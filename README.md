@@ -8,6 +8,9 @@
 ## Chapters
 
 <!-- BEGIN chapter-list (managed by /write-notebook; do not edit by hand) -->
+| Chapter | Notebook | Colab |
+|---|---|---|
+| 5 | [The Solow Growth Model](notebooks/ch05-the-solow-growth-model.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/ch05-the-solow-growth-model.ipynb) |
 <!-- END chapter-list -->
 
 ## Repository layout

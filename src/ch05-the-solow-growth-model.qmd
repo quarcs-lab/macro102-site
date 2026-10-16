@@ -1,0 +1,1116 @@
+# Chapter 5: The Solow Growth Model
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/ch05-the-solow-growth-model.ipynb)
+
+*Data Science and Macroeconomic Models: A Python Companion to Intermediate Macroeconomics* · Carlos Mendez
+
+> **How to use this notebook.** In Colab, click *Runtime → Run all*. After that, every model
+> figure has live sliders: move one and the model is solved again on the spot. On the book
+> website the same figures come with one precomputed slider. Each section ends with a short
+> **Your turn** task, and you can try it in the empty code cell below the task.
+
+<!-- cell -->
+
+## Learning goals
+
+The Solow model explains where an economy's capital stock comes from. By the end of this
+chapter you will be able to:
+
+- draw the **Solow diagram** and explain why an economy moves toward a **steady state**;
+- compute the steady-state levels of capital and output per person from the model's parameters;
+- run **experiments**: a higher investment rate, a higher depreciation rate, faster population
+  growth, or an earthquake that destroys capital;
+- use the **principle of transition dynamics** to read cross-country data on growth and investment;
+- write short Python functions, draw interactive figures with Plotly, and work with data tables in pandas.
+
+## Figures in this chapter
+
+The figures follow the order of the textbook chapter. The second column shows which textbook
+figure each notebook figure replicates.
+
+| Figure | Textbook figure | Type | What you can change |
+|---|---|---|---|
+| Figure 1 | 5.1 The Solow diagram | model | investment rate, depreciation rate, productivity, starting capital |
+| Figure 2 | 5.2 The Solow diagram with output | model | investment rate, depreciation rate, productivity |
+| Figure 3 | 5.3 Explaining capital in the Solow model | data | the depreciation rate of the model line |
+| Figure 4 | 5.4 An increase in the investment rate | model | old and new investment rate |
+| Figure 5 | 5.5 Output after an increase in the investment rate | model | new investment rate, linear or ratio scale |
+| Figure 6 | 5.6 A rise in the depreciation rate | model | old and new depreciation rate |
+| Figure 7 | 5.7 Output after an increase in the depreciation rate | model | new depreciation rate, linear or ratio scale |
+| Figure 8 | 5.8 Growth rates in the OECD | data | starting year (play button) |
+| Figure 9 | 5.9 Growth rates around the world | data | starting year (play button), OECD on/off |
+| Figure 10 | 5.10 Investment in South Korea and the Philippines | data | the two countries compared with the United States |
+| Figure 11 | 5.11 The Solow diagram with population growth | model | investment, population growth and depreciation rates |
+| Figure 12 | 5.12 The Solow diagram after an earthquake | model | share of capital destroyed, "Earthquake!" button |
+| Figure 13 | 5.13 Output per person after an earthquake | model | share of capital destroyed, linear or ratio scale |
+
+## Setup
+
+We first load the Python libraries we need. You only have to run this cell once.
+
+> **Python note.** `import` loads a *library*, a toolbox written by other people. We give each
+> library a short nickname, for example `np` for NumPy, so that the code stays short. Text after
+> a `#` is a *comment*: Python ignores it, and it is there for human readers.
+
+```{python}
+# Libraries used in this chapter
+import numpy as np                              # numbers and arrays
+import pandas as pd                             # data tables
+import plotly.express as px                     # quick charts from data tables
+import plotly.graph_objects as go               # charts built piece by piece (model figures)
+import plotly.io as pio
+from plotly.subplots import make_subplots       # several panels in one figure
+from ipywidgets import interact, interact_manual, FloatSlider, ToggleButtons, Dropdown
+
+# One light blue/green look for every chart
+BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
+pio.templates.default = "plotly_white"
+px.defaults.color_discrete_sequence = [BLUE, TEAL, GREEN, "#5aa0d8", "#0b4f47"]
+WIDE = {"description_width": "initial"}         # show the full slider labels
+
+# The data files of this chapter live in the book's GitHub repository
+DATA_URL = "https://raw.githubusercontent.com/quarcs-lab/macro102-site/main/data/ch05/"
+```
+
+The next cell defines a helper that only the book website needs. Run it and move on.
+
+```{python}
+#| kind: helper
+# @title Helper for the website versions (run this cell; you do not need to read it)
+def slider_figure(make_figure, name, values, start, label=None):
+    """Precompute make_figure(name=value) for every value and join the results with one slider.
+
+    The website cannot run Python, so each interactive figure also gets this precomputed version.
+    """
+    figures = [make_figure(**{name: v}) for v in values]
+    first = values.index(start)
+    fig = go.Figure(layout=figures[first].layout)
+    owner = []                                  # which precomputed figure each trace comes from
+    for i, f in enumerate(figures):
+        for trace in f.data:
+            trace.visible = (i == first)
+            fig.add_trace(trace)
+            owner.append(i)
+    steps = []
+    for i, f in enumerate(figures):
+        layout = {"title": f.layout.title.to_plotly_json(),
+                  "annotations": [a.to_plotly_json() for a in f.layout.annotations],
+                  "shapes": [s.to_plotly_json() for s in f.layout.shapes]}
+        visible = [o == i for o in owner]
+        steps.append(dict(method="update", label=str(values[i]), args=[{"visible": visible}, layout]))
+    fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
+                                    currentvalue=dict(prefix=(label or name) + " = "))])
+    return fig
+```
+
+## The model in code
+
+The Solow model has two key equations. Output per person $y_t$ depends on capital per person
+$k_t$ with **diminishing returns**:
+
+$$y_t = \bar{A}\,k_t^{1/3} \qquad (5.6)$$
+
+and capital per person changes each year by **net investment**, which is new investment minus depreciation:
+
+$$\Delta k_{t+1} = \bar{s}\,y_t - \bar{d}\,k_t \qquad (5.7)$$
+
+A bar over a letter marks a **parameter**, a number we choose from outside the model:
+
+- $\bar{A}$ is productivity;
+- $\bar{s}$ is the investment rate, the share of output that is saved and invested;
+- $\bar{d}$ is the depreciation rate.
+
+In the code we simply write `A`, `s` and `d`.
+
+The economy stops changing when investment exactly replaces the capital that wears out,
+$\bar{s}y^* = \bar{d}k^*$. Solving for $k^*$ gives the **steady state**:
+
+$$k^* = \left(\frac{\bar{s}\bar{A}}{\bar{d}}\right)^{3/2} \quad (5.8) \qquad\qquad
+y^* = \left(\frac{\bar{s}}{\bar{d}}\right)^{1/2}\bar{A}^{3/2} \quad (5.9)$$
+
+> **Python note.** `def` creates a *function*: a named recipe that takes inputs (the
+> *arguments*) and gives back a result with `return`. Writing `A=1.0` gives the argument a
+> *default value*, used whenever we do not pass one. The text in triple quotes is a short
+> description of what the function does. `**` means "to the power of".
+
+```{python}
+def output(k, A=1.0):
+    """Output per person: y = A k^(1/3)   (equation 5.6)."""
+    return A * k ** (1 / 3)
+
+
+def steady_state_k(s, d, A=1.0, n=0.0):
+    """Steady-state capital per person: k* = (s A / (n + d))^(3/2)   (equation 5.8; n is used in Figure 11)."""
+    return (s * A / (n + d)) ** (3 / 2)
+```
+
+Let us try the functions with the values used throughout this chapter: $\bar{s}=0.4$, $\bar{d}=0.1$, $\bar{A}=1$.
+
+> **Python note.** An *f-string* such as `f"k* = {k_star:.2f}"` inserts the value of a variable
+> into a piece of text; `:.2f` means "show two decimals".
+
+```{python}
+k_star = steady_state_k(s=0.4, d=0.1)
+y_star = output(k_star)
+print(f"Steady-state capital per person k* = {k_star:.2f}")
+print(f"Steady-state output per person  y* = {y_star:.2f}")
+print(f"Check with equation (5.9):      y* = {(0.4 / 0.1) ** 0.5 * 1.0 ** 1.5:.2f}")
+```
+
+## Figure 1: The Solow diagram
+
+**Goal.** See why the economy moves toward the steady state $k^*$ from any starting point $k_0$.
+
+The Solow diagram plots the two parts of equation (5.7) against capital per person $k$:
+
+- **investment** $\bar{s}y = \bar{s}\bar{A}k^{1/3}$, which is a curve because of diminishing returns;
+- **depreciation** $\bar{d}k$, which is a straight line.
+
+When investment is above depreciation, net investment is positive, so capital grows. When it is
+below, capital shrinks. Where the two cross, capital stops changing: that point is the steady state $k^*$.
+
+> **Python note.** `np.linspace(0, 20, 200)` creates 200 evenly spaced numbers from 0 to 20:
+> the values of $k$ at which we draw the curves. `go.Figure()` starts an empty chart, and each
+> `add_trace` adds one curve or set of points. We fix the axis ranges so that you can *see*
+> the curves move when a parameter changes.
+
+```{python}
+def solow_diagram(s=0.4, d=0.1, A=1.0, k0=2.7):
+    """The Solow diagram (Figure 5.1): investment s*y and depreciation d*k against k."""
+    k = np.linspace(0, 20, 200)                     # capital per person on the x-axis
+    k_star = steady_state_k(s, d, A)
+    net = s * output(k0, A) - d * k0                 # net investment at the starting point
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=k, y=s * output(k, A), name="Investment, s·y", line=dict(color=TEAL, width=3)))
+    fig.add_trace(go.Scatter(x=k, y=d * k, name="Depreciation, d·k", line=dict(color=BLUE, width=3)))
+    fig.add_trace(go.Scatter(x=[k0, k0], y=[d * k0, s * output(k0, A)], name="Net investment at k0",
+                             mode="lines", line=dict(color=GREEN, width=5)))
+    fig.add_trace(go.Scatter(x=[k_star], y=[d * k_star], name="Steady state", mode="markers",
+                             marker=dict(color="black", size=11)))
+    # An arrow on the x-axis: capital moves from k0 toward k*
+    fig.add_annotation(x=k_star, y=0.05, ax=k0, ay=0.05, xref="x", yref="y", axref="x", ayref="y",
+                       showarrow=True, arrowhead=3, arrowwidth=2, arrowcolor=GREEN)
+    fig.update_layout(title=f"k* = {k_star:.2f}   |   net investment at k0 = {k0}: {net:+.3f}",
+                      xaxis=dict(title="Capital per person, k", range=[0, 20]),
+                      yaxis=dict(title="Investment and depreciation", range=[0, 2]))
+    return fig
+```
+
+Now the interactive version. Move the sliders and watch where the curves cross.
+
+> **Python note.** `interact` turns each argument of a function into a slider and calls the
+> function again every time you move one. The `;` at the end only hides an extra line of text.
+
+```{python}
+#| kind: widget
+interact(solow_diagram,
+         s=FloatSlider(value=0.4, min=0.1, max=0.6, step=0.05, description="investment rate s", style=WIDE),
+         d=FloatSlider(value=0.1, min=0.05, max=0.2, step=0.01, description="depreciation rate d", style=WIDE),
+         A=FloatSlider(value=1.0, min=0.5, max=1.5, step=0.1, description="productivity A", style=WIDE),
+         k0=FloatSlider(value=2.7, min=0.5, max=19.5, step=0.5, description="starting capital k0", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 1 with a precomputed slider for the investment rate
+slider_figure(solow_diagram, "s", [0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6], start=0.4,
+              label="investment rate s")
+```
+
+**What to notice.**
+
+- At $k_0 = 2.7$ the green bar points up: investment exceeds depreciation, so capital rises toward $k^* = 8$.
+- Drag $k_0$ above $k^*$ and the net investment becomes negative, so capital falls back toward $k^*$.
+- Raising $\bar{s}$ or $\bar{A}$ lifts the investment curve and moves $k^*$ to the right. Raising $\bar{d}$ makes the
+  depreciation line steeper and moves $k^*$ to the left.
+
+**Your turn.** Find a combination of $\bar{s}$ and $\bar{d}$ that gives exactly the same $k^*$ as the
+default ($k^*=8$). Then check your answer with `steady_state_k` in the empty cell below.
+
+<details><summary>Hint</summary>
+
+Equation (5.8) shows that $k^*$ depends on $\bar{s}$ and $\bar{d}$ only through the ratio $\bar{s}/\bar{d}$ (with $\bar{A}=1$).
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 2: The Solow diagram with output
+
+**Goal.** Add the production function to the diagram and read off output, investment and
+consumption in the steady state.
+
+Every unit of output is either consumed or invested. So consumption per person is the gap
+between the output curve and the investment curve: $c = y - \bar{s}y = (1-\bar{s})\,y$.
+
+```{python}
+def solow_with_output(s=0.4, d=0.1, A=1.0):
+    """The Solow diagram with output (Figure 5.2): y, s*y and d*k, with consumption at k*."""
+    k = np.linspace(0, 20, 200)
+    k_star = steady_state_k(s, d, A)
+    y_star = output(k_star, A)
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=k, y=output(k, A), name="Output, y", line=dict(color=GREEN, width=3)))
+    fig.add_trace(go.Scatter(x=k, y=s * output(k, A), name="Investment, s·y", line=dict(color=TEAL, width=3)))
+    fig.add_trace(go.Scatter(x=k, y=d * k, name="Depreciation, d·k", line=dict(color=BLUE, width=3)))
+    # Consumption in the steady state: the gap between y* and s*y*
+    fig.add_trace(go.Scatter(x=[k_star, k_star], y=[s * y_star, y_star], name="Consumption, c*",
+                             mode="lines+markers", line=dict(color="black", width=4)))
+    fig.update_layout(title=f"y* = {y_star:.2f}   investment = {s * y_star:.2f}   consumption c* = {(1 - s) * y_star:.2f}",
+                      xaxis=dict(title="Capital per person, k", range=[0, 20]),
+                      yaxis=dict(title="Output, investment and depreciation", range=[0, 3]))
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(solow_with_output,
+         s=FloatSlider(value=0.4, min=0.1, max=0.9, step=0.05, description="investment rate s", style=WIDE),
+         d=FloatSlider(value=0.1, min=0.05, max=0.2, step=0.01, description="depreciation rate d", style=WIDE),
+         A=FloatSlider(value=1.0, min=0.5, max=1.5, step=0.1, description="productivity A", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 2 with a precomputed slider for the investment rate
+slider_figure(solow_with_output, "s", [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9], start=0.4,
+              label="investment rate s")
+```
+
+**What to notice.**
+
+- The black bar is steady-state consumption. A higher $\bar{s}$ raises $y^*$, but it also means a larger share of output is invested rather than consumed.
+- Productivity $\bar{A}$ moves *both* the output curve and the investment curve. That is why it has such a large effect on $y^*$: the exponent on $\bar{A}$ in equation (5.9) is $3/2$.
+
+**Your turn.** Move the investment rate from 0.1 to 0.9 and watch the consumption readout in the
+title. Which investment rate gives the *highest* steady-state consumption?
+
+<details><summary>Hint</summary>
+
+Consumption is $(1-\bar{s})\,y^*$. When $\bar{s}$ is small, $y^*$ is small. When $\bar{s}$ is large, little output is
+left to consume. The best value lies in between, and with an exponent of $1/3$ on capital you can
+find it on the slider.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 3: Explaining capital across countries
+
+**Goal.** Test a prediction of the Solow model with real data.
+
+In the steady state $\bar{s}y^* = \bar{d}k^*$, so the **capital-output ratio** is simply
+
+$$\frac{K^*}{Y^*} = \frac{k^*}{y^*} = \frac{\bar{s}}{\bar{d}} \qquad (5.11)$$
+
+If depreciation rates are similar across countries, countries that invest a larger share of their
+output should have more capital relative to output. Let us check this with the Penn World Table.
+
+> **Python note.** `pd.read_csv` reads a data file into a *DataFrame*, a table with named
+> columns. `.head()` shows its first five rows, which is always a good first look at new data.
+
+```{python}
+capital = pd.read_csv(DATA_URL + "fig5-3.csv")
+capital.head()
+```
+
+Each row is a country. `inv_rate_avg_1990_2023` is the average investment rate (percent of GDP)
+and `ky_2023` is the capital-output ratio in 2023. The function below draws the data and adds
+the model's prediction, $K/Y = s/d$, as a straight line.
+
+```{python}
+def capital_output_chart(d=0.07):
+    """Figure 5.3: capital-output ratio against the investment rate, with the model line K/Y = s/d."""
+    fig = px.scatter(capital, x="inv_rate_avg_1990_2023", y="ky_2023", hover_name="country",
+                     labels={"inv_rate_avg_1990_2023": "Investment rate, s (percent, 1990–2023 average)",
+                             "ky_2023": "Capital-output ratio, K/Y (2023)"})
+    s = np.linspace(0, 55, 100)                      # investment rates, in percent
+    fig.add_trace(go.Scatter(x=s, y=(s / 100) / d, name="Solow model: K/Y = s/d",
+                             line=dict(color=TEAL, width=3)))
+    fig.update_layout(title=f"Data and the Solow prediction with d = {d:.2f}",
+                      xaxis_range=[0, 55], yaxis_range=[0, 7])
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(capital_output_chart,
+         d=FloatSlider(value=0.07, min=0.03, max=0.15, step=0.01, description="depreciation rate d", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 3 with a precomputed slider for the depreciation rate
+slider_figure(capital_output_chart, "d", [0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1, 0.12], start=0.07,
+              label="depreciation rate d")
+```
+
+**What to notice.**
+
+- The points slope upward, as the model predicts: countries that invest more have more capital relative to output.
+- Hover over the points. Singapore and South Korea sit at the top right, and the United States lies in the middle.
+- A depreciation rate around 6–8 percent makes the model line run through the cloud of points.
+
+**Your turn.** Use the slider to find the depreciation rate whose line fits the data best by eye.
+Then hover over three countries that lie far from the line and write down their names.
+
+<details><summary>Hint</summary>
+
+A steeper line means a smaller $\bar{d}$, because the slope of $K/Y = s/d$ is $1/d$. Countries far
+above the line have more capital than their investment rate alone would suggest.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+### Key numbers: how much of the rich–poor gap is due to investment?
+
+Using equation (5.9), and assuming equal depreciation rates, the income ratio between rich and
+poor countries splits into a productivity part and an investment part:
+
+$$\frac{y^*_{rich}}{y^*_{poor}} = \left(\frac{\bar{A}_{rich}}{\bar{A}_{poor}}\right)^{3/2} \times \left(\frac{\bar{s}_{rich}}{\bar{s}_{poor}}\right)^{1/2} \qquad (5.12)$$
+
+In the textbook, the five richest countries are 75 times richer than the five poorest, and
+investment rates differ by a factor of about 4. Investment therefore explains a factor of $\sqrt{4}=2$,
+which leaves $75/2 = 37.5$ for productivity. Let us redo the calculation with the latest data. We
+load a wider data file: GDP per person and investment rates for every country and year.
+
+```{python}
+panel = pd.read_csv(DATA_URL + "pwt_panel.csv")
+latest = panel[panel.year == 2023].dropna(subset=["gdp_pc"])
+latest.sort_values("gdp_pc").head()
+```
+
+> **Python note.** `panel[panel.year == 2023]` keeps only the rows where the condition is true.
+> `.sort_values("gdp_pc")` sorts the rows from poorest to richest.
+
+Look at the first row. GDP per person in Venezuela appears to be about 160 dollars a year, which
+is not plausible. During Venezuela's hyperinflation the price data behind this number broke down.
+**Always look at your data before using it.** We drop Venezuela and continue.
+
+```{python}
+panel = panel[panel.country != "Venezuela (Bolivarian Republic of)"]
+latest = panel[panel.year == 2023].dropna(subset=["gdp_pc"]).sort_values("gdp_pc")
+poorest, richest = latest.head(5), latest.tail(5)
+
+# Average investment rate since 1990 for each country
+investment = panel[panel.year >= 1990].groupby("country").inv_rate.mean()
+
+income_ratio = richest.gdp_pc.mean() / poorest.gdp_pc.mean()
+s_ratio = investment[richest.country].mean() / investment[poorest.country].mean()
+print("Five richest:", ", ".join(richest.country))
+print("Five poorest:", ", ".join(poorest.country))
+print(f"Income ratio, rich / poor:         {income_ratio:.0f}")
+print(f"Investment-rate ratio, rich / poor: {s_ratio:.1f}")
+print(f"Factor explained by investment:     {s_ratio ** 0.5:.1f}")
+print(f"Factor left for productivity:       {income_ratio / s_ratio ** 0.5:.0f}")
+```
+
+The lesson is the same as in the textbook. Differences in investment rates explain only a small
+part of the income gap, and productivity explains most of it.
+
+## Figure 4: An increase in the investment rate
+
+**Goal.** Run the first experiment. The economy sits in its steady state, and then the investment
+rate rises permanently from $\bar{s}$ to $\bar{s}'$.
+
+The investment curve $\bar{s}y$ rotates upward, and the depreciation line does not move. At the old $k^*$,
+investment now exceeds depreciation, so capital accumulates until the new steady state $k^{**}$.
+
+```{python}
+def increase_in_s(s=0.4, s_new=0.6, d=0.1, A=1.0):
+    """Figure 5.4: the investment curve shifts up when s rises to s_new."""
+    k = np.linspace(0, 25, 200)
+    k_old, k_new = steady_state_k(s, d, A), steady_state_k(s_new, d, A)
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=k, y=s * output(k, A), name="Old investment, s·y",
+                             line=dict(color=GRAY, width=3, dash="dash")))
+    fig.add_trace(go.Scatter(x=k, y=s_new * output(k, A), name="New investment, s'·y", line=dict(color=TEAL, width=3)))
+    fig.add_trace(go.Scatter(x=k, y=d * k, name="Depreciation, d·k", line=dict(color=BLUE, width=3)))
+    fig.add_trace(go.Scatter(x=[k_old, k_new], y=[d * k_old, d * k_new], name="k* (old) and k** (new)",
+                             mode="markers", marker=dict(color="black", size=11)))
+    fig.add_annotation(x=k_new, y=0.08, ax=k_old, ay=0.08, xref="x", yref="y", axref="x", ayref="y",
+                       showarrow=True, arrowhead=3, arrowwidth=2, arrowcolor=GREEN)
+    fig.update_layout(title=f"k* = {k_old:.2f}  →  k** = {k_new:.2f}   (k**/k* = {k_new / k_old:.2f})",
+                      xaxis=dict(title="Capital per person, k", range=[0, 25]),
+                      yaxis=dict(title="Investment and depreciation", range=[0, 2.5]))
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(increase_in_s,
+         s=FloatSlider(value=0.4, min=0.1, max=0.8, step=0.05, description="old investment rate s", style=WIDE),
+         s_new=FloatSlider(value=0.6, min=0.1, max=0.8, step=0.05, description="new investment rate s'", style=WIDE),
+         d=FloatSlider(value=0.1, min=0.05, max=0.2, step=0.01, description="depreciation rate d", style=WIDE),
+         A=FloatSlider(value=1.0, min=0.5, max=1.5, step=0.1, description="productivity A", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 4 with a precomputed slider for the new investment rate
+slider_figure(increase_in_s, "s_new", [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8], start=0.6,
+              label="new investment rate s'")
+```
+
+**What to notice.**
+
+- With $\bar{s}$ going from 0.4 to 0.6, steady-state capital rises by a factor of $(0.6/0.4)^{3/2} \approx 1.84$.
+- Set $\bar{s}' < \bar{s}$ and the experiment runs in reverse: capital falls to a lower steady state.
+
+**Your turn.** By what factor does $k^*$ rise when $\bar{s}$ doubles from 0.3 to 0.6? Read it off the
+title, then confirm it with equation (5.8) in the cell below.
+
+<details><summary>Hint</summary>
+
+From equation (5.8), $k^{**}/k^* = (\bar{s}'/\bar{s})^{3/2}$, whatever the values of $\bar{A}$ and $\bar{d}$.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 5: Output after an increase in the investment rate
+
+**Goal.** Follow output per person **year by year** after the investment rate rises in 2020.
+
+The Solow model cannot be solved with a formula for every year, but a computer can simply apply
+equation (5.7) one year at a time. This is called a **simulation**. The function below starts the
+economy in its old steady state and changes the parameters in `change_year`. We will reuse it in
+Figures 7 and 13.
+
+> **Python note.** A `for` loop repeats the indented lines once for each year. `if ... else`
+> chooses between two cases. `y_path.append(...)` adds one more number to the end of a list.
+
+```{python}
+def simulate(s_old=0.4, s_new=0.4, d_old=0.1, d_new=0.1, destroyed=0.0,
+             A=1.0, change_year=2020, first_year=2000, last_year=2100):
+    """Output per person, year by year, when something changes in change_year.
+
+    The economy starts in its old steady state. From change_year on, the investment rate is s_new and
+    the depreciation rate is d_new; in change_year a share `destroyed` of the capital stock is lost.
+    """
+    years = np.arange(first_year, last_year + 1)
+    k = steady_state_k(s_old, d_old, A)                # start in the old steady state
+    y_path = []
+    for year in years:
+        if year < change_year:
+            s, d = s_old, d_old
+        else:
+            s, d = s_new, d_new
+        if year == change_year:
+            k = k * (1 - destroyed)                    # an earthquake or a war destroys capital
+        y_path.append(output(k, A))
+        k = k + s * output(k, A) - d * k               # capital accumulation, equation (5.7)
+    return years, np.array(y_path)
+```
+
+The figure has two panels: (a) the Solow diagram with output, and (b) output per person over time.
+
+On a **ratio scale** (a logarithmic axis), equal distances mean equal *percentage* changes. The
+slope of the line is then the growth rate.
+
+> **Python note.** `make_subplots(rows=1, cols=2)` creates a figure with two panels side by
+> side, and `row=..., col=...` tells `add_trace` which panel to draw in. On a log axis Plotly
+> wants the axis limits as powers of ten, which is why we write `np.log10(...)`.
+
+```{python}
+def output_after_s(s_new=0.6, scale="ratio", s=0.4, d=0.1):
+    """Figure 5.5: the Solow diagram with output (a) and output over time (b) when s rises in 2020."""
+    years, y = simulate(s_old=s, s_new=s_new, d_old=d, d_new=d)
+    k = np.linspace(0, 25, 200)
+    growth_2021 = 100 * (y[21] / y[20] - 1)              # y[20] is 2020 and y[21] is 2021
+    fig = make_subplots(rows=1, cols=2, subplot_titles=("(a) Solow diagram", "(b) Output over time"))
+    fig.add_trace(go.Scatter(x=k, y=output(k), name="Output, y", line=dict(color=GREEN, width=3)), row=1, col=1)
+    fig.add_trace(go.Scatter(x=k, y=s * output(k), name="Old investment", line=dict(color=GRAY, dash="dash")), row=1, col=1)
+    fig.add_trace(go.Scatter(x=k, y=s_new * output(k), name="New investment", line=dict(color=TEAL, width=3)), row=1, col=1)
+    fig.add_trace(go.Scatter(x=k, y=d * k, name="Depreciation", line=dict(color=BLUE, width=3)), row=1, col=1)
+    fig.add_trace(go.Scatter(x=[steady_state_k(s, d), steady_state_k(s_new, d)], y=[y[0], y[-1]], name="y* and y**",
+                             mode="markers", marker=dict(color="black", size=10)), row=1, col=1)
+    fig.add_trace(go.Scatter(x=years, y=y, name="Output per person over time", line=dict(color=GREEN, width=3)), row=1, col=2)
+    fig.update_xaxes(title_text="Capital per person, k", range=[0, 25], row=1, col=1)
+    fig.update_yaxes(range=[0, 3.5], row=1, col=1)
+    fig.update_xaxes(title_text="Year", row=1, col=2)
+    if scale == "ratio":
+        fig.update_yaxes(type="log", range=[np.log10(1.0), np.log10(3.5)], row=1, col=2)
+    else:
+        fig.update_yaxes(range=[1.0, 3.5], row=1, col=2)
+    fig.update_layout(title=f"y* = {y[0]:.2f} → y** = {y[-1]:.2f}   |   growth in 2021: {growth_2021:+.1f}%")
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(output_after_s,
+         s_new=FloatSlider(value=0.6, min=0.2, max=0.8, step=0.05, description="new investment rate s'", style=WIDE),
+         scale=ToggleButtons(options=["ratio", "linear"], description="vertical scale"));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 5 with a precomputed slider for the new investment rate
+slider_figure(output_after_s, "s_new", [0.3, 0.4, 0.5, 0.6, 0.7, 0.8], start=0.6, label="new investment rate s'")
+```
+
+**What to notice.**
+
+- Output grows fastest right after 2020 and then more and more slowly. On the ratio scale, the line bends and becomes flat at $y^{**}$.
+- The higher investment rate raises the *level* of output for good, but it does not raise the *growth rate* for good. In the long run, growth goes back to zero.
+
+**Your turn.** Set the new investment rate *below* 0.4 (a policy that discourages investment). Describe
+what happens to output and to its growth rate after 2020.
+
+<details><summary>Hint</summary>
+
+Now the investment curve shifts *down*. Look at the sign of the growth rate in the title, and at
+how quickly the line flattens on the ratio scale.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 6: A rise in the depreciation rate
+
+**Goal.** Run the second experiment. The depreciation rate rises permanently from $\bar{d}$ to $\bar{d}'$.
+Severe weather that wears out buildings and machines faster could cause this.
+
+This time the investment curve stays put and the depreciation line rotates upward. At the old $k^*$,
+depreciation exceeds investment, so capital falls until it reaches a lower steady state $k^{**}$.
+
+```{python}
+def increase_in_d(d=0.1, d_new=0.15, s=0.4, A=1.0):
+    """Figure 5.6: the depreciation line rotates up when d rises to d_new."""
+    k = np.linspace(0, 20, 200)
+    k_old, k_new = steady_state_k(s, d, A), steady_state_k(s, d_new, A)
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=k, y=s * output(k, A), name="Investment, s·y", line=dict(color=TEAL, width=3)))
+    fig.add_trace(go.Scatter(x=k, y=d * k, name="Old depreciation, d·k", line=dict(color=GRAY, width=3, dash="dash")))
+    fig.add_trace(go.Scatter(x=k, y=d_new * k, name="New depreciation, d'·k", line=dict(color=BLUE, width=3)))
+    fig.add_trace(go.Scatter(x=[k_old, k_new], y=[d * k_old, d_new * k_new], name="k* (old) and k** (new)",
+                             mode="markers", marker=dict(color="black", size=11)))
+    fig.add_annotation(x=k_new, y=0.06, ax=k_old, ay=0.06, xref="x", yref="y", axref="x", ayref="y",
+                       showarrow=True, arrowhead=3, arrowwidth=2, arrowcolor=GREEN)
+    fig.update_layout(title=f"k* = {k_old:.2f}  →  k** = {k_new:.2f}   (k**/k* = {k_new / k_old:.2f})",
+                      xaxis=dict(title="Capital per person, k", range=[0, 20]),
+                      yaxis=dict(title="Investment and depreciation", range=[0, 2]))
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(increase_in_d,
+         d=FloatSlider(value=0.1, min=0.05, max=0.25, step=0.01, description="old depreciation rate d", style=WIDE),
+         d_new=FloatSlider(value=0.15, min=0.05, max=0.25, step=0.01, description="new depreciation rate d'", style=WIDE),
+         s=FloatSlider(value=0.4, min=0.1, max=0.6, step=0.05, description="investment rate s", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 6 with a precomputed slider for the new depreciation rate
+slider_figure(increase_in_d, "d_new", [0.06, 0.08, 0.1, 0.12, 0.15, 0.18, 0.2], start=0.15,
+              label="new depreciation rate d'")
+```
+
+**What to notice.**
+
+- With $\bar{d}$ going from 0.10 to 0.15, steady-state capital falls to about 54 percent of its old level, because $(0.10/0.15)^{3/2} \approx 0.54$.
+- Only the line that contains the changed parameter moves. This is the first step in every Solow experiment.
+
+**Your turn.** Which depreciation rate $\bar{d}'$ would cut steady-state capital exactly in half? Find it with
+the slider first, then solve equation (5.8) in the cell below.
+
+<details><summary>Hint</summary>
+
+You need $(\bar{d}/\bar{d}')^{3/2} = 1/2$, so $\bar{d}' = \bar{d} \times 2^{2/3}$.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 7: Output after an increase in the depreciation rate
+
+**Goal.** Follow output per person year by year after the depreciation rate rises in 2020. We reuse
+`simulate` from Figure 5. This time only `d_new` changes.
+
+```{python}
+def output_after_d(d_new=0.15, scale="ratio", s=0.4, d=0.1):
+    """Figure 5.7: the Solow diagram with output (a) and output over time (b) when d rises in 2020."""
+    years, y = simulate(s_old=s, s_new=s, d_old=d, d_new=d_new)
+    k = np.linspace(0, 20, 200)
+    growth_2021 = 100 * (y[21] / y[20] - 1)
+    fig = make_subplots(rows=1, cols=2, subplot_titles=("(a) Solow diagram", "(b) Output over time"))
+    fig.add_trace(go.Scatter(x=k, y=output(k), name="Output, y", line=dict(color=GREEN, width=3)), row=1, col=1)
+    fig.add_trace(go.Scatter(x=k, y=s * output(k), name="Investment", line=dict(color=TEAL, width=3)), row=1, col=1)
+    fig.add_trace(go.Scatter(x=k, y=d * k, name="Old depreciation", line=dict(color=GRAY, dash="dash")), row=1, col=1)
+    fig.add_trace(go.Scatter(x=k, y=d_new * k, name="New depreciation", line=dict(color=BLUE, width=3)), row=1, col=1)
+    fig.add_trace(go.Scatter(x=[steady_state_k(s, d), steady_state_k(s, d_new)], y=[y[0], y[-1]], name="y* and y**",
+                             mode="markers", marker=dict(color="black", size=10)), row=1, col=1)
+    fig.add_trace(go.Scatter(x=years, y=y, name="Output per person over time", line=dict(color=GREEN, width=3)), row=1, col=2)
+    fig.update_xaxes(title_text="Capital per person, k", range=[0, 20], row=1, col=1)
+    fig.update_yaxes(range=[0, 3], row=1, col=1)
+    fig.update_xaxes(title_text="Year", row=1, col=2)
+    if scale == "ratio":
+        fig.update_yaxes(type="log", range=[np.log10(1.0), np.log10(3.0)], row=1, col=2)
+    else:
+        fig.update_yaxes(range=[1.0, 3.0], row=1, col=2)
+    fig.update_layout(title=f"y* = {y[0]:.2f} → y** = {y[-1]:.2f}   |   growth in 2021: {growth_2021:+.1f}%")
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(output_after_d,
+         d_new=FloatSlider(value=0.15, min=0.05, max=0.25, step=0.01, description="new depreciation rate d'", style=WIDE),
+         scale=ToggleButtons(options=["ratio", "linear"], description="vertical scale"));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 7 with a precomputed slider for the new depreciation rate
+slider_figure(output_after_d, "d_new", [0.06, 0.08, 0.1, 0.12, 0.15, 0.18, 0.2], start=0.15,
+              label="new depreciation rate d'")
+```
+
+**What to notice.**
+
+- Output falls fastest right after the change, and then the decline slows until output settles at $y^{**}$.
+- This is the **principle of transition dynamics**. The farther an economy is from its steady state, in percentage terms, the faster it moves. Above the steady state it shrinks, and below it grows.
+
+**Your turn.** Switch between the ratio and the linear scale. On which scale is it easier to see that
+the growth rate is largest right after 2020? Explain why in one sentence.
+
+<details><summary>Hint</summary>
+
+On a ratio scale, the slope of the line is the growth rate. Compare the slope just after 2020 with the
+slope around 2060.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 8: Growth rates in the OECD
+
+**Goal.** Use the principle of transition dynamics to read real growth data.
+
+If rich countries share similar steady states, those that were poorer at the start should be
+further below their steady state, and so they should grow faster. We check this for the 24 OECD
+countries that the textbook uses, measuring growth from a starting year up to 2023.
+
+> **Python note.** The function below builds a small table. `merge` joins two tables on a common
+> column, here the country code `iso3`, much like matching rows by ID in a spreadsheet. The growth
+> rate is the *average annual* growth: $(\text{end}/\text{start})^{1/\text{years}} - 1$.
+
+```{python}
+def growth_since(start, end=2023):
+    """One row per country: GDP per person in `start` and its average annual growth from start to end."""
+    first = panel[panel.year == start][["iso3", "country", "oecd", "gdp_pc"]]
+    last = panel[panel.year == end][["iso3", "gdp_pc"]]
+    table = first.merge(last, on="iso3", suffixes=("_start", "_end")).dropna()
+    table["growth"] = 100 * ((table.gdp_pc_end / table.gdp_pc_start) ** (1 / (end - start)) - 1)
+    table["start_year"] = start
+    return table
+
+
+# One table per starting year, stacked on top of each other
+tables = []
+for start in [1960, 1970, 1980, 1990, 2000]:
+    tables.append(growth_since(start))
+growth = pd.concat(tables)
+growth.head()
+```
+
+Plotly Express can show one chart per starting year and add a **play button** and a slider to move
+between them, using `animation_frame`. The option `trendline="ols"` adds a regression line, which
+is the best-fitting straight line through the points. Because the horizontal axis is on a ratio scale
+(`log_x=True`), we also fit the line to the logarithm of GDP with `trendline_options=dict(log_x=True)`.
+Hover over a point to see the country.
+
+```{python}
+oecd = growth[growth.oecd]
+fig = px.scatter(oecd, x="gdp_pc_start", y="growth", hover_name="country",
+                 animation_frame="start_year", trendline="ols", trendline_options=dict(log_x=True), log_x=True,
+                 range_x=[2500, 120000], range_y=[-1, 7],
+                 labels={"gdp_pc_start": "GDP per person in the starting year (2021 dollars, ratio scale)",
+                         "growth": "Average annual growth to 2023 (percent)", "start_year": "Starting year"},
+                 title="Growth rates in the OECD: poorer countries grew faster")
+fig.show()
+```
+
+**What to notice.**
+
+- In 1960, Japan, Portugal, Spain and Ireland were relatively poor, and they grew fastest. Countries that were rich in 1960, such as the United States, Canada, New Zealand and Switzerland, grew slowly.
+- The regression line slopes down: the OECD countries **converged** toward similar income levels.
+- Press play. The downward slope becomes weaker for later starting years, as most OECD countries got close to their steady states.
+
+**Your turn.** Compute the growth rate of Ireland from 1960 to 2023 yourself, from the two values of
+GDP per person in the `panel` table. Check that your number matches the chart.
+
+<details><summary>Hint</summary>
+
+Use `panel[(panel.country == "Ireland") & (panel.year == 1960)]` to find the 1960 row, and do the same
+for 2023. Then apply $(\text{end}/\text{start})^{1/63} - 1$.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 9: Growth rates around the world
+
+**Goal.** Ask whether poor countries *in general* grow faster than rich ones.
+
+We draw the same chart for every country with data, and color the OECD countries differently.
+Click an entry in the legend to hide or show that group.
+
+> **Python note.** `.map(...)` replaces each value of a column using a dictionary, here turning
+> `True`/`False` into readable group names for the legend.
+
+```{python}
+growth["group"] = growth.oecd.map({True: "OECD", False: "Rest of the world"})
+fig = px.scatter(growth, x="gdp_pc_start", y="growth", color="group", hover_name="country",
+                 animation_frame="start_year", trendline="ols", trendline_scope="overall",
+                 trendline_options=dict(log_x=True),
+                 log_x=True, range_x=[300, 200000], range_y=[-5, 9],
+                 labels={"gdp_pc_start": "GDP per person in the starting year (2021 dollars, ratio scale)",
+                         "growth": "Average annual growth to 2023 (percent)", "group": "Countries",
+                         "start_year": "Starting year"},
+                 title="Growth rates around the world: no clear catch-up")
+fig.show()
+```
+
+**What to notice.**
+
+- For the world as a whole, the regression line is nearly flat: poor countries did *not* grow faster on average.
+- According to the Solow model, this suggests that most poor countries are close to a **low steady state**. They have low investment rates and low productivity, rather than having been pushed below a high steady state.
+- A few countries, such as South Korea, China and Botswana, grew very fast. Their steady states probably moved up.
+
+**Your turn.** Hide the OECD group by clicking it in the legend. Then hover over the three fastest-growing
+countries for the 1960 start. What do they have in common, according to Figure 10 below?
+
+<details><summary>Hint</summary>
+
+Look for the highest points of the chart, then look up their investment rates in Figure 10 with the dropdown menus.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 10: Investment in South Korea and the Philippines
+
+**Goal.** See how a rising investment rate can lift a country's steady state.
+
+In 1960, South Korea was even poorer than the Philippines. Since then Korea's GDP per person has
+grown much faster. The Solow model points to investment: if Korea's investment rate rose sharply,
+its steady state moved up, and transition dynamics produced fast growth.
+
+```{python}
+def investment_chart(country_a="Republic of Korea", country_b="Philippines"):
+    """Figure 5.10: investment rates of two countries and the United States, 1950-2023."""
+    chosen = panel[panel.country.isin([country_a, country_b, "United States"])]
+    fig = px.line(chosen, x="year", y="inv_rate", color="country",
+                  labels={"inv_rate": "Investment rate (percent of GDP)", "year": "Year"},
+                  title=f"Investment rates: {country_a}, {country_b} and the United States")
+    fig.update_layout(yaxis_range=[0, 60], xaxis_range=[1950, 2023])
+    return fig
+```
+
+> **Python note.** A `Dropdown` is a menu: here it lists every country in the data.
+> `sorted(...)` puts the names in alphabetical order, and `.unique()` keeps each name only once.
+
+```{python}
+#| kind: widget
+countries = sorted(panel.country.unique())
+interact(investment_chart,
+         country_a=Dropdown(options=countries, value="Republic of Korea", description="country A", style=WIDE),
+         country_b=Dropdown(options=countries, value="Philippines", description="country B", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 10 with a precomputed slider for the comparison country
+slider_figure(investment_chart, "country_b", ["Philippines", "China", "India", "Brazil", "Mexico", "Nigeria"],
+              start="Philippines", label="compared with")
+```
+
+**What to notice.**
+
+- Korea's investment rate rose from about 13 percent in the 1950s to more than 40 percent in the 1990s. Investment in the United States and the Philippines stayed much flatter.
+- A permanently higher investment rate means a higher steady state, and Korea grew fast during its transition toward it.
+
+### Key numbers: Korea relative to the United States
+
+With equal depreciation rates, equation (5.9) gives the ratio of steady-state incomes:
+
+$$\frac{y^*_{Korea}}{y^*_{US}} = \left(\frac{\bar{A}_{Korea}}{\bar{A}_{US}}\right)^{3/2} \times \left(\frac{\bar{s}_{Korea}}{\bar{s}_{US}}\right)^{1/2} \qquad (5.13)$$
+
+We take the investment rates from the data, and then ask what productivity ratio would explain
+the actual income ratio in 2023.
+
+```{python}
+s_kor, s_usa = investment["Republic of Korea"], investment["United States"]
+y_kor = latest[latest.country == "Republic of Korea"].gdp_pc.iloc[0]
+y_usa = latest[latest.country == "United States"].gdp_pc.iloc[0]
+
+investment_part = (s_kor / s_usa) ** 0.5
+A_ratio = ((y_kor / y_usa) / investment_part) ** (2 / 3)      # solve (5.13) for A_Korea / A_US
+print(f"Investment rates since 1990: Korea {s_kor:.1f}%, United States {s_usa:.1f}%")
+print(f"Investment part of (5.13):   {investment_part:.2f}")
+print(f"Actual income ratio, 2023:   {y_kor / y_usa:.2f}")
+print(f"Implied productivity ratio:  {A_ratio:.2f}")
+```
+
+**Your turn.** Use the two dropdown menus to compare China and India. Which one had the higher
+investment rate after 2000? Then repeat the Korea calculation above for China.
+
+<details><summary>Hint</summary>
+
+Replace `"Republic of Korea"` with `"China"` in the code. The exact country names are in the
+`countries` list.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 11: The Solow diagram with population growth
+
+**Goal.** Add population growth at rate $\bar{n}$ and see what changes.
+
+Every year new workers arrive, and they must be equipped with capital too. Part of investment
+is therefore used up just to keep capital *per person* constant. The capital accumulation equation becomes
+
+$$\Delta k_{t+1} = \bar{s}y_t - (\bar{n}+\bar{d})\,k_t \qquad (5.15)$$
+
+so population growth works like extra depreciation. The steady state is
+$y^* = \bar{A}^{3/2}\left(\frac{\bar{s}}{\bar{n}+\bar{d}}\right)^{1/2}$ (5.16).
+
+```{python}
+def solow_with_population(s=0.4, n=0.02, d=0.08, A=1.0):
+    """Figure 5.11: investment s*y against the line (n + d)*k."""
+    k = np.linspace(0, 20, 200)
+    k_star = steady_state_k(s, d, A, n=n)
+    y_star = output(k_star, A)
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=k, y=s * output(k, A), name="Investment, s·y", line=dict(color=TEAL, width=3)))
+    fig.add_trace(go.Scatter(x=k, y=(n + d) * k, name="(n + d)·k", line=dict(color=BLUE, width=3)))
+    fig.add_trace(go.Scatter(x=k, y=d * k, name="d·k (no population growth)", line=dict(color=GRAY, dash="dash")))
+    fig.add_trace(go.Scatter(x=[k_star], y=[(n + d) * k_star], name="Steady state", mode="markers",
+                             marker=dict(color="black", size=11)))
+    fig.update_layout(title=f"k* = {k_star:.2f}   y* = {y_star:.2f}   |   total GDP grows at n = {100 * n:.1f}% a year",
+                      xaxis=dict(title="Capital per person, k", range=[0, 20]),
+                      yaxis=dict(title="Investment and (n + d)·k", range=[0, 2]))
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(solow_with_population,
+         s=FloatSlider(value=0.4, min=0.1, max=0.6, step=0.05, description="investment rate s", style=WIDE),
+         n=FloatSlider(value=0.02, min=0.0, max=0.05, step=0.005, description="population growth n", style=WIDE, readout_format=".3f"),
+         d=FloatSlider(value=0.08, min=0.03, max=0.15, step=0.01, description="depreciation rate d", style=WIDE),
+         A=FloatSlider(value=1.0, min=0.5, max=1.5, step=0.1, description="productivity A", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 11 with a precomputed slider for population growth
+slider_figure(solow_with_population, "n", [0.0, 0.01, 0.02, 0.03, 0.04, 0.05], start=0.02,
+              label="population growth n")
+```
+
+**What to notice.**
+
+- Faster population growth rotates the $(\bar{n}+\bar{d})k$ line upward and **lowers** $k^*$ and $y^*$.
+- Output *per person* still settles at a constant $y^*$. Total GDP $Y = yL$, however, keeps growing at the rate $\bar{n}$.
+
+**Your turn.** Set $\bar{n} = 0$. Which earlier figure do you get back? Then find the population growth rate
+that lowers $y^*$ by 10 percent compared with $\bar{n}=0.02$.
+
+<details><summary>Hint</summary>
+
+With $\bar{n}=0$ the line is just $\bar{d}k$. For the second part, $y^*$ is proportional to $(\bar{n}+\bar{d})^{-1/2}$, so
+you need $(0.1/(\bar{n}+0.08))^{1/2} = 0.9$.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 12: The Solow diagram after an earthquake
+
+**Goal.** See what happens when a disaster destroys part of the capital stock but leaves the
+population and the parameters unchanged.
+
+An earthquake does **not** shift any curve, because $\bar{s}$, $\bar{d}$ and $\bar{A}$ are all the same. The economy
+just jumps to the left along the $k$-axis. Below the steady state, investment exceeds depreciation,
+so capital grows back toward the *same* $k^*$.
+
+```{python}
+def earthquake_diagram(destroyed=0.5, s=0.4, d=0.1, A=1.0):
+    """Figure 5.12: an earthquake moves the economy from k* to k0 = (1 - destroyed) k*; no curve shifts."""
+    k = np.linspace(0, 14, 200)
+    k_star = steady_state_k(s, d, A)
+    k0 = (1 - destroyed) * k_star
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=k, y=output(k, A), name="Output, y", line=dict(color=GREEN, width=3)))
+    fig.add_trace(go.Scatter(x=k, y=s * output(k, A), name="Investment, s·y", line=dict(color=TEAL, width=3)))
+    fig.add_trace(go.Scatter(x=k, y=d * k, name="Depreciation, d·k", line=dict(color=BLUE, width=3)))
+    fig.add_trace(go.Scatter(x=[k_star, k0], y=[output(k_star, A), output(k0, A)], name="Output before and after",
+                             mode="markers", marker=dict(color="black", size=11)))
+    fig.add_annotation(x=k0, y=0.15, ax=k_star, ay=0.15, xref="x", yref="y", axref="x", ayref="y",
+                       showarrow=True, arrowhead=3, arrowwidth=2, arrowcolor="crimson", text="earthquake")
+    fig.update_layout(title=f"k falls from {k_star:.1f} to {k0:.1f};  output falls to {output(k0) / output(k_star):.0%} of y*",
+                      xaxis=dict(title="Capital per person, k", range=[0, 14]),
+                      yaxis=dict(title="Output, investment and depreciation", range=[0, 2.7]))
+    return fig
+```
+
+This time we use `interact_manual`. It adds a button, so nothing happens until you press it. Choose
+the share of capital destroyed, then press **Earthquake!**
+
+```{python}
+#| kind: widget
+earthquake = interact_manual.options(manual_name="Earthquake!")
+earthquake(earthquake_diagram,
+           destroyed=FloatSlider(value=0.5, min=0.1, max=0.9, step=0.1, description="share of capital destroyed", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 12 with a precomputed slider for the share of capital destroyed
+slider_figure(earthquake_diagram, "destroyed", [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9], start=0.5,
+              label="share of capital destroyed")
+```
+
+**What to notice.**
+
+- Losing half of the capital stock lowers output by only about 21 percent, because $(1/2)^{1/3} \approx 0.79$. Diminishing returns work in reverse: the units of capital that are lost were the least productive ones.
+- The steady state does not change, so the economy eventually returns to exactly where it started.
+
+**Your turn.** What share of capital must be destroyed for output to fall by half? Find it with the
+slider, then check it with a formula.
+
+<details><summary>Hint</summary>
+
+Output after the earthquake is $(1-\text{share})^{1/3}\,y^*$. Set it equal to $0.5\,y^*$ and solve for the share.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 13: Output per person after an earthquake
+
+**Goal.** Follow the recovery year by year. We reuse `simulate`, now with a `destroyed` share of capital in 2020.
+
+```{python}
+def output_after_earthquake(destroyed=0.5, scale="ratio"):
+    """Figure 5.13: output per person over time when an earthquake destroys capital in 2020."""
+    years, y = simulate(destroyed=destroyed)
+    back = years[(years > 2020) & (y >= 0.99 * y[0])]          # years in which output is back within 1% of y*
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=years, y=y, name="Output per person", line=dict(color=GREEN, width=3)))
+    fig.add_trace(go.Scatter(x=[2000, 2100], y=[y[0], y[0]], name="Steady state y*", mode="lines",
+                             line=dict(color=GRAY, dash="dash")))
+    if scale == "ratio":
+        fig.update_yaxes(type="log", range=[np.log10(0.8), np.log10(2.2)])
+    else:
+        fig.update_yaxes(range=[0.8, 2.2])
+    fig.update_layout(title=f"Output falls by {100 * (1 - y[20] / y[0]):.0f}% in 2020 and is back within 1% of y* in {back[0]}",
+                      xaxis_title="Year", yaxis_title="Output per person, y")
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(output_after_earthquake,
+         destroyed=FloatSlider(value=0.5, min=0.1, max=0.9, step=0.1, description="share of capital destroyed", style=WIDE),
+         scale=ToggleButtons(options=["ratio", "linear"], description="vertical scale"));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 13 with a precomputed slider for the share of capital destroyed
+slider_figure(output_after_earthquake, "destroyed", [0.1, 0.3, 0.5, 0.7, 0.9], start=0.5,
+              label="share of capital destroyed")
+```
+
+**What to notice.**
+
+- Output drops at once in 2020 and then grows back. Growth is fastest right after the shock, when the economy is furthest below its steady state.
+- Studies of cities rebuilt after wars, such as Hiroshima, Nagasaki and the bombed provinces of Vietnam, find this kind of recovery within one generation.
+
+**Your turn.** Does a larger disaster take *proportionally* longer to recover from? Compare the recovery year in the title for
+shares of 0.3, 0.5 and 0.9.
+
+<details><summary>Hint</summary>
+
+The farther below the steady state, the faster the growth. A bigger shock starts the recovery with higher growth rates.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Key numbers
+
+This table collects the main numbers of the chapter. Each one is computed with the functions defined
+above, so it is easy to check how a number changes with the parameters.
+
+```{python}
+y_star = output(steady_state_k(0.4, 0.1))
+rows = [
+    ["Steady-state capital k* (s = 0.4, d = 0.1, A = 1)", steady_state_k(0.4, 0.1)],
+    ["Steady-state output y*", y_star],
+    ["K/Y in the steady state = s / d", 0.4 / 0.1],
+    ["k**/k* when s rises from 0.4 to 0.6", steady_state_k(0.6, 0.1) / steady_state_k(0.4, 0.1)],
+    ["y**/y* when s rises from 0.4 to 0.6", output(steady_state_k(0.6, 0.1)) / y_star],
+    ["k**/k* when d rises from 0.10 to 0.15", steady_state_k(0.4, 0.15) / steady_state_k(0.4, 0.1)],
+    ["y* with n = 0.02 relative to n = 0 (d = 0.08)", output(steady_state_k(0.4, 0.08, n=0.02)) / output(steady_state_k(0.4, 0.08))],
+    ["Output right after losing half of k, as a share of y*", 0.5 ** (1 / 3)],
+    ["Rich/poor income ratio, latest data", income_ratio],
+    ["  ... factor explained by investment rates", s_ratio ** 0.5],
+]
+pd.DataFrame(rows, columns=["Quantity", "Value"]).round(2)
+```
+
+## Summary
+
+- The Solow model makes capital **endogenous**. Capital grows when investment $\bar{s}y$ exceeds depreciation $\bar{d}k$, and it stops growing at the **steady state** $k^* = (\bar{s}\bar{A}/\bar{d})^{3/2}$.
+- Because of **diminishing returns** to capital, capital accumulation cannot be the engine of long-run growth: output per person settles at a constant $y^*$.
+- Changes in $\bar{s}$, $\bar{d}$ or $\bar{n}$ change the *level* of the steady state. The economy then grows or shrinks for a while, and fastest when it is farthest from the steady state (the **principle of transition dynamics**).
+- The data agree with the model on capital-output ratios and on catch-up within the OECD. But for the world as a whole, productivity differences, not investment, explain most of the gap between rich and poor countries.
+- The next chapter looks for the engine of long-run growth: new **ideas**.
