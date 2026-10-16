@@ -1,0 +1,1598 @@
+# Chapter 14: Financial Crises and the Short-Run Model
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/ch14-financial-crises-and-the-short-run-model.ipynb)
+
+*Data Science and Macroeconomic Models: A Python Companion to Intermediate Macroeconomics* · Carlos Mendez
+
+> **How to use this notebook.** In Colab, click *Runtime → Run all*. After that, every model
+> figure has live sliders: move one and the model is solved again on the spot. On the book
+> website the same figures come with one precomputed slider. Each section ends with a short
+> **Your turn** task, and you can try it in the empty code cell below the task.
+
+<!-- cell -->
+
+## Learning goals
+
+Chapters 11 to 13 assumed that the central bank sets the interest rate at which firms and households borrow. In a
+financial crisis that link breaks. This chapter adds a **risk premium** to the short-run model and uses it, together
+with U.S. data, to study the financial crisis of 2008–2009, the dangers of deflation and the policy response. By the
+end of it you will be able to:
+
+- add the **financial friction** $\bar{f}$ to the IS/MP and AS/AD models and show why it acts like a negative demand
+  shock;
+- explain why **deflation** and the **zero lower bound** make a recession worse, and how a deflationary spiral can
+  turn a recession into a depression;
+- read the data on the crisis and its aftermath: interest-rate spreads, the Taylor rule, potential GDP, money growth,
+  asset-price bubbles, the Fed's balance sheet, forward guidance and productivity;
+- in Python: build a model step by step from small functions, compute peaks, troughs and growth rates, stack a
+  chart with `px.area`, rebuild a table from monthly data, and blank out data that cross a definition break.
+
+<!-- cell -->
+
+## Figures in this chapter
+
+The figures follow the order of the textbook chapter. The second column shows which textbook figure each notebook
+figure replicates.
+
+| Figure | Textbook figure | Type | What you can change |
+|---|---|---|---|
+| Figure 1 | 14.1 The spread between corporate bonds and 10-year Treasuries | data | show or hide series (legend), hover |
+| Figure 2 | 14.2 A housing bubble and a financial crisis | model | housing shock ā′, financial friction f̄ |
+| Figure 3 | 14.3 The financial crisis in the AS/AD framework | model | period t, shock ā, friction f̄, policy response m̄ |
+| Figure 4 | 14.4 The fed funds rate and the Taylor rule | data | r̄ and the output weight of the Taylor rule |
+| Figure 5 | 14.5 What happened to potential GDP? | data | show or hide series (legend), hover |
+| Figure 6 | 14.6 The growth rate of various money supply measures | data | show or hide series (legend), hover |
+| Figure 7 | 14.7 The price-earnings ratio in the stock market | data | first year of the long-run average |
+| Figure 8 | 14.8 Real home prices in the United States | data | boom and bust episode |
+| Figure 9 | 14.9 Financial assets of the Federal Reserve (with Table 14.1) | data | show or hide asset types (legend) |
+| Figure 10 | 14.10 The fed funds rate: actual and expected | data | year of the market forecast |
+| Figure 11 | 14.11 U.S. total factor productivity | data | first year of the average growth rate |
+| Figure 12 | 14.12 The Great Depression in the IS/MP framework | model | step A–D, Fed's hike, crash ā′, slope ν̄, diagram |
+| Figure 13 | 14.13 The Phillips curve and the Great Depression | model | step A–D, Fed's hike, crash ā′, slope ν̄, diagram |
+
+<!-- cell -->
+
+## Setup
+
+We first load the Python libraries we need. You only have to run this cell once.
+
+> **Python note.** `import` loads a *library*, a toolbox written by other people. We give each
+> library a short nickname, for example `np` for NumPy, so that the code stays short. Text after
+> a `#` is a *comment*: Python ignores it, and it is there for human readers. The `try ... except`
+> block runs one Colab-only line and simply skips it anywhere else.
+
+```{python}
+# Libraries used in this chapter
+import numpy as np                              # numbers and arrays
+import pandas as pd                             # data tables
+import plotly.express as px                     # quick charts from data tables
+import plotly.graph_objects as go               # charts built piece by piece (model figures)
+import plotly.io as pio
+from plotly.subplots import make_subplots       # several panels in one figure
+from ipywidgets import interact, FloatSlider, IntSlider, ToggleButtons, Dropdown
+
+# One light blue/green look for every chart
+BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
+pio.templates.default = "plotly_white"
+pio.templates["plotly_white"].layout.update(width=860, height=480)   # same size in Colab and on the website
+px.defaults.color_discrete_sequence = [BLUE, TEAL, GREEN, "#5aa0d8", "#0b4f47"]
+WIDE = {"description_width": "initial"}         # show the full slider labels
+
+# Colab only: let Plotly charts appear inside the interactive widgets
+try:
+    import google.colab
+    google.colab.output.enable_custom_widget_manager()
+except ImportError:
+    pass                                        # not running in Colab: nothing to do
+
+# The data files of this chapter live in the book's GitHub repository
+DATA_URL = "https://raw.githubusercontent.com/quarcs-lab/macro102-site/main/data/ch14/"
+```
+
+The next cell defines a helper that only the book website needs. Run it and move on.
+
+```{python}
+#| kind: helper
+# @title Helper for the website versions (run this cell; you do not need to read it)
+def slider_figure(make_figure, name, values, start, label=None):
+    """Precompute make_figure(name=value) for every value and join the results with one slider.
+
+    The website cannot run Python, so each interactive figure also gets this precomputed version.
+    """
+    figures = [make_figure(**{name: v}) for v in values]
+    first = values.index(start)
+    fig = go.Figure(layout=figures[first].layout)
+    owner = []                                  # which precomputed figure each trace comes from
+    for i, f in enumerate(figures):
+        for trace in f.data:
+            trace.visible = (i == first)
+            fig.add_trace(trace)
+            owner.append(i)
+    steps = []
+    for i, f in enumerate(figures):
+        layout = {"title": f.layout.title.to_plotly_json(),
+                  "annotations": [a.to_plotly_json() for a in f.layout.annotations],
+                  "shapes": [s.to_plotly_json() for s in f.layout.shapes]}
+        visible = [o == i for o in owner]
+        steps.append(dict(method="update", label=str(values[i]), args=[{"visible": visible}, layout]))
+    fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
+                                    currentvalue=dict(prefix=(label or name) + " = "))])
+    return fig
+```
+
+## The model in code
+
+The short-run model of Chapters 11 to 13 has three pieces: the IS curve $\tilde{Y}_t = \bar{a} - \bar{b}(R_t - \bar{r})$,
+the central bank's choice of the real interest rate (the MP curve, or the policy rule
+$R_t - \bar{r} = \bar{m}(\pi_t - \bar{\pi})$), and the Phillips curve $\pi_t = \pi_{t-1} + \bar{\nu}\tilde{Y}_t$. This
+chapter adds one equation. The central bank sets the **fed funds rate** $R^{ff}_t$, but firms and households borrow at
+a higher rate. The difference is a **risk premium**, the **financial friction** $\bar{f}$:
+
+$$R_t = R^{ff}_t + \bar{f}. \qquad (14.1)$$
+
+In normal times $\bar{f} = 0$. In a financial crisis lenders fear they will not be repaid, $\bar{f}$ jumps, and the rate
+that matters for investment rises even when the central bank cuts its own rate. Put equation (14.1) and the policy rule
+into the IS curve and you get the **new AD curve**:
+
+$$\tilde{Y}_t = \underbrace{\bar{a} - \bar{b}\bar{f}}_{\text{AD shock}} - \bar{b}\bar{m}\,(\pi_t - \bar{\pi}). \qquad (14.2)$$
+
+The friction enters exactly like a fall in $\bar{a}$. The last ingredient is the **Fisher equation**, which links the
+nominal interest rate $i_t$ to the real one: $R_t = i_t - \pi_t$. (The textbook prints equation 14.3 as
+$R_t = i_t + \pi_t$; that is a typo, and the text around it uses $R_t = i_t - \pi_t$.) When the nominal rate is stuck,
+**falling** inflation means a **rising** real interest rate.
+
+**One baseline for every diagram.** The textbook draws its diagrams without numbers, apart from a few examples. All
+the diagrams of this notebook start from one illustrative set of values:
+
+- the IS curve: a marginal product of capital $\bar{r} = 2$ percent and $\bar{b} = 1$, so each point of interest rate
+  above $\bar{r}$ costs 1 percent of output;
+- the policy rule and the Phillips curve: an inflation target $\bar{\pi} = 2$ percent, $\bar{m} = 1$ and $\bar{\nu} = 0.5$;
+- 2008: the housing bust lowers demand by $\bar{a}' = -2$ and the crisis adds a risk premium $\bar{f} = 4$ points;
+- 1929: the Fed raises the interest rate by 3 points and the stock market crash lowers demand by $\bar{a}' = -3$.
+
+With these values the model reproduces the textbook's example numbers: $-2$ and $-4$ percent in Figure 2, and
+$-3$, $-6$ and $-9$ percent in Figures 12 and 13.
+
+> **Python note.** `def` creates a *function*: a named recipe that takes inputs (the *arguments*) and gives
+> back a result with `return`. Writing `a=0.0` gives an argument a *default value*, used whenever we do not
+> pass one. Names in capital letters, such as `R_BAR`, are constants we set once and never change.
+
+```{python}
+R_BAR, B_BAR = 2.0, 1.0            # marginal product of capital 2%, interest sensitivity b = 1
+PI_BAR, M_BAR, NU = 2.0, 1.0, 0.5  # inflation target 2%, policy response m = 1, Phillips slope nu = 0.5
+A_HOUSING, F_CRISIS = -2.0, 4.0    # 2008: the housing bust a' = -2 and a risk premium f = 4 points
+HIKE, A_CRASH = 3.0, -3.0          # 1929: the Fed's hike of 3 points and the crash a' = -3
+
+
+def is_output(R, a=0.0):
+    """IS curve: short-run output Y~ = a - b (R - r_bar), in percent."""
+    return a - B_BAR * (R - R_BAR)
+
+
+def is_rate(Y, a=0.0):
+    """The IS curve solved for the real interest rate, R = r_bar + (a - Y) / b (used to draw it)."""
+    return R_BAR + (a - Y) / B_BAR
+
+
+def borrowing_rate(R_ff, f=0.0):
+    """Equation 14.1: firms and households borrow at R = R_ff + f."""
+    return R_ff + f
+
+
+def real_rate(i, pi):
+    """The Fisher equation: the real interest rate R = i - pi."""
+    return i - pi
+```
+
+The AS/AD part of the model needs three more functions: the new AD curve, the AS curve and the point where they
+cross. To find that point, put the AS curve into the AD curve and solve for output:
+$\tilde{Y}_t = \left[\bar{a} - \bar{b}\bar{f} - \bar{b}\bar{m}(\pi_{t-1} - \bar{\pi})\right] / (1 + \bar{b}\bar{m}\bar{\nu})$.
+
+```{python}
+def ad_output(pi, a=0.0, f=0.0, m=M_BAR):
+    """Equation 14.2, the new AD curve: Y~ = (a - b f) - b m (pi - pi_bar)."""
+    return a - B_BAR * f - B_BAR * m * (pi - PI_BAR)
+
+
+def as_inflation(Y, pi_prev=PI_BAR):
+    """The AS curve (the Phillips curve): pi = pi_prev + nu Y~, with pi_prev last period's inflation."""
+    return pi_prev + NU * Y
+
+
+def solve_asad(pi_prev, a=0.0, f=0.0, m=M_BAR):
+    """Where the AD and AS curves cross: this period's output and inflation."""
+    Y = (a - B_BAR * f - B_BAR * m * (pi_prev - PI_BAR)) / (1 + B_BAR * m * NU)
+    return Y, as_inflation(Y, pi_prev)
+```
+
+A quick check of the 2008 story with these functions:
+
+> **Python note.** An *f-string* such as `f"Y~ = {Y:.1f}%"` inserts a value into text; `:.1f` means "show one
+> decimal". `Y, pi = solve_asad(...)` *unpacks* the two results of a function into two variables.
+
+```{python}
+R_ff = R_BAR + A_HOUSING / B_BAR                  # the cut that offsets the housing bust
+R = borrowing_rate(R_ff, F_CRISIS)                # what firms pay once the crisis hits
+print(f"Housing bust, Fed does nothing (B):  Y~ = {is_output(R_BAR, A_HOUSING):.1f}%")
+print(f"Fed cuts R_ff to {R_ff:.1f}% (C):          Y~ = {is_output(R_ff, A_HOUSING):.1f}%")
+print(f"Risk premium f = 4, so R = {R:.1f}% (D):  Y~ = {is_output(R, A_HOUSING):.1f}%")
+Y, pi = solve_asad(PI_BAR, A_HOUSING, F_CRISIS)
+print(f"AS/AD, first year of the crisis:     Y~ = {Y:.1f}%, inflation = {pi:.1f}%")
+```
+
+The Fed's cut would fully offset the housing bust, but the risk premium undoes it and more: output ends 4 percent below
+potential. In the AS/AD version the policy rule also reacts to inflation, so the first-year recession is 4 percent and
+inflation falls from 2 to 0 percent.
+
+<!-- cell -->
+
+### Drawing tools
+
+All model diagrams use the same few drawing steps, so we write them once:
+
+- `add_curve` draws one curve and writes its name at its right end; `add_label` skips a name that would sit on top of
+  another one;
+- `add_point` marks a point with dashed guides to the axes, and `add_arrow` draws an arrow;
+- `model_figure` starts a figure with one or two panels, and `model_axes` fixes the axes and writes the title.
+
+> **Python note.** `np.linspace(-7.5, 4.5, 121)` creates 121 evenly spaced numbers from −7.5 to 4.5. Because our model
+> functions work on a whole array at once, one call gives a whole curve. `(x >= x0) & (y <= y1)` is true where *both*
+> conditions hold, `x[inside]` keeps the values where `inside` is true, and `[-1]` takes the last of them. A `for` loop
+> over `fig.layout.annotations` looks at every label already written, and `return` inside the loop stops the function
+> early.
+
+```{python}
+FADED_TEAL, FADED_BLUE = "rgba(0,128,112,0.35)", "rgba(22,82,140,0.35)"   # curves before a shock
+
+
+def axis_names(col):
+    """The names Plotly gives the axes of panel col: x and y in panel 1, x2 and y2 in panel 2."""
+    if col == 1:
+        return "x", "y"
+    return f"x{col}", f"y{col}"
+
+
+def add_label(fig, x, y, text, color, col=1):
+    """Write a curve name at (x, y), unless another name already sits within 0.6 axis units."""
+    xref, yref = axis_names(col)
+    for old in fig.layout.annotations:
+        if old.xref == xref and old.showarrow is False and abs(old.x - x) < 1.5 and abs(old.y - y) < 0.6:
+            return
+    fig.add_annotation(x=x, y=y, xref=xref, yref=yref, text=text, showarrow=False, xanchor="left",
+                       yanchor="bottom", font=dict(color=color, size=14))
+
+
+def add_curve(fig, x, y, label, color, box, dash="solid", col=1):
+    """Draw a curve in panel col and write its name at its last point inside box = (x range, y range)."""
+    fig.add_trace(go.Scatter(x=x, y=y, mode="lines", name=label, showlegend=False,
+                             line=dict(color=color, width=3, dash=dash)), row=1, col=col)
+    (x0, x1), (y0, y1) = box
+    inside = (x >= x0) & (x <= x1 - 1.2) & (y >= y0) & (y <= y1)    # leave room for the text
+    if inside.any() and label != "":
+        add_label(fig, x[inside][-1], y[inside][-1], label, color, col)
+```
+
+```{python}
+def add_point(fig, x, y, label, box, guides="v", col=1):
+    """Mark (x, y) with a dot and a letter; dashed guides down to the x-axis ("v"), to both axes ("both") or none."""
+    (x0, x1), (y0, y1) = box
+    xs, ys = [x, x], [y, y0]
+    if guides == "both":
+        xs, ys = [x0, x, x], [y, y, y0]
+    if guides != "none":
+        fig.add_trace(go.Scatter(x=xs, y=ys, mode="lines", showlegend=False, hoverinfo="skip",
+                                 line=dict(color="black", width=1, dash="dash")), row=1, col=col)
+    fig.add_trace(go.Scatter(x=[x], y=[y], mode="markers+text", text=[label], textposition="top right",
+                             name=label, showlegend=False, textfont=dict(size=16),
+                             marker=dict(color="black", size=10)), row=1, col=col)
+
+
+def add_arrow(fig, x0, y0, x1, y1, col=1):
+    """Draw an arrow from (x0, y0) to (x1, y1) in axis units; nothing if the two points almost coincide."""
+    if abs(x1 - x0) + abs(y1 - y0) > 0.15:
+        xref, yref = axis_names(col)
+        fig.add_annotation(x=x1, y=y1, ax=x0, ay=y0, xref=xref, yref=yref, axref=xref, ayref=yref, text="",
+                           showarrow=True, arrowhead=3, arrowwidth=2, arrowcolor="black")
+```
+
+> **Python note.** `make_subplots(rows=1, cols=2)` creates a figure with two panels side by side, and
+> `add_trace(..., row=1, col=2)` draws in the second panel. `fig.update_xaxes(..., row=1, col=col)` changes the
+> horizontal axis of one panel only.
+
+```{python}
+def model_figure(cols=1, titles=None):
+    """An empty figure with cols panels side by side (titles: one short title per panel)."""
+    return make_subplots(rows=1, cols=cols, subplot_titles=titles, horizontal_spacing=0.1)
+
+
+def model_axes(fig, title, box, y_title, x_ticks, y_ticks, panels=1):
+    """Fixed axes in every panel, so that you can see the curves move, and the title readout."""
+    for col in range(1, panels + 1):
+        fig.update_xaxes(title_text="Output, Ỹ (%)", range=box[0], tickvals=x_ticks, zeroline=False, row=1, col=col)
+        fig.update_yaxes(title_text=y_title, range=box[1], tickvals=y_ticks, zeroline=False, row=1, col=col)
+    fig.update_layout(title=title)
+```
+
+<!-- cell -->
+
+### Tools for the data figures
+
+Two data tools are used by several figures. `shade_recessions` shades the U.S. recessions, as dated by the National
+Bureau of Economic Research (NBER). The file `recessions.csv` lists, for each recession since 1953, the **peak** (the
+last month before the recession) and the **trough** (its last month). `peak_to_trough` finds the highest value of a
+series between two dates, the lowest value after it, and the fall in percent between the two.
+
+> **Python note.** `pd.read_csv` reads a data file into a *DataFrame*, a table with named columns, and
+> `parse_dates=[...]` turns text such as `"2007-12-01"` into real dates. `zip(a, b)` hands over one pair of values at a
+> time. `data[(data.date >= start) & (data.date <= end)]` keeps the rows between two dates, `.idxmax()` gives the row
+> label of the largest value, and `.loc[label]` picks that row.
+
+```{python}
+recessions = pd.read_csv(DATA_URL + "recessions.csv", parse_dates=["peak", "trough"])
+
+
+def shade_recessions(fig, start):
+    """Shade every NBER recession that ends after the date start (Figures 4 and 6)."""
+    for peak, trough in zip(recessions.peak, recessions.trough):
+        if trough >= pd.Timestamp(start):
+            fig.add_vrect(x0=peak, x1=trough, fillcolor=BLUE, opacity=0.12, line_width=0)
+    return fig
+
+
+def peak_to_trough(data, column, start, end):
+    """The peak of column between two dates, the lowest value after it, and the fall in percent (Figures 7, 8)."""
+    window = data[(data.date >= start) & (data.date <= end)]
+    peak = window.loc[window[column].idxmax()]
+    after = window[window.date >= peak.date]
+    trough = after.loc[after[column].idxmin()]
+    return peak, trough, 100 * (1 - trough[column] / peak[column])
+
+
+recessions.tail(3)
+```
+
+## Figure 1: The spread between corporate bonds and 10-year Treasuries
+
+**Goal.** See the financial friction $\bar{f}$ in the data: the gap between what companies and the government pay to
+borrow.
+
+The U.S. government almost surely repays its debt, so its 10-year bonds (*Treasuries*) are the safe benchmark. Companies
+with a "BAA" rating are solid but not risk-free, so investors ask for a higher yield on their bonds. The difference
+between the two yields, the **spread**, is a measure of the risk premium $\bar{f}$ in equation (14.1). In normal times
+it is about 2 percentage points.
+
+```{python}
+spread = pd.read_csv(DATA_URL + "fig14-1.csv", parse_dates=["date"])
+spread.head()
+```
+
+Each row is a month. `baa_yield` and `treasury_10y` are the two yields in percent, and `spread` is their difference in
+percentage points. Before plotting we give the columns readable names, because the names appear in the legend.
+
+> **Python note.** `rename(columns={...})` gives columns new names, and `list(names.values())` is the list of the new
+> names. `px.line` draws a line chart straight from a DataFrame; with a list `y=[...]` it draws one line per column, and
+> `labels={...}` gives the axes readable names. `selector=dict(name=...)` changes only the line
+> with that name. `hovermode="x unified"` shows all three values of a month in one hover box.
+
+```{python}
+names = {"baa_yield": "BAA corporate bond yield", "treasury_10y": "10-year Treasury yield", "spread": "Spread"}
+peak = spread.loc[spread.spread.idxmax()]
+fig = px.line(spread.rename(columns=names), x="date", y=list(names.values()),
+              color_discrete_sequence=[TEAL, "#5aa0d8", BLUE],
+              labels={"date": "Year", "value": "Percent", "variable": ""},
+              title="Corporate borrowing costs rose in 2008 while Treasury yields fell")
+fig.update_traces(line_width=2)
+fig.update_traces(line_width=4, selector=dict(name="Spread"))
+fig.add_annotation(x=peak.date, y=peak.spread, text=f"Spread: {peak.spread:.1f} points ({peak.date:%b %Y})",
+                   ax=120, ay=-50, font=dict(size=13))
+fig.update_layout(yaxis=dict(range=[0, 10.5], tickvals=[2, 4, 6, 8, 10]), hovermode="x unified",
+                  legend=dict(x=0.99, y=0.99, xanchor="right", yanchor="top"))
+fig.show()
+```
+
+**What to notice.**
+
+- The spread averaged about 2 points from 1996 to 2007, then jumped to 6 points in December 2008, three times its usual
+  size.
+- In 2007–2008 the Treasury yield **fell**, as the Fed cut rates and investors fled to safety, but the BAA yield **rose**.
+  Lower policy rates did not reach the companies that borrow.
+- Smaller spikes come with other moments of stress: the 2001–2002 recession and the Covid-19 shock of March 2020.
+
+<!-- cell -->
+
+### Key numbers: the spread
+
+```{python}
+before = spread[spread.date < "2008-01-01"]
+by_year = spread.groupby(spread.date.dt.year).mean(numeric_only=True)
+print(f"Average spread 1996-2007: {before.spread.mean():.2f} points")
+print(f"Largest spread: {peak.spread:.2f} points in {peak.date:%B %Y}")
+for year in [2006, 2008]:
+    print(f"{year}: 10-year Treasury {by_year.treasury_10y[year]:.2f}%, BAA {by_year.baa_yield[year]:.2f}%")
+```
+
+> **Python note.** `groupby(spread.date.dt.year)` puts the months of each year in one group, and `.mean()` averages each
+> group. `by_year.treasury_10y[2006]` is the 2006 average of that column.
+
+From 2006 to 2008 the average Treasury yield fell by more than a point, while the average BAA yield rose by about one
+point.
+
+**Your turn.** Find the largest spread of 2020 and the month it happened. How does it compare with December 2008?
+
+<details><summary>Hint</summary>
+
+Keep the rows of 2020 with `spread[spread.date.dt.year == 2020]`, then use `.idxmax()` and `.loc[...]` as in the cell
+above.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 2: A housing bubble and a financial crisis
+
+**Goal.** See why a rise in the financial friction can defeat the central bank's interest-rate cut.
+
+Panel (a) repeats an example from Chapter 12. The housing bubble bursts, households feel poorer and spend less, so
+$\bar{a}$ falls and the IS curve shifts back to IS′. If the Fed did nothing, the economy would move from $A$ to $B$, a
+recession. The Fed answers by cutting the fed funds rate from $\bar{r}$ to $R^{ff}$ (MP′), just enough to bring output
+back to potential at $C$.
+
+Panel (b) adds the financial crisis. Firms now borrow at $R = R^{ff} + \bar{f}$ (equation 14.1). With a large enough
+friction, the rate they pay ends **above** $\bar{r}$ despite the Fed's cut (MP″), and the economy lands at $D$, a deeper
+recession than $B$. Two shocks conspire: the fall in consumption, and the rise in borrowing costs.
+
+> **Python note.** `np.full_like(IS_Y, R)` makes an array as long as `IS_Y` in which every value is `R`: a flat line, our
+> MP curve. `"..." if col == 1 else "..."` picks the first value when the condition holds, the second otherwise.
+
+```{python}
+IS_BOX = ([-7.5, 4.5], [-4.5, 9.5])            # the fixed axes: output from -7.5 to 4.5, R from -4.5 to 9.5
+IS_Y = np.linspace(-7.5, 4.5, 121)             # output levels at which we draw the curves
+
+
+def draw_housing_panel(fig, col, a_new, R_ff, R):
+    """One panel of Figure 14.2: IS and IS', and the MP lines at r_bar, R_ff and (panel b) R = R_ff + f."""
+    add_curve(fig, IS_Y, is_rate(IS_Y, a_new), "IS′", TEAL, IS_BOX, col=col)
+    add_curve(fig, IS_Y, is_rate(IS_Y), "IS", FADED_TEAL, IS_BOX, col=col)
+    if col == 2:
+        add_curve(fig, IS_Y, np.full_like(IS_Y, R), "MP″", BLUE, IS_BOX, col=col)
+    add_curve(fig, IS_Y, np.full_like(IS_Y, R_ff), "MP′", BLUE if col == 1 else FADED_BLUE, IS_BOX, col=col)
+    add_curve(fig, IS_Y, np.full_like(IS_Y, R_BAR), "MP", FADED_BLUE, IS_BOX, col=col)
+    add_point(fig, 0.0, R_BAR, "A", IS_BOX, col=col)
+    add_point(fig, is_output(R_BAR, a_new), R_BAR, "B", IS_BOX, col=col)
+    add_point(fig, 0.0, R_ff, "C", IS_BOX, col=col)
+```
+
+```{python}
+def housing_crisis(a_new=A_HOUSING, f=F_CRISIS):
+    """Figure 14.2: (a) a housing bust and the Fed's cut, (b) the same with a financial crisis on top."""
+    R_ff = R_BAR + a_new / B_BAR                   # the cut that brings output back to potential on IS'
+    R = borrowing_rate(R_ff, f)                    # equation 14.1: the rate firms pay
+    Y_B, Y_D = is_output(R_BAR, a_new), is_output(R, a_new)
+    fig = model_figure(2, ("(a) The housing bust and the Fed's cut", "(b) Add a financial crisis"))
+    for col in [1, 2]:
+        draw_housing_panel(fig, col, a_new, R_ff, R)
+    add_arrow(fig, -7.0, R_BAR, -7.0, R_ff, col=1)          # the Fed cuts its rate ...
+    add_arrow(fig, Y_B, -3.8, 0.0, -3.8, col=1)              # ... and output returns to potential
+    add_arrow(fig, -7.0, R_ff, -7.0, R, col=2)               # the risk premium pushes R back up
+    add_point(fig, Y_D, R, "D", IS_BOX, col=2)
+    title = (f"B: Ỹ = {Y_B:.1f}%;  the Fed cuts R<sup>ff</sup> to {R_ff:.1f}%;  "
+             f"R = R<sup>ff</sup> + f̄ = {R:.1f}%, so D: Ỹ = {Y_D:.1f}%")
+    model_axes(fig, title, IS_BOX, "Real interest rate, R (%)", [-6, -4, -2, 0, 2, 4], [-4, -2, 0, 2, 4, 6, 8], panels=2)
+    return fig
+```
+
+> **Python note.** `interact` turns each argument of a function into a slider and calls the function again every time
+> you move one. The `;` at the end only hides an extra line of text.
+
+```{python}
+#| kind: widget
+interact(housing_crisis,
+         a_new=FloatSlider(value=-2.0, min=-4.0, max=0.0, step=0.5, description="housing shock ā′", style=WIDE),
+         f=FloatSlider(value=4.0, min=0.0, max=6.0, step=0.5, description="financial friction f̄ (points)", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 2 with a precomputed slider for the financial friction
+slider_figure(housing_crisis, "f", [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0], start=4.0, label="financial friction f̄ (points)")
+```
+
+**What to notice.**
+
+- With $\bar{f} = 0$, points $C$ and $D$ coincide: the Fed's cut fully offsets the housing bust.
+- With $\bar{f} = 2$, $D$ sits exactly at $B$: the friction cancels the cut, and the economy is back where it would be
+  if the Fed had done nothing. Any friction above 2 points leaves the economy worse off than $B$.
+- In this baseline, output at $D$ equals $-\bar{b}\bar{f}$ whatever the housing shock: the Fed removed the housing
+  shock, so only the friction is left.
+
+<!-- cell -->
+
+### Key numbers: the zero lower bound
+
+Why not cut the fed funds rate further, to $R^{ff} = \bar{r} + \bar{a}'/\bar{b} - \bar{f}$, so that firms again pay what
+brings output back to potential? Because $R^{ff}$ here is a *real* rate. The nominal fed funds rate is
+$i = R^{ff} + \pi$, and it cannot go below zero. With inflation at 2 percent, the lowest possible real fed funds rate is
+$-2$ percent.
+
+```{python}
+pi = 2.0                                          # inflation before the crisis
+needed = R_BAR + A_HOUSING / B_BAR - F_CRISIS     # the real fed funds rate that would restore Y~ = 0
+print(f"Real fed funds rate needed: {needed:.1f}%, a nominal rate of {needed + pi:.1f}%")
+lowest = real_rate(0.0, pi)                       # the nominal rate at zero
+R = borrowing_rate(lowest, F_CRISIS)
+print(f"Best the Fed can do: R_ff = {lowest:.1f}%, so R = {R:.1f}% and Y~ = {is_output(R, A_HOUSING):.1f}%")
+```
+
+The cut needed would require a nominal rate of $-2$ percent. At the zero lower bound the best the Fed can do is
+$R = 2$ percent, which only brings output back to $B$, $-2$ percent. This is why the Fed turned to other tools
+(Figures 9 and 10).
+
+**Your turn.** Which financial friction $\bar{f}$ leaves the economy at $D$ with output 3 percent below potential? Does
+the answer depend on the housing shock $\bar{a}'$? Check with the sliders, then with `is_output`.
+
+<details><summary>Hint</summary>
+
+Look at the third "What to notice" point first. Then try `is_output(borrowing_rate(R_BAR + a / B_BAR, f), a)` for a few
+values of `f` and `a`.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 3: The financial crisis in the AS/AD framework
+
+**Goal.** Follow the crisis over time in the AS/AD diagram, and see how it can lead to deflation.
+
+By the new AD curve (14.2), the housing bust (a lower $\bar{a}$) and the risk premium $\bar{f}$ both shift the AD curve
+down to AD′. In period 1 the economy jumps from $A$ to $B$: a deep recession, and inflation below the 2 percent target.
+Firms expect last period's inflation, so the AS curve then shifts down period by period, and the economy slides along
+AD′ toward $C$, where output is back at potential but inflation is far below target. Because inflation started at only
+2 percent, it can turn **negative**: deflation. Point $D$ is where the economy would jump if the shocks suddenly ended:
+today's AS curve meets the old AD curve.
+
+As in Chapter 13, one function `crisis_path` solves the model period by period, and the figure shows period `t`.
+
+> **Python note.** `rows.append(dict(...))` adds one dictionary of named values to the list `rows`, and `rows[-1]["pi"]`
+> is the value named `"pi"` in the last one. `pd.DataFrame(rows)` turns the list into a table, one row per period, and
+> `path.loc[t]` is the row of period `t`.
+
+```{python}
+AD_BOX = ([-7.5, 7.5], [-7.5, 5.5])            # the fixed axes: output and inflation
+AD_Y = np.linspace(-7.5, 7.5, 151)             # output levels at which we draw the curves
+PERIODS = 15                                   # periods simulated after the shock
+
+
+def ad_inflation(Y, a=0.0, f=0.0, m=M_BAR):
+    """The new AD curve (14.2) solved for inflation, pi = pi_bar + (a - b f - Y) / (b m) (used to draw it)."""
+    return PI_BAR + (a - B_BAR * f - Y) / (B_BAR * m)
+
+
+def crisis_path(a=A_HOUSING, f=F_CRISIS, m=M_BAR):
+    """Figure 14.3: the AS/AD model period by period after a lasting shock; period 0 is the old steady state."""
+    rows = [dict(period=0, pi_prev=PI_BAR, Y=0.0, pi=PI_BAR)]
+    for t in range(1, PERIODS + 1):
+        pi_prev = rows[-1]["pi"]                  # adaptive expectations: last period's inflation
+        Y, pi = solve_asad(pi_prev, a, f, m)
+        rows.append(dict(period=t, pi_prev=pi_prev, Y=Y, pi=pi))
+    return pd.DataFrame(rows)
+
+
+crisis_path().head(5).round(2)
+```
+
+```{python}
+def add_crisis_path(fig, path, t, a, f, m):
+    """The AD shift, the jump from A to B in period 1, then the slide along AD' up to period t."""
+    x = ad_output(5.0, m=m)                       # where the old AD curve reaches 5% inflation
+    add_arrow(fig, x, 5.0, x, max(ad_inflation(x, a, f, m), AD_BOX[1][0]))
+    add_point(fig, path.Y[1], path.pi[1], "B", AD_BOX, guides="both")
+    for s in range(2, t + 1):
+        add_arrow(fig, path.Y[s - 1], path.pi[s - 1], path.Y[s], path.pi[s])
+        add_point(fig, path.Y[s], path.pi[s], "", AD_BOX, guides="none")
+```
+
+```{python}
+def crisis_asad(t=8, a=A_HOUSING, f=F_CRISIS, m=M_BAR):
+    """Figure 14.3: the economy t periods into a lasting crisis, with the old and new AS and AD curves."""
+    path = crisis_path(a, f, m)
+    now = path.loc[t]
+    pi_C = PI_BAR + (a - B_BAR * f) / (B_BAR * m)        # long run: Y~ = 0 on the new AD curve
+    fig = model_figure()
+    add_curve(fig, AD_Y, ad_inflation(AD_Y, a, f, m), "AD′", BLUE, AD_BOX)
+    add_curve(fig, AD_Y, ad_inflation(AD_Y, m=m), "AD", FADED_BLUE, AD_BOX)
+    add_curve(fig, AD_Y, as_inflation(AD_Y, now.pi_prev), "AS′", TEAL, AD_BOX)
+    add_curve(fig, AD_Y, as_inflation(AD_Y), "AS", FADED_TEAL, AD_BOX)
+    add_crisis_path(fig, path, t, a, f, m)
+    add_point(fig, 0.0, PI_BAR, "A", AD_BOX, guides="both")
+    add_point(fig, 0.0, pi_C, "C", AD_BOX, guides="both")
+    if t > 1:
+        Y_D, pi_D = solve_asad(now.pi_prev, m=m)         # D: today's AS curve meets the old AD curve
+        add_point(fig, Y_D, pi_D, "D", AD_BOX, guides="none")
+    title = f"Period {t}: Ỹ = {now.Y:.1f}%, π = {now.pi:.1f}%   |   long run at C: π = {pi_C:.1f}%"
+    model_axes(fig, title, AD_BOX, "Inflation, π (%)", [-6, -4, -2, 0, 2, 4, 6], [-6, -4, -2, 0, 2, 4])
+    return fig
+```
+
+> **Python note.** `IntSlider` is a slider for whole numbers, here the period `t`.
+
+```{python}
+#| kind: widget
+interact(crisis_asad,
+         t=IntSlider(value=8, min=1, max=15, step=1, description="period t", style=WIDE),
+         a=FloatSlider(value=-2.0, min=-4.0, max=0.0, step=0.5, description="housing shock ā", style=WIDE),
+         f=FloatSlider(value=4.0, min=0.0, max=5.0, step=0.5, description="financial friction f̄", style=WIDE),
+         m=FloatSlider(value=1.0, min=0.75, max=2.0, step=0.25, description="policy response m̄", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 3 with a precomputed slider for the period
+slider_figure(crisis_asad, "t", [1, 2, 3, 4, 6, 8, 12, 15], start=8, label="period t")
+```
+
+**What to notice.**
+
+- In period 1 the AD shock of $\bar{a} - \bar{b}\bar{f} = -6$ costs 4 percent of output, and inflation falls from 2 to
+  0 percent at $B$.
+- From then on inflation keeps falling, period after period, and the economy approaches $C$, with inflation at
+  $-4$ percent: deflation. Each period the economy closes one third of the remaining gap to $C$.
+- A larger $\bar{m}$ makes AD′ flatter. The first recession is deeper, but $C$ has less deflation.
+- The model assumes that the policy rule can always lower the interest rate. Deflation and the zero lower bound break
+  that assumption, which is why the textbook prefers the IS/MP diagram for such times (Figures 12 and 13).
+
+**Your turn.** Find the policy response $\bar{m}$ at which inflation in the long run, at $C$, is exactly $-2$ percent,
+as in the textbook's figure. Then check: is the period-1 recession deeper or milder than with $\bar{m} = 1$?
+
+<details><summary>Hint</summary>
+
+At $C$, output is zero, so $\pi_C = \bar{\pi} + (\bar{a} - \bar{b}\bar{f})/(\bar{b}\bar{m})$. Solve $-2 = 2 - 6/\bar{m}$, then
+compare `crisis_path(m=...).Y[1]` for both values.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 4: The fed funds rate and the Taylor rule
+
+**Goal.** Compare the Fed's actual interest rate with the rate a Taylor rule recommends.
+
+The **Taylor rule** is the policy rule of Chapter 13 with one more term: the real rate also responds to short-run
+output. With equal weights of one half and the Fisher equation, the nominal rate it recommends is
+
+$$i_t = \bar{r} + \pi_t + 0.5\,(\pi_t - 2) + 0.5\,\tilde{Y}_t,$$
+
+which is $i_t = 1\% + 1.5\,\pi_t + 0.5\,\tilde{Y}_t$ for the traditional $\bar{r} = 2$ percent. Many economists now
+think the long-run real rate has fallen to about 1 percent, so the textbook also shows the rule with $\bar{r} = 1$.
+Inflation is core PCE inflation over the last four quarters, and short-run output uses the CBO's estimate of
+potential GDP.
+
+```{python}
+taylor = pd.read_csv(DATA_URL + "fig14-4.csv", parse_dates=["date"])
+taylor.tail(3)
+```
+
+Each row is a quarter. `fed_funds` is the average fed funds rate, `short_run_output` and `core_pce_inflation` are the two
+inputs of the rule, and `taylor_rbar2` and `taylor_rbar1` are the rule computed with $\bar{r} = 2$ and $\bar{r} = 1$.
+`short_run_output_vintage2023` is short-run output as it was measured in May 2023, when the textbook was written; it
+stops in 2023.
+
+```{python}
+def taylor_rule(pi, Y, r_bar=2.0, weight=0.5):
+    """Figure 14.4: the Taylor rule, i = r_bar + pi + 0.5 (pi - 2) + weight Y~, in percent."""
+    return r_bar + pi + 0.5 * (pi - PI_BAR) + weight * Y
+
+
+ours = taylor_rule(taylor.core_pce_inflation, taylor.short_run_output)
+print(f"Largest difference from the column taylor_rbar2: {(ours - taylor.taylor_rbar2).abs().max():.4f} points")
+```
+
+Our function reproduces the rule in the data file. Now we draw it, and let you change $\bar{r}$ and the weight on output.
+
+```{python}
+def taylor_chart(r_bar=2.0, weight=0.5):
+    """Figure 14.4, first panel: the actual fed funds rate and the rate the Taylor rule recommends."""
+    chart = pd.DataFrame({"date": taylor.date, "Actual fed funds rate": taylor.fed_funds,
+                          "Taylor rule": taylor_rule(taylor.core_pce_inflation, taylor.short_run_output, r_bar, weight)})
+    boom = chart[(chart.date >= "2002-01-01") & (chart.date < "2007-01-01")]
+    gap = (boom["Taylor rule"] - boom["Actual fed funds rate"]).mean()
+    fig = px.line(chart, x="date", y=["Actual fed funds rate", "Taylor rule"], color_discrete_sequence=[BLUE, GREEN],
+                  labels={"date": "Year", "value": "Percent", "variable": ""},
+                  title=f"Taylor rule with r̄ = {r_bar:.1f}: rule minus actual rate in 2002–2006 = {gap:+.1f} points")
+    fig.update_traces(line_width=3)
+    fig.add_hline(y=0, line_dash="dash", line_color=GRAY)
+    shade_recessions(fig, "2000-01-01")
+    fig.update_layout(yaxis=dict(range=[-5, 11.5], tickvals=[-4, -2, 0, 2, 4, 6, 8, 10]),
+                      legend=dict(x=0.01, y=0.99, xanchor="left", yanchor="top"))
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(taylor_chart,
+         r_bar=FloatSlider(value=2.0, min=0.0, max=3.0, step=0.5, description="r̄ in the rule (%)", style=WIDE),
+         weight=FloatSlider(value=0.5, min=0.0, max=1.0, step=0.25, description="weight on output", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 4 with a precomputed slider for r̄
+slider_figure(taylor_chart, "r_bar", [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0], start=2.0, label="r̄ in the rule (%)")
+```
+
+The other two panels of the textbook figure show the inputs of the rule. We draw them side by side. The dashed gray line
+is short-run output as measured in May 2023: data revisions have raised it since 2018.
+
+```{python}
+inputs = make_subplots(rows=1, cols=2, subplot_titles=("Short-run output, Ỹ (%)", "Core PCE inflation, π (%)"))
+inputs.add_trace(go.Scatter(x=taylor.date, y=taylor.short_run_output, name="Short-run output, current data",
+                            line=dict(color=BLUE, width=3)), row=1, col=1)
+inputs.add_trace(go.Scatter(x=taylor.date, y=taylor.short_run_output_vintage2023, name="Short-run output, data of May 2023",
+                            line=dict(color=GRAY, width=2, dash="dash")), row=1, col=1)
+inputs.add_trace(go.Scatter(x=taylor.date, y=taylor.core_pce_inflation, name="Core PCE inflation",
+                            line=dict(color=TEAL, width=3)), row=1, col=2)
+inputs.add_hline(y=0, line_dash="dot", line_color=GRAY, row=1, col=1)
+inputs.add_hline(y=2, line_dash="dot", line_color=GRAY, row=1, col=2)
+shade_recessions(inputs, "2000-01-01")
+inputs.update_xaxes(range=["1999-07-01", "2026-12-31"])
+inputs.update_yaxes(range=[-12, 3.5], tickvals=[-10, -8, -6, -4, -2, 0, 2], row=1, col=1)
+inputs.update_yaxes(range=[-0.5, 6.5], tickvals=[0, 1, 2, 3, 4, 5, 6], row=1, col=2)
+inputs.update_layout(title="The inputs of the rule: a deep slump after 2008, low inflation until 2021",
+                     legend=dict(orientation="h", y=-0.15))
+inputs.show()
+```
+
+**What to notice.**
+
+- From 2009 to 2015 the fed funds rate sat at zero. In 2009 the rule itself was near or below zero, so the Fed looked
+  generous; but the risk premium of Figure 1 meant firms did not borrow at those low rates.
+- From 2002 to 2006 the fed funds rate was well **below** the rule: policy may have been too loose for too long,
+  helping the housing boom.
+- Inflation was low after 2008 but did not keep falling, although output was far below potential. A credible 2 percent
+  target may have held expectations up.
+- Move $\bar{r}$ down to 1: the rule is lower by 1 point in every quarter. In 2021–2022, with inflation above 5 percent,
+  even that rule called for rates far above the actual ones.
+
+<!-- cell -->
+
+### Key numbers: the Taylor rule
+
+```{python}
+zlb = taylor[(taylor.date >= "2009-01-01") & (taylor.date < "2016-01-01")]
+print(f"Highest fed funds rate 2009-2015: {zlb.fed_funds.max():.2f}%")
+print("Taylor rule (r_bar = 2) in the four quarters of 2009:", taylor[taylor.date.dt.year == 2009].taylor_rbar2.round(2).tolist())
+print(f"Rule 2011-2015, lowest value: {taylor[(taylor.date >= '2011') & (taylor.date < '2016')].taylor_rbar2.min():.2f}%")
+peak = taylor.loc[taylor.taylor_rbar2.idxmax()]
+print(f"Highest rule rate: {peak.taylor_rbar2:.2f}% in {peak.date:%Y-%m}, when the fed funds rate was {peak.fed_funds:.2f}%")
+```
+
+The fed funds rate never rose above 0.2 percent between 2009 and 2015, while the rule called for at least 1 percent from
+2011 on: one reason for the unconventional policies of Figures 9 and 10.
+
+**Your turn.** Compute the average gap between the rule and the actual rate in 2021–2022 for $\bar{r} = 2$ and for
+$\bar{r} = 1$.
+
+<details><summary>Hint</summary>
+
+Keep the rows with `taylor[(taylor.date >= "2021-01-01") & (taylor.date < "2023-01-01")]` and average
+`taylor_rbar2 - fed_funds`, then `taylor_rbar1 - fed_funds`.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 5: What happened to potential GDP?
+
+**Goal.** See how much of the "recovery" after 2008 came from a lower estimate of potential GDP.
+
+Short-run output is the gap between actual and potential GDP. Potential GDP cannot be observed: the Congressional Budget
+Office (CBO) estimates it with an extended Solow model, and it revises the estimate as new data arrive. Here we compare
+actual GDP with two CBO estimates of potential: the latest one, and the one the CBO made in 2007, just before the crisis.
+
+```{python}
+gdp = pd.read_csv(DATA_URL + "fig14-5.csv", parse_dates=["date"])
+gdp.tail(3)
+```
+
+The values are in trillions of chained 2017 dollars (the textbook used 2012 dollars, so its numbers are lower). The 2007
+estimate ends in 2017, the last year the CBO projected at the time; after that the column is empty (`NaN`, "not a
+number").
+
+```{python}
+names = {"gdp_actual": "Actual GDP", "gdp_potential_latest": "Potential GDP, latest estimate",
+         "gdp_potential_2007": "Potential GDP, 2007 estimate"}
+fig = px.line(gdp.rename(columns=names), x="date", y=list(names.values()), color_discrete_sequence=[BLUE, TEAL, GREEN],
+              labels={"date": "Year", "value": "Trillions of 2017 dollars", "variable": ""},
+              title="The output gap closed mostly because potential GDP was revised down")
+fig.update_traces(line_width=3)
+fig.update_layout(yaxis=dict(range=[12.5, 25.5], tickvals=[14, 16, 18, 20, 22, 24]), hovermode="x unified",
+                  legend=dict(x=0.01, y=0.99, xanchor="left", yanchor="top"))
+fig.show()
+```
+
+**What to notice.**
+
+- Until 2007 the two estimates of potential almost coincide. After 2008 the 2007 estimate keeps rising along its old
+  trend, while the latest estimate bends down.
+- Measured against the latest estimate, actual GDP was back at potential by about 2018. Measured against the 2007
+  estimate, it never came close.
+- Since 2021 actual GDP has been slightly above the latest estimate of potential, apart from the Covid-19 dip in 2020.
+
+<!-- cell -->
+
+### Key numbers: two estimates of the output gap
+
+```{python}
+def output_gap(actual, potential):
+    """Short-run output: the percent gap between actual and potential GDP."""
+    return 100 * (actual / potential - 1)
+
+
+gdp["gap_latest"] = output_gap(gdp.gdp_actual, gdp.gdp_potential_latest)
+gdp["gap_2007"] = output_gap(gdp.gdp_actual, gdp.gdp_potential_2007)
+gaps = gdp.groupby(gdp.date.dt.year)[["gap_latest", "gap_2007"]].mean()
+gaps.loc[[2007, 2009, 2010, 2015, 2017]].round(2)
+```
+
+In 2017, actual GDP was 10.8 percent below the CBO's 2007 estimate of potential but only 0.6 percent below the latest
+one. The gap closed because potential was revised down by about 10 percent, not because GDP grew fast.
+
+**Your turn.** By how much, in percent, was the latest estimate of potential GDP below the 2007 estimate in 2017?
+
+<details><summary>Hint</summary>
+
+Use `output_gap` with the two potential columns: `output_gap(gdp.gdp_potential_latest, gdp.gdp_potential_2007)`, then
+average the quarters of 2017.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 6: The growth rate of various money supply measures
+
+**Goal.** Check whether the Fed repeated the mistake of the Great Depression, when the money supply collapsed.
+
+Milton Friedman and Anna Schwartz blamed the Great Depression on a Fed that let the money supply fall from 1929 to 1933.
+Here we look at three measures of money after 1990, from the narrowest to the broadest: **currency**, **M1** (currency
+plus checking accounts) and **M2** (M1 plus savings accounts and small time deposits). Each is measured by its growth
+over the last 12 months.
+
+```{python}
+money = pd.read_csv(DATA_URL + "fig14-6.csv", parse_dates=["date"])
+money.describe().round(1)
+```
+
+**A data-hygiene moment.** M1 grew by 357 percent in a year? That is not money creation. In May 2020 the Fed redefined
+M1 to include savings deposits, so M1 jumped by about 11 trillion dollars in one month. Any 12-month growth rate that
+compares the new definition with the old one, from May 2020 to April 2021, is meaningless. We blank those months out
+instead of letting them dominate the chart.
+
+> **Python note.** `money.loc[rows, "m1"] = np.nan` replaces the values of column `m1` in the selected rows with `NaN`,
+> "not a number". Plotly leaves a gap where a value is missing.
+
+```{python}
+broken = (money.date >= "2020-05-01") & (money.date <= "2021-04-01")
+print(f"M1 growth from May 2020 to April 2021: {money.m1[broken].min():.0f}% to {money.m1[broken].max():.0f}%")
+money.loc[broken, "m1"] = np.nan                   # growth across the definition break is not money growth
+print(f"M1 growth in April 2020 and May 2021: {money.m1[money.date == '2020-04-01'].iloc[0]:.1f}% and "
+      f"{money.m1[money.date == '2021-05-01'].iloc[0]:.1f}%")
+```
+
+```{python}
+names = {"currency": "Currency", "m1": "M1", "m2": "M2"}
+fig = px.line(money.rename(columns=names), x="date", y=list(names.values()), color_discrete_sequence=[BLUE, TEAL, GREEN],
+              labels={"date": "Year", "value": "Percent change over 12 months", "variable": ""},
+              title="All three money measures grew fast at the end of 2008 and in 2009")
+fig.update_traces(line_width=2.5)
+shade_recessions(fig, "1990-01-01")
+fig.add_annotation(x="2019-09-01", y=28.5, text="M1 redefined in May 2020:<br>growth across the break not shown",
+                   showarrow=False, xanchor="right", font=dict(size=12))
+fig.update_layout(yaxis=dict(range=[-15, 31], tickvals=[-10, -5, 0, 5, 10, 15, 20, 25, 30]),
+                  legend=dict(x=0.01, y=0.99, xanchor="left", yanchor="top"))
+fig.show()
+```
+
+**What to notice.**
+
+- Between October and December 2008, M1 growth jumped from about 7 to about 17 percent and currency growth from 4 to
+  7 percent; all three measures stayed high through 2009. The money supply grew, it did not collapse.
+- M2 grew by up to 27 percent in 2020–2021, with the Covid-19 relief programs, and then **fell** from late 2022 to early
+  2024, for the first time since the series began in 1959.
+- Money growth swings a lot from year to year. A single year of fast growth does not mean inflation is coming.
+
+**Your turn.** Find the month of fastest currency growth after 2008 and its growth rate.
+
+<details><summary>Hint</summary>
+
+Keep the rows with `money[money.date >= "2009-01-01"]`, then find the row of the largest `currency` with `.idxmax()` and
+`.loc[...]`.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 7: The price-earnings ratio in the stock market
+
+**Goal.** Measure stock prices against company profits and look for bubbles.
+
+In standard finance models, a stock is worth the present value of the profits it will earn. Robert Shiller's
+**price-earnings ratio** divides the stock price index by the average real earnings of the previous ten years (it is
+often called the CAPE). When the ratio climbs far above its long-run average, prices have usually come back down. The
+textbook marks the average with a dashed line; the slider lets you choose the years behind that average.
+
+```{python}
+cape = pd.read_csv(DATA_URL + "fig14-7.csv", parse_dates=["date"])
+cape.tail(3)
+```
+
+> **Python note.** `px.area` draws a line and fills the area below it. `cape.date.dt.year >= since` is true for the
+> months from the year `since` on. `cape.cape.iloc[-1]` is the last value of the column.
+
+```{python}
+def cape_chart(since=1881):
+    """Figure 14.7: the price-earnings ratio and its average from the year since to today."""
+    recent = cape[cape.date.dt.year >= since]
+    average = recent.cape.mean()
+    fig = px.area(cape, x="date", y="cape", color_discrete_sequence=["#5aa0d8"],
+                  labels={"date": "Year", "cape": "Price-earnings ratio"},
+                  title=f"Price-earnings ratio: {cape.cape.iloc[-1]:.1f} in {cape.date.iloc[-1]:%b %Y}; "
+                        f"average since {since}: {average:.1f}")
+    fig.add_trace(go.Scatter(x=[recent.date.iloc[0], cape.date.iloc[-1]], y=[average, average], mode="lines",
+                             name=f"Average since {since}", line=dict(color=BLUE, width=2, dash="dash")))
+    for year in [1929, 1999]:
+        top = cape.loc[cape[cape.date.dt.year == year].cape.idxmax()]
+        fig.add_annotation(x=top.date, y=top.cape, text=f"{top.date:%b %Y}: {top.cape:.1f}", ax=-60, ay=-25)
+    fig.update_layout(yaxis=dict(range=[0, 51], tickvals=[0, 10, 20, 30, 40, 50]), showlegend=False)
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(cape_chart, since=IntSlider(value=1881, min=1881, max=2001, step=10, description="average since", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 7 with a precomputed slider for the start of the average
+slider_figure(cape_chart, "since", [1881, 1901, 1951, 1981, 2001], start=1881, label="average since")
+```
+
+**What to notice.**
+
+- The ratio peaked in September 1929, just before the crash, and peaked even higher in December 1999, at the top of the
+  dot-com boom. Both times prices then fell a long way.
+- The average over the whole sample is now 17.8 (the textbook's 17.4 stopped in 2023). The average since 1990 is much
+  higher: whether today's high ratio is a bubble depends on which "normal" you believe in.
+- In 2026 the ratio is above 40, close to the 1999 record.
+
+<!-- cell -->
+
+### Key numbers: two stock market crashes
+
+```{python}
+for start, end in [("1929-01-01", "1932-12-31"), ("1999-01-01", "2009-12-31")]:
+    top, bottom, fall = peak_to_trough(cape, "cape", start, end)
+    print(f"Peak {top.cape:.1f} ({top.date:%b %Y}), trough {bottom.cape:.1f} ({bottom.date:%b %Y}): "
+          f"the ratio fell {fall:.0f}%")
+```
+
+**Your turn.** Compute the average price-earnings ratio for 1881–1989 and for 1990 to today.
+
+<details><summary>Hint</summary>
+
+Filter with `cape[cape.date < "1990-01-01"]` and `cape[cape.date >= "1990-01-01"]`, and use `.cape.mean()` on each.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 8: Real home prices in the United States
+
+**Goal.** See how unusual the housing boom of the 2000s was, and how far prices fell.
+
+Shiller's index of U.S. home prices is divided by the consumer price index, so it measures **real** home prices: the
+price of a house in terms of other goods. It is set to 100 in 1953. We use a ratio (log) scale, on which equal
+percentage changes look equally tall. The menu picks a boom-and-bust episode, and `peak_to_trough` measures it.
+
+> **Python note.** `log_y=True` gives a ratio scale. On such an axis, Plotly expects the range in powers of ten:
+> `np.log10(80)` is the power of ten that gives 80. A *dictionary* such as `EPISODES` stores named values, and
+> `EPISODES[episode]` gets the two dates of one episode. `Dropdown` shows a menu of choices.
+
+```{python}
+homes = pd.read_csv(DATA_URL + "fig14-8.csv", parse_dates=["date"]).rename(columns={"real_home_price_1953_100": "price"})
+EPISODES = {"1970s boom": ("1975-01-01", "1986-12-31"), "1980s boom": ("1985-01-01", "1997-12-31"),
+            "2000s bubble": ("2000-01-01", "2015-12-31"), "2020s boom": ("2020-01-01", "2026-12-31")}
+
+
+def home_prices(episode="2000s bubble"):
+    """Figure 14.8: real home prices on a ratio scale, with the peak and trough of one episode."""
+    peak, trough, fall = peak_to_trough(homes, "price", *EPISODES[episode])
+    fig = px.line(homes, x="date", y="price", log_y=True, color_discrete_sequence=[BLUE],
+                  labels={"date": "Year", "price": "Real home prices, 1953 = 100 (ratio scale)"},
+                  title=f"{episode}: real home prices fell {fall:.1f}% from {peak.date:%b %Y} to {trough.date:%b %Y}")
+    fig.update_traces(line_width=3)
+    fig.add_trace(go.Scatter(x=[peak.date, trough.date], y=[peak.price, trough.price], mode="markers+text",
+                             text=["Peak", "Trough"], textposition=["top center", "bottom center"], showlegend=False,
+                             marker=dict(color=TEAL, size=12)))
+    fig.update_yaxes(range=[np.log10(80), np.log10(220)], tickvals=[80, 100, 120, 140, 160, 180, 200])
+    return fig
+```
+
+> **Python note.** `*EPISODES[episode]` *unpacks* the pair of dates into two separate arguments, `start` and `end`.
+
+```{python}
+#| kind: widget
+interact(home_prices, episode=Dropdown(options=list(EPISODES), value="2000s bubble", description="episode", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 8 with a precomputed slider for the episode
+slider_figure(home_prices, "episode", ["1970s boom", "1980s boom", "2000s bubble", "2020s boom"], start="2000s bubble",
+              label="episode")
+```
+
+**What to notice.**
+
+- From 1953 to 2000 real home prices moved within a narrow band, between about 88 and 115. The boom of the 2000s pushed
+  them far above anything seen before.
+- Real prices fell 35.7 percent from the end of 2005 to early 2012, exactly the textbook's number. Household wealth fell
+  with them, which is the drop in $\bar{a}$ of Figure 2.
+- Earlier booms, around 1979 and 1989, were also followed by real declines. After 2020 prices rose again and have
+  eased only a little.
+
+**Your turn.** Since 2000, in how many months was the real home price index above its pre-2000 maximum?
+
+<details><summary>Hint</summary>
+
+The pre-2000 maximum is `homes[homes.date < "2000-01-01"].price.max()`. Then count the later months above it:
+`(homes[homes.date >= "2000-01-01"].price > top).sum()`.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 9: Financial assets of the Federal Reserve
+
+**Goal.** See the size and the composition of the Fed's balance sheet change during the crisis and after.
+
+With the fed funds rate at zero, the Fed bought other assets on a huge scale: mortgage-backed securities and long-term
+Treasury bonds. This is **quantitative easing** (QE), done in three rounds after 2008 and again in 2020. The chart
+stacks the Fed's assets by type, from the weekly balance sheet (the H.4.1 release).
+
+The textbook reprints a chart of the Cleveland Fed that split Treasuries by purchase program; that chart is no longer
+published. We split Treasuries by **remaining maturity** instead: over one year ("long-term") and within one year
+("short-term"). So our long-term layer is not zero before 2009, as it is in the textbook.
+
+```{python}
+assets = pd.read_csv(DATA_URL + "fig14-9.csv", parse_dates=["date"])
+assets.tail(3)
+```
+
+All values are in billions of dollars; `total_assets` is the sum of the five layers.
+
+> **Python note.** `px.area` with a list `y=[...]` stacks one layer per column, in the order of the list. With five
+> series, we pass five colors explicitly.
+
+```{python}
+names = {"long_term_treasuries": "Long-term Treasuries", "mbs_agency_debt": "Mortgage-backed securities",
+         "short_term_treasuries": "Short-term Treasuries", "credit_market_facilities": "Credit-market facilities",
+         "lending_and_other": "Lending to banks and other"}
+fig = px.area(assets.rename(columns=names), x="date", y=list(names.values()),
+              color_discrete_sequence=["#5aa0d8", TEAL, "#b9d7ef", "#0b4f47", GREEN],
+              labels={"date": "Year", "value": "Billions of dollars", "variable": ""},
+              title="The Fed's assets grew tenfold: 0.9 trillion dollars in 2007, 9 trillion in 2022")
+for text, day in [("QE1", "2009-03-04"), ("QE2", "2010-11-03"), ("QE3", "2012-09-12"), ("Covid-19", "2020-03-18")]:
+    total = assets.total_assets[assets.date == day].iloc[0]
+    fig.add_annotation(x=day, y=total, text=text, ax=-25, ay=-35, font=dict(size=13))
+fig.update_layout(yaxis=dict(range=[0, 10000], tickvals=[2000, 4000, 6000, 8000, 10000], tickformat=","),
+                  legend=dict(x=0.01, y=0.99, xanchor="left", yanchor="top"))
+fig.show()
+```
+
+**What to notice.**
+
+- In late 2008 the Fed first lent directly to banks and to credit markets (the green and dark layers). These loans were
+  repaid within about two years.
+- QE1, QE2 and QE3 then added mortgage-backed securities and long-term Treasuries, step by step, until the balance sheet
+  reached about 4.5 trillion dollars in 2015.
+- The Covid-19 purchases added more than 4 trillion dollars in two years. Since 2022 the Fed has let its holdings run
+  off, to about 6.8 trillion dollars in 2026.
+
+<!-- cell -->
+
+### Key numbers: Table 14.1, the Fed's balance sheet
+
+Table 14.1 of the textbook summarizes the balance sheet in May 2007 and May 2015. The file `fed_balance_sheet.csv` holds
+the monthly averages of the weekly H.4.1 data, so we can rebuild the table for any month. Its total is what the H.4.1
+calls *total factors supplying reserve funds*, the total the textbook uses.
+
+```{python}
+sheet = pd.read_csv(DATA_URL + "fed_balance_sheet.csv").set_index("month")
+
+
+def balance_sheet(month):
+    """Table 14.1: the Fed's assets and liabilities in one month, billions of dollars."""
+    row = sheet.loc[month]
+    items = {"Assets: U.S. Treasuries": row.treasuries, "Assets: Mortgage-backed securities": row.mbs,
+             "Assets: Other": row.total - row.treasuries - row.mbs, "Total assets": row.total,
+             "Liabilities: Currency": row.currency, "Liabilities: Reserves": row.reserves,
+             "Liabilities: Other": row.total - row.currency - row.reserves, "Total liabilities": row.total}
+    return pd.Series(items)
+
+
+table = pd.DataFrame({"May 2007": balance_sheet("2007-05"), "May 2015": balance_sheet("2015-05"),
+                      sheet.index[-1]: balance_sheet(sheet.index[-1])})
+table.insert(0, "May 2007, textbook", [790, 0, 116, 906, 814, 7, 85, 906])
+table.insert(2, "May 2015, textbook", [2460, 1720, 340, 4520, 1360, 2600, 560, 4520])
+table.round(0)
+```
+
+```{python}
+old, new = table.loc["Total assets", "May 2007"], table.loc["Total assets", "May 2015"]
+currency = table.loc["Liabilities: Currency", "May 2015"] - table.loc["Liabilities: Currency", "May 2007"]
+print(f"Total 2007 -> 2015: {old:.0f} -> {new:.0f} billion, {new / old:.2f} times as large, +{new - old:.0f} billion")
+print(f"Share of the expansion paid for with new currency: {100 * currency / (new - old):.1f}%")
+print(f"Total assets, weekly peak: {assets.total_assets.max():.0f} billion, "
+      f"{assets.total_assets.max() / assets.total_assets[0]:.1f} times January 2007")
+```
+
+Our table matches the textbook's within 11 billion dollars in every cell. The balance sheet grew fivefold, by more than
+3.5 trillion dollars, but new currency paid for only about 15 percent of it (the textbook says "less than 15 percent";
+its own numbers give 15.1). The rest came from bank **reserves**: the Fed paid for its purchases by crediting banks'
+accounts at the Fed, and the banks kept the money there.
+
+**Your turn.** Rebuild the table for May 2022, near the peak of the balance sheet. How large were reserves, compared with
+May 2015?
+
+<details><summary>Hint</summary>
+
+Call `balance_sheet("2022-05")` and compare its `"Liabilities: Reserves"` line with `table.loc["Liabilities: Reserves",
+"May 2015"]`.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 10: The fed funds rate: actual and expected
+
+**Goal.** See how forward guidance changed what financial markets expected of the Fed.
+
+Firms borrow for years, so they care about long-term interest rates, and a long rate is roughly the average of the short
+rates expected over its life. By announcing how long it would keep rates low, **forward guidance**, the Fed could lower
+long rates even with the fed funds rate at zero. In January 2012 it said rates would stay exceptionally low "at least
+through late 2014".
+
+Each dashed line is the path of the fed funds rate that markets expected in June of one year. The textbook uses futures
+contracts, which are not public; we read the expected path off the Treasury yield curve (forward rates), a close proxy
+that also contains a small term premium. The slider highlights one year's forecast.
+
+```{python}
+paths = pd.read_csv(DATA_URL + "fig14-10.csv", parse_dates=["date"])
+actual = paths[["date", "fed_funds"]].dropna()
+paths[["date", "expected_2009_06"]].dropna()
+```
+
+The June 2009 path starts at the actual rate, 0.21 percent, and climbs to 2.70 percent by the end of 2011, two and a half
+years later. Each `expected_YYYY_06` column holds one such path; the column `fed_funds` holds the actual monthly rate.
+
+> **Python note.** `date.to_period("M")` keeps only the month of a date, so two dates of the same month compare equal.
+> `if later.empty:` checks whether a filter found no rows.
+
+```{python}
+def realized_rate(day):
+    """The actual fed funds rate in the month of day, as text ("not known yet" for future months)."""
+    later = actual[actual.date.dt.to_period("M") == day.to_period("M")]
+    if later.empty:
+        return "not known yet"
+    return f"{later.fed_funds.iloc[0]:.2f}%"
+
+
+def add_expected_path(fig, year, chosen):
+    """One market forecast, made in June of year: thick if chosen, faint otherwise."""
+    path = paths[["date", f"expected_{year}_06"]].dropna()
+    width, color = 1.5, "rgba(127,178,58,0.45)"
+    if chosen:
+        width, color = 4, GREEN
+    fig.add_trace(go.Scatter(x=path.date, y=path[f"expected_{year}_06"], mode="lines", name=f"Expected in June {year}",
+                             line=dict(color=color, width=width, dash="dash")))
+    return path
+```
+
+```{python}
+def expectations_chart(year=2009):
+    """Figure 14.10: the actual fed funds rate and the paths markets expected each June."""
+    fig = px.line(actual, x="date", y="fed_funds", color_discrete_sequence=[BLUE],
+                  labels={"date": "Year", "fed_funds": "Percent"})
+    fig.update_traces(line_width=3, name="Actual fed funds rate")
+    for y in range(2008, 2027):
+        path = add_expected_path(fig, y, y == year)
+        if y == year:
+            end, expected = path.date.iloc[-1], path.iloc[-1, 1]
+    fig.add_vline(x="2012-01-25", line_color="black", line_width=1)
+    fig.add_annotation(x="2012-01-25", y=5.7, text="Forward guidance,<br>January 2012", xanchor="left", ax=30, ay=0)
+    fig.update_layout(title=f"June {year}: markets expected {expected:.2f}% for {end:%b %Y}; actual: {realized_rate(end)}",
+                      showlegend=False, xaxis_range=["2007-07-01", "2029-06-30"], yaxis=dict(range=[-0.3, 6.2],
+                      tickvals=[0, 1, 2, 3, 4, 5, 6]))
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(expectations_chart, year=IntSlider(value=2009, min=2008, max=2026, step=1, description="forecast made in June",
+                                            style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 10 with a precomputed slider for the year of the forecast
+slider_figure(expectations_chart, "year", [2008, 2009, 2010, 2011, 2012, 2013, 2015, 2018, 2021, 2022, 2024], start=2009,
+              label="forecast made in June")
+```
+
+**What to notice.**
+
+- From 2009 to 2015 every forecast expected the Fed to raise rates within about two years, and every one was too high:
+  markets kept thinking the Fed was about to tighten.
+- The flattest forecast of those years is June 2012, just after forward guidance began: markets now believed rates would
+  stay low.
+- The forecasts can also miss the other way. In June 2021 markets expected 0.88 percent for the end of 2023; the Fed,
+  fighting inflation, had raised the rate to 5.33 percent.
+
+<!-- cell -->
+
+### Key numbers: how wrong were the markets?
+
+> **Python note.** `path.iloc[-1, 1]` picks a cell by position: the last row (`-1`) of the second column (`1`).
+
+```{python}
+for year in range(2009, 2016):
+    path = paths[["date", f"expected_{year}_06"]].dropna()
+    end, expected = path.date.iloc[-1], path.iloc[-1, 1]
+    real = actual[actual.date.dt.to_period("M") == end.to_period("M")].fed_funds.iloc[0]
+    print(f"June {year}: expected {expected:.2f}% for {end:%b %Y}, actual {real:.2f}%, error {expected - real:+.2f} points")
+```
+
+The error is positive in every year from 2009 to 2015, and it is smallest in 2012 and 2015.
+
+**Your turn.** Which June forecast after 2015 made the largest error, in either direction? Use only forecasts whose end
+date has already passed.
+
+<details><summary>Hint</summary>
+
+Copy the loop and change the years to `range(2016, 2024)`. Forecasts from June 2024 on end after the last month of data,
+so their actual rate is not known yet.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 11: U.S. total factor productivity
+
+**Goal.** Measure the productivity slowdown that may explain the slow recovery after 2008.
+
+Total factor productivity (TFP) is output divided by a weighted combination of capital and labor: the $\bar{A}$ of the
+production model. The Bureau of Labor Statistics measures it for the private business sector and for manufacturing. Both
+indexes are set to 100 in 2009 and drawn on a ratio scale. The average annual growth rate between two years is
+
+$$g = 100 \times \frac{\ln(x_{\text{end}} / x_{\text{start}})}{\text{end} - \text{start}}.$$
+
+> **Python note.** `np.log` is the natural logarithm. `data.set_index("year")[column]` makes the years the row labels of
+> a column, so `x[2004]` is the value of 2004.
+
+```{python}
+tfp = pd.read_csv(DATA_URL + "fig14-11.csv")
+
+
+def growth_rate(data, column, start, end):
+    """Average annual growth in percent from year start to year end, 100 ln(x_end / x_start) / (end - start)."""
+    x = data.set_index("year")[column]
+    return 100 * np.log(x[end] / x[start]) / (end - start)
+
+
+LAST_PB = tfp.year[tfp.tfp_private_business.notna()].max()      # last year with data, private business
+LAST_MFG = tfp.year[tfp.tfp_manufacturing.notna()].max()         # last year with data, manufacturing
+print(f"Private business 2004-{LAST_PB}: {growth_rate(tfp, 'tfp_private_business', 2004, LAST_PB):.2f}% a year")
+print(f"Manufacturing 2004-{LAST_MFG}: {growth_rate(tfp, 'tfp_manufacturing', 2004, LAST_MFG):.2f}% a year")
+```
+
+```{python}
+def tfp_chart(start=2004):
+    """Figure 14.11: TFP in private business and manufacturing (2009 = 100, ratio scale), growth since start."""
+    names = {"tfp_private_business": "Private business sector", "tfp_manufacturing": "Manufacturing"}
+    g_pb = growth_rate(tfp, "tfp_private_business", start, LAST_PB)
+    g_mfg = growth_rate(tfp, "tfp_manufacturing", start, LAST_MFG)
+    fig = px.line(tfp.rename(columns=names), x="year", y=list(names.values()), log_y=True,
+                  color_discrete_sequence=[BLUE, TEAL], labels={"year": "Year", "value": "TFP, 2009 = 100", "variable": ""},
+                  title=f"TFP growth since {start}: private business {g_pb:.2f}%, manufacturing {g_mfg:.2f}% a year")
+    fig.update_traces(line_width=3)
+    fig.add_trace(go.Scatter(x=[1987, LAST_PB], y=[100, 100], mode="lines", name="2009 level", showlegend=False,
+                             line=dict(color="#5aa0d8", width=2)))
+    fig.add_vrect(x0=start, x1=LAST_PB, fillcolor=GREEN, opacity=0.12, line_width=0)
+    fig.update_yaxes(range=[np.log10(70), np.log10(122)], tickvals=[70, 80, 90, 100, 110, 120])
+    fig.update_layout(legend=dict(x=0.99, y=0.02, xanchor="right", yanchor="bottom"))
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(tfp_chart, start=IntSlider(value=2004, min=1987, max=2015, step=1, description="growth since", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 11 with a precomputed slider for the first year of the growth rate
+slider_figure(tfp_chart, "start", [1987, 1995, 2000, 2004, 2010, 2015], start=2004, label="growth since")
+```
+
+**What to notice.**
+
+- From 1995 to 2004 TFP grew fast, by more than 1.5 percent a year in private business: the information-technology boom.
+- Since 2004 growth has been much slower: 0.72 percent a year in private business and close to zero in manufacturing.
+  With the textbook's data (through 2022) the numbers were 0.5 and 0.2 percent; later revisions raised private-business
+  TFP.
+- The slowdown began **before** the financial crisis, so the crisis cannot be its only cause.
+
+**Your turn.** Compute TFP growth in private business for 1995–2004 and for 2004–2019 (before Covid-19). By how much did
+it slow down?
+
+<details><summary>Hint</summary>
+
+`growth_rate(tfp, "tfp_private_business", 1995, 2004)`, then the same with 2004 and 2019.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 12: The Great Depression in the IS/MP framework
+
+**Goal.** Rebuild the textbook's worked exercise on the Great Depression, one shock at a time.
+
+Three things went wrong after 1928, and each moved the economy further below potential:
+
+1. **A to B.** Worried about a stock market bubble, the Fed raised interest rates (MP → MP′).
+2. **B to C.** The bubble burst in October 1929. Lost wealth and uncertainty cut consumption and investment: $\bar{a}$
+   fell and the IS curve shifted back to IS′.
+3. **C to D.** The slump made inflation fall, through the Phillips curve, from about zero to deflation. The Fed kept the
+   nominal rate $i$ unchanged, so by the Fisher equation $R = i - \pi$ the real rate **rose** (MP″).
+
+The function `depression_steps` follows the three steps with our model functions, and `great_depression` draws them.
+Figures 12 and 13 show the same event in two diagrams, so one function draws both; the `diagram` buttons switch between
+them, and the `step` slider walks from $A$ to $D$.
+
+```{python}
+def depression_steps(hike=HIKE, a_crash=A_CRASH, nu=NU):
+    """Exercise 2 (Figures 14.12-14.13): output, real rate and inflation at the points A, B, C and D."""
+    pi_0 = 0.0                                    # inflation was about zero in the late 1920s
+    i = R_BAR + pi_0 + hike                       # the Fed raises its nominal rate
+    R_B = real_rate(i, pi_0)
+    Y_C = is_output(R_B, a_crash)                 # the crash shifts the IS curve back
+    pi_D = pi_0 + nu * Y_C                        # Phillips curve: the slump at C lowers inflation
+    R_D = real_rate(i, pi_D)                      # i stays fixed, so deflation raises the real rate
+    rows = [("A", is_output(R_BAR), R_BAR, pi_0), ("B", is_output(R_B), R_B, pi_0),
+            ("C", Y_C, R_B, pi_0), ("D", is_output(R_D, a_crash), R_D, pi_D)]
+    steps = pd.DataFrame(rows, columns=["point", "Y", "R", "pi"])
+    steps["d_pi"] = nu * steps.Y                  # the change in inflation at each point (Figure 14.13)
+    return steps
+
+
+depression_steps()
+```
+
+> **Python note.** `range(3, -1, -1)` counts down: 3, 2, 1, 0. `reversed(lines)` goes through a list from the end, so
+> the newest MP line is drawn first and keeps its label.
+
+```{python}
+DEP_BOX = ([-15.5, 3.5], [-1.5, 12.5])          # Figure 12 axes: output and the real interest rate
+PC_BOX = ([-15.5, 3.5], [-8.5, 2.5])            # Figure 13 axes: output and the change in inflation
+DEP_Y = np.linspace(-15.5, 3.5, 191)            # output levels at which we draw the curves
+STEP_NAMES = ["A: the late 1920s", "B: the Fed raises rates", "C: the stock market crash", "D: deflation"]
+
+
+def draw_depression_ismp(fig, steps, step, a_crash):
+    """Figure 14.12: IS (and IS' from step C on), one MP line per step, and the points up to step."""
+    if step >= 2:
+        add_curve(fig, DEP_Y, is_rate(DEP_Y, a_crash), "IS′", TEAL, DEP_BOX)
+    add_curve(fig, DEP_Y, is_rate(DEP_Y), "IS", FADED_TEAL if step >= 2 else TEAL, DEP_BOX)
+    lines = [("MP", steps.R[0], 0), ("MP′", steps.R[1], 1), ("MP″", steps.R[3], 3)]
+    for name, R, first in reversed(lines):
+        if first <= step:
+            color = BLUE if R == steps.R[step] else FADED_BLUE
+            add_curve(fig, DEP_Y, np.full_like(DEP_Y, R), name, color, DEP_BOX)
+    for s in range(step + 1):
+        add_point(fig, steps.Y[s], steps.R[s], steps.point[s], DEP_BOX)
+```
+
+```{python}
+def draw_depression_phillips(fig, steps, step, nu):
+    """Figure 14.13: the Phillips curve and the points up to step."""
+    add_curve(fig, DEP_Y, nu * DEP_Y, "Phillips curve", GREEN, PC_BOX)
+    fig.add_hline(y=0, line_dash="dot", line_color=GRAY)
+    for s in range(step + 1):
+        add_point(fig, steps.Y[s], steps.d_pi[s], steps.point[s], PC_BOX)
+    fig.add_annotation(x=3.3, y=-7.5, text="Δπ < 0: inflation <i>falls</i> over time", showarrow=False,
+                       xanchor="right", font=dict(size=13))      # bottom right, away from the curve
+
+
+def great_depression(step=3, hike=HIKE, a_crash=A_CRASH, nu=NU, diagram="IS/MP"):
+    """Figures 14.12 and 14.13: the Great Depression step by step, in the IS/MP or the Phillips curve diagram."""
+    steps = depression_steps(hike, a_crash, nu)
+    now = steps.loc[step]
+    fig = model_figure()
+    if diagram == "IS/MP":
+        draw_depression_ismp(fig, steps, step, a_crash)
+        title = f"{STEP_NAMES[step]}: Ỹ = {now.Y:.1f}%, R = {now.R:.1f}%, π = {now.pi:.1f}%"
+        model_axes(fig, title, DEP_BOX, "Real interest rate, R (%)", [-15, -12, -9, -6, -3, 0, 3], [0, 2, 4, 6, 8, 10, 12])
+    else:
+        draw_depression_phillips(fig, steps, step, nu)
+        title = f"{STEP_NAMES[step]}: Ỹ = {now.Y:.1f}%, change in inflation Δπ = {now.d_pi:.1f} points"
+        model_axes(fig, title, PC_BOX, "Change in inflation, Δπ (points)", [-15, -12, -9, -6, -3, 0, 3], [-8, -6, -4, -2, 0, 2])
+    return fig
+```
+
+> **Python note.** `ToggleButtons` shows one button per option, and the function receives the text of the chosen button.
+
+```{python}
+#| kind: widget
+interact(great_depression,
+         step=IntSlider(value=3, min=0, max=3, step=1, description="step (0 = A, 3 = D)", style=WIDE),
+         hike=FloatSlider(value=3.0, min=0.0, max=4.0, step=0.5, description="Fed's rate hike (points)", style=WIDE),
+         a_crash=FloatSlider(value=-3.0, min=-4.0, max=0.0, step=0.5, description="crash shock ā′", style=WIDE),
+         nu=FloatSlider(value=0.5, min=0.0, max=0.75, step=0.25, description="Phillips slope ν̄", style=WIDE),
+         diagram=ToggleButtons(options=["IS/MP", "Phillips curve"], value="IS/MP", description="diagram"));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 12 with a precomputed slider for the step
+slider_figure(great_depression, "step", [0, 1, 2, 3], start=3, label="step (0 = A, 3 = D)")
+```
+
+**What to notice.**
+
+- Each step costs 3 percent of output: $-3$ at $B$, $-6$ at $C$ and $-9$ at $D$, the textbook's example numbers.
+- The third step is the dangerous one. At $D$ output is even lower, so inflation falls again, the real rate rises
+  again, and so on: a **deflationary spiral**. Nothing in the model stops it unless policy changes.
+- Set $\bar{\nu} = 0$ (prices that never react): $D$ coincides with $C$. The spiral needs prices that fall in a slump.
+
+**Your turn.** Suppose the Fed had cut the nominal rate one for one with the fall in inflation, instead of keeping it
+fixed. Where would the economy be after step 3? Explain with the Fisher equation, then check with `is_output`.
+
+<details><summary>Hint</summary>
+
+If $i$ falls by as much as $\pi$, then $R = i - \pi$ does not change from step $C$. Compare `is_output(5.0, -3.0)` with
+point $C$ in `depression_steps()`.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 13: The Phillips curve and the Great Depression
+
+**Goal.** See why the slump turned into deflation, in the Phillips curve diagram.
+
+The Phillips curve $\Delta\pi_t = \bar{\nu}\tilde{Y}_t$ says that inflation falls whenever output is below potential. Every
+point $B$, $C$ and $D$ of Figure 12 lies below potential, so at each of them inflation falls, by more the deeper the
+slump. Inflation was about zero in the late 1920s, so falling inflation meant **deflation**: prices fell by about a
+quarter between 1929 and 1933.
+
+This is the same function as in Figure 12, with the Phillips curve diagram selected.
+
+```{python}
+#| kind: widget
+interact(great_depression,
+         step=IntSlider(value=3, min=0, max=3, step=1, description="step (0 = A, 3 = D)", style=WIDE),
+         hike=FloatSlider(value=3.0, min=0.0, max=4.0, step=0.5, description="Fed's rate hike (points)", style=WIDE),
+         a_crash=FloatSlider(value=-3.0, min=-4.0, max=0.0, step=0.5, description="crash shock ā′", style=WIDE),
+         nu=FloatSlider(value=0.5, min=0.0, max=0.75, step=0.25, description="Phillips slope ν̄", style=WIDE),
+         diagram=ToggleButtons(options=["IS/MP", "Phillips curve"], value="Phillips curve", description="diagram"));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 13 with a precomputed slider for the step
+def phillips_view(step=3):
+    """Figure 14.13 for the website: the Phillips curve diagram of great_depression."""
+    return great_depression(step=step, diagram="Phillips curve")
+
+
+slider_figure(phillips_view, "step", [0, 1, 2, 3], start=3, label="step (0 = A, 3 = D)")
+```
+
+**What to notice.**
+
+- With $\bar{\nu} = 0.5$, inflation falls by 1.5 points a year at $B$, 3 points at $C$ and 4.5 points at $D$.
+- The change in inflation at $C$ is what raises the real rate from $C$ to $D$ in Figure 12; the even larger fall at $D$
+  would push the real rate up once more.
+- A steeper Phillips curve (a larger $\bar{\nu}$) makes deflation, and so the spiral, faster.
+
+**Your turn.** Starting from inflation of zero, what would inflation be after one year at $C$ and then one more year at
+$D$? Use the column `d_pi` of `depression_steps()`.
+
+<details><summary>Hint</summary>
+
+Inflation after a year at a point is last year's inflation plus that point's `d_pi`. Start from 0 and add the values of
+$C$ and then of $D$.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Key numbers
+
+This table collects the main numbers of the chapter. Each one is computed with the functions and data above.
+
+```{python}
+steps = depression_steps()
+rows = [
+    ["Average BAA-Treasury spread 1996-2007, points", before.spread.mean()],
+    ["Largest spread (December 2008), points", spread.spread.max()],
+    ["Figure 2: output at B (housing bust), %", is_output(R_BAR, A_HOUSING)],
+    ["Figure 2: output at D (with f = 4), %", is_output(borrowing_rate(R_BAR + A_HOUSING / B_BAR, F_CRISIS), A_HOUSING)],
+    ["Figure 3: inflation in the long run at C, %", PI_BAR + (A_HOUSING - B_BAR * F_CRISIS) / (B_BAR * M_BAR)],
+    ["Taylor rule minus fed funds rate, 2002-2006 average, points",
+     (taylor.taylor_rbar2 - taylor.fed_funds)[(taylor.date >= "2002") & (taylor.date < "2007")].mean()],
+    ["Output gap 2017 against the 2007 CBO estimate, %", gaps.loc[2017, "gap_2007"]],
+    ["M1 growth in December 2008, %", money.m1[money.date == "2008-12-01"].iloc[0]],
+    ["Price-earnings ratio, full-sample average", cape.cape.mean()],
+    ["Real home prices, fall from the 2005 peak to the 2012 trough, %", peak_to_trough(homes, "price", "2000-01-01", "2015-12-31")[2]],
+    ["Fed balance sheet, May 2015 / May 2007", new / old],
+    ["Fed's total assets, 2022 peak / January 2007", assets.total_assets.max() / assets.total_assets[0]],
+    ["TFP growth in private business since 2004, % a year", growth_rate(tfp, "tfp_private_business", 2004, LAST_PB)],
+    ["Great Depression: output at D, %", steps.Y[3]],
+]
+pd.DataFrame(rows, columns=["Quantity", "Value"]).round(2)
+```
+
+## Summary
+
+- A **financial friction** $\bar{f}$ sits between the fed funds rate and the rate at which firms and households borrow,
+  $R = R^{ff} + \bar{f}$. In 2008 the spread of corporate over Treasury bonds tripled, so the Fed's cuts did not lower
+  borrowing costs. In the AS/AD model the friction acts like a negative demand shock, $\bar{a} - \bar{b}\bar{f}$.
+- At the **zero lower bound** the nominal rate cannot be cut further, and **deflation** then raises the real interest
+  rate. A recession lowers inflation, deflation deepens the recession: a **deflationary spiral**, as in the Great
+  Depression.
+- The Fed answered the crisis with zero rates, a fivefold and later tenfold larger balance sheet (**quantitative
+  easing**) and **forward guidance**; money growth stayed high, unlike in the 1930s.
+- The data also show the bubbles behind the crisis (stock and home prices), and a slow aftermath: much of the closing
+  of the output gap came from a lower estimate of potential GDP, and TFP growth has been slow since 2004.
+- The next chapter looks at **DSGE models**, the modern models of business cycles that researchers built on these
+  lessons.
