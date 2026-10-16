@@ -21,3 +21,10 @@ All four come from the Penn World Table 11.0 (Feenstra, Inklaar & Timmer; GGDC, 
 
   It is built by `build_data.py` from the PWT 11.0 subset saved by macro102's `/collect-data`. It reproduces `fig5-8.csv` to within 0.0002 percentage points.
   - Known quirk: Venezuela's 2023 GDP per person (about $160) is implausible, an effect of hyperinflation on the PWT price data. The notebook uses this as a data-cleaning example.
+
+## Multi-country files (conventions §6b)
+
+Made by `build_data.py`.
+
+- `oecd_members.csv`: `iso3, country, joined, in_textbook`. The 38 OECD members in 2026 with the year each joined (OECD, "Members and partners", <https://www.oecd.org/en/about/members-partners.html>; 20 founding members in 1961, then Italy 1962 … Costa Rica 2021), and whether the country is one of the textbook's 24 in Figure 5.8. Used by Figure 8 to add the 14 later members (6 of them have PWT data in 1960).
+- `regions.csv`: `iso3, country, region, income_group`. Same as `../ch04/regions.csv`: the World Bank region and income group of the 185 PWT countries (World Bank country API, cached in `../macro102/.work/ch05/notebook-raw/`; Taiwan, Anguilla and Montserrat added by hand). Used for the website region menu of Figure 10.

@@ -29,3 +29,14 @@ is the method that reproduces the textbook (see `pwt_production.csv` below). "Re
   - **Known quirks:**
     - Venezuela's 2023 GDP per person (about $160) is not plausible, because hyperinflation broke the PWT price data. The notebook finds it with a quick look at the data and drops it, as a data-cleaning example.
     - Capital in the first years after a country's data begin depends heavily on the starting guess $K_{first}$. The notebook therefore uses years from 1980 on.
+
+## Multi-country files (conventions §6b)
+
+Made by `build_data.py`; downloads are cached in `../macro102/.work/ch04/notebook-raw/`.
+
+- `share_prices.csv`: `iso3, country, date, real_index`. Monthly real share prices, 2015 average = 100, for 40 countries (the OECD members whose index is on FRED plus Brazil, China, India, Indonesia, Russia and South Africa), 1950-03 to 2026-08, 24,166 rows (652 KB).
+  - Sources: OECD Main Economic Indicators "Total share prices for all shares" via FRED, `SPASTT01{CC}M661N` (index 2015 = 100), deflated by the BIS long consumer price series (`https://stats.bis.org/api/v1/data/WS_LONG_CPI/M..628?format=csv`, index). FRED's own OECD CPI indices (`CPALTT01{CC}M661N`, `{ISO3}CPIALLMINMEI`) are discontinued or end in 2021–2025, so BIS is used for every country.
+  - Cleaning: months that FRED codes as 0 are dropped (Slovenia 1994); Brazil starts in 1993-01 because its index jumps 50-fold in January 1993 (a rebasing, not a boom). Values have 4 significant digits.
+  - Coverage: from the 1950s for most early OECD members; from the 1990s for Central Europe, Chile, China (1999), Russia (2001) and others. Latvia, Lithuania, Colombia and Costa Rica have no series on FRED.
+  - Validation against `fig4-3.csv` (U.S.): the OECD U.S. series (it follows the NYSE Composite) and the real S&P 500 have a correlation of monthly changes of 0.973 for 1957-01 to 2026-08, but average real growth of 2.94% vs 3.87% a year; the gap opened mostly after 2015 (4.2% vs 8.8% a year), as Nasdaq-listed technology firms lifted the S&P 500. The notebook explains this as a data lesson.
+- `regions.csv`: `iso3, country, region, income_group`. The World Bank region and income group (`https://api.worldbank.org/v2/country?format=json&per_page=400`, trailing spaces stripped) of the 185 countries of `pwt_production.csv`, with PWT country names. Taiwan (East Asia & Pacific, high income), Anguilla and Montserrat (Latin America & Caribbean, high income) are not in the World Bank list and are added by hand. Used for the website region menus.
