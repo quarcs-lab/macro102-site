@@ -12,11 +12,25 @@ Outputs (next to this script):
                    U.S. business sector, percent per year, 1950 to the latest year
 Checks: tfp_util equals fig15-1.csv (copied from collect-data) in every year, and
         tfp_util = tfp_solow - utilization (Fernald's definition) within 0.05 points (annual averages of quarterly logs make it approximate).
+
+Multi-country file (conventions §6b), downloads cached in ../macro102/.work/ch15/notebook-raw/:
+  pwt_growth.csv   iso3, country, region, year, tfp_growth, gdp_growth
+                   Penn World Table 11.0: 100 x change in the log of rtfpna (TFP at constant national prices) and of
+                   rgdpna (real GDP at constant national prices), every country with TFP data, 1955 to 2023.
+                   Inputs: pwt110.dta (DataverseNL doi:10.34894/FABVLR; collect-data's bulk copy is used if present)
+                   and the World Bank country list (api.worldbank.org/v2/country) for readable names and regions.
+Check: the U.S. rows correlate strongly with Fernald's raw Solow residual (tfp_solow) and hardly with the
+       utilization-adjusted series of Figure 15.1.
 """
 import argparse
+import json
 import os
+import shutil
+import time
 
+import numpy as np
 import pandas as pd
+import requests
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 RAW = "original-scanned-book/ch15-dsge-models-the-frontier-of-business-cycle-research/data/fig15-1/raw/"
@@ -66,13 +80,92 @@ def validate(out):
     print(f"validation: tfp_util equals fig15-1.csv in all {len(both)} years (max gap {gap:.1e}); "
           f"tfp_util = tfp_solow - utilization (max gap {identity:.1e})")
 
+# readable names for the World Bank's formal ones (the same list as data/ch01/build_data.py)
+RENAME = {"Korea, Rep.": "South Korea", "Korea, Dem. People's Rep.": "North Korea", "Egypt, Arab Rep.": "Egypt",
+          "Iran, Islamic Rep.": "Iran", "Venezuela, RB": "Venezuela", "Russian Federation": "Russia",
+          "Yemen, Rep.": "Yemen", "Congo, Dem. Rep.": "DR Congo", "Congo, Rep.": "Congo", "Gambia, The": "Gambia",
+          "Bahamas, The": "Bahamas", "Hong Kong SAR, China": "Hong Kong", "Macao SAR, China": "Macao",
+          "Lao PDR": "Laos", "Kyrgyz Republic": "Kyrgyzstan", "Slovak Republic": "Slovakia",
+          "Micronesia, Fed. Sts.": "Micronesia", "Syrian Arab Republic": "Syria", "Viet Nam": "Vietnam",
+          "Brunei Darussalam": "Brunei", "Turkiye": "Turkey", "Somalia, Fed. Rep.": "Somalia",
+          "St. Martin (French part)": "St. Martin", "Naoero": "Nauru", "Cote d'Ivoire": "Côte d'Ivoire",
+          "Sao Tome and Principe": "São Tomé and Príncipe", "Curacao": "Curaçao"}
+REGIONS = {"Middle East, North Africa, Afghanistan & Pakistan": "Middle East & North Africa"}
+
+
+def get(cache, url, file, params=None):
+    """Download url into the cache folder once (requests' default User-Agent), return the local path."""
+    path = os.path.join(cache, file)
+    if os.path.exists(path):
+        return path
+    for k in range(4):
+        try:
+            r = requests.get(url, params=params, timeout=300)
+            if r.status_code == 200:
+                open(path, "wb").write(r.content)
+                return path
+        except requests.RequestException:
+            pass
+        time.sleep(10 * (k + 1))
+    raise RuntimeError(f"download failed: {url}")
+
+
+def pwt_growth(macro102, cache):
+    """TFP and real GDP growth for every PWT 11.0 country with TFP data (log changes, percent)."""
+    path = os.path.join(cache, "pwt110.dta")
+    if not os.path.exists(path):
+        bulk = os.path.join(macro102, ".work", "downloads", "pwt110.dta")
+        if os.path.exists(bulk):
+            shutil.copy(bulk, path)
+        else:
+            files = requests.get("https://dataverse.nl/api/datasets/:persistentId/versions/:latest/files",
+                                 params={"persistentId": "doi:10.34894/FABVLR"}, timeout=120).json()["data"]
+            fid = [f["dataFile"]["id"] for f in files if f["dataFile"]["filename"] == "pwt110.dta"][0]
+            get(cache, f"https://dataverse.nl/api/access/datafile/{fid}", "pwt110.dta")
+    d = pd.read_stata(path, columns=["countrycode", "year", "rtfpna", "rgdpna"]).sort_values(["countrycode", "year"])
+    d["year"] = d.year.astype(int)
+    for col, name in [("rtfpna", "tfp_growth"), ("rgdpna", "gdp_growth")]:
+        d[name] = (100 * np.log(d[col]).groupby(d.countrycode).diff()).round(3)
+    d = d.dropna(subset=["tfp_growth"]).rename(columns={"countrycode": "iso3"})
+    p = get(cache, "https://api.worldbank.org/v2/country", "wdi_countries.json", {"format": "json", "per_page": 400})
+    rows = [r for r in json.load(open(p))[1] if r["region"]["value"].strip() != "Aggregates"]
+    names = pd.DataFrame({"iso3": [r["id"] for r in rows], "country": [RENAME.get(r["name"], r["name"]) for r in rows],
+                          "region": [REGIONS.get(r["region"]["value"].strip(), r["region"]["value"].strip()) for r in rows]})
+    names = pd.concat([names, pd.DataFrame([("TWN", "Taiwan", "East Asia & Pacific")], columns=names.columns)])
+    out = d.merge(names, on="iso3")[["iso3", "country", "region", "year", "tfp_growth", "gdp_growth"]]
+    out = out.sort_values(["country", "year"]).reset_index(drop=True)
+    missing = sorted(set(d.iso3) - set(names.iso3))
+    if missing:
+        raise SystemExit(f"PWT countries with no name: {missing}")
+    path = os.path.join(HERE, "pwt_growth.csv")
+    out.to_csv(path, index=False)
+    print(f"pwt_growth.csv: {len(out)} rows, {out.iso3.nunique()} countries, {out.year.min()}-{out.year.max()}, "
+          f"{os.path.getsize(path) / 1000:.0f} kB")
+    return out
+
+
+def validate_pwt(out, annual):
+    """The U.S. PWT TFP is a raw Solow residual: it should track Fernald's tfp_solow, not the adjusted tfp_util."""
+    us = out[out.iso3 == "USA"].merge(annual, on="year")
+    raw, util = us.tfp_growth.corr(us.tfp_solow), us.tfp_growth.corr(us.tfp_util)
+    print(f"validation: U.S. PWT TFP growth {us.year.min()}-{us.year.max()} correlates {raw:.2f} with Fernald's raw "
+          f"residual and {util:.2f} with the utilization-adjusted series; GDP growth corr "
+          f"{us.gdp_growth_x.corr(us.gdp_growth_y):.2f}")
+    if raw < 0.6:
+        raise SystemExit("U.S. PWT TFP growth does not track Fernald's raw Solow residual")
+
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--macro102", default=os.path.join(HERE, "..", "..", "..", "macro102"))
     raw_dir = os.path.join(os.path.abspath(parser.parse_args().macro102), RAW)
     recessions(raw_dir)
-    validate(tfp_annual(raw_dir))
+    annual = tfp_annual(raw_dir)
+    validate(annual)
+    macro102 = os.path.abspath(parser.parse_args().macro102)
+    cache = os.path.join(macro102, ".work", "ch15", "notebook-raw")
+    os.makedirs(cache, exist_ok=True)
+    validate_pwt(pwt_growth(macro102, cache), annual)
 
 
 if __name__ == "__main__":

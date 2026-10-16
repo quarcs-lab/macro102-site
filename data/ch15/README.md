@@ -41,3 +41,26 @@ Run it with `python build_data.py --macro102 PATH`.
   - Range check: `gdp_growth` runs from −3.75 (2009) to 9.40 (1950); `tfp_solow` from −3.72 (1974) to 7.17 (1950).
     These are real swings, not errors.
   - Used for the "Which TFP?" comparison in Figure 1.
+
+## Multi-country file (beyond the United States)
+
+Built by `build_data.py` from public downloads, cached in macro102's `.work/ch15/notebook-raw/` (delete a file there to
+download it again).
+
+- `pwt_growth.csv`: `iso3, country, region, year, tfp_growth, gdp_growth`. Every country of the Penn World Table 11.0
+  with TFP data: 120 countries, 1955 to 2023, 6,868 rows (about 360 kB).
+  - `tfp_growth` = 100 × change in the log of `rtfpna` (TFP at constant national prices, 2017 = 1);
+    `gdp_growth` = 100 × change in the log of `rgdpna` (real GDP at constant national prices); percent per year.
+    Log changes can fall below −100 (Iraq 1991: −105).
+  - `region` is the World Bank region; names follow the World Bank's country list with the readable names of
+    `data/ch01/build_data.py` (Taiwan added by hand).
+  - Sources: PWT 11.0, `pwt110.dta` (DataverseNL, doi:10.34894/FABVLR; macro102's `.work/downloads/` copy is used
+    when present) and <https://api.worldbank.org/v2/country?format=json&per_page=400>.
+  - Concept: PWT's TFP is a **raw Solow residual** (no utilization adjustment), so it corresponds to `tfp_solow` in
+    `tfp_annual.csv`, not to the utilization-adjusted series of Figure 15.1. Validation: for the United States,
+    1955–2023, PWT TFP growth has a correlation of 0.93 with Fernald's `tfp_solow` and 0.29 with `tfp_util`; PWT's
+    GDP growth has a correlation of 0.98 with Fernald's business-output growth. `build_data.py` stops if the first
+    correlation falls below 0.6.
+  - Data hygiene: wars and collapses give extreme values (Iraq 1991 −105, Kuwait 1991 −51, Macao 2020 −80, Kuwait
+    1992 +55). The series start in 1954–1994 (1994 for the former Soviet, Yugoslav and Czechoslovak states).
+  - Used in Figure 1, "Beyond the United States".
