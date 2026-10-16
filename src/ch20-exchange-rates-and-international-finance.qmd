@@ -714,6 +714,7 @@ without the trade channel ($\bar{b}_{nx} = 0$), the closed economy of Chapter 11
 
 ```{python}
 R_LINE = np.linspace(9, 2, 141)              # real interest rates, high to low, at which we draw the IS curves
+R_UP = np.linspace(2, 9, 141)                # the same rates, low to high: the label then goes at the upper end
 X_IS, R_AXIS = [-11, 5], [2, 9]              # fixed axes, so that you can see the curve turn
 
 
@@ -722,10 +723,11 @@ def tightening(R_new=6.0, b_nx=B_NX, b_i=B_I):
     Y_new = is_curve(R_new, b_i=b_i, b_nx=b_nx)
     fig = go.Figure()
     if b_nx > 0:
-        add_curve(fig, is_curve(R_LINE, b_i=b_i, b_nx=0.0), R_LINE, "IS without trade", GRAY, X_IS, R_AXIS, "dash")
+        add_curve(fig, is_curve(R_UP, b_i=b_i, b_nx=0.0), R_UP, "IS without trade", GRAY, X_IS, R_AXIS, "dash")
     add_curve(fig, is_curve(R_LINE, b_i=b_i, b_nx=b_nx), R_LINE, "IS", BLUE, X_IS, R_AXIS)
     add_point(fig, 0.0, R_BAR, "A", X_IS[0], R_AXIS[0])
-    add_point(fig, Y_new, R_new, "B", X_IS[0], R_AXIS[0])
+    if R_new != R_BAR:                                                        # B is A when the rate does not change
+        add_point(fig, Y_new, R_new, "B", X_IS[0], R_AXIS[0])
     add_arrow(fig, X_IS[0] + 0.6, R_BAR, X_IS[0] + 0.6, R_new)              # the interest rate rises ...
     add_arrow(fig, 0.0, R_AXIS[0] + 0.3, Y_new, R_AXIS[0] + 0.3)            # ... and output falls
     invest = -b_i * (R_new - R_BAR) + 0.0                                    # + 0.0 avoids printing -0.0
@@ -815,9 +817,13 @@ def add_asad_curves(fig, a, pi_e, t, m, b):
     ad_label = f"AD = AD<sub>{t}</sub>" if t > A_LAST else "AD"
     add_curve(fig, ad_output(PI_LINE, 0.0, m, b), PI_LINE, ad_label, FADED if shock_on else BLUE, X_AD, PI_AXIS)
     if a != 0:
-        label = "AD<sub>1</sub>" if abs(a / (b * m)) > 0.6 else ""  # no label when it would sit on AD's label
+        label = "AD<sub>1</sub>" if abs(a) > 0.8 and abs(a / (b * m)) > 0.6 else ""  # no label on top of AD's
         add_curve(fig, ad_output(PI_LINE, a, m, b), PI_LINE, label, BLUE if shock_on else FADED, X_AD, PI_AXIS)
 ```
+
+> **Python note.** `for x, y in written:` goes through a list of pairs and unpacks each pair into `x` and `y`. A letter
+> is left out when its point lies within 0.3 points of output and 0.6 points of inflation of a point that already has
+> one, as happens when a small shock or a strong policy response keeps $B$, $C$ and $D$ close to $A$.
 
 ```{python}
 def add_path(fig, path, t):
@@ -827,11 +833,19 @@ def add_path(fig, path, t):
                              line=dict(color=GRAY, width=1, dash="dot"), marker=dict(color=GRAY, size=5)))
     for s in range(1, t + 1):
         add_arrow(fig, path.Y[s - 1], path.pi[s - 1], path.Y[s], path.pi[s])
+    written = []                                        # the points that already carry a letter
     for s in range(t + 1):
         if s in LETTERS:
-            add_point(fig, path.Y[s], path.pi[s], LETTERS[s], X_AD[0], PI_AXIS[0], guides=False)
+            letter = LETTERS[s]
+            for x, y in written:
+                if abs(path.Y[s] - x) < 0.3 and abs(path.pi[s] - y) < 0.6:
+                    letter = ""                         # too close to a letter already written: leave it out
+            add_point(fig, path.Y[s], path.pi[s], letter, X_AD[0], PI_AXIS[0], guides=False)
+            if letter != "":
+                written.append((path.Y[s], path.pi[s]))
+```
 
-
+```{python}
 def foreign_rate_shock(gap=RW_GAP, t=10, b_nx=B_NX, m=M_BAR):
     """Figure 20.5: period t after the foreign real interest rate rises gap points above r_bar in periods 1-9."""
     a = foreign_shock(R_BAR + gap, b_nx)                 # equation 20.8: the demand shock from abroad
@@ -842,7 +856,7 @@ def foreign_rate_shock(gap=RW_GAP, t=10, b_nx=B_NX, m=M_BAR):
     add_asad_curves(fig, a, now.pi_e, t, m, b)
     add_path(fig, path, t)
     fig.update_layout(title=f"Period {t}: π = {now.pi:.2f}%, Ỹ = {round(now.Y, 2) + 0.0:+.2f}%   "
-                            f"(Rʷ − r̄ = {gap:.1f}, so ā = {a:.1f} in periods 1–{A_LAST})",
+                            f"(Rʷ − r̄ = {gap:.1f}, so ā = {a:.2f} in periods 1–{A_LAST})",
                       xaxis=dict(title="Output, Ỹ (percent)", range=X_AD, tickvals=list(range(-3, 4)), zeroline=False),
                       yaxis=dict(title="Inflation, π (percent)", range=PI_AXIS, tickvals=list(range(0, 8)), zeroline=False))
     return fig

@@ -235,7 +235,8 @@ Figures 1 and 2 are the same kind of diagram, so we write its drawing steps once
   that would sit on top of another one;
 - `add_point` marks a desired capital stock with a dashed guide to the axis, and `add_arrow` draws an arrow.
 
-> **Python note.** `np.linspace(0.12, 3, 300)` creates 300 evenly spaced numbers from 0.12 to 3.
+> **Python note.** `np.linspace(0.05, K_max, 300)` creates 300 evenly spaced numbers from 0.05 to `K_max`,
+> the right end of the x-axis, which `fig.layout.xaxis.range[1]` reads from the figure.
 > Because `mpk` works on a whole array at once, one call gives the whole curve. `go.Figure()`
 > starts an empty chart, and each `add_trace` adds one line or set of points. `MPK <= 0.4` is
 > true where the curve is inside the axes, `K[inside]` keeps those values, and `[0]` takes the
@@ -268,7 +269,8 @@ def add_label(fig, x, y, text, color, xanchor="left"):
 ```{python}
 def add_mpk(fig, A=A_BAR):
     """Draw the MPK curve of equation (17.7) and write its name next to its top-left end."""
-    K = np.linspace(0.12, K_RANGE[1], 300)
+    K_max = fig.layout.xaxis.range[1]                     # the right end of the x-axis
+    K = np.linspace(0.05, K_max, 300)
     MPK = mpk(K, A)
     inside = MPK <= RETURN_RANGE[1]                       # the part of the curve inside the axes
     fig.add_trace(go.Scatter(x=K[inside], y=MPK[inside], mode="lines", name="MPK", line=dict(color=BLUE, width=3)))
@@ -277,8 +279,9 @@ def add_mpk(fig, A=A_BAR):
 
 def add_level(fig, uc, label, color, dash="solid"):
     """Draw a flat user-cost line at the height uc and write its name at its right end."""
-    fig.add_trace(go.Scatter(x=K_RANGE, y=[uc, uc], mode="lines", name=label, line=dict(color=color, width=3, dash=dash)))
-    add_label(fig, K_RANGE[1], uc, label, color, xanchor="right")
+    K_max = fig.layout.xaxis.range[1]
+    fig.add_trace(go.Scatter(x=[0, K_max], y=[uc, uc], mode="lines", name=label, line=dict(color=color, width=3, dash=dash)))
+    add_label(fig, K_max, uc, label, color, xanchor="right")
 
 
 def add_point(fig, K, uc, label, anchor="left"):
@@ -315,13 +318,20 @@ So a young firm that starts with $K_0$ and wants $K^{\text{desired}}$ next year 
 $I = K^{\text{desired}} - (1-\bar{d})K_0$. The title shows this number. The arrow points from $K_0$ to
 the desired capital stock.
 
+> **Python note.** `if K_star > 2.6:` runs the indented lines below it only when the condition is true. Here
+> it widens the x-axis (`update_xaxes`) in the rare case of a very low user cost, when the desired capital
+> stock would otherwise fall off the chart; `tickvals=None` lets Plotly choose the tick marks. `round(x, 2)`
+> rounds a number to two decimals, and adding `0.0` turns a rounded `-0.0` into `0.0`, so the title never shows "-0.00".
+
 ```{python}
 def desired_capital_diagram(R=0.02, d=0.08, gpk=0.0, A=A_BAR, K0=0.5):
     """Figure 17.1: invest until the marginal product of capital falls to the user cost."""
     uc = user_cost(R, d, gpk)
     K_star = desired_capital(uc, A)
-    I = K_star - (1 - d) * K0                        # investment that reaches K_star next year, equation (17.8)
+    I = round(K_star - (1 - d) * K0, 2) + 0.0        # investment that reaches K_star next year, equation (17.8)
     fig = capital_figure(f"User cost {uc:.1%}  |  desired capital {K_star:.2f}  |  investment from K0 = {K0:.1f}: {I:+.2f}")
+    if K_star > 2.6:                                 # a very low user cost: widen the x-axis so K desired stays on it
+        fig.update_xaxes(range=[0, 1.15 * K_star], tickvals=None)
     add_mpk(fig, A)
     add_level(fig, uc, "User cost: R + d − Δp/p", TEAL)
     add_point(fig, K_star, uc, "K<sup>desired</sup>")
@@ -415,9 +425,9 @@ The economy starts with no tax. Choose a tax rate, then press **Introduce the ta
 #| kind: widget
 introduce = interact_manual.options(manual_name="Introduce the tax!")
 introduce(corporate_tax_diagram,
-          tau=FloatSlider(value=0.35, min=0.0, max=0.6, step=0.05, description="corporate tax rate τ", style=WIDE),
-          R=FloatSlider(value=0.02, min=0.01, max=0.08, step=0.01, description="interest rate R", style=WIDE),
-          d=FloatSlider(value=0.08, min=0.05, max=0.15, step=0.01, description="depreciation rate d", style=WIDE));
+          tau=FloatSlider(value=0.35, min=0.0, max=0.5, step=0.05, description="corporate tax rate τ", style=WIDE),
+          R=FloatSlider(value=0.02, min=0.01, max=0.06, step=0.01, description="interest rate R", style=WIDE),
+          d=FloatSlider(value=0.08, min=0.05, max=0.12, step=0.01, description="depreciation rate d", style=WIDE));
 ```
 
 ```{python}
@@ -582,7 +592,8 @@ Each row is a month. `cape` is the P/E ratio and `cape_average` its average over
 > **Python note.** `px.area` draws a line and fills the area below it. `cape.iloc[-1]` is the last row
 > of the table. `if R > g:` runs the indented lines only when the condition holds; `else:` handles the
 > other case. Here it protects us from dividing by zero, because equation (17.16) has no finite price
-> when $g \geq R$.
+> when $g \geq R$. `"Model" if model < 48 else "Model ↑"` is a one-line `if`: it gives the first text when the
+> condition holds and the second one otherwise. `min(model, 48)` keeps the label inside the chart.
 
 ```{python}
 def pe_chart(R=0.05, g=0.02, payout=0.5):
@@ -599,9 +610,9 @@ def pe_chart(R=0.05, g=0.02, payout=0.5):
         fig.add_trace(go.Scatter(x=[cape.date.iloc[0], last.date], y=[model, model], mode="lines",
                                  name="Model, equation (17.17)", line=dict(color=TEAL, width=3)))
         model_text = f"model: {payout:.2f} / ({R:.1%} − {g:.2%}) = {model:.1f}"
-        if model < 48:                                   # the label sits after the end of the data
-            fig.add_annotation(x=last.date, y=model, text="Model", showarrow=False, xanchor="left",
-                               xshift=6, font=dict(color=TEAL, size=14))
+        label = "Model" if model < 48 else "Model ↑"      # a model line above the chart is not visible: point up
+        fig.add_annotation(x=last.date, y=min(model, 48), text=label, showarrow=False, xanchor="left",
+                           xshift=6, font=dict(color=TEAL, size=14))
     fig.update_layout(title=f"P/E ratio {last.cape:.1f} in {last.date:%b %Y}  |  {model_text}",
                       xaxis=dict(range=["1881-01-01", "2041-01-01"]),     # room for the label on the right
                       yaxis=dict(range=[0, 50], tickvals=[0, 10, 20, 30, 40, 50]), showlegend=False)

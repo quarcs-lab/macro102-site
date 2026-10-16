@@ -187,6 +187,8 @@ slope of the curve is the marginal product of capital, and it falls as $K$ rises
 > (the end value 11 is left out). A `for` loop repeats the indented lines once for each value in a list.
 > `go.Figure()` starts an empty chart, and each `add_trace(go.Scatter(...))` adds one line or set of dots
 > to it. `add_annotation` writes a piece of text at a point of the chart, here the name of the curve at its end.
+> `K[-1]` is the last value of `K`, and `max(60, 1.1 * Y_end)` is the larger of the two numbers: the vertical
+> axis stays at 0 to 60 unless the curve would leave it.
 
 ```{python}
 def production_curve(A=1.0, L=70, alpha=1 / 3):
@@ -203,13 +205,14 @@ def production_curve(A=1.0, L=70, alpha=1 / 3):
     fig.add_trace(go.Scatter(x=dots, y=production(dots, L, A, alpha), name="K = 1, 2, ..., 10", mode="markers",
                              marker=dict(color="black", size=10)))
     # The curve's name, written above its right end (as in the textbook)
-    fig.add_annotation(x=K[-1], y=production(K[-1], L, A, alpha), text="Y = A K<sup>α</sup> L<sup>1−α</sup>",
+    Y_end = production(K[-1], L, A, alpha)             # the axis grows only if the curve ends above 54
+    fig.add_annotation(x=K[-1], y=Y_end, text="Y = A K<sup>α</sup> L<sup>1−α</sup>",
                        showarrow=False, xanchor="right", yanchor="bottom", yshift=8)
     gain_1_2 = production(2, L, A, alpha) - production(1, L, A, alpha)
     gain_7_8 = production(8, L, A, alpha) - production(7, L, A, alpha)
     fig.update_layout(title=f"Output gain from K = 1 to 2: {gain_1_2:.2f} tons;  from K = 7 to 8: {gain_7_8:.2f} tons",
                       xaxis=dict(title="Capital, K", range=[0, 10.4], tickvals=dots),
-                      yaxis=dict(title="Tons of ice cream, Y", range=[0, 60], dtick=5),
+                      yaxis=dict(title="Tons of ice cream, Y", range=[0, max(60, 1.1 * Y_end)], dtick=10),
                       showlegend=False)
     return fig
 ```
@@ -282,8 +285,31 @@ Where supply meets demand, the markets clear:
 $$r^* = \frac{1}{3}\,\bar{A}\left(\frac{\bar{L}}{\bar{K}}\right)^{2/3} \qquad\qquad
 w^* = \frac{2}{3}\,\bar{A}\left(\frac{\bar{K}}{\bar{L}}\right)^{1/3}$$
 
+Both panels have the same parts, so one function draws a panel and we call it twice.
+
 > **Python note.** `make_subplots(rows=1, cols=2)` creates a figure with two panels side by side,
-> and `row=..., col=...` tells `add_trace` which panel to draw in.
+> and `row=..., col=...` tells `add_trace` which panel to draw in. `names[0]` is the first item of the
+> list `names`, and `"solid" if col == 1 else "dot"` gives `"solid"` in the first panel and `"dot"` in the
+> second. `demand <= 0.65 * top` is True where the demand curve is in the lower part of the panel;
+> `x[low]` keeps those values of `x`, and `[0]` takes the first of them: there we write the curve's name.
+
+```{python}
+def add_market(fig, col, x, demand, supply, price, top, names):
+    """One panel of Figure 4.2: the demand curve, the vertical supply line and the equilibrium."""
+    dash = "solid" if col == 1 else "dot"
+    fig.add_trace(go.Scatter(x=x, y=demand, name="Demand", line=dict(color=BLUE, width=4, dash=dash)), row=1, col=col)
+    fig.add_trace(go.Scatter(x=[supply, supply], y=[0.05, 0.8 * top], name="Supply", mode="lines",
+                             line=dict(color=TEAL, width=4, dash=dash)), row=1, col=col)
+    fig.add_trace(go.Scatter(x=[0, supply], y=[price, price], mode="lines", line=dict(color=GRAY, dash="dash")),
+                  row=1, col=col)
+    fig.add_trace(go.Scatter(x=[supply], y=[price], name="Equilibrium", mode="markers",
+                             marker=dict(color="black", size=12)), row=1, col=col)
+    low = demand <= 0.65 * top                       # the name goes below the name of the supply line
+    fig.add_annotation(x=x[low][0], y=demand[low][0], text=names[0], showarrow=False, yanchor="bottom", yshift=6,
+                       row=1, col=col)
+    fig.add_annotation(x=supply, y=0.8 * top, text=names[1], showarrow=False, yanchor="bottom", row=1, col=col)
+    fig.update_yaxes(range=[0, top], row=1, col=col)
+```
 
 ```{python}
 def factor_markets(K_bar=1.0, L_bar=1.0, A=1.0, alpha=1 / 3):
@@ -292,22 +318,15 @@ def factor_markets(K_bar=1.0, L_bar=1.0, A=1.0, alpha=1 / 3):
     r_star, w_star = mpk(K_bar, L_bar, A, alpha), mpl(K_bar, L_bar, A, alpha)
     Y_star = production(K_bar, L_bar, A, alpha)
     fig = make_subplots(rows=1, cols=2, subplot_titles=("(a) The capital market", "(b) The labor market"))
-    fig.add_trace(go.Scatter(x=K, y=mpk(K, L_bar, A, alpha), name="Demand: MPK", line=dict(color=BLUE, width=4)), row=1, col=1)
-    fig.add_trace(go.Scatter(x=[K_bar, K_bar], y=[0.05, 0.93], name="Supply of capital", line=dict(color=TEAL, width=4)), row=1, col=1)
-    fig.add_trace(go.Scatter(x=[0, K_bar], y=[r_star, r_star], line=dict(color=GRAY, dash="dash")), row=1, col=1)
-    fig.add_trace(go.Scatter(x=[K_bar], y=[r_star], name="Equilibrium", mode="markers", marker=dict(color="black", size=12)), row=1, col=1)
-    fig.add_trace(go.Scatter(x=L, y=mpl(K_bar, L, A, alpha), name="Demand: MPL", line=dict(color=BLUE, width=4, dash="dot")), row=1, col=2)
-    fig.add_trace(go.Scatter(x=[L_bar, L_bar], y=[0.05, 1.35], name="Supply of labor", line=dict(color=TEAL, width=4, dash="dot")), row=1, col=2)
-    fig.add_trace(go.Scatter(x=[0, L_bar], y=[w_star, w_star], line=dict(color=GRAY, dash="dash")), row=1, col=2)
-    fig.add_trace(go.Scatter(x=[L_bar], y=[w_star], mode="markers", marker=dict(color="black", size=12)), row=1, col=2)
-    fig.add_annotation(x=K[0], y=mpk(K[0], L_bar, A, alpha), text="Demand<br>MPK", showarrow=False, yanchor="bottom", yshift=6, row=1, col=1)
-    fig.add_annotation(x=K_bar, y=0.93, text="Supply of<br>capital", showarrow=False, yanchor="bottom", row=1, col=1)
-    fig.add_annotation(x=L[0], y=mpl(K_bar, L[0], A, alpha), text="Demand<br>MPL", showarrow=False, yanchor="bottom", yshift=6, row=1, col=2)
-    fig.add_annotation(x=L_bar, y=1.35, text="Supply of<br>labor", showarrow=False, yanchor="bottom", row=1, col=2)
+    # Fixed vertical axes, which grow only when an equilibrium price is high
+    add_market(fig, 1, K, mpk(K, L_bar, A, alpha), K_bar, r_star, max(1.15, 2.2 * r_star),
+               ["Demand<br>MPK", "Supply of<br>capital"])
+    add_market(fig, 2, L, mpl(K_bar, L, A, alpha), L_bar, w_star, max(1.7, 2.2 * w_star),
+               ["Demand<br>MPL", "Supply of<br>labor"])
     fig.update_xaxes(title_text="Capital, K", range=[0, 2.2], tickvals=[0.5, 1, 1.5, 2], row=1, col=1)
-    fig.update_yaxes(title_text="Rental price, r", range=[0, 1.15], dtick=0.2, row=1, col=1)
+    fig.update_yaxes(title_text="Rental price, r", dtick=0.2, row=1, col=1)
     fig.update_xaxes(title_text="Labor, L", range=[0, 2.2], tickvals=[0.5, 1, 1.5, 2], row=1, col=2)
-    fig.update_yaxes(title_text="Real wage, w", range=[0, 1.7], dtick=0.5, row=1, col=2)
+    fig.update_yaxes(title_text="Real wage, w", dtick=0.5, row=1, col=2)
     fig.update_layout(title=f"r* = {r_star:.3f}   w* = {w_star:.3f}   |   capital gets {r_star * K_bar / Y_star:.0%} "
                             f"of output, labor {w_star * L_bar / Y_star:.0%}", showlegend=False)
     return fig

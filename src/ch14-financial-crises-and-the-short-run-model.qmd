@@ -273,8 +273,8 @@ def add_curve(fig, x, y, label, color, box, dash="solid", col=1):
 ```
 
 ```{python}
-def add_point(fig, x, y, label, box, guides="v", col=1):
-    """Mark (x, y) with a dot and a letter; dashed guides down to the x-axis ("v"), to both axes ("both") or none."""
+def add_point(fig, x, y, label, box, guides="v", col=1, where="top right"):
+    """Mark (x, y) with a dot and a letter placed `where`; dashed guides to the x-axis ("v"), both axes ("both") or none."""
     (x0, x1), (y0, y1) = box
     xs, ys = [x, x], [y, y0]
     if guides == "both":
@@ -282,7 +282,7 @@ def add_point(fig, x, y, label, box, guides="v", col=1):
     if guides != "none":
         fig.add_trace(go.Scatter(x=xs, y=ys, mode="lines", showlegend=False, hoverinfo="skip",
                                  line=dict(color="black", width=1, dash="dash")), row=1, col=col)
-    fig.add_trace(go.Scatter(x=[x], y=[y], mode="markers+text", text=[label], textposition="top right",
+    fig.add_trace(go.Scatter(x=[x], y=[y], mode="markers+text", text=[label], textposition=where,
                              name=label, showlegend=False, textfont=dict(size=16),
                              marker=dict(color="black", size=10)), row=1, col=col)
 
@@ -478,7 +478,7 @@ def housing_crisis(a_new=A_HOUSING, f=F_CRISIS):
     add_arrow(fig, -7.0, R_BAR, -7.0, R_ff, col=1)          # the Fed cuts its rate ...
     add_arrow(fig, Y_B, -3.8, 0.0, -3.8, col=1)              # ... and output returns to potential
     add_arrow(fig, -7.0, R_ff, -7.0, R, col=2)               # the risk premium pushes R back up
-    add_point(fig, Y_D, R, "D", IS_BOX, col=2)
+    add_point(fig, Y_D, R, "D", IS_BOX, col=2, where="bottom left")   # readable when D meets B or C
     title = (f"B: Ỹ = {Y_B:.1f}%;  the Fed cuts R<sup>ff</sup> to {R_ff:.1f}%;  "
              f"R = R<sup>ff</sup> + f̄ = {R:.1f}%, so D: Ỹ = {Y_D:.1f}%")
     model_axes(fig, title, IS_BOX, "Real interest rate, R (%)", [-6, -4, -2, 0, 2, 4], [-4, -2, 0, 2, 4, 6, 8], panels=2)
@@ -629,7 +629,7 @@ interact(crisis_asad,
          t=IntSlider(value=8, min=1, max=15, step=1, description="period t", style=WIDE),
          a=FloatSlider(value=-2.0, min=-4.0, max=0.0, step=0.5, description="housing shock ā", style=WIDE),
          f=FloatSlider(value=4.0, min=0.0, max=5.0, step=0.5, description="financial friction f̄", style=WIDE),
-         m=FloatSlider(value=1.0, min=0.75, max=2.0, step=0.25, description="policy response m̄", style=WIDE));
+         m=FloatSlider(value=1.0, min=1.0, max=2.0, step=0.25, description="policy response m̄", style=WIDE));
 ```
 
 ```{python}
@@ -706,7 +706,7 @@ def taylor_chart(r_bar=2.0, weight=0.5):
     chart = pd.DataFrame({"date": taylor.date, "Actual fed funds rate": taylor.fed_funds,
                           "Taylor rule": taylor_rule(taylor.core_pce_inflation, taylor.short_run_output, r_bar, weight)})
     boom = chart[(chart.date >= "2002-01-01") & (chart.date < "2007-01-01")]
-    gap = (boom["Taylor rule"] - boom["Actual fed funds rate"]).mean()
+    gap = round((boom["Taylor rule"] - boom["Actual fed funds rate"]).mean(), 1) + 0.0   # + 0.0 avoids -0.0
     fig = px.line(chart, x="date", y=["Actual fed funds rate", "Taylor rule"], color_discrete_sequence=[BLUE, GREEN],
                   labels={"date": "Year", "value": "Percent", "variable": "Series"},
                   title=f"Taylor rule with r̄ = {r_bar:.1f}: rule minus actual rate in 2002–2006 = {gap:+.1f} points")
@@ -1420,7 +1420,7 @@ depression_steps()
 
 ```{python}
 DEP_BOX = ([-15.5, 3.5], [-1.5, 12.5])          # Figure 12 axes: output and the real interest rate
-PC_BOX = ([-15.5, 3.5], [-8.5, 2.5])            # Figure 13 axes: output and the change in inflation
+PC_BOX = ([-15.5, 3.5], [-11.5, 2.5])           # Figure 13 axes: output and the change in inflation
 DEP_Y = np.linspace(-15.5, 3.5, 191)            # output levels at which we draw the curves
 STEP_NAMES = ["A: the late 1920s", "B: the Fed raises rates", "C: the stock market crash", "D: deflation"]
 
@@ -1436,7 +1436,8 @@ def draw_depression_ismp(fig, steps, step, a_crash):
             color = BLUE if R == steps.R[step] else FADED_BLUE
             add_curve(fig, DEP_Y, np.full_like(DEP_Y, R), name, color, DEP_BOX)
     for s in range(step + 1):
-        add_point(fig, steps.Y[s], steps.R[s], steps.point[s], DEP_BOX)
+        where = "bottom left" if s == 3 else "top right"          # D stays readable when it meets C
+        add_point(fig, steps.Y[s], steps.R[s], steps.point[s], DEP_BOX, where=where)
 ```
 
 ```{python}
@@ -1445,8 +1446,9 @@ def draw_depression_phillips(fig, steps, step, nu):
     add_curve(fig, DEP_Y, nu * DEP_Y, "Phillips curve", GREEN, PC_BOX)
     fig.add_hline(y=0, line_dash="dot", line_color=GRAY)
     for s in range(step + 1):
-        add_point(fig, steps.Y[s], steps.d_pi[s], steps.point[s], PC_BOX)
-    fig.add_annotation(x=3.3, y=-7.5, text="Δπ < 0: inflation <i>falls</i> over time", showarrow=False,
+        where = "bottom right" if s == 3 else "top right"         # below the Phillips curve, clear of C
+        add_point(fig, steps.Y[s], steps.d_pi[s], steps.point[s], PC_BOX, where=where)
+    fig.add_annotation(x=3.3, y=-10.5, text="Δπ < 0: inflation <i>falls</i> over time", showarrow=False,
                        xanchor="right", font=dict(size=13))      # bottom right, away from the curve
 
 
@@ -1462,7 +1464,7 @@ def great_depression(step=3, hike=HIKE, a_crash=A_CRASH, nu=NU, diagram="IS/MP")
     else:
         draw_depression_phillips(fig, steps, step, nu)
         title = f"{STEP_NAMES[step]}: Ỹ = {now.Y:.1f}%, change in inflation Δπ = {now.d_pi:.1f} points"
-        model_axes(fig, title, PC_BOX, "Change in inflation, Δπ (points)", [-15, -12, -9, -6, -3, 0, 3], [-6, -4, -2, 0, 2])
+        model_axes(fig, title, PC_BOX, "Change in inflation, Δπ (points)", [-15, -12, -9, -6, -3, 0, 3], [-10, -8, -6, -4, -2, 0, 2])
     return fig
 ```
 

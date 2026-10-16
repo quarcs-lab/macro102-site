@@ -270,16 +270,20 @@ Every diagram below uses the same axes and the same few drawing steps, so we wri
 - `add_point` marks a point with dashed guides to the axes, and `add_arrow` draws an arrow;
 - `asad_figure` starts a figure with one or two panels, and `asad_axes` fixes the axes and writes the title.
 
-> **Python note.** `np.linspace(-6, 6, 121)` creates 121 evenly spaced numbers from −6 to 6. Because our model
-> functions work on a whole array at once, one call gives a whole curve. `make_subplots(rows=1, cols=2)`
-> creates a figure with two panels side by side, and `add_trace(..., row=1, col=2)` draws in the second
-> panel. `(x >= 0) & (y <= 8)` is true where *both* conditions hold, `x[inside]` keeps the values where
+> **Python note.** `np.linspace(-15, 15, 241)` creates 241 evenly spaced numbers from −15 to 15, one every
+> 0.125. Because our model functions work on a whole array at once, one call gives a whole curve.
+> `make_subplots(rows=1, cols=2)` creates a figure with two panels side by side, and
+> `add_trace(..., row=1, col=2)` draws in the second panel. `(x >= 0) & (y <= 8)` is true where *both* conditions hold, `x[inside]` keeps the values where
 > `inside` is true, and `[-1]` takes the last of them. Labels such as `"AS<sub>2</sub>"` use HTML to write
-> AS₂.
+> AS₂. `fig.data` is the list of traces already drawn, `min(a, b)` and `max(a, b)` give the smaller and the
+> larger of two numbers, and `tickvals=None` lets Plotly choose the tick marks itself. The axes stay fixed for
+> every slider setting except a few extreme ones, where `asad_axes` widens them so that no dot falls off the
+> chart. `fig.update_annotations(yshift=16)` moves every text already in the figure (here only the panel
+> titles) 16 pixels up.
 
 ```{python}
-Y_GRID = np.linspace(-6, 6, 121)            # output levels at which we draw the AS curves
-PI_GRID = np.linspace(12, -4, 161)          # inflation rates, high to low, at which we draw the AD curves
+Y_GRID = np.linspace(-15, 15, 241)          # output levels at which we draw the AS curves
+PI_GRID = np.linspace(12, -5, 137)          # inflation rates, high to low, at which we draw the AD curves
 X_RANGE, PI_RANGE = [-4, 4], [-1, 8]        # fixed axes, so that you can see the curves move
 FADED = "rgba(0,128,112,0.35)"              # light teal for the AS curves of earlier periods
 
@@ -316,7 +320,8 @@ def add_as(fig, label, color, pi_e=PI_BAR, nu=NU_BAR, o=0.0, dash="solid", col=1
 def add_point(fig, Y, pi, label, col=1, guides=True):
     """Mark the point (Y, pi) with a dot and a label, and (if guides) dashed lines to both axes."""
     if guides:
-        fig.add_trace(go.Scatter(x=[X_RANGE[0], Y, Y], y=[pi, pi, PI_RANGE[0]], mode="lines", showlegend=False,
+        # the guides start far outside the chart: the axes cut them off at their edges, wherever these are
+        fig.add_trace(go.Scatter(x=[-100, Y, Y], y=[pi, pi, -100], mode="lines", showlegend=False,
                                  hoverinfo="skip", line=dict(color="black", width=1, dash="dash")), row=1, col=col)
     fig.add_trace(go.Scatter(x=[Y], y=[pi], mode="markers", name=label, showlegend=False,
                              marker=dict(color="black", size=10)), row=1, col=col)
@@ -338,16 +343,26 @@ def add_arrow(fig, x0, y0, x1, y1, col=1):
 ```{python}
 def asad_figure(cols=1, titles=None):
     """An empty figure with cols panels side by side (titles: one short title per panel)."""
-    return make_subplots(rows=1, cols=cols, subplot_titles=titles, horizontal_spacing=0.1)
+    fig = make_subplots(rows=1, cols=cols, subplot_titles=titles, horizontal_spacing=0.1)
+    fig.update_annotations(yshift=16)           # lift the panel titles clear of curve labels at the top edge
+    return fig
 
 
 def asad_axes(fig, title, panels=1):
     """Fixed AS/AD axes in the first panels (no tick in the bottom-left corner) and the title readout."""
+    x_range, pi_range = list(X_RANGE), list(PI_RANGE)
+    for trace in fig.data:                       # the dots: widen an axis only if a dot would fall off the chart
+        if trace.mode == "markers":
+            x_range = [min(x_range[0], trace.x[0] - 0.5), max(x_range[1], trace.x[0] + 0.5)]
+            pi_range = [min(pi_range[0], trace.y[0] - 0.4), max(pi_range[1], trace.y[0] + 0.8)]
+    x_ticks, pi_ticks = list(range(-3, 4)), list(range(0, 8))
+    if x_range != X_RANGE or pi_range != PI_RANGE:
+        x_ticks, pi_ticks = None, None           # wider axes: let Plotly choose the ticks
     for col in range(1, panels + 1):
-        fig.update_xaxes(title_text="Output, Ỹ (percent)", range=X_RANGE, tickvals=list(range(-3, 4)),
-                         zeroline=False, row=1, col=col)
-        fig.update_yaxes(title_text="Inflation, π (percent)", range=PI_RANGE, tickvals=list(range(0, 8)),
-                         zeroline=False, row=1, col=col)
+        fig.update_xaxes(title_text="Output, Ỹ (percent)", range=x_range, tickvals=x_ticks, zeroline=False,
+                         row=1, col=col)
+        fig.update_yaxes(title_text="Inflation, π (percent)", range=pi_range, tickvals=pi_ticks, zeroline=False,
+                         row=1, col=col)
     fig.update_layout(title=title, legend=dict(x=0.99, y=0.99, xanchor="right", yanchor="top",
                                                bgcolor="rgba(255,255,255,0.8)"))
 ```
@@ -367,8 +382,9 @@ $\tilde{Y} = \bar{a}$: with no demand shock, potential output. When you change a
 stays behind as a dashed gray line.
 
 > **Python note.** `if ... :` runs the indented lines only when the condition is true. `!=` means "is not
-> equal to", and comparing two groups of numbers in parentheses checks them all at once. `2.5 < x < 4.2` is
-> true when `x` lies between the two numbers. We use it to leave out a label that the new curve would cross.
+> equal to", and comparing two groups of numbers in parentheses checks them all at once. `x > 2.4 and y < 4.3`
+> is true only when both conditions hold. We use it to leave out the baseline label when the new curve, or its
+> own label, would run into it.
 
 ```{python}
 def ad_curve(pi_bar=PI_BAR, m=M_BAR, b=B_BAR, a=0.0):
@@ -376,7 +392,7 @@ def ad_curve(pi_bar=PI_BAR, m=M_BAR, b=B_BAR, a=0.0):
     fig = asad_figure()
     if (pi_bar, m, b, a) != (PI_BAR, M_BAR, B_BAR, 0.0):
         label = "AD (baseline)"
-        if 2.5 < ad_output(-0.5, pi_bar, m, a, b) < 4.2:     # the new AD curve would run into this label
+        if ad_output(-1.0, pi_bar, m, a, b) > 2.4 and ad_output(-0.3, pi_bar, m, a, b) < 4.3:   # new AD too close
             label = ""
         add_ad(fig, label, GRAY, dash="dash")
     add_ad(fig, "AD", BLUE, a, pi_bar, m, b)
@@ -442,7 +458,7 @@ def inflation_rises(pi_new=3.0, m=M_BAR):
     fig = asad_figure()
     if m != M_BAR:
         label = "AD (m̄ = 0.5)"
-        if 2.5 < ad_output(-0.5, m=m) < 4.2:              # the new AD curve would run into this label
+        if ad_output(-1.0, m=m) > 2.4 and ad_output(-0.3, m=m) < 4.3:   # the new AD would run into this label
             label = ""
         add_ad(fig, label, GRAY, dash="dash")
     add_ad(fig, "AD", BLUE, m=m)
@@ -522,7 +538,7 @@ interact(inflation_rises,
 ```{python}
 #| kind: website
 # @title Website version: Figure 3 with a precomputed slider for the policy response
-slider_figure(inflation_rises, "m", [0.25, 0.5, 0.75, 1.0, 1.5, 2.0], start=1.0, label="policy response m̄")
+slider_figure(inflation_rises, "m", [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75], start=1.0, label="policy response m̄")
 ```
 
 **What to notice.**
@@ -569,6 +585,7 @@ def as_curve(pi_prev=PI_BAR, nu=NU_BAR, o=0.0):
     add_as(fig, "AS", TEAL, pi_prev, nu, o)
     add_point(fig, 0.0, pi_prev + o, "")
     asad_axes(fig, f"AS: π = {pi_prev:.1f} + {nu:.2f} × Ỹ + {o:.1f};   at Ỹ = 0, π = {pi_prev + o:.1f}%")
+    fig.update_layout(margin=dict(r=120))               # room for the label "AS (baseline)" at the right edge
     return fig
 ```
 
@@ -695,13 +712,15 @@ color, and the path so far, with the textbook's letters ($B$, $C$, $D$ for perio
 def add_event_curves(fig, path, t, as_periods, m=M_BAR, nu=NU_BAR, col=1):
     """Curves of a simulated event at period t: the old AS, the AS of as_periods (the last one solid), every AD."""
     first, last = path.pi_e[0], as_periods[-1]
-    gap = abs(path.pi_e[last] + path.o[last] - first)      # how far today's AS is from the original AS
-    same = gap == 0
-    old_label = "AS" if same or gap > 0.6 else ""            # no label when it would sit on today's label
+    today = path.pi_e[last] + path.o[last]                   # where today's AS crosses Y~ = 0
+    near = 0.6 * max(1, nu)          # two AS labels closer than this would overlap (a steep AS exits at the top)
+    same = today == first
+    old_label = "AS" if same or abs(today - first) > near else ""     # no label on top of today's label
     add_as(fig, old_label, TEAL if same else GRAY, first, nu, dash="solid" if same else "dash", col=col)
     for s in as_periods:
-        if path.pi_e[s] + path.o[s] != first:                # skip curves that equal the original AS
-            label = f"AS<sub>{s}</sub>" if s in (as_periods[0], last) else ""
+        start = path.pi_e[s] + path.o[s]
+        if start != first:                                   # skip curves that equal the original AS
+            label = f"AS<sub>{s}</sub>" if s == last or (s == as_periods[0] and abs(start - today) > near) else ""
             add_as(fig, label, TEAL if s == last else FADED, path.pi_e[s], nu, path.o[s], col=col)
     drawn = []                                               # the AD curves already drawn: (a, target)
     for s in range(t + 1):
@@ -709,12 +728,11 @@ def add_event_curves(fig, path, t, as_periods, m=M_BAR, nu=NU_BAR, col=1):
         if pair not in drawn:
             drawn.append(pair)
             name = "AD" if s == 0 else f"AD<sub>{s}</sub>"
-            if pair == (path.a[t], path.target[t]):
-                add_ad(fig, name, BLUE, pair[0], pair[1], m, col=col)
-            else:
-                if pair[0] == path.a[t] and abs(pair[1] - path.target[t]) < 0.6:   # it would sit on today's label
-                    name = ""
-                add_ad(fig, name, GRAY, pair[0], pair[1], m, dash="dash", col=col)
+            shift = abs(pair[0] - path.a[t] + B_BAR * m * (pair[1] - path.target[t]))   # 0 for today's AD
+            if 0 < shift * min(1, 1 / (B_BAR * m)) < 0.6:          # an old label would sit on today's label
+                name = ""
+            add_ad(fig, name, BLUE if shift == 0 else GRAY, pair[0], pair[1], m,      # today's AD in blue
+                   dash="solid" if shift == 0 else "dash", col=col)
 ```
 
 ```{python}
@@ -907,7 +925,9 @@ def add_time_paths(fig, path, col=2):
     fig.add_trace(go.Scatter(x=[0, T_MAX], y=[path.target[1], path.target[1]], name="Target π̄", mode="lines",
                              line=dict(color=GRAY, width=2, dash="dot")), row=1, col=col)
     fig.update_xaxes(title_text="Period", range=[-0.5, T_MAX + 0.5], tickvals=[0, 5, 10, 15, 20], row=1, col=col)
-    fig.update_yaxes(title_text="Percent", range=[-3, 7], tickvals=[-2, 0, 2, 4, 6], row=1, col=col)
+    low = min(-3, path.Y.min() - 0.5, path.pi.min() - 0.5)     # wider than -3 to 7 only if a path would leave it
+    high = max(7, path.pi.max() + 0.5)
+    fig.update_yaxes(title_text="Percent", range=[low, high], tickvals=list(range(-12, 14, 2)), row=1, col=col)
 
 
 def event_summary(path, letters, as_periods, m=M_BAR, nu=NU_BAR):
@@ -966,7 +986,8 @@ path.loc[0:6, ["period", "Y", "pi", "gap", "gap ratio"]].round(3)
 > **Python note.** `path.gap.shift(1)` moves the column down by one row, so each row sees last period's gap.
 > `path.loc[0:6, [...]]` keeps rows 0 to 6 and the listed columns.
 
-From period 2 on the ratio is exactly 0.5. Inflation is 3, 2.5, 2.25, ... and output −1, −0.5, −0.25, ...
+From period 2 on the ratio is exactly 0.5. (Period 0 has no gap, so the ratio of period 1 divides by zero and
+pandas shows `inf`.) Inflation is 3, 2.5, 2.25, ... and output −1, −0.5, −0.25, ...
 
 **Your turn.** Over all periods, the total change in inflation is zero (it starts and ends at 2 percent). Use the AS
 curve to explain why the sum of output must then be $-\bar{o}/\bar{\nu} = -2$. Check it with `path.Y.sum()`.
@@ -1739,9 +1760,9 @@ def credible_disinflation(credibility=1.0, pi_new=2.0, m=M_BAR, nu=NU_BAR):
     Y, pi = solve_asad(pi_e, pi_bar=pi_new, m=m, nu=nu)
     fig = asad_figure()
     old_as, old_ad = "AS", "AD"
-    if abs(pi_e - PI_OLD) < 0.6:                        # no label when it would sit on the label of AS′
+    if abs(pi_e - PI_OLD) < 0.6 * max(1, nu):          # no label when it would sit on the label of AS′
         old_as = ""
-    if abs(pi_new - PI_OLD) < 0.6:                      # ... or on the label of AD′
+    if abs(pi_new - PI_OLD) * min(1, B_BAR * m) < 0.6:  # ... or on the label of AD′
         old_ad = ""
     if pi_e != PI_OLD:
         add_as(fig, old_as, GRAY, PI_OLD, nu, dash="dash")
