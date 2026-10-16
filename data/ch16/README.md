@@ -41,3 +41,32 @@ Both files are made by `build_data.py` from raw files saved by macro102's `/coll
 - `saving_rate_monthly.csv`: `date, saving_rate`. FRED `PSAVERT`, percent of disposable personal income,
   monthly, seasonally adjusted, 1970-01 to 2026-08; used in Figure 4 to build the quarterly series and to compare
   monthly with quarterly data. July and August 2026 form an incomplete quarter, which `fig16-4.csv` leaves out.
+
+## Multi-country files (Figures 3–5 beyond the United States)
+
+Also made by `build_data.py`, which downloads them from the public sources (requests' default User-Agent) and caches
+the raw responses in macro102's `.work/ch16/notebook-raw/`. Each is a tidy long table, one row per country and period,
+with `iso3`, a readable `country` name and a `region` (Americas, Asia and Oceania, Europe, Middle East and Africa) used
+by the website's group buttons. Countries: the 38 OECD members and 12 large emerging economies, as far as each source
+covers them; aggregates (euro area, G20, ...) are dropped. Retrieved 2026-10-17.
+
+- `household_debt.csv`: `iso3, country, date, debt_gdp, region`. Credit to households and NPISHs from all sectors, at
+  market value, percent of GDP, adjusted for breaks; quarterly (dates are quarter starts), 1970Q1 (or the first
+  quarter available) to 2026Q1; 43 countries, 6,511 rows. Source: BIS total credit statistics, dataflow `WS_TC`, key
+  `Q..H.A.M.770.A` (<https://stats.bis.org/api/v2/data/dataflow/BIS/WS_TC/2.0/Q..H.A.M.770.A?format=csv>; the
+  same series as FRED `HDTGPD{CC}Q163N`, which starts only in 2005). Check: the U.S. rows are on average 1.3 points
+  above `fig16-3.csv` (largest gap 4.7 points, correlation 0.998): the BIS uses its own debt and GDP measures.
+  Ireland's ratio is distorted by the jump of its GDP in 2015 (multinational profits).
+- `saving_rates.csv`: `iso3, country, year, saving_rate, region`. Net saving of households and NPISH, percent of net
+  disposable income; annual, 1970 (U.S., Australia) or later to 2024/2025; 35 countries (China from 1992), 1,103
+  rows. Source: OECD National Accounts at a Glance, Chapter 5 (dataflow `OECD.SDD.NAD,DSD_NAAG@DF_NAAG_V,1.0`,
+  measure `B8NS1M`, unit `PT_B6N_S1M`). Check: the U.S. rows are on average 0.23 points above the calendar-year
+  means of the monthly `PSAVERT` (`saving_rate_monthly.csv`), never more than 0.67 points away (1970–2024).
+- `household_wealth.csv`: `iso3, country, year, net_worth_ratio, region`. Household (and NPISH) net worth in years of
+  gross disposable income: (net financial worth + dwellings + land) per person divided by gross disposable income per
+  person, all in US dollars at PPP; annual, 1995 (or later) to 2023–2025; 26 countries, 741 rows. Source: the same
+  OECD dataflow, measures `LES1M_BF90_POP`, `LES1M_N111N_POP`, `LES1M_N211N_POP` and `B6GS1M_POP`. Dwellings and
+  land are most of households' non-financial wealth; the OECD's total non-financial assets exist for only 10
+  countries. Check: the U.S. ratio is 0.93 to 1.09 times the Federal Reserve's ratio of `fig16-5.csv` (annual means;
+  mean 1.015, 1995–2024). Gotcha: NAAG's measure `LES1M_B90`, labelled "Net worth", is total financial **assets**
+  (codes `LE`, `F`, `A`), not net worth; it is not used.

@@ -64,3 +64,43 @@ sibling macro102 checkout (`original-scanned-book/ch18-the-government-and-the-ma
   non-member countries and aggregates are dropped). Validation: the 2019 and 2024 values of the six textbook
   countries equal `fig18-3.csv` within 0.005. Used for the animated OECD-wide chart of Figure 3 and the text checks
   (U.S. rank, euro-area average).
+
+## Multi-country files (Figures 1, 2, 4, 5 and 8 beyond the textbook's countries)
+
+Also made by `build_data.py`, which downloads from the public sources (requests' default User-Agent) and caches the
+raw responses in macro102's `.work/ch18/notebook-raw/`. Each is a tidy long table with `iso3`, a readable `country`
+name and a `region` (Americas, Asia and Oceania, Europe, Middle East and Africa) used by the website's group buttons.
+Countries: the 38 OECD members and 12 large emerging economies, as far as each source covers them; aggregates are
+dropped. Retrieved 2026-10-17. Shares are percent of GDP and calendar years.
+
+- `gov_finance.csv`: `iso3, country, year, revenue, spending, balance, private_investment, region`; 42 countries,
+  1959 (Australia; U.S. 1970, most 1995) to 2025, 1,379 rows. `revenue`, `spending` and `balance` are general
+  government total revenue (`OTR`), total expenditure (`OTE`) and net lending (`B9`) from OECD Table 12
+  (`OECD.SDD.NAD,DSD_NASEC10@DF_TABLE12_REV|EXP|BAL,1.1`, sector `S13`, national currency) divided by GDP (OECD
+  Table 1, `B1GQ`). `private_investment` is GFCF minus government GFCF plus changes in inventories (OECD National
+  Accounts at a Glance, Chapter 3, and Table 1; see the Chapter 17 README). Brazil's and Costa Rica's Table 12
+  accounts are about 24 points of GDP above the IMF Fiscal Monitor's general government revenue and spending (all
+  other countries within 15, most within 2), so their fiscal columns are left empty; China and South Africa have the
+  balance only. Checks: `spending` equals `gov_spending.csv` (Government at a Glance) with a median gap of 0.00 and 97
+  percent of 682 country-years within 0.5 points; the U.S. `private_investment` is within 0.41 points of
+  `fig18-5.csv` (1970–2024). For the U.S., general government spending is 16 points of GDP above federal outlays.
+- `gross_debt.csv`: `iso3, country, year, gross_debt, region`; general government gross debt (central government
+  where general government is not available), percent of GDP; 48 countries, 1800 to 2024, 5,090 rows. Source: IMF,
+  *Public Finances in Modern History* database (December 2025 vintage), DataMapper indicator `d`
+  (<https://www.imf.org/external/datamapper/api/v1/d>). Germany has no values for 1914–1924 and 1939–1949. Check: the
+  U.S. rows are 15.1 points (1946) and 24.9 points (2024) above the federal debt held by the public of
+  `fig18-2.csv`, a narrower concept; the 2024 value equals the IMF WEO's `GGXWDG_NGDP` (122.3).
+- `net_debt.csv`: `iso3, country, year, net_debt, region`; general government net financial liabilities
+  (−net financial worth `BF90`, non-consolidated) / GDP × 100, as `fig18-4.csv`; 39 countries, 1995 to 2025,
+  1,030 rows. Source: OECD government financial balance sheets (`OECD.SDD.NAD,DSD_NASEC20@DF_T720GOV_A,1.1`, key
+  `A....S13...N.LE.BF90........`) and OECD Table 1 GDP. Check: Italy, Japan, the U.S. and the U.K. equal
+  `fig18-4.csv`; Germany differs by up to 1.05 points because the OECD revised its balance sheets after collect-data's
+  download of 2026-10-16. Norway's net debt is about −400 percent of GDP (its oil fund).
+- `health_spending.csv`: `iso3, country, year, health_share, region`; current health expenditure, all financing
+  schemes, percent of GDP, as `fig18-8.csv`; 45 countries, 1970 to 2025 (emerging economies from 2000; 2025
+  provisional), 1,896 rows. Source: OECD Health Statistics (`OECD.ELS.HD,DSD_SHA@DF_SHA,1.1`, key
+  `.A.EXP_HEALTH.PT_B1GQ._T.._T._T._T._Z._Z._Z`). Check: the five textbook countries equal `fig18-8.csv` exactly.
+
+API note: the OECD Data Explorer answered HTTP 429 with a Cloudflare "Just a moment..." page for long stretches on
+2026-10-17 (the structure endpoints kept working). `build_data.py` reads the cache when it exists, so a rerun needs
+no download.

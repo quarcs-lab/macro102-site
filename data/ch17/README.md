@@ -41,3 +41,22 @@ sibling macro102 checkout (`original-scanned-book/ch17-investment/data/`).
   from `fig17-4/raw/fred_A006RE1Q156NBEA.csv` and `fred_A011RE1Q156NBEA.csv` (BEA NIPA Table 1.1.10). Validation:
   the annual means reproduce `fig17-4.csv` within 0.15 points. Used to check the text's quarterly numbers (2009Q3:
   12.7 percent of GDP, below the annual 13.3).
+
+## Multi-country file (Figure 4 beyond the United States)
+
+Also made by `build_data.py`, which downloads from the OECD Data Explorer (requests' default User-Agent) and caches
+the raw responses in macro102's `.work/ch17/notebook-raw/`. Retrieved 2026-10-17.
+
+- `investment_components.csv`: `iso3, country, year, total, nonres_fixed, residential, inventories, region`. Private
+  investment and its three parts in percent of GDP, annual, 1970 (or later) to 2024/2025, 35 countries, 1,147 rows;
+  `region` (Americas, Asia and Oceania, Europe, Middle East and Africa) groups the countries. Built as:
+  `total` = GFCF × (1 − government share of GFCF) + changes in inventories; `residential` = GFCF in dwellings (all
+  sectors, so it includes a little public housing); `nonres_fixed` = private GFCF − residential;
+  `inventories` = changes in inventories / GDP. Sources: OECD National Accounts at a Glance, Chapter 3
+  (`OECD.SDD.NAD,DSD_NAAG@DF_NAAG_III,1.0`: `P51G` in % of GDP, `P51GS13` in % of GFCF) and Chapter 3B
+  (`DSD_NAAG@DF_NAAG_III_GFCF,1.0`: `P51G_N111G` in % of GFCF); OECD Table 1
+  (`DSD_NAMAIN10@DF_TABLE1_EXPENDITURE,2.0`, key `A..S1..B1GQ+P5+P51G+P52+P51N....XDC.V..`: GDP and changes in
+  inventories, national currency). Countries without all four parts (e.g. China, India, Spain, Norway, Switzerland)
+  are left out. Check: the U.S. rows are within 0.40 (total), 0.42 (nonresidential), 0.05 (residential) and 0.06
+  (inventories) points of GDP of the BEA shares in `fig17-4.csv` (1975–2024). Ireland's investment jumps to 51.5
+  percent of GDP in 2019 because multinationals moved intellectual property there.
