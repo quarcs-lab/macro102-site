@@ -10,6 +10,8 @@
 <!-- BEGIN chapter-list (managed by /write-notebook; do not edit by hand) -->
 | Chapter | Notebook | Colab |
 |---|---|---|
+| 1 | [Introduction to Macroeconomics](notebooks/ch01-introduction-to-macroeconomics.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/ch01-introduction-to-macroeconomics.ipynb) |
+| 2 | [Measuring the Macroeconomy](notebooks/ch02-measuring-the-macroeconomy.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/ch02-measuring-the-macroeconomy.ipynb) |
 | 3 | [An Overview of Long-Run Economic Growth](notebooks/ch03-an-overview-of-long-run-economic-growth.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/ch03-an-overview-of-long-run-economic-growth.ipynb) |
 | 4 | [A Model of Production](notebooks/ch04-a-model-of-production.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/ch04-a-model-of-production.ipynb) |
 | 5 | [The Solow Growth Model](notebooks/ch05-the-solow-growth-model.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/ch05-the-solow-growth-model.ipynb) |

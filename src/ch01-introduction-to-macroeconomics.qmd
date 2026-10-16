@@ -1,0 +1,993 @@
+# Chapter 1: Introduction to Macroeconomics
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/ch01-introduction-to-macroeconomics.ipynb)
+
+*Data Science and Macroeconomic Models: A Python Companion to Intermediate Macroeconomics* · Carlos Mendez
+
+> **How to use this notebook.** In Colab, click *Runtime → Run all*. After that, every
+> interactive figure has live sliders, buttons or menus: change one and the figure is drawn again
+> on the spot. On the book website the same figures come with one precomputed slider or a few
+> buttons. Each section ends with a short **Your turn** task, and you can try it in the empty code
+> cell below the task. This is the first notebook of the book, so it explains every piece of
+> Python the first time it appears.
+
+<!-- cell -->
+
+## Learning goals
+
+Macroeconomics studies the economy as a whole: income, employment, inflation, unemployment and
+deficits. It works in four steps: document the facts, build a model, compare the model with the
+facts, and use the model for experiments. By the end of this chapter you will be able to:
+
+- describe the big facts behind the questions of macroeconomics, using real data for many countries;
+- explain the structure of an economic model: **parameters** and **exogenous variables** go in, and
+  **endogenous variables** come out;
+- solve the supply-and-demand model of the labor market and run experiments with it;
+- tell the **long run** (economic growth) from the **short run** (fluctuations around potential output);
+- load data tables with pandas, check them, and draw interactive line charts with Plotly;
+- write short Python functions and turn them into interactive figures with sliders.
+
+<!-- cell -->
+
+## Figures in this chapter
+
+The figures follow the order of the textbook chapter. The second column shows which textbook
+figure each notebook figure replicates.
+
+| Figure | Textbook figure | Type | What you can change |
+|---|---|---|---|
+| Figure 1 | 1.1 GDP per person in six countries | data | ratio or linear scale |
+| Figure 2 | 1.2 The U.S. employment-population ratio | data | — (zoom with the range slider, hover to read values) |
+| Figure 3 | 1.3 Inflation rates in certain rich countries | data | — (click a country in the legend to hide it) |
+| Figure 4 | 1.4 The unemployment rate in the U.S., Europe and Japan | data | the period over which Europe is compared with the U.S. |
+| Figure 5 | 1.5 Budget and trade deficits in the United States | data | — (hover to read values) |
+| Figure 6 | 1.6 The structure of economic models | model | the inputs of a labor-market model, including a minimum wage |
+| Figure 7 | 1.7 Per capita GDP in the United States | data | the year of the output-gap readout |
+| Figure 8 | 1.8 The labor market | model | supply slope, hours supplied at a zero wage, labor demand at a zero wage |
+
+<!-- cell -->
+
+## Setup
+
+We first load the Python libraries we need. You only have to run this cell once.
+
+> **Python note.** `import` loads a *library*, a toolbox written by other people. We give each
+> library a short nickname, for example `np` for NumPy, so that the code stays short. Text after
+> a `#` is a *comment*: Python ignores it, and it is there for human readers. The `try ... except`
+> block runs one Colab-only line and simply skips it anywhere else.
+
+```{python}
+# Libraries used in this chapter
+import numpy as np                    # numbers and arrays
+import pandas as pd                   # data tables
+import plotly.express as px           # quick charts from data tables
+import plotly.graph_objects as go     # charts built piece by piece (model figures)
+import plotly.io as pio
+from ipywidgets import interact, FloatSlider, IntSlider, IntRangeSlider, ToggleButtons
+
+# One light blue/green look for every chart
+BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
+pio.templates.default = "plotly_white"
+pio.templates["plotly_white"].layout.update(width=860, height=480)   # same size in Colab and on the website
+px.defaults.color_discrete_sequence = [BLUE, TEAL, GREEN, "#5aa0d8", "#0b4f47", "#e0a33b"]
+WIDE = {"description_width": "initial"}         # show the full slider labels
+
+# Colab only: let Plotly charts appear inside the interactive widgets
+try:
+    import google.colab
+    google.colab.output.enable_custom_widget_manager()
+except ImportError:
+    pass                                        # not running in Colab: nothing to do
+
+# The data files of this chapter live in the book's GitHub repository
+DATA_URL = "https://raw.githubusercontent.com/quarcs-lab/macro102-site/main/data/ch01/"
+```
+
+The next cell defines a helper that only the book website needs. Run it and move on.
+
+```{python}
+#| kind: helper
+# @title Helper for the website versions (run this cell; you do not need to read it)
+def slider_figure(make_figure, name, values, start, label=None):
+    """Precompute make_figure(name=value) for every value and join the results with one slider.
+
+    The website cannot run Python, so each model figure gets this precomputed version.
+    """
+    figures = [make_figure(**{name: v}) for v in values]
+    first = values.index(start)
+    fig = go.Figure(layout=figures[first].layout)
+    owner = []                                  # which figure each trace comes from
+    for i, f in enumerate(figures):
+        for trace in f.data:
+            trace.visible = (i == first)
+            fig.add_trace(trace)
+            owner.append(i)
+    steps = []
+    for i, f in enumerate(figures):
+        layout = {"title": f.layout.title.to_plotly_json(),
+                  "annotations": [a.to_plotly_json() for a in f.layout.annotations],
+                  "shapes": [s.to_plotly_json() for s in f.layout.shapes]}
+        visible = [o == i for o in owner]
+        steps.append(dict(method="update", label=str(values[i]), args=[{"visible": visible}, layout]))
+    fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
+                                    currentvalue=dict(prefix=(label or name) + " = "))])
+    return fig
+```
+
+## The model in code
+
+Chapter 1 uses one small model to show what a model is: **supply and demand in the labor market**.
+Workers supply hours of work $L^s$, and they offer more hours when the wage $w$ is higher. Firms
+demand hours of work $L^d$, and they hire fewer hours when the wage is higher. In the textbook's worked
+exercise both relations are straight lines:
+
+$$L^s = \bar{a}\,w + \bar{\ell} \qquad\qquad L^d = \bar{f} - w$$
+
+A bar over a letter marks a **parameter**, a number the model builder chooses:
+
+- $\bar{a}$ is the slope of labor supply: the extra hours offered when the wage rises by one dollar;
+- $\bar{\ell}$ is the number of hours people would work even at a zero wage;
+- $\bar{f}$ is the number of hours the firm would hire at a zero wage, a measure of its capacity.
+
+In the code we simply write `a`, `l` and `f`. The wage $w$ and employment $L$ are the **endogenous
+variables**: the model determines them. The labor market is in equilibrium when supply equals demand,
+$\bar{a}w + \bar{\ell} = \bar{f} - w$. Solving this one equation gives
+
+$$w^* = \frac{\bar{f} - \bar{\ell}}{1 + \bar{a}} \qquad\qquad L^* = \bar{f} - w^*$$
+
+With the textbook's numbers ($\bar{a} = 2$, $\bar{\ell} = 30$, $\bar{f} = 60$), $2w + 30 = 60 - w$, so $w^* = 10$ and $L^* = 50$.
+
+> **Python note.** `def` creates a *function*: a named recipe that takes inputs (the
+> *arguments*) and gives back a result with `return`. Writing `a=2.0` gives the argument a
+> *default value*, used whenever we do not pass one. The text in triple quotes is a short
+> description of what the function does. A function can return two results at once, separated by a comma.
+
+```{python}
+def labor_supply(w, a=2.0, l=30.0):
+    """Hours of work offered at the wage w: L^s = a w + l   (Exercise 5)."""
+    return a * w + l
+
+
+def labor_demand(w, f=60.0):
+    """Hours of work the firm wants to hire at the wage w: L^d = f - w   (Exercise 5)."""
+    return f - w
+
+
+def equilibrium(a=2.0, l=30.0, f=60.0):
+    """The wage and employment at which supply equals demand: w* = (f - l) / (1 + a), L* = f - w*."""
+    w_star = (f - l) / (1 + a)
+    L_star = labor_demand(w_star, f)
+    return w_star, L_star
+```
+
+Let us check the functions against the textbook's answer.
+
+> **Python note.** `w_star, L_star = equilibrium()` stores the two results of the function in two
+> variables. An *f-string* such as `f"w* = {w_star:.1f}"` inserts the value of a variable into a
+> piece of text; `:.1f` means "show one decimal".
+
+```{python}
+w_star, L_star = equilibrium()
+print(f"Equilibrium wage       w* = {w_star:.1f}")
+print(f"Equilibrium employment L* = {L_star:.1f}")
+print(f"At w*, supply = {labor_supply(w_star):.1f} and demand = {labor_demand(w_star):.1f}: the market clears")
+```
+
+## Figure 1: GDP per person in six countries
+
+**Goal.** Document the first big fact of macroeconomics: income differs enormously across countries
+and over time.
+
+The data come from the Maddison Project, which estimates GDP per person for every country over
+long periods. GDP (gross domestic product) is the overall income of a country; Chapter 2 explains
+how it is measured. All values are in 2022 dollars, so they can be compared across years.
+
+> **Python note.** `pd.read_csv(...)` reads a data file into a *DataFrame*, a table with named
+> columns. `DATA_URL + "fig1-1.csv"` glues the folder address and the file name together.
+> `.head()` shows the first five rows.
+
+```{python}
+countries = pd.read_csv(DATA_URL + "fig1-1.csv")
+countries.head()
+```
+
+The table is **wide**: one column per country, and only the benchmark years the textbook uses
+(1870, 1890, 1900, 1929 and every decade from 1950). Plotly Express prefers **long** tables, with
+one row per country and year.
+
+> **Python note.** `.melt(id_vars="year")` turns the country columns into rows: the old column
+> names go into a new column (`var_name`) and the numbers into another (`value_name`). A
+> *dictionary* such as `NAMES` pairs keys with values, and `.map(NAMES)` replaces each column name
+> with a readable country name.
+
+```{python}
+NAMES = {"gdppc_usa": "United States", "gdppc_gbr": "U.K.", "gdppc_jpn": "Japan",
+         "gdppc_arg": "Argentina", "gdppc_zaf": "S. Africa", "gdppc_chn": "China"}
+long = countries.melt(id_vars="year", var_name="series", value_name="gdppc")
+long["country"] = long.series.map(NAMES)
+long.head()
+```
+
+The textbook draws this figure on a **ratio scale**: each step up the vertical axis doubles the
+value (1,000, 2,000, 4,000, ...). Equal distances then mean equal *percentage* changes, so a
+country growing at a steady rate draws a straight line. Chapter 3 explains ratio scales in detail.
+
+> **Python note.** `px.line` draws one line per value of `color=`. `log_y=True` gives a ratio
+> scale, and `tickvals` sets the numbers printed on the axis (Plotly's own labels are hard to read
+> on a ratio scale). On a ratio scale, the axis `range` is given in powers of ten: `np.log10(800)`.
+> The `if ... else` block runs one branch or the other.
+
+```{python}
+TICKS = [1000, 2000, 4000, 8000, 16000, 32000, 64000]
+
+
+def six_countries(scale="ratio"):
+    """Figure 1.1: GDP per person in six countries, 1870-2022 (2022 dollars)."""
+    fig = px.line(long, x="year", y="gdppc", color="country", hover_name="country", markers=True,
+                  log_y=(scale == "ratio"),
+                  labels={"year": "Year", "gdppc": "GDP per person (2022 dollars)", "country": "Country"},
+                  title="Large income gaps across countries, and large gains over time")
+    if scale == "ratio":
+        fig.update_yaxes(tickvals=TICKS, range=[np.log10(800), np.log10(90000)])
+    else:
+        fig.update_yaxes(range=[0, 80000])
+    return fig
+```
+
+> **Python note.** `interact` calls a function and redraws its figure every time you change a
+> control. `ToggleButtons` gives one button per option. The `;` at the end only hides an extra
+> line of text.
+
+```{python}
+#| kind: widget
+interact(six_countries, scale=ToggleButtons(options=["ratio", "linear"], value="ratio", description="vertical scale"));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 1 with buttons for the vertical scale
+fig = six_countries()
+fig.update_layout(updatemenus=[dict(type="buttons", direction="right", x=0, y=1.13, xanchor="left", buttons=[
+    dict(label="ratio scale", method="relayout",
+         args=[{"yaxis.type": "log", "yaxis.range": [np.log10(800), np.log10(90000)], "yaxis.tickvals": TICKS}]),
+    dict(label="linear scale", method="relayout",
+         args=[{"yaxis.type": "linear", "yaxis.range": [0, 80000], "yaxis.tickvals": None}])])])
+fig
+```
+
+**What to notice.**
+
+- In every year, the richest of the six countries has several times the income of the poorest.
+  In 2022 the United States leads and South Africa is last.
+- The U.K. was richer than the United States in 1870 and 1890; by 1900 the United States was ahead.
+- Japan's income fell between 1929 and 1950 (World War II) and then rose very fast: it passed
+  South Africa in the 1950s and Argentina in the 1960s. China was almost flat until 1950 and has grown
+  fast since, passing Argentina by 2020.
+- Switch to the linear scale: the lines for poorer countries are squeezed near zero, and the early
+  growth of every country becomes invisible. That is why the textbook uses a ratio scale.
+
+<!-- cell -->
+
+### Key numbers: how much richer?
+
+The textbook asks why the typical American is "more than 10 times richer" than a century ago and
+"25 times richer" than the typical Ethiopian. A wider file holds every available year for the six
+countries and for Ethiopia, so we can check both numbers.
+
+> **Python note.** `.pivot(index="year", columns="iso3", values="gdppc")` turns a long table back
+> into a wide one, with the years as row labels and one column per country code. Then
+> `wide.loc[2022, "ETH"]` picks one number, and `us[us < x]` keeps only the years in which the
+> condition is true.
+
+```{python}
+annual = pd.read_csv(DATA_URL + "maddison_annual.csv")
+wide = annual.pivot(index="year", columns="iso3", values="gdppc")
+us = wide["USA"]
+print(f"U.S. 2022 / U.S. 1922:  {us[2022] / us[1922]:.1f}")
+print(f"Last year with less than a tenth of the 2022 income: {us[us < us[2022] / 10].index.max()}")
+print(f"U.S. / Ethiopia, 2022:  {us[2022] / wide.loc[2022, 'ETH']:.1f}")
+print("U.S. / Ethiopia in other years:")
+print((us / wide["ETH"]).loc[[1950, 1980, 2000, 2010, 2022]].round(1))
+```
+
+The 25-fold gap with Ethiopia is confirmed: in 2022 the ratio is about 25.5. The "10 times richer than
+a century ago" is not: in the current Maddison data, U.S. income in 2022 is about 5.8 times its 1922
+level. A tenfold gap takes us back to 1879, about 140 years. (Figure 7 checks the same claim with a
+different data source.) Notice too that the gap with Ethiopia
+was much larger around 2000 (about 59 times); the textbook's later mention of a "50-fold" gap fits
+those years. Ethiopia has grown fast since then. **Always check a claim against the data, and say
+which data and which year you used.**
+
+**Your turn.** By what factor did GDP per person rise between 1950 and 2022 in Japan? And in the
+United States? Use the `wide` table.
+
+<details><summary>Hint</summary>
+
+Divide `wide.loc[2022, "JPN"]` by `wide.loc[1950, "JPN"]`, then do the same with `"USA"`. Fast
+growth from a low starting point is called *catch-up*; Chapter 5 explains it.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 2: The U.S. employment-population ratio
+
+**Goal.** See how recessions show up in the labor market.
+
+The employment-population ratio is the percentage of the adult population that has a job. It is
+monthly data, so we tell pandas that the `date` column holds dates. A second small file lists the
+start (peak) and end (trough) month of every U.S. recession since 1960, as dated by the NBER.
+
+> **Python note.** `parse_dates=["date"]` turns text such as `"2020-04-01"` into real dates, so
+> that Plotly and pandas can work with them. `.tail()` shows the last five rows.
+
+```{python}
+emp = pd.read_csv(DATA_URL + "fig1-2.csv", parse_dates=["date"])
+recessions = pd.read_csv(DATA_URL + "recessions.csv", parse_dates=["peak", "trough"])
+emp.tail()
+```
+
+Look at the dates in the last rows: September 2025 is followed by November 2025. A whole month is
+missing. Let us check how many months should be there.
+
+> **Python note.** `pd.date_range(..., freq="MS")` lists the first day of every month between two
+> dates. `months.isin(emp.date)` is `True` for each month that appears in the data, and `~` turns
+> `True` into `False` and back, so `months[~ ...]` keeps the months that are missing.
+
+```{python}
+months = pd.date_range("1960-01-01", "2026-09-01", freq="MS")
+missing = months[~months.isin(emp.date)]
+print(f"{len(emp)} rows of data for {len(months)} months. Missing: {list(missing.strftime('%Y-%m'))}")
+```
+
+October 2025 is missing because the Bureau of Labor Statistics did not collect its survey during
+the federal government shutdown of that autumn. The chart simply joins September and November.
+Gaps like this are common in real data, which is why we check before we compute.
+
+> **Python note.** The shaded bands are the recessions. A `for` loop repeats the indented line once
+> for each recession: `zip(recessions.peak, recessions.trough)` hands over one (peak, trough) pair at a
+> time, and `fig.add_vrect` shades the band between the two dates. `rangeslider_visible=True` adds a
+> small copy of the chart below the axis: drag its handles to zoom in on a period.
+
+```{python}
+fig = px.line(emp, x="date", y="emp_pop_ratio",
+              labels={"date": "Year", "emp_pop_ratio": "Employment-population ratio (percent)"},
+              title="Employment fell sharply in the 2007–09 and Covid-19 recessions")
+fig.update_traces(line=dict(color=BLUE, width=2))
+for peak, trough in zip(recessions.peak, recessions.trough):
+    fig.add_vrect(x0=peak, x1=trough, fillcolor=BLUE, opacity=0.12, line_width=0)
+fig.update_yaxes(range=[50, 66])
+fig.update_xaxes(rangeslider_visible=True)
+fig.show()
+```
+
+**What to notice.**
+
+- The ratio rose from about 56 percent in the early 1960s to a peak of 64.7 percent in April 2000.
+- It falls in every recession (the shaded bands), but the last two falls are far deeper than the
+  others: the 2007–09 recession and the Covid-19 collapse of spring 2020.
+- After 2009 the recovery was slow. After the Covid drop the ratio bounced back within two years,
+  but it has not returned to its February 2020 level of 61.1 percent.
+
+<!-- cell -->
+
+### Key numbers: how deep was each fall?
+
+The textbook says that the two latest recessions brought the sharpest declines in employment in more
+than 50 years. For each recession, we compare the ratio in the peak month with its lowest value up to
+two years after the trough (employment often keeps falling after a recession ends).
+
+> **Python note.** `set_index("date")` uses the dates as row labels, so `ratio[:peak]` keeps every
+> month up to the peak and `.iloc[-1]` takes the last of them. `pd.DateOffset(years=2)` adds two years
+> to a date. Each pass of the loop adds one row to the list `falls`, which becomes a DataFrame at the end.
+
+```{python}
+ratio = emp.set_index("date").emp_pop_ratio
+falls = []
+for peak, trough in zip(recessions.peak, recessions.trough):
+    at_peak = ratio[:peak].iloc[-1]
+    lowest = ratio[peak:trough + pd.DateOffset(years=2)].min()
+    falls.append([peak.strftime("%Y-%m"), at_peak, lowest, at_peak - lowest])
+pd.DataFrame(falls, columns=["Recession peak", "Ratio at peak", "Lowest after", "Fall (points)"]).round(1)
+```
+
+Before 2007, no recession lowered the ratio by more than 2.4 points. The 2007–09 recession lowered it by
+4.5 points and the Covid-19 recession by 9.9 points, from 61.1 to 51.2 percent in just two months. The
+textbook's claim holds.
+
+**Your turn.** In which month after April 2020 did the ratio first get back to 60 percent?
+
+<details><summary>Hint</summary>
+
+`ratio["2020-05":]` keeps the months from May 2020 on. Add a condition in square brackets to keep the
+months with a value of at least 60, then look at the first row with `.head(1)`.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 3: Inflation rates in certain rich countries
+
+**Goal.** Document the history of inflation in four rich economies.
+
+The **inflation rate** is the percentage change in consumer prices over a year. The file has one
+column per economy. We rename the columns so that the chart legend is readable.
+
+> **Python note.** `.rename(columns={old: new})` changes column names. Passing a *list* of columns as
+> `y=[...]` makes `px.line` draw one line per column. `add_hline` draws a horizontal line, here a dashed
+> zero line: below it, prices fall (*deflation*).
+
+```{python}
+inflation = pd.read_csv(DATA_URL + "fig1-3.csv")
+inflation = inflation.rename(columns={"inflation_us": "U.S.", "inflation_uk": "U.K.",
+                                      "inflation_euro_area": "Euro area", "inflation_japan": "Japan"})
+fig = px.line(inflation, x="year", y=["U.S.", "U.K.", "Euro area", "Japan"],
+              labels={"year": "Year", "value": "Inflation rate (percent)", "variable": "Economy"},
+              title="Inflation was high in the 1970s, low for 30 years, and jumped in 2021–22")
+fig.add_hline(y=0, line_dash="dash", line_color=GRAY)
+fig.update_layout(hovermode="x unified")
+fig.show()
+```
+
+**What to notice.**
+
+- Inflation peaked in the 1970s: Japan at 23 percent in 1974, the U.K. at 24 percent in 1975, the
+  United States at 13.5 percent in 1980.
+- From the mid-1990s to 2019, inflation was low and stable everywhere, and Japan often had deflation.
+- In 2021–2022 inflation jumped in all four economies. Hover over 2022 to compare them.
+- Click a name in the legend to hide that line; double-click to show it alone.
+
+<!-- cell -->
+
+### Key numbers: three eras of inflation
+
+To check the caption's story, we average inflation over eras.
+
+> **Python note.** `pd.cut` sorts each year into a bin: the years from 1960 to 1969 get the label
+> `"1960s"`, and so on (each bin includes its right edge). `groupby("era").mean()` then averages every
+> column within each era.
+
+```{python}
+inflation["era"] = pd.cut(inflation.year, bins=[1959, 1969, 1979, 1989, 2019, 2020, 2025],
+                          labels=["1960s", "1970s", "1980s", "1990-2019", "2020", "2021-2025"])
+inflation.groupby("era", observed=True)[["U.S.", "U.K.", "Euro area", "Japan"]].mean().round(1)
+```
+
+Average inflation in the 1970s ranged from about 7 percent (United States) to almost 13 percent (U.K.).
+From 1990 to 2019 it averaged about 2.5 percent in the United States, the U.K. and the euro area, and
+0.5 percent in Japan. It then rose again after 2020. In our data, U.S. inflation in 2022 was 8.0 percent,
+higher than the 6.4 percent the textbook shows, probably because the full-year figure was not yet
+available when the book was written.
+
+**Your turn.** In which year did inflation reach its highest value in each of the four economies?
+
+<details><summary>Hint</summary>
+
+`inflation.set_index("year")[["U.S.", "U.K.", "Euro area", "Japan"]].idxmax()` gives, for each column,
+the row label (the year) of its largest value.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 4: The unemployment rate in the U.S., Europe and Japan
+
+**Goal.** Compare unemployment across three large economies, and test a claim about Europe.
+
+The **unemployment rate** is the share of the labor force (people who have a job or are looking for
+one) that is looking for work but does not have a job. "Europe" here is the euro area of 12 countries,
+from the European Commission's AMECO database; it starts in 1960.
+
+```{python}
+unemp = pd.read_csv(DATA_URL + "fig1-4.csv")
+unemp = unemp.rename(columns={"unrate_us": "United States", "unrate_europe": "Europe", "unrate_japan": "Japan"})
+unemp.head(7)
+```
+
+The empty cells (`NaN`, "not a number") in the Europe column are the years 1955–1959, before the
+series starts. pandas skips them when it computes averages.
+
+The textbook says that over the past two decades unemployment has been "nearly twice as high in
+Europe as in the United States". The function below draws the three lines, shades a period, and
+computes the average ratio of the European rate to the U.S. rate in that period.
+
+> **Python note.** `start, end = period` unpacks a pair of numbers into two variables.
+> `unemp[(unemp.year >= start) & (unemp.year <= end)]` keeps the rows where both conditions are true;
+> `&` means "and", and each condition needs its own brackets.
+
+```{python}
+def unemployment_chart(period=(2006, 2025)):
+    """Figure 1.4: unemployment rates, with the average Europe/U.S. ratio over a shaded period."""
+    start, end = period
+    chosen = unemp[(unemp.year >= start) & (unemp.year <= end)]
+    ratio = (chosen["Europe"] / chosen["United States"]).mean()
+    fig = px.line(unemp, x="year", y=["United States", "Europe", "Japan"],
+                  labels={"year": "Year", "value": "Unemployment rate (percent)", "variable": "Economy"})
+    fig.add_vrect(x0=start, x1=end, fillcolor=GRAY, opacity=0.15, line_width=0)
+    fig.update_yaxes(range=[0, 14])
+    fig.update_layout(title=f"{start}–{end}: Europe's rate was {ratio:.2f} times the U.S. rate on average",
+                      hovermode="x unified")
+    return fig
+```
+
+> **Python note.** An `IntRangeSlider` has two handles, so it chooses a whole period at once.
+
+```{python}
+#| kind: widget
+interact(unemployment_chart,
+         period=IntRangeSlider(value=(2006, 2025), min=1960, max=2025, step=1, description="period", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 4 with a precomputed slider for the period
+slider_figure(unemployment_chart, "period", [(1960, 1979), (1980, 1999), (2000, 2019), (2006, 2025)],
+              start=(2006, 2025), label="period")
+```
+
+**What to notice.**
+
+- Over the last 20 years (2006–2025), European unemployment was on average about 1.6 times the U.S.
+  rate: much higher, though a bit less than "nearly twice".
+- From 1960 to 1978 Europe's rate was *below* the U.S. rate every year, on average just over half of it.
+  Choose the period 1960–1979 to see it.
+- Japan's unemployment rate stayed low throughout, never above 5.4 percent.
+
+<!-- cell -->
+
+### Key numbers: when did Europe overtake the United States?
+
+```{python}
+above = unemp[unemp["Europe"] > unemp["United States"]]
+print(f"First year with higher unemployment in Europe: {above.year.min()}")
+print(f"Highest rates: U.S. {unemp['United States'].max():.1f} ({unemp.loc[unemp['United States'].idxmax(), 'year']}), "
+      f"Europe {unemp['Europe'].max():.1f} ({unemp.loc[unemp['Europe'].idxmax(), 'year']}), "
+      f"Japan {unemp['Japan'].max():.1f} ({unemp.loc[unemp['Japan'].idxmax(), 'year']})")
+```
+
+Europe first overtook the United States in 1979. The two rates crossed back and forth in the early
+1980s; from 1984 on, Europe was higher in every year except 2020, when the Covid-19 shock sent U.S.
+unemployment to 8.1 percent.
+
+**Your turn.** Japan's unemployment rate was higher than the U.S. rate in only a few years. Which ones?
+
+<details><summary>Hint</summary>
+
+Copy the first line of the cell above, and compare the `"Japan"` column with the `"United States"` column.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 5: Budget and trade deficits in the United States
+
+**Goal.** Look at two deficits that often appear in the news.
+
+The **budget deficit** is what the federal government spends beyond its revenue, and the **trade
+deficit** is what the country imports beyond its exports. Both are measured as a percentage of GDP,
+so that years with very different GDP can be compared. A *negative* deficit is a surplus.
+
+```{python}
+deficits = pd.read_csv(DATA_URL + "fig1-5.csv")
+deficits = deficits.rename(columns={"budget_deficit_pct_gdp": "Budget deficit", "trade_deficit_pct_gdp": "Trade deficit"})
+fig = px.line(deficits, x="year", y=["Budget deficit", "Trade deficit"], color_discrete_sequence=[BLUE, GREEN],
+              labels={"year": "Year", "value": "Percent of GDP", "variable": "Deficit"},
+              title="U.S. budget and trade deficits have both been high in recent years")
+fig.add_hline(y=0, line_dash="dash", line_color=GRAY)
+fig.update_layout(hovermode="x unified")
+fig.show()
+```
+
+**What to notice.**
+
+- The budget deficit jumps in recessions (1975, the early 1980s, 2009–2010) and above all in 2020,
+  when it reached almost 14 percent of GDP.
+- The trade deficit was near zero, sometimes a surplus, until the mid-1970s. It peaked in 2006 at 5.7 percent of GDP.
+- In 2025 the budget deficit was still about 5.8 percent of GDP and the trade deficit about 3 percent.
+
+<!-- cell -->
+
+### Key numbers: surpluses and record deficits
+
+> **Python note.** `deficits[deficits["Budget deficit"] < 0]` keeps the rows with a budget surplus,
+> and `.year.tolist()` lists their years. `.idxmax()` gives the row label of the largest value, and
+> `.loc[row, column]` reads one cell.
+
+```{python}
+surplus = deficits[deficits["Budget deficit"] < 0]
+print("Budget surplus in:", surplus.year.tolist())
+for column in ["Budget deficit", "Trade deficit"]:
+    row = deficits[column].idxmax()
+    print(f"Largest {column.lower()}: {deficits.loc[row, column]:.1f} percent of GDP in {deficits.loc[row, 'year']}")
+```
+
+**Your turn.** In how many years since 1960 were *both* deficits above 3 percent of GDP? Which years?
+
+<details><summary>Hint</summary>
+
+Combine two conditions with `&`, as in Figure 4:
+`deficits[(deficits["Budget deficit"] > 3) & (deficits["Trade deficit"] > 3)]`. `len(...)` counts the rows.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 6: The structure of economic models
+
+**Goal.** See what a model does: it takes **inputs** and determines **outcomes**.
+
+Every economic model has the same structure. The model builder picks the inputs:
+
+- **parameters**, fixed numbers such as $\bar{a}$, $\bar{\ell}$, $\bar{f}$, or a minimum wage set by law;
+- **exogenous variables**, inputs that may change over time in a way the model builder decides in
+  advance, such as the number of people in the economy.
+
+The model, a set of equations, then determines the **endogenous variables**, here the wage and
+employment. The textbook draws this as three boxes: inputs → MODEL → outcomes. Below, the boxes are
+live: every slider is an input, and the right box shows the outcomes the model computes.
+
+We add one input the textbook mentions as an example of a parameter: a **minimum wage**. If it is
+below $w^*$, it has no effect. If it is above $w^*$, the wage equals the minimum wage, firms hire only the
+hours they demand at that wage, and the hours that workers offer but cannot sell are unemployment,
+$L^s - L^d$. (Think of $\bar{\ell}$ as growing with the number of people in the economy: more people
+offer more hours at any wage.)
+
+> **Python note.** `fig.add_shape(type="rect", ...)` draws a rectangle and `fig.add_annotation(...)`
+> writes text; `<br>` starts a new line and `<b>...</b>` makes text bold. An annotation with
+> `showarrow=True` draws an arrow from (`ax`, `ay`) to (`x`, `y`). `max(w_star, w_min)` is the larger of
+> the two numbers. The loops run once per box and once per arrow.
+
+```{python}
+def structure_of_models(a=2.0, l=30.0, f=60.0, w_min=0.0):
+    """Figure 1.6 as a live model: inputs (parameters) -> MODEL -> outcomes (endogenous variables)."""
+    w_star, L_star = equilibrium(a, l, f)
+    w = max(w_star, w_min)                         # a minimum wage above w* sets the wage
+    L = labor_demand(w, f)                         # firms hire the hours they demand at that wage
+    unemployed = labor_supply(w, a, l) - L         # hours offered but not hired (zero if w = w*)
+    inputs = (f"<b>INPUTS</b><br><i>parameters and exogenous<br>variables</i><br><br>supply slope a = {a}"
+              f"<br>hours at zero wage l = {l}<br>demand at zero wage f = {f}<br>minimum wage = {w_min}")
+    model = "<b>MODEL</b><br><br>Lˢ = a·w + l<br>Lᵈ = f − w<br>Lˢ = Lᵈ, unless<br>a minimum wage<br>is above w*"
+    outcomes = (f"<b>OUTCOMES</b><br><i>endogenous variables</i><br><br>wage w = {w:.2f}"
+                f"<br>employment L = {L:.2f}<br>unemployment = {unemployed:.2f}")
+    fig = go.Figure()
+    for x0, x1, text in [[0.0, 0.33, inputs], [0.39, 0.61, model], [0.67, 1.0, outcomes]]:
+        fig.add_shape(type="rect", x0=x0, x1=x1, y0=0.12, y1=0.88, fillcolor="#ecf3fa", line=dict(color=BLUE))
+        fig.add_annotation(x=(x0 + x1) / 2, y=0.5, text=text, showarrow=False, font=dict(size=13))
+    for x_from, x_to in [[0.33, 0.39], [0.61, 0.67]]:
+        fig.add_annotation(x=x_to, y=0.5, ax=x_from, ay=0.5, xref="x", yref="y", axref="x", ayref="y",
+                           text="", showarrow=True, arrowhead=3, arrowwidth=4, arrowcolor=GREEN)
+    fig.update_xaxes(visible=False, range=[0, 1])
+    fig.update_yaxes(visible=False, range=[0, 1])
+    fig.update_layout(title=f"Inputs → model → outcomes: wage w = {w:.2f}, employment L = {L:.2f}")
+    return fig
+```
+
+> **Python note.** A `FloatSlider` chooses a number between `min` and `max` in steps of `step`.
+> `value` is where it starts: the textbook's numbers.
+
+```{python}
+#| kind: widget
+interact(structure_of_models,
+         a=FloatSlider(value=2.0, min=1.0, max=4.0, step=0.5, description="supply slope a", style=WIDE),
+         l=FloatSlider(value=30, min=20, max=40, step=5, description="hours at zero wage l", style=WIDE),
+         f=FloatSlider(value=60, min=50, max=70, step=5, description="demand at zero wage f", style=WIDE),
+         w_min=FloatSlider(value=0, min=0, max=20, step=1, description="minimum wage", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 6 with a precomputed slider for the minimum wage
+slider_figure(structure_of_models, "w_min", [0, 5, 10, 12, 15, 20], start=0, label="minimum wage")
+```
+
+**What to notice.**
+
+- With the textbook's inputs, the outcomes are $w^* = 10$ and $L^* = 50$, and nobody who wants to work
+  at that wage is left out.
+- A minimum wage of 5 or 10 changes nothing, because it is not above the market wage. A minimum wage
+  of 12 raises the wage to 12, cuts employment to 48, and leaves 6 hours of unemployment.
+- You never set the wage or employment directly: they are *endogenous*. You only change inputs, and the
+  model works out the outcomes. That is what the textbook means by running an **experiment** with a model.
+
+**Your turn.** Set the minimum wage to 15. How much unemployment does the model predict? Then check the
+number with `labor_supply` and `labor_demand` in the cell below.
+
+<details><summary>Hint</summary>
+
+Unemployment is `labor_supply(15) - labor_demand(15)`, with the default values of `a`, `l` and `f`.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 7: Per capita GDP in the United States
+
+**Goal.** See the three features of the graph that organizes the whole textbook: long-run growth,
+short-run fluctuations, and the question of what comes next.
+
+The file has two columns. `gdppc_actual` is real GDP per person. `gdppc_potential` is **potential
+output**: what GDP per person would be if prices were fully flexible and all resources were fully
+employed. From 1949 on, potential output comes from the Congressional Budget Office (CBO); before
+1949 it is a smooth statistical trend of the actual series, so the early years should be read with care.
+
+```{python}
+usgdp = pd.read_csv(DATA_URL + "fig1-7.csv")
+usgdp.head()
+```
+
+The average annual growth rate $g$ between 1870 and 2025 is the constant rate that turns the 1870 value
+into the 2025 value in 155 years: $y_{2025} = y_{1870}(1+g)^{155}$, so $g = (y_{2025}/y_{1870})^{1/155} - 1$.
+
+> **Python note.** `usgdp.set_index("year").gdppc_actual` gives a column whose rows are labeled by
+> year, so `y[2025]` is the 2025 value. On a ratio-scale axis, an annotation's height is also given in
+> powers of ten: `y=np.log10(30000)`.
+
+```{python}
+y = usgdp.set_index("year").gdppc_actual
+g = (y[2025] / y[1870]) ** (1 / 155) - 1
+named = usgdp.rename(columns={"gdppc_actual": "Actual", "gdppc_potential": "Potential"})   # readable legend
+fig = px.line(named, x="year", y=["Actual", "Potential"], log_y=True, color_discrete_sequence=[BLUE, GREEN],
+              labels={"year": "Year", "value": "Per capita GDP (2022 dollars, ratio scale)", "variable": "Series"},
+              title="Per capita GDP in the United States, 1870–2025")
+fig.update_traces(selector=dict(name="Potential"), line_dash="dash")
+fig.update_yaxes(tickvals=[4000, 8000, 16000, 32000, 64000], range=[np.log10(3500), np.log10(100000)])
+fig.add_annotation(x=1920, y=np.log10(30000), showarrow=False, font=dict(size=15),
+                   text=f"The average annual<br>growth rate is<br>{100 * g:.1f}% per year")
+fig.show()
+```
+
+**What to notice.**
+
+- **The long run.** Income per person rose enormously, and on a ratio scale the line is close to
+  straight: growth of almost 2 percent a year, sustained for over 150 years.
+- **The short run.** Actual GDP (solid) moves around potential output (dashed). The Great Depression of
+  the 1930s and the World War II boom of the 1940s are the only deviations you can see easily.
+- **The future.** The line raises an obvious question: will growth continue at the same rate?
+
+<!-- cell -->
+
+### Key numbers: the long run
+
+```{python}
+print(f"1870: ${y[1870]:,}    2022: ${y[2022]:,}    2025: ${y[2025]:,}")
+print(f"Rise from 1870 to 2022: a factor of {y[2022] / y[1870]:.1f}")
+print(f"Rise from 1922 to 2022: a factor of {y[2022] / y[1922]:.1f}")
+print(f"Average growth, 1870-2025: {100 * g:.2f}% a year")
+```
+
+The textbook reports \$4,200 in 1870 and \$76,000 in 2022, "more than a factor of 15". Our 2022 value is
+close (\$77,942). Our 1870 value is about 10 percent higher, because we use newer historical estimates
+(the Maddison Project) for the years before 1929. The rise is a factor of almost 17, and average growth
+is 1.9 percent a year, which the textbook rounds to 2 percent.
+
+This series also lets us revisit the claim of Figure 1. Here, U.S. income in 2022 is about 8.1 times its
+1922 level: more than the 5.8 of the Maddison data, but still short of "more than 10 times". The two
+sources disagree because estimating income a century ago is hard, and they measure prices differently.
+When sources disagree, report the range.
+
+<!-- cell -->
+
+### The short run: the output gap
+
+The gap between actual and potential output, in percent, is
+$100 \times (\text{actual} / \text{potential} - 1)$. It is negative in recessions. The chart below plots
+it for every year, and the title converts the gap of the chosen year into dollars per person and for a
+family of four.
+
+> **Python note.** `usgdp["gap"] = ...` adds a new column, computed row by row from two other columns.
+> `usgdp[usgdp.year == year].iloc[0]` picks the one row of the chosen year. `px.bar` draws a bar chart,
+> and `:+,.0f` in an f-string shows a sign, thousands separators and no decimals.
+
+```{python}
+usgdp["gap"] = 100 * (usgdp.gdppc_actual / usgdp.gdppc_potential - 1)
+
+
+def output_gap_chart(year=2009):
+    """Figure 1.7, second feature: actual GDP per person relative to potential, in percent."""
+    row = usgdp[usgdp.year == year].iloc[0]
+    dollars = row.gdppc_actual - row.gdppc_potential
+    fig = px.bar(usgdp, x="year", y="gap", color_discrete_sequence=[TEAL],
+                 labels={"year": "Year", "gap": "Actual relative to potential (percent)"})
+    fig.add_trace(go.Scatter(x=[year], y=[row.gap], mode="markers", name=str(year),
+                             marker=dict(color="black", size=11)))
+    fig.update_yaxes(range=[-20, 25])
+    fig.update_layout(title=f"{year}: gap {row.gap:+.1f}%, or {dollars:+,.0f} dollars per person "
+                            f"({4 * dollars:+,.0f} for a family of four)")
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(output_gap_chart, year=IntSlider(value=2009, min=1870, max=2025, step=1, description="year", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 7's output gap with a precomputed slider for the year
+slider_figure(output_gap_chart, "year", [1933, 1944, 1982, 2009, 2020, 2025], start=2009, label="year")
+```
+
+**What to notice.**
+
+- The Great Depression is by far the deepest gap: 17 percent below potential in 1933. The World War II
+  boom put output 23 percent *above* potential in 1944.
+- Since 1949 (the CBO years), no gap has been larger than about 6 percent. The largest is 1982
+  (6.2 percent below potential).
+- The textbook says output in 2009 was about 6 percent below potential, a loss of about \$4,000 per
+  person. With today's revised data the 2009 gap is 4.7 percent, or about \$3,100 per person and
+  \$12,300 for a family of four. Statistical agencies revise their estimates of the past as new information
+  arrives.
+
+<!-- cell -->
+
+### Key numbers: issues for the future
+
+The textbook asks whether the next century will bring another tenfold rise in income. We compute what
+a tenfold rise would mean and what growth rate it would need.
+
+```{python}
+print(f"Ten times the 2022 level: ${10 * y[2022]:,}")
+print(f"Income after 100 more years at the historical rate: ${y[2025] * (1 + g) ** 100:,.0f}")
+print(f"Growth rate needed for a tenfold rise in 100 years: {100 * (10 ** (1 / 100) - 1):.2f}% a year")
+```
+
+Ten times today's income is about \$780,000 per person, close to the textbook's \$750,000. At the
+historical growth rate of 1.9 percent, income would rise by a factor of about 6.4 in a century; a tenfold
+rise needs about 2.3 percent a year. Small differences in growth rates add up over long periods.
+
+**Your turn.** Find the year after 1949 in which actual output was furthest *above* potential.
+
+<details><summary>Hint</summary>
+
+`usgdp[usgdp.year >= 1949]` keeps the CBO years. Then use `.gap.idxmax()` to find the row with the
+largest gap, and read its `year` with `usgdp.loc[row, "year"]`.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 8: The labor market
+
+**Goal.** Draw the supply-and-demand diagram of the labor market and see how the equilibrium moves
+when a parameter changes.
+
+The diagram puts employment $L$ on the horizontal axis and the wage $w$ on the vertical axis. Labor supply
+$L^s = \bar{a}w + \bar{\ell}$ slopes up, and labor demand $L^d = \bar{f} - w$ slopes down. They cross at the
+equilibrium $(L^*, w^*)$. When you move a slider away from the textbook's values, the textbook's curves stay
+on the chart as dashed gray lines, so you can see the shift.
+
+> **Python note.** `np.linspace(0, 30, 100)` creates 100 evenly spaced wages from 0 to 30. Because the
+> wage is on the *vertical* axis, we compute the hours supplied and demanded at each wage and use them as
+> `x`. `go.Figure()` starts an empty chart, and each `add_trace` adds one curve or set of points.
+
+```{python}
+def labor_market(a=2.0, l=30.0, f=60.0):
+    """Figure 1.8: labor supply and demand, and the equilibrium (L*, w*)."""
+    w = np.linspace(0, 30, 100)
+    w_star, L_star = equilibrium(a, l, f)
+    fig = go.Figure()
+    if (a, l, f) != (2.0, 30.0, 60.0):             # keep the textbook's curves for comparison
+        fig.add_trace(go.Scatter(x=labor_supply(w), y=w, name="Textbook curves (a=2, l=30, f=60)",
+                                 line=dict(color=GRAY, width=2, dash="dash")))
+        fig.add_trace(go.Scatter(x=labor_demand(w), y=w, showlegend=False, line=dict(color=GRAY, width=2, dash="dash")))
+    fig.add_trace(go.Scatter(x=labor_supply(w, a, l), y=w, name="Labor supply, Lˢ = a·w + l", line=dict(color=TEAL, width=3)))
+    fig.add_trace(go.Scatter(x=labor_demand(w, f), y=w, name="Labor demand, Lᵈ = f − w", line=dict(color=BLUE, width=3)))
+    fig.add_trace(go.Scatter(x=[0, L_star, L_star], y=[w_star, w_star, 0], mode="lines", showlegend=False,
+                             line=dict(color="black", width=1, dash="dot")))
+    fig.add_trace(go.Scatter(x=[L_star], y=[w_star], mode="markers", name="Equilibrium (L*, w*)",
+                             marker=dict(color="black", size=12)))
+    fig.update_layout(title=f"Equilibrium: wage w* = {w_star:.2f}, employment L* = {L_star:.2f}",
+                      xaxis=dict(title="Employment, L", range=[0, 100]),
+                      yaxis=dict(title="Wage, w", range=[0, 30]))
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(labor_market,
+         a=FloatSlider(value=2.0, min=1.0, max=4.0, step=0.5, description="supply slope a", style=WIDE),
+         l=FloatSlider(value=30, min=20, max=40, step=5, description="hours at zero wage l", style=WIDE),
+         f=FloatSlider(value=60, min=50, max=70, step=5, description="demand at zero wage f", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 8 with a precomputed slider for labor demand at a zero wage
+slider_figure(labor_market, "f", [50, 55, 60, 65, 70], start=60, label="demand at zero wage f")
+```
+
+**What to notice.**
+
+- With the textbook's parameters the curves cross at $w^* = 10$ and $L^* = 50$, the answer to the textbook's
+  worked exercise.
+- A higher $\bar{f}$ shifts labor demand to the right: the wage **and** employment both rise.
+- A higher $\bar{\ell}$ shifts labor supply to the right: employment rises but the wage **falls**.
+- A larger $\bar{a}$ makes supply respond more to the wage. The supply curve gets flatter in this diagram,
+  and it pivots around the point where the wage is zero.
+
+<!-- cell -->
+
+### Key numbers: three experiments
+
+The formulas $w^* = (\bar{f} - \bar{\ell})/(1+\bar{a})$ and $L^* = \bar{f} - w^*$ show how much each parameter moves the
+outcomes. With $\bar{a} = 2$, raising $\bar{f}$ by 3 raises $w^*$ by $3/3 = 1$; raising $\bar{\ell}$ by 3 lowers $w^*$ by 1.
+
+> **Python note.** This loop goes through a *list of lists*: each inner list holds a name and three
+> parameter values, which the line `for name, a, l, f in ...` unpacks.
+
+```{python}
+for name, a, l, f in [["textbook", 2, 30, 60], ["l up by 3", 2, 33, 60], ["f up by 3", 2, 30, 63]]:
+    w_new, L_new = equilibrium(a, l, f)
+    print(f"{name:10}  w* = {w_new:5.2f}   L* = {L_new:5.2f}")
+```
+
+**Your turn.** Find values of $\bar{\ell}$ and $\bar{f}$ that keep the wage at $w^* = 10$ but raise employment to
+$L^* = 60$ (keep $\bar{a} = 2$). Check your answer with `equilibrium`.
+
+<details><summary>Hint</summary>
+
+$L^* = \bar{f} - w^*$, so $L^* = 60$ with $w^* = 10$ needs $\bar{f} = 70$. Then choose $\bar{\ell}$ so that
+$(\bar{f} - \bar{\ell})/3 = 10$. Try it with the sliders too.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Key numbers
+
+This table collects the main numbers of the chapter. Each one is computed with the functions and data above.
+
+```{python}
+rows = [
+    ["U.S. GDP per person, 2022 / 1922 (Maddison)", us[2022] / us[1922]],
+    ["U.S. / Ethiopia GDP per person, 2022 (Maddison)", us[2022] / wide.loc[2022, "ETH"]],
+    ["Employment-population ratio, peak (April 2000, %)", ratio.max()],
+    ["Employment-population ratio, Covid low (April 2020, %)", ratio.min()],
+    ["Europe / U.S. unemployment rate, 2006-2025 average", (unemp["Europe"] / unemp["United States"])[unemp.year >= 2006].mean()],
+    ["Largest U.S. budget deficit (2020, % of GDP)", deficits["Budget deficit"].max()],
+    ["U.S. GDP per person, 2022 / 1870", y[2022] / y[1870]],
+    ["U.S. average growth, 1870-2025 (% a year)", 100 * g],
+    ["U.S. output gap, 2009 (%)", usgdp.set_index("year").gap[2009]],
+    ["Labor market: equilibrium wage w*", equilibrium()[0]],
+    ["Labor market: equilibrium employment L*", equilibrium()[1]],
+]
+pd.DataFrame(rows, columns=["Quantity", "Value"]).round(2)
+```
+
+## Summary
+
+- Macroeconomics studies the economy as a whole. Its big questions start from facts like these: huge
+  income gaps across countries, deep recessions such as 2008–09 and 2020, the inflation of the 1970s and
+  of 2021–22, high unemployment in Europe, and large U.S. budget and trade deficits.
+- It answers them in four steps: document the facts, build a model, compare the model with the facts,
+  and use the model for experiments.
+- A model takes **parameters** and **exogenous variables** as inputs and determines the **endogenous
+  variables**. In the labor-market model, $w^* = (\bar{f} - \bar{\ell})/(1 + \bar{a})$ and $L^* = \bar{f} - w^*$.
+- U.S. GDP per person has grown at almost 2 percent a year since 1870 (**the long run**), with deviations
+  from potential output that are small except in the Great Depression and World War II (**the short run**).
+- Checking claims against the data matters: some textbook numbers hold exactly, others change with newer data.
+- The next chapter shows how GDP, the measure behind most of these figures, is defined and measured.
