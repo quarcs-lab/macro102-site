@@ -1,0 +1,945 @@
+# Chapter 4: A Model of Production
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/ch04-a-model-of-production.ipynb)
+
+*Data Science and Macroeconomic Models: A Python Companion to Intermediate Macroeconomics* · Carlos Mendez
+
+> **How to use this notebook.** In Colab, click *Runtime → Run all*. After that, every
+> interactive figure has live sliders, buttons or menus: change one and the figure is drawn again
+> on the spot. On the book website the same figures come with one precomputed slider or a few
+> buttons. Each section ends with a short **Your turn** task, and you can try it in the empty code
+> cell below the task.
+
+<!-- cell -->
+
+## Learning goals
+
+Why are some countries so much richer than others? This chapter builds a first model to answer
+that question. By the end of it you will be able to:
+
+- write down the **Cobb-Douglas production function** and explain constant returns to scale and
+  **diminishing marginal products**;
+- solve the production model: find the equilibrium wage, rental price of capital and output, and
+  show that labor gets two-thirds of output and capital one-third;
+- compare the model's predictions with data on 111 countries, a method called **development accounting**;
+- measure **total factor productivity (TFP)** as the part of income the model cannot explain with capital;
+- write Python functions with several arguments, combine Plotly Express charts with model curves, and
+  select, filter and summarize rows of a large data table with pandas.
+
+## Figures in this chapter
+
+The figures follow the order of the textbook chapter. The second column shows which textbook
+figure each notebook figure replicates.
+
+| Figure | Textbook figure | Type | What you can change |
+|---|---|---|---|
+| Figure 1 | 4.1 The diminishing marginal product of capital | model | productivity, labor, capital exponent |
+| Figure 2 | 4.2 Supply and demand for capital and labor | model | supplies of capital and labor, productivity, capital exponent |
+| Figure 3 | 4.3 The S&P 500 stock price index | data | the period shown, linear or ratio scale |
+| Figure 4 | 4.4 Predicted per capita GDP in the production model | data | the year |
+| Figure 5 | 4.5 The model's prediction for per capita GDP | data | the capital exponent |
+| Figure 6 | 4.6 The U.S. and Chinese production functions | data | the country compared with the United States |
+| Figure 7 | 4.7 Measuring TFP so the model fits exactly | data | the year (play button) |
+| — | 4.8 Satellite image of North and South Korea at night | not replicable | — (a photograph; see the note at the end of Figure 7) |
+| Figure 8 | 4.9 Per capita GDP in China and Russia | data | the countries shown, linear or ratio scale |
+
+The textbook's Tables 4.3 and 4.4 are rebuilt inside Figures 4 and 7.
+
+## Setup
+
+We first load the Python libraries we need. You only have to run this cell once.
+
+> **Python note.** `import` loads a *library*, a toolbox written by other people. We give each
+> library a short nickname, for example `np` for NumPy, so that the code stays short. Text after
+> a `#` is a *comment*: Python ignores it, and it is there for human readers. The `try ... except`
+> block runs one Colab-only line and simply skips it anywhere else.
+
+```{python}
+# Libraries used in this chapter
+import numpy as np                              # numbers and arrays
+import pandas as pd                             # data tables
+import plotly.express as px                     # quick charts from data tables
+import plotly.graph_objects as go               # charts built piece by piece (model figures)
+import plotly.io as pio
+from plotly.subplots import make_subplots       # several panels in one figure
+from ipywidgets import (interact, FloatSlider, SelectionSlider, IntRangeSlider, ToggleButtons,
+                        Dropdown, SelectMultiple)
+
+# One light blue/green look for every chart
+BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
+pio.templates.default = "plotly_white"
+pio.templates["plotly_white"].layout.update(width=860, height=480)   # same size in Colab and on the website
+px.defaults.color_discrete_sequence = [BLUE, TEAL, GREEN, "#5aa0d8", "#0b4f47"]
+WIDE = {"description_width": "initial"}         # show the full slider labels
+
+# Colab only: let Plotly charts appear inside the interactive widgets
+try:
+    import google.colab
+    google.colab.output.enable_custom_widget_manager()
+except ImportError:
+    pass                                        # not running in Colab: nothing to do
+
+# The data files of this chapter live in the book's GitHub repository
+DATA_URL = "https://raw.githubusercontent.com/quarcs-lab/macro102-site/main/data/ch04/"
+```
+
+The next cell defines a helper that only the book website needs. Run it and move on.
+
+```{python}
+#| kind: helper
+# @title Helper for the website versions (run this cell; you do not need to read it)
+def slider_figure(make_figure, name, values, start, label=None):
+    """Precompute make_figure(name=value) for every value and join the results with one slider.
+
+    The website cannot run Python, so each interactive figure also gets this precomputed version.
+    """
+    figures = [make_figure(**{name: v}) for v in values]
+    first = values.index(start)
+    fig = go.Figure(layout=figures[first].layout)
+    owner = []                                  # which precomputed figure each trace comes from
+    for i, f in enumerate(figures):
+        for trace in f.data:
+            trace.visible = (i == first)
+            fig.add_trace(trace)
+            owner.append(i)
+    steps = []
+    for i, f in enumerate(figures):
+        layout = {"title": f.layout.title.to_plotly_json(),
+                  "annotations": [a.to_plotly_json() for a in f.layout.annotations],
+                  "shapes": [s.to_plotly_json() for s in f.layout.shapes]}
+        visible = [o == i for o in owner]
+        steps.append(dict(method="update", label=str(values[i]), args=[{"visible": visible}, layout]))
+    fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
+                                    currentvalue=dict(prefix=(label or name) + " = "))])
+    return fig
+```
+
+## The model in code
+
+The model has one firm that rents $K$ machines and hires $L$ workers to make output $Y$ (in the
+textbook, tons of ice cream). The **production function** says how much it can make:
+
+$$Y = F(K, L) = \bar{A}\,K^{1/3}L^{2/3} \qquad (4.1)$$
+
+$\bar{A}$ is **productivity**: a higher $\bar{A}$ means more output from the same machines and workers.
+The exponents add up to one, so doubling both inputs exactly doubles output (**constant returns to
+scale**). But adding capital *alone* raises output by less and less (**diminishing marginal product**).
+The extra output from one more machine, and from one more worker, are
+
+$$MPK = \frac{1}{3}\,\frac{Y}{K} \quad (4.3) \qquad\qquad MPL = \frac{2}{3}\,\frac{Y}{L} \quad (4.4)$$
+
+To let you experiment with the shape of the function, we write the exponent on capital as
+$\alpha$ ("alpha"). The textbook uses $\alpha = 1/3$, so the exponent on labor is $1-\alpha = 2/3$.
+
+> **Python note.** `def` creates a *function*: a named recipe that takes inputs (the
+> *arguments*) and gives back a result with `return`. Writing `A=1.0` gives an argument a
+> *default value*, used whenever we do not pass one. The text in triple quotes is a short
+> description of what the function does. `**` means "to the power of", and `1 / 3` is simply the
+> number one third.
+
+```{python}
+def production(K, L, A=1.0, alpha=1 / 3):
+    """Output: Y = A K^alpha L^(1 - alpha)   (equation 4.1; the textbook uses alpha = 1/3)."""
+    return A * K ** alpha * L ** (1 - alpha)
+
+
+def mpk(K, L, A=1.0, alpha=1 / 3):
+    """Marginal product of capital: MPK = alpha * Y / K   (equation 4.3)."""
+    return alpha * production(K, L, A, alpha) / K
+
+
+def mpl(K, L, A=1.0, alpha=1 / 3):
+    """Marginal product of labor: MPL = (1 - alpha) * Y / L   (equation 4.4)."""
+    return (1 - alpha) * production(K, L, A, alpha) / L
+```
+
+Let us check the functions against the textbook. With $\bar{A}=1$, 8 machines and 27 workers make
+$8^{1/3}\cdot 27^{2/3} = 2 \cdot 9 = 18$ tons of ice cream.
+
+> **Python note.** An *f-string* such as `f"Y = {Y:.2f}"` inserts the value of a variable into a
+> piece of text; `:.2f` means "show two decimals".
+
+```{python}
+print(f"8 machines and 27 workers:      Y = {production(8, 27):.2f} tons")
+print(f"Double both (16 and 54):        Y = {production(16, 54):.2f} tons   (constant returns: twice as much)")
+print(f"Double capital only (16 and 27): Y = {production(16, 27):.2f} tons   (less than twice as much)")
+
+# The MPK formula should match the extra output from a tiny extra amount of capital
+small = 0.0001
+print(f"MPK by formula (4.3): {mpk(8, 27):.4f}")
+print(f"MPK by a small step:  {(production(8 + small, 27) - production(8, 27)) / small:.4f}")
+```
+
+## Figure 1: The diminishing marginal product of capital
+
+**Goal.** See why each extra machine adds less output than the one before.
+
+Hold the number of workers fixed at $L$ and draw output against capital. The curve rises, but it
+gets flatter: going from 1 to 2 machines adds much more output than going from 7 to 8 machines. The
+slope of the curve is the marginal product of capital, and it falls as $K$ rises.
+
+> **Python note.** `np.linspace(0, 10.4, 300)` creates 300 evenly spaced numbers from 0 to 10.4:
+> the values of $K$ at which we draw the curve. `np.arange(1, 11)` gives the whole numbers 1, 2, …, 10
+> (the end value 11 is left out). A `for` loop repeats the indented lines once for each value in a list.
+
+```{python}
+def production_curve(A=1.0, L=70, alpha=1 / 3):
+    """Figure 4.1: output against capital with labor held fixed; dots at K = 1, ..., 10."""
+    K = np.linspace(0, 10.4, 300)
+    dots = np.arange(1, 11)
+    fig = go.Figure()
+    # Dashed guides at K = 1, 2, 7 and 8, as in the textbook
+    for K0 in [1, 2, 7, 8]:
+        Y0 = production(K0, L, A, alpha)
+        fig.add_trace(go.Scatter(x=[K0, K0, 0], y=[0, Y0, Y0], mode="lines", showlegend=False,
+                                 line=dict(color=GRAY, width=1, dash="dash")))
+    fig.add_trace(go.Scatter(x=K, y=production(K, L, A, alpha), name="Output, Y", line=dict(color=GREEN, width=4)))
+    fig.add_trace(go.Scatter(x=dots, y=production(dots, L, A, alpha), name="K = 1, 2, ..., 10", mode="markers",
+                             marker=dict(color="black", size=10)))
+    gain_1_2 = production(2, L, A, alpha) - production(1, L, A, alpha)
+    gain_7_8 = production(8, L, A, alpha) - production(7, L, A, alpha)
+    fig.update_layout(title=f"From K = 1 to 2, output rises by {gain_1_2:.2f} tons; from 7 to 8, by only {gain_7_8:.2f}",
+                      xaxis=dict(title="Capital, K", range=[0, 10.4], dtick=1),
+                      yaxis=dict(title="Tons of ice cream, Y", range=[0, 45], dtick=5))
+    return fig
+```
+
+The textbook does not say how many workers there are. With $\bar{A}=1$, $L = 70$ workers reproduces
+its curve: $70^{2/3} \approx 17$ tons with one machine.
+
+For the exponent we use a `SelectionSlider`. It is a slider that moves through a fixed list of values,
+here a few simple fractions.
+
+> **Python note.** A *dictionary* such as `{"1/3": 1 / 3}` links a label (the *key*) to a value.
+> `ALPHAS.items()` gives the (label, value) pairs, which is what `SelectionSlider` needs: it shows the
+> label and passes the value to the function.
+
+```{python}
+ALPHAS = {"1/4": 1 / 4, "1/3": 1 / 3, "1/2": 1 / 2, "2/3": 2 / 3, "3/4": 3 / 4, "1": 1.0}
+```
+
+Now the interactive version. Move the sliders and watch the two readouts in the title.
+
+> **Python note.** `interact` turns each argument of a function into a slider and calls the
+> function again every time you move one. The `;` at the end only hides an extra line of text.
+
+```{python}
+#| kind: widget
+interact(production_curve,
+         A=FloatSlider(value=1.0, min=0.5, max=1.5, step=0.1, description="productivity A", style=WIDE),
+         L=FloatSlider(value=70, min=10, max=120, step=10, description="workers L", style=WIDE),
+         alpha=SelectionSlider(options=list(ALPHAS.items()), value=1 / 3, description="capital exponent α", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 1 with a precomputed slider for the number of workers
+slider_figure(production_curve, "L", [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120], start=70,
+              label="workers L")
+```
+
+**What to notice.**
+
+- The dots get closer together vertically as $K$ rises: each extra machine adds less output. With the
+  defaults, the first extra machine adds 4.41 tons and the eighth adds only 1.48 tons.
+- More workers lift the whole curve. Each machine is more useful when there are more people to run it.
+- Set $\alpha = 1$: the curve becomes a straight line and the marginal product no longer falls. With
+  $\alpha = 1/4$ the curve bends even more sharply.
+
+**Your turn.** With the default settings, by how much does output rise when capital goes from 9 to 10?
+Compute it in the cell below with the `production` function. Is it more or less than 1.48 tons?
+
+<details><summary>Hint</summary>
+
+Type `production(10, 70) - production(9, 70)`. The arguments `A` and `alpha` keep their default values.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 2: Supply and demand for capital and labor
+
+**Goal.** Solve the production model and find the equilibrium prices of capital and labor.
+
+Firms rent capital until its marginal product equals the rental price $r$, and hire workers until
+their marginal product equals the wage $w$. So the MPK and MPL curves are the **demand curves** for
+capital and labor. The supplies are fixed at $\bar{K}$ and $\bar{L}$, so the supply curves are vertical lines.
+Where supply meets demand, the markets clear:
+
+$$r^* = \frac{1}{3}\,\bar{A}\left(\frac{\bar{L}}{\bar{K}}\right)^{2/3} \qquad\qquad
+w^* = \frac{2}{3}\,\bar{A}\left(\frac{\bar{K}}{\bar{L}}\right)^{1/3}$$
+
+> **Python note.** `make_subplots(rows=1, cols=2)` creates a figure with two panels side by side,
+> and `row=..., col=...` tells `add_trace` which panel to draw in.
+
+```{python}
+def factor_markets(K_bar=1.0, L_bar=1.0, A=1.0, alpha=1 / 3):
+    """Figure 4.2: (a) the capital market and (b) the labor market."""
+    K = np.linspace(0.3, 2.2, 200)                   # capital demanded, for the demand curve
+    L = np.linspace(0.3, 2.2, 200)                   # labor demanded
+    r_star, w_star = mpk(K_bar, L_bar, A, alpha), mpl(K_bar, L_bar, A, alpha)
+    Y_star = production(K_bar, L_bar, A, alpha)
+    fig = make_subplots(rows=1, cols=2, subplot_titles=("(a) The capital market", "(b) The labor market"))
+    fig.add_trace(go.Scatter(x=K, y=mpk(K, L_bar, A, alpha), name="Demand: MPK", line=dict(color=BLUE, width=4)), row=1, col=1)
+    fig.add_trace(go.Scatter(x=[K_bar, K_bar], y=[0.05, 0.95], name="Supply of capital", line=dict(color=TEAL, width=4)), row=1, col=1)
+    fig.add_trace(go.Scatter(x=[0, K_bar], y=[r_star, r_star], showlegend=False, line=dict(color=GRAY, dash="dash")), row=1, col=1)
+    fig.add_trace(go.Scatter(x=[K_bar], y=[r_star], name="Equilibrium", mode="markers", marker=dict(color="black", size=12)), row=1, col=1)
+    fig.add_trace(go.Scatter(x=L, y=mpl(K_bar, L, A, alpha), name="Demand: MPL", line=dict(color=BLUE, width=4, dash="dot")), row=1, col=2)
+    fig.add_trace(go.Scatter(x=[L_bar, L_bar], y=[0.05, 1.45], name="Supply of labor", line=dict(color=TEAL, width=4, dash="dot")), row=1, col=2)
+    fig.add_trace(go.Scatter(x=[0, L_bar], y=[w_star, w_star], showlegend=False, line=dict(color=GRAY, dash="dash")), row=1, col=2)
+    fig.add_trace(go.Scatter(x=[L_bar], y=[w_star], showlegend=False, mode="markers", marker=dict(color="black", size=12)), row=1, col=2)
+    fig.update_xaxes(title_text="Capital, K", range=[0, 2.2], row=1, col=1)
+    fig.update_yaxes(title_text="Rental price, r", range=[0, 1.0], row=1, col=1)
+    fig.update_xaxes(title_text="Labor, L", range=[0, 2.2], row=1, col=2)
+    fig.update_yaxes(title_text="Real wage, w", range=[0, 1.5], row=1, col=2)
+    fig.update_layout(title=f"r* = {r_star:.3f}   w* = {w_star:.3f}   |   capital gets {r_star * K_bar / Y_star:.0%} "
+                            f"of output, labor {w_star * L_bar / Y_star:.0%}")
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(factor_markets,
+         K_bar=FloatSlider(value=1.0, min=0.5, max=2.0, step=0.1, description="supply of capital K̄", style=WIDE),
+         L_bar=FloatSlider(value=1.0, min=0.5, max=2.0, step=0.1, description="supply of labor L̄", style=WIDE),
+         A=FloatSlider(value=1.0, min=0.5, max=1.5, step=0.1, description="productivity A", style=WIDE),
+         alpha=SelectionSlider(options=list(ALPHAS.items()), value=1 / 3, description="capital exponent α", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 2 with a precomputed slider for the supply of capital
+slider_figure(factor_markets, "K_bar", [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0], start=1.0,
+              label="supply of capital K̄")
+```
+
+**What to notice.**
+
+- With $\bar{K} = \bar{L} = \bar{A} = 1$, the rental price is $r^* = 1/3$ and the wage is $w^* = 2/3$.
+- More capital lowers its rental price, because the marginal product of capital falls. It also
+  raises the wage: each worker now has more machines to work with, so the labor demand curve shifts up.
+- Whatever you do to $\bar{K}$, $\bar{L}$ or $\bar{A}$, capital always gets the same share of output and labor gets
+  the rest (equation 4.5). Only the exponent $\alpha$ changes the split.
+
+**Your turn.** Use the sliders to find what happens to the wage $w^*$ when the number of workers $\bar{L}$
+doubles from 1 to 2, holding $\bar{K}$ fixed. Then check your answer with the `mpl` function.
+
+<details><summary>Hint</summary>
+
+$w^* = \frac{2}{3}\bar{A}(\bar{K}/\bar{L})^{1/3}$, so doubling $\bar{L}$ multiplies the wage by $(1/2)^{1/3}$. In code:
+`mpl(1, 2) / mpl(1, 1)`.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+### Key numbers: the factor shares add up to output
+
+Payments to capital, $r^*K^*$, and to labor, $w^*L^*$, use up all of output (equations 4.5 and 4.6).
+So firms make zero economic profit, and income equals production.
+
+```{python}
+K_bar, L_bar = 1.0, 1.0
+Y_star = production(K_bar, L_bar)
+capital_income, labor_income = mpk(K_bar, L_bar) * K_bar, mpl(K_bar, L_bar) * L_bar
+print(f"Output Y*:                 {Y_star:.3f}")
+print(f"Capital income r*K*:       {capital_income:.3f}   ({capital_income / Y_star:.0%} of output)")
+print(f"Labor income w*L*:         {labor_income:.3f}   ({labor_income / Y_star:.0%} of output)")
+print(f"Economic profit Y - rK - wL: {Y_star - capital_income - labor_income:.3f}")
+```
+
+## Figure 3: The S&P 500 stock price index
+
+**Goal.** Read a long financial time series and connect it to the capital income of the model.
+
+In the model, capital earns $r^*K^*$, one-third of output. A company's stock market value is the value
+of its current and future capital income, so a stock price index measures the value of (part of) the
+economy's capital stock. The S&P 500 covers 500 large U.S. companies. Dividing it by the consumer price
+index gives a **real** index, in dollars of the same purchasing power.
+
+> **Python note.** `parse_dates=["date"]` tells pandas that the `date` column holds dates, not
+> plain text. Then `.dt.year` extracts the year of each date, and we store it as a new column.
+
+```{python}
+stocks = pd.read_csv(DATA_URL + "fig4-3.csv", parse_dates=["date"])
+stocks["year"] = stocks.date.dt.year
+stocks.tail()
+```
+
+The index is in September 2026 dollars, so it is about 10 percent higher than in the textbook, which
+uses 2023 dollars.
+
+> **Python note.** An `IntRangeSlider` has two handles and gives back a *tuple*, a pair of values
+> written `(1920, 2026)`. The line `start, end = period` unpacks the pair into two variables.
+
+```{python}
+def stock_chart(period=(1920, 2026), scale="ratio"):
+    """Figure 4.3: the real S&P 500 index over a chosen period, on a ratio or linear scale."""
+    start, end = period
+    chosen = stocks[(stocks.year >= start) & (stocks.year <= end)]
+    first, last = chosen.sp500_real.iloc[0], chosen.sp500_real.iloc[-1]
+    years = (chosen.date.iloc[-1] - chosen.date.iloc[0]).days / 365.25
+    growth = 100 * ((last / first) ** (1 / years) - 1)          # average annual growth, percent
+    fig = px.area(chosen, x="date", y="sp500_real", log_y=(scale == "ratio"),
+                  labels={"date": "Year", "sp500_real": "Real stock price index (September 2026 dollars)"},
+                  title=f"{start}–{end}: the real index changed by a factor of {last / first:.1f}, "
+                        f"or {growth:+.1f}% a year")
+    fig.update_traces(line_color=BLUE, fillcolor="rgba(22, 82, 140, 0.15)")
+    if scale == "ratio":
+        fig.update_yaxes(tickvals=[80, 160, 320, 640, 1280, 2560, 5120, 10240])   # each tick doubles
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(stock_chart,
+         period=IntRangeSlider(value=(1920, 2026), min=1920, max=2026, step=1, description="period", style=WIDE),
+         scale=ToggleButtons(options=["ratio", "linear"], description="vertical scale"));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 3 with buttons for the vertical scale and a range slider under the chart
+fig = stock_chart()
+fig.update_xaxes(rangeslider_visible=True)
+fig.update_layout(updatemenus=[dict(type="buttons", direction="right", x=0, y=1.13, xanchor="left", buttons=[
+    dict(label="ratio scale", method="relayout", args=[{"yaxis.type": "log", "yaxis.autorange": True}]),
+    dict(label="linear scale", method="relayout", args=[{"yaxis.type": "linear", "yaxis.autorange": True}])])])
+fig
+```
+
+**What to notice.**
+
+- On the ratio scale, equal vertical distances mean equal percentage changes, and every tick doubles
+  the one below it. The big swings stand out: the 1929 peak and the 1932 crash, the long fall from the late
+  1960s to 1982, the 2000 peak and the 2009 trough.
+- Switch to the linear scale. The early decades flatten into a line near zero, and only the recent swings
+  look large. For a series that grows a lot, the ratio scale is the honest picture.
+- Over the whole period, the real index has grown by a factor of about 50.
+
+**Your turn.** The textbook asks two questions. By how much did the real index change between 1965 and
+1995? And by how much over your own lifetime? Use the period slider, and read the answer in the title.
+
+<details><summary>Hint</summary>
+
+Drag the left handle to 1965 and the right handle to 1995. Note the factor and the growth rate per year.
+Then set the left handle to the year you were born and the right handle to 2026.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 4: Predicted per capita GDP in the production model
+
+**Goal.** Use the model to predict how rich each country should be, given its capital per person.
+
+Dividing equation (4.1) by $L$ gives output per person in terms of capital per person, $k = K/L$:
+
+$$y^* = \bar{A}\,\bar{k}^{1/3} \qquad (4.7)$$
+
+For now, assume every country has the same productivity, $\bar{A} = 1$. Then the model predicts that income
+depends only on capital per person: $y^* = \bar{k}^{1/3}$ (4.9). To compare countries, we divide both
+variables by their U.S. values, so the United States equals 1.
+
+We load the wider data file of this chapter. It has one row per country and year from the Penn World
+Table 11.0, with capital per person built from each country's past investment.
+
+> **Python note.** `pwt.columns` lists the columns of a table, and `pwt.shape` gives its number of rows and
+> columns. The columns ending in `_rel` are relative to the United States in the same year.
+
+```{python}
+pwt = pd.read_csv(DATA_URL + "pwt_production.csv")
+print(pwt.shape)
+pwt[pwt.year == 2023].head()
+```
+
+The function below picks the eight countries of the textbook figure in a given year and places them on
+the curve $y^* = k^{1/3}$.
+
+> **Python note.** `.isin(EIGHT)` is true for the rows whose country appears in the list `EIGHT`.
+> `.copy()` makes a separate table, so that we can add a column to it safely. `.replace(SHORT)` swaps
+> long names for the short ones in the dictionary `SHORT`. `.map(POSITIONS)` looks up each country in
+> `POSITIONS`, and `.fillna("top left")` fills in the countries that are not in it.
+
+```{python}
+EIGHT = ["United States", "Switzerland", "Japan", "Italy", "United Kingdom", "China", "Brazil", "Burundi"]
+SHORT = {"United States": "U.S.", "United Kingdom": "U.K."}
+POSITIONS = {"Japan": "bottom right", "Burundi": "middle right"}      # where to put labels that would overlap
+
+
+def predicted_income_chart(year=2023):
+    """Figure 4.4: predicted income y* = k^(1/3) for eight countries (U.S. = 1)."""
+    chosen = pwt[(pwt.year == year) & pwt.country.isin(EIGHT)].copy()
+    chosen["predicted"] = chosen.k_rel ** (1 / 3)
+    chosen["label"] = chosen.country.replace(SHORT)
+    chosen["position"] = chosen.country.map(POSITIONS).fillna("top left")
+    fig = px.scatter(chosen, x="k_rel", y="predicted", text="label", hover_name="country",
+                     labels={"k_rel": "Capital per person, k (U.S. = 1)",
+                             "predicted": "Predicted per capita GDP, y* (U.S. = 1)"})
+    fig.update_traces(textposition=list(chosen.position), marker=dict(color="black", size=11))
+    k = np.linspace(0, 1.8, 300)
+    fig.add_trace(go.Scatter(x=k, y=k ** (1 / 3), name="y* = k^(1/3)", line=dict(color=BLUE, width=3)))
+    china = chosen[chosen.country == "China"].iloc[0]
+    fig.update_layout(title=f"{year}: China has {china.k_rel:.0%} of U.S. capital per person, "
+                            f"so the model predicts {china.predicted:.0%} of U.S. income",
+                      xaxis_range=[0, 1.8], yaxis_range=[0, 1.3])
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(predicted_income_chart,
+         year=Dropdown(options=[1980, 1990, 2000, 2010, 2019, 2023], value=2023, description="year", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 4 with a precomputed slider for the year
+slider_figure(predicted_income_chart, "year", [1980, 1990, 2000, 2010, 2019, 2023], start=2023, label="year")
+```
+
+**What to notice.**
+
+- Capital per person differs enormously: Burundi has less than 1 percent of the U.S. level, and
+  Switzerland about 60 percent more. The predicted incomes differ much less, because the curve is so
+  bent. This is **diminishing returns to capital** at work.
+- Switzerland has more than twice as much capital per person as the United Kingdom, yet it is predicted
+  to be only about 30 percent richer.
+- Choose earlier years: China moves up along the curve as it accumulates capital, from about 3 percent of
+  U.S. capital per person in 1980 to 35 percent in 2023.
+
+### Table 4.3: the model's prediction for per capita GDP
+
+The textbook lists the numbers behind the figure for 11 countries in 2019. We rebuild the table from our
+data and put the textbook's values next to it. Our data come from a newer release of the Penn World
+Table, so the numbers differ a little, but the pattern is the same.
+
+> **Python note.** `.set_index("country")` uses the country names as row labels, and `.loc[ELEVEN]`
+> picks the rows in the order of the list. `pd.DataFrame({...})` builds a table from a dictionary:
+> each key becomes a column name.
+
+```{python}
+ELEVEN = ["United States", "Switzerland", "Japan", "Italy", "Spain", "United Kingdom",
+          "Brazil", "China", "South Africa", "India", "Burundi"]
+y2019 = pwt[pwt.year == 2019].set_index("country").loc[ELEVEN]
+table_4_3 = pd.DataFrame({
+    "capital per person k": y2019.k_rel,
+    "predicted y* = k^(1/3)": y2019.k_rel ** (1 / 3),
+    "observed y": y2019.y_rel,
+    "textbook: k": [1.000, 1.488, 0.914, 0.792, 0.716, 0.714, 0.195, 0.275, 0.165, 0.082, 0.005],
+    "textbook: observed y": [1.000, 1.203, 0.634, 0.651, 0.645, 0.707, 0.233, 0.226, 0.200, 0.107, 0.013],
+})
+table_4_3.round(3)
+```
+
+Compare the second and third columns: for almost every country the model predicts a higher income
+than the country actually has. Italy, for example, has about 82 percent of U.S. capital per person, so
+the model predicts 94 percent of U.S. income, but Italy's actual income is only 69 percent.
+
+**Your turn.** Add a column to `table_4_3` with the ratio of predicted to observed income. Which country
+does the model miss by the largest factor?
+
+<details><summary>Hint</summary>
+
+`table_4_3["ratio"] = table_4_3["predicted y* = k^(1/3)"] / table_4_3["observed y"]`, then sort the
+table with `.sort_values("ratio")`.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 5: The model's prediction for per capita GDP
+
+**Goal.** Compare the model's predictions with the data for 111 countries.
+
+We plot actual income on the horizontal axis and the model's prediction on the vertical axis. If the
+model were right, every country would lie on the **45-degree line**, where prediction equals data.
+
+First, a quick look at the data. We keep the 111 countries that have data since 1960, the textbook's
+sample, and sort them from poorest to richest.
+
+```{python}
+sample = pwt[(pwt.year == 2023) & pwt.in_sample]
+sample.sort_values("y_rel").head()
+```
+
+Look at the first row. Venezuela's GDP per person appears to be about 0.2 percent of the U.S. level, or
+roughly 160 dollars a year, which is not plausible. During Venezuela's hyperinflation the price data
+behind this number broke down. **Always look at your data before using it.** We drop Venezuela and continue
+with 110 countries.
+
+```{python}
+sample = sample[sample.country != "Venezuela (Bolivarian Republic of)"]
+len(sample)
+```
+
+Both axes use a **ratio scale**, labeled with fractions of the U.S. level. We also let you change the
+exponent $\alpha$ on capital, to test the textbook's argument about it.
+
+```{python}
+FRACTIONS = [1 / 256, 1 / 128, 1 / 64, 1 / 32, 1 / 16, 1 / 8, 1 / 4, 1 / 2, 1, 2]
+FRACTION_NAMES = ["1/256", "1/128", "1/64", "1/32", "1/16", "1/8", "1/4", "1/2", "1", "2"]
+
+
+def prediction_chart(alpha=1 / 3):
+    """Figure 4.5: predicted income k^alpha against actual income (U.S. = 1), with the 45-degree line."""
+    chosen = sample.copy()
+    chosen["predicted"] = chosen.k_rel ** alpha
+    above = (chosen.predicted > chosen.y_rel).mean()            # share of countries above the line
+    gap = (chosen.predicted / chosen.y_rel).median()            # how far off the typical country is
+    fig = px.scatter(chosen, x="y_rel", y="predicted", hover_name="country", log_x=True, log_y=True,
+                     labels={"y_rel": "Per capita GDP in 2023 (U.S. = 1, ratio scale)",
+                             "predicted": "Predicted value, y* = k^α (ratio scale)"})
+    fig.update_traces(marker=dict(color=GREEN, size=9))
+    fig.add_trace(go.Scatter(x=[1 / 256, 2], y=[1 / 256, 2], name="45-degree line: model = data",
+                             mode="lines", line=dict(color=BLUE, width=3)))
+    fig.update_xaxes(range=[np.log10(1 / 110), np.log10(2.5)], tickvals=FRACTIONS, ticktext=FRACTION_NAMES)
+    fig.update_yaxes(range=[np.log10(1 / 256), np.log10(2.5)], tickvals=FRACTIONS, ticktext=FRACTION_NAMES)
+    fig.update_layout(title=f"α = {alpha:.2f}: {above:.0%} of countries lie above the line; typical gap: {gap:.1f} times")
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(prediction_chart,
+         alpha=SelectionSlider(options=list(ALPHAS.items()), value=1 / 3, description="capital exponent α", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 5 with a precomputed slider for the capital exponent
+fig = slider_figure(prediction_chart, "alpha", list(ALPHAS.values()), start=1 / 3, label="capital exponent α")
+for step, name in zip(fig.layout.sliders[0].steps, ALPHAS):
+    step.label = name                                          # show 1/3 rather than 0.333...
+fig
+```
+
+**What to notice.**
+
+- With $\alpha = 1/3$, almost every country lies far **above** the 45-degree line: the model predicts that
+  poor countries should be much richer than they are. Burundi is predicted to have about 1/6 of U.S.
+  income, but it actually has about 1/74. The "typical gap" in the title is the median of predicted
+  over actual income: the typical country is predicted to be 2.8 times richer than it is.
+- The gap shrinks as income rises, and the richest countries lie close to the line.
+- Move the exponent to $\alpha = 1$, so that $y = k$. The poor countries move toward the line, but now many
+  rich countries fall *below* it. Capital's share of income is close to 1/3 in the data, so raising the
+  exponent is not a good way to rescue the model.
+
+**Your turn.** Hover over the points to find two countries that lie unusually far above the cloud for their
+income level. Then find two that lie close to the 45-degree line with $\alpha = 1/3$.
+
+<details><summary>Hint</summary>
+
+Points high above their neighbors have a lot of capital for their income. Points near the line are countries
+where capital alone almost explains income. Start at the top right of the chart.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 6: The U.S. and Chinese production functions
+
+**Goal.** Bring productivity back into the model and measure it.
+
+Countries are poorer than their capital predicts, so they must use their capital and labor less
+efficiently: they have a lower $\bar{A}$. We cannot observe $\bar{A}$ directly, but we observe everything else in
+equation (4.10), $y^* = \bar{A}\bar{k}^{1/3}$. So we choose the $\bar{A}$ that makes the equation hold exactly:
+
+$$\bar{A} = \frac{y^*}{\bar{k}^{1/3}} \qquad (4.11)$$
+
+This is **total factor productivity (TFP)**. It is already in our data as the column `tfp`. A lower TFP shifts
+the whole production function down.
+
+```{python}
+def compare_with_us(country="China"):
+    """Figure 4.6: the U.S. production function (A = 1) and another country's (its implied TFP), 2023."""
+    row = sample[sample.country == country].iloc[0]
+    A, k, y = row.tfp, row.k_rel, row.y_rel
+    points = pd.DataFrame({"label": ["U.S.", f"{country} with U.S. TFP", country],
+                           "k": [1.0, k, k], "y": [1.0, k ** (1 / 3), y]})
+    fig = px.scatter(points, x="k", y="y", text="label", hover_name="label",
+                     labels={"k": "Capital per person, k (U.S. = 1)", "y": "Output per person, y (U.S. = 1)"})
+    fig.update_traces(marker=dict(color="black", size=12), textposition=["top center", "bottom right", "bottom right"])
+    grid = np.linspace(0, 2, 300)
+    fig.add_trace(go.Scatter(x=grid, y=grid ** (1 / 3), name="U.S. production function, A = 1",
+                             line=dict(color=BLUE, width=3)))
+    fig.add_trace(go.Scatter(x=grid, y=A * grid ** (1 / 3), name=f"{country}'s production function, A = {A:.2f}",
+                             line=dict(color=TEAL, width=3)))
+    fig.update_layout(title=f"{country}: {k ** (1 / 3):.0%} of U.S. income with U.S. TFP, {y:.0%} with its own (A = {A:.2f})",
+                      xaxis_range=[0, max(1.3, 1.2 * k)], yaxis_range=[0, 1.6])
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(compare_with_us,
+         country=Dropdown(options=sorted(sample.country), value="China", description="country", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 6 with a precomputed slider for the country compared with the United States
+slider_figure(compare_with_us, "country", ["China", "India", "Brazil", "Mexico", "Nigeria", "Japan"],
+              start="China", label="compared with")
+```
+
+**What to notice.**
+
+- In 2023, China had 35 percent of U.S. capital per person. With U.S. productivity, it would have about
+  71 percent of U.S. income. Its actual income is 30 percent, so its implied TFP is 0.42.
+- The textbook, using 2019 data from an older release of the Penn World Table, finds a TFP of 0.35 for
+  China. The newer release revises China's income up, and China has also kept growing since 2019.
+- Choose Japan: it has almost as much capital per person as the United States, but much lower TFP.
+
+**Your turn.** Compare India with China. Which of the two has the larger gap between its "with U.S. TFP"
+point and its actual income? What does that tell you about its TFP?
+
+<details><summary>Hint</summary>
+
+The vertical distance between the two points of a country is the effect of its lower TFP. A bigger gap
+means a lower $\bar{A}$. Check with `sample[sample.country == "India"]`.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 7: Measuring TFP so the model fits exactly
+
+**Goal.** See how TFP varies across all 110 countries, and over time.
+
+We plot implied TFP against income, both on ratio scales. Press the play button to move through the
+years. Capital per person in the earliest years depends heavily on a starting guess, so we begin in 1980.
+
+> **Python note.** `animation_frame="year"` draws one chart per year and adds a play button and a slider.
+> `range_x` and `range_y` fix the axes, so that the points move but the axes do not.
+
+```{python}
+years = pwt[pwt.in_sample & pwt.year.isin([1980, 1990, 2000, 2010, 2019, 2023])]
+years = years[years.country != "Venezuela (Bolivarian Republic of)"]
+fig = px.scatter(years, x="y_rel", y="tfp", hover_name="country", animation_frame="year",
+                 log_x=True, log_y=True, range_x=[1 / 110, 2.5], range_y=[1 / 40, 2.5],
+                 labels={"y_rel": "Per capita GDP (U.S. = 1, ratio scale)",
+                         "tfp": "Implied TFP, A = y / k^(1/3) (U.S. = 1, ratio scale)", "year": "Year"},
+                 title="Measuring TFP so the model fits exactly")
+fig.update_traces(marker=dict(color=TEAL, size=9))
+fig.update_xaxes(tickvals=FRACTIONS, ticktext=FRACTION_NAMES)
+fig.update_yaxes(tickvals=FRACTIONS, ticktext=FRACTION_NAMES)
+fig.show()
+```
+
+**What to notice.**
+
+- The points form a tight upward cloud: rich countries have high TFP, and poor countries have low TFP.
+- The differences are large. In the poorest countries TFP is less than 1/10 of the U.S. level.
+- Hover over the top right: Ireland, Norway, Singapore and Switzerland all have higher TFP than the
+  United States. A few countries, such as Egypt and Syria, have high TFP for their income level.
+
+### Table 4.4: implied TFP for the textbook's countries
+
+Per capita GDP equals $\bar{k}^{1/3}$ times implied TFP. The textbook's values for 2019 are in the last column.
+
+```{python}
+table_4_4 = pd.DataFrame({
+    "observed y": y2019.y_rel,
+    "k^(1/3)": y2019.k_rel ** (1 / 3),
+    "implied TFP": y2019.tfp,
+    "textbook: implied TFP": [1.000, 1.054, 0.654, 0.703, 0.721, 0.792, 0.402, 0.347, 0.365, 0.247, 0.074],
+})
+table_4_4.round(3)
+```
+
+### Key numbers: capital or TFP?
+
+Equation (4.10) splits the income gap between two countries into a TFP part and a capital part:
+
+$$\frac{y^*_{rich}}{y^*_{poor}} = \frac{\bar{A}_{rich}}{\bar{A}_{poor}} \times \left(\frac{\bar{k}_{rich}}{\bar{k}_{poor}}\right)^{1/3} \qquad (4.12)$$
+
+The textbook compares the five richest and the five poorest countries in 2019: incomes differ by a factor
+of 75, capital explains a factor of about 5 and TFP a factor of about 15. We redo the calculation for 2023.
+
+```{python}
+ranked = sample.sort_values("y_rel")
+poorest, richest = ranked.head(5), ranked.tail(5)
+income_ratio = richest.y_rel.mean() / poorest.y_rel.mean()
+capital_factor = (richest.k_rel.mean() / poorest.k_rel.mean()) ** (1 / 3)
+tfp_factor = income_ratio / capital_factor                     # whatever capital does not explain
+print("Five richest:", ", ".join(richest.country))
+print("Five poorest:", ", ".join(poorest.country))
+print(f"Income ratio, rich / poor:   {income_ratio:.0f}")
+print(f"Factor explained by capital: {capital_factor:.1f}")
+print(f"Factor explained by TFP:     {tfp_factor:.1f}")
+```
+
+Our richest five include Ireland and Luxembourg, so the income ratio is a little larger than the
+textbook's. The split is very close: capital explains a factor of about 5, and TFP about three times as
+much. In logarithms, capital explains a bit more than one-third of the gap
+($\log 5.2 / \log 82 \approx 0.37$).
+
+We can do the same for Burundi and the United States. With capital differences only, Burundi's income
+would be $\bar{k}^{1/3}$ of the U.S. level. With TFP differences only, it would be its TFP.
+
+```{python}
+burundi = sample[sample.country == "Burundi"].iloc[0]
+capital_only, tfp_only = burundi.k_rel ** (1 / 3), burundi.tfp
+print(f"Actual income relative to the U.S.: 1/{1 / burundi.y_rel:.0f}")
+print(f"With capital differences only:      1/{1 / capital_only:.1f}")
+print(f"With TFP differences only:          1/{1 / tfp_only:.1f}")
+print(f"Share of the (log) gap due to capital: {np.log(capital_only) / np.log(burundi.y_rel):.0%}")
+```
+
+> **Python note.** `np.log` is the natural logarithm. Because $y = \bar{A}\bar{k}^{1/3}$, the logarithm of $y$
+> is the sum of two parts, $\log \bar{A} + \log \bar{k}^{1/3}$, which lets us split the gap into shares.
+
+**Your turn.** Repeat the rich–poor calculation with the *ten* richest and *ten* poorest countries. Does
+the split between capital and TFP change much?
+
+<details><summary>Hint</summary>
+
+Replace `.head(5)` and `.tail(5)` with `.head(10)` and `.tail(10)` in a copy of the cell above.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+### A figure we cannot draw: Korea at night (textbook Figure 4.8)
+
+Why is TFP so different across countries? The textbook points to human capital, technology,
+**institutions** and **misallocation**. Its most striking example is a satellite photograph of the Korean
+peninsula at night. South Korea is full of light, while North Korea is almost completely dark except for
+its capital, Pyongyang. Reliable income data for North Korea do not exist, so this figure cannot be
+rebuilt from data. You can see a similar photograph, taken from the International Space Station, at NASA's
+[*The Koreas at Night*](https://science.nasa.gov/earth/earth-observatory/the-koreas-at-night-83182/).
+
+## Figure 8: Per capita GDP in China and Russia
+
+**Goal.** Compare two very different paths of economic reform after 1990.
+
+Russia reformed quickly, a "big bang" that swept away the old institutions at once. China reformed
+gradually. The figure shows what happened to income per person.
+
+> **Python note.** A `SelectMultiple` widget is a list from which you can pick several entries:
+> hold Ctrl (or Cmd on a Mac) while clicking. It gives back a tuple of the chosen countries.
+
+```{python}
+def income_paths(countries=("China", "Russian Federation"), scale="linear"):
+    """Figure 4.9: GDP per person since 1990 for the chosen countries (2021 dollars)."""
+    chosen = pwt[pwt.country.isin(countries) & (pwt.year >= 1990)]
+    fig = px.line(chosen, x="year", y="gdp_pc", color="country", log_y=(scale == "ratio"),
+                  labels={"gdp_pc": "Per capita GDP (2021 dollars)", "year": "Year", "country": "Country"},
+                  title="Per capita GDP since 1990")
+    fig.update_traces(line_width=3)
+    fig.update_layout(xaxis_range=[1990, 2023])
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(income_paths,
+         countries=SelectMultiple(options=sorted(pwt.country.unique()), value=("China", "Russian Federation"),
+                                  rows=8, description="countries", style=WIDE),
+         scale=ToggleButtons(options=["linear", "ratio"], description="vertical scale"));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 8 with more countries (click the legend to hide one) and scale buttons
+fig = income_paths(countries=["China", "Russian Federation", "Poland", "Ukraine", "Viet Nam"])
+fig.update_layout(updatemenus=[dict(type="buttons", direction="right", x=0, y=1.13, xanchor="left", buttons=[
+    dict(label="linear scale", method="relayout", args=[{"yaxis.type": "linear", "yaxis.autorange": True}]),
+    dict(label="ratio scale", method="relayout", args=[{"yaxis.type": "log", "yaxis.autorange": True}])])])
+fig
+```
+
+**What to notice.**
+
+- Russia's income fell for most of the 1990s and only passed its 1990 level again in 2006.
+- China's income rose steadily, by more than 7 percent a year.
+- On the ratio scale, China's line is close to straight: it grew at a similar rate for three decades.
+
+### Key numbers: Russia and China
+
+```{python}
+russia = pwt[pwt.country == "Russian Federation"].set_index("year").gdp_pc
+china = pwt[pwt.country == "China"].set_index("year").gdp_pc
+recovered = russia[(russia.index > 1990) & (russia > russia[1990])].index[0]
+print(f"Russia, 1990: {russia[1990]:,.0f} dollars; lowest point {russia.min():,.0f} in {russia.idxmin()}")
+print(f"Russia's fall from 1990 to 1999: {1 - russia[1999] / russia[1990]:.0%}")
+print(f"First year above the 1990 level: {recovered}")
+print(f"China, 1990 and 2019: {china[1990]:,.0f} and {china[2019]:,.0f} dollars")
+print(f"China's average growth, 1990-2019: {100 * ((china[2019] / china[1990]) ** (1 / 29) - 1):.1f}% a year")
+```
+
+The textbook says Russia's income fell by 40 percent, but its own data show a fall of about 48 percent
+from 1990 to 1999, and ours about 49 percent. For China the textbook reports growth of about 6 percent a year. The
+newer Penn World Table revises China's income in 1990 down and in 2019 up, which raises the growth rate
+to about 8 percent.
+
+**Your turn.** Add Poland and Ukraine to the chart. Both left communism around 1990. Which of the two
+looks more like Russia, and which more like China?
+
+<details><summary>Hint</summary>
+
+Hold Ctrl (or Cmd) and click "Poland" and "Ukraine" in the list. Then switch to the ratio scale to compare
+growth rates.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Key numbers
+
+This table collects the main numbers of the chapter. Each one is computed with the functions and data
+above, so it is easy to check how a number changes.
+
+```{python}
+rows = [
+    ["Output with 8 machines and 27 workers (A = 1)", production(8, 27)],
+    ["Output gain, K from 1 to 2 (L = 70)", production(2, 70) - production(1, 70)],
+    ["Output gain, K from 7 to 8 (L = 70)", production(8, 70) - production(7, 70)],
+    ["Rental price r* (K = L = A = 1)", mpk(1, 1)],
+    ["Wage w* (K = L = A = 1)", mpl(1, 1)],
+    ["Italy: predicted y* in 2019 (U.S. = 1)", y2019.k_rel["Italy"] ** (1 / 3)],
+    ["China: implied TFP, 2023", sample[sample.country == "China"].tfp.iloc[0]],
+    ["Rich/poor income ratio, 2023", income_ratio],
+    ["  ... factor explained by capital", capital_factor],
+    ["  ... factor explained by TFP", tfp_factor],
+]
+pd.DataFrame(rows, columns=["Quantity", "Value"]).round(3)
+```
+
+## Summary
+
+- The **Cobb-Douglas production function** $Y = \bar{A}K^{1/3}L^{2/3}$ has constant returns to scale but a
+  **diminishing marginal product** of each input on its own.
+- In equilibrium, capital and labor are fully employed, and their prices equal their marginal products.
+  Capital earns one-third of output and labor two-thirds, whatever the amounts of capital and labor.
+- Per person, the model says $y^* = \bar{A}\bar{k}^{1/3}$. With equal productivity, it predicts much smaller
+  income gaps than we see, because of diminishing returns to capital.
+- Measured as the residual that makes the model fit, **TFP** differs enormously across countries and
+  explains most of the gap between rich and poor, roughly two-thirds to three-quarters of it.
+- The production model takes capital as given. The next chapter, on the **Solow model**, explains where
+  capital per person comes from.
