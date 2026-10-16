@@ -1,0 +1,1901 @@
+# Chapter 13: Stabilization Policy and the AS/AD Framework
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/ch13-stabilization-policy-and-the-as-ad-framework.ipynb)
+
+*Data Science and Macroeconomic Models: A Python Companion to Intermediate Macroeconomics* · Carlos Mendez
+
+> **How to use this notebook.** In Colab, click *Runtime → Run all*. After that, every model
+> figure has live sliders: move one and the model is solved again on the spot. On the book
+> website the same figures come with one precomputed slider. Each section ends with a short
+> **Your turn** task, and you can try it in the empty code cell below the task.
+
+<!-- cell -->
+
+## Learning goals
+
+Chapters 11 and 12 built the short-run model from three pieces: the IS curve, the MP curve and the
+Phillips curve. In those chapters the central bank chose the interest rate case by case. This chapter
+gives it a **rule**, and the whole short-run model then fits in one familiar diagram. By the end of it
+you will be able to:
+
+- combine the IS curve with a **monetary policy rule** to get the **aggregate demand (AD) curve**, and
+  read the Phillips curve as an **aggregate supply (AS) curve**;
+- solve the AS/AD model for its steady state and for the path of inflation and output, period by period,
+  after an inflation shock, a disinflation and an aggregate demand shock;
+- explain why expectations, credibility and inflation targets matter for the cost of fighting inflation;
+- test the model on U.S. data: the fed funds rate against the policy rule, and inflation-output loops;
+- in Python: write one `simulate` loop and reuse it in many figures, build tables from lists of
+  dictionaries, reshape data with `melt`, and compare two vintages of the same data.
+
+<!-- cell -->
+
+## Figures in this chapter
+
+The figures follow the order of the textbook chapter. The second column shows which textbook
+figure each notebook figure replicates.
+
+| Figure | Textbook figure | Type | What you can change |
+|---|---|---|---|
+| Figure 1 | 13.1 The aggregate demand curve | model | inflation target π̄, policy response m̄, b̄, demand shock ā |
+| Figure 2 | 13.2 The AD curve after an inflation shock | model | new inflation rate π′, policy response m̄ |
+| Figure 3 | 13.3 An aggressive monetary policy rule | model | policy response m̄, new inflation rate π′ |
+| Figure 4 | 13.4 The aggregate supply curve | model | last year's inflation, slope ν̄, inflation shock ō |
+| Figure 5 | 13.5 The AS/AD framework | model | expected inflation, target π̄, m̄, ν̄ |
+| Figure 6 | 13.6 The initial response to an inflation shock | model | shock ō, period, m̄, ν̄ |
+| Figure 7 | 13.7 Two periods after an inflation shock | model | shock ō, m̄, ν̄ |
+| Figure 8 | 13.8 Three periods after an inflation shock | model | shock ō, period, m̄, ν̄ |
+| Figure 9 | 13.9 The effects of an inflation shock: summary | model | shock ō, m̄, ν̄ |
+| Figure 10 | 13.10 The initial response to disinflation | model | new target π̄′, period, m̄, ν̄ |
+| Figure 11 | 13.11 The dynamics of disinflation | model | new target π̄′, m̄, ν̄ |
+| Figure 12 | 13.12 A positive aggregate demand shock | model | shock ā, period, m̄, ν̄ |
+| Figure 13 | 13.13 Dynamics as the AS curve shifts | model | shock ā, period, m̄, ν̄ |
+| Figure 14 | 13.14 The unraveling after the AD shock ends | model | shock ā, period, m̄, ν̄ |
+| Figure 15 | 13.15 A positive aggregate demand shock: summary | model | shock ā, last period of the shock, m̄, ν̄ |
+| Figure 16 | 13.16 The fed funds rate, actual and predicted | data | r̄ and m̄ of the policy rule |
+| Figure 17 | 13.17 Inflation-output loops in the U.S. economy | data | years shown, data vintage |
+| Figure 18 | 13.18 Forecasting and the Great Recession | data | show or hide forecasts (legend) |
+| Figure 19 | 13.19 Inflation in the OECD | data | show or hide countries (legend) |
+| Figure 20 | 13.20 Costless disinflation by coordinating expectations | model | credibility of the new target, π̄′, m̄, ν̄ |
+| Figure 21 | 13.21 Nearly 300 years of inflation in the United Kingdom | data | hover for each period |
+
+<!-- cell -->
+
+## Setup
+
+We first load the Python libraries we need. You only have to run this cell once.
+
+> **Python note.** `import` loads a *library*, a toolbox written by other people. We give each
+> library a short nickname, for example `np` for NumPy, so that the code stays short. Text after
+> a `#` is a *comment*: Python ignores it, and it is there for human readers. The `try ... except`
+> block runs one Colab-only line and simply skips it anywhere else.
+
+```{python}
+# Libraries used in this chapter
+import numpy as np                              # numbers and arrays
+import pandas as pd                             # data tables
+import plotly.express as px                     # quick charts from data tables
+import plotly.graph_objects as go               # charts built piece by piece (model figures)
+import plotly.io as pio
+from plotly.subplots import make_subplots       # several panels in one figure
+from ipywidgets import interact, FloatSlider, IntSlider, ToggleButtons
+
+# One light blue/green look for every chart
+BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
+pio.templates.default = "plotly_white"
+pio.templates["plotly_white"].layout.update(width=860, height=480)   # same size in Colab and on the website
+px.defaults.color_discrete_sequence = [BLUE, TEAL, GREEN, "#5aa0d8", "#0b4f47"]
+WIDE = {"description_width": "initial"}         # show the full slider labels
+
+# Colab only: let Plotly charts appear inside the interactive widgets
+try:
+    import google.colab
+    google.colab.output.enable_custom_widget_manager()
+except ImportError:
+    pass                                        # not running in Colab: nothing to do
+
+# The data files of this chapter live in the book's GitHub repository
+DATA_URL = "https://raw.githubusercontent.com/quarcs-lab/macro102-site/main/data/ch13/"
+```
+
+The next cell defines a helper that only the book website needs. Run it and move on.
+
+```{python}
+#| kind: helper
+# @title Helper for the website versions (run this cell; you do not need to read it)
+def slider_figure(make_figure, name, values, start, label=None):
+    """Precompute make_figure(name=value) for every value and join the results with one slider.
+
+    The website cannot run Python, so each interactive figure also gets this precomputed version.
+    """
+    figures = [make_figure(**{name: v}) for v in values]
+    first = values.index(start)
+    fig = go.Figure(layout=figures[first].layout)
+    owner = []                                  # which precomputed figure each trace comes from
+    for i, f in enumerate(figures):
+        for trace in f.data:
+            trace.visible = (i == first)
+            fig.add_trace(trace)
+            owner.append(i)
+    steps = []
+    for i, f in enumerate(figures):
+        layout = {"title": f.layout.title.to_plotly_json(),
+                  "annotations": [a.to_plotly_json() for a in f.layout.annotations],
+                  "shapes": [s.to_plotly_json() for s in f.layout.shapes]}
+        visible = [o == i for o in owner]
+        steps.append(dict(method="update", label=str(values[i]), args=[{"visible": visible}, layout]))
+    fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
+                                    currentvalue=dict(prefix=(label or name) + " = "))])
+    return fig
+```
+
+## The model in code
+
+The short-run model of Chapter 12 has three equations: the IS curve
+$\tilde{Y}_t = \bar{a} - \bar{b}(R_t - \bar{r})$, the MP curve (the central bank chooses $R_t$) and the
+Phillips curve $\Delta\pi_t = \bar{\nu}\tilde{Y}_t + \bar{o}$. This chapter replaces the MP curve with a
+**monetary policy rule**: the central bank raises the real interest rate above the marginal product of
+capital whenever inflation is above its **inflation target** $\bar{\pi}$,
+
+$$R_t - \bar{r} = \bar{m}\,(\pi_t - \bar{\pi}). \qquad (13.1)$$
+
+The parameter $\bar{m}$ says how hard the central bank leans against inflation. Substitute the rule into
+the IS curve and you get the **AD curve**. Write the Phillips curve in levels and you get the **AS curve**:
+
+$$\text{AD:}\quad \tilde{Y}_t = \bar{a} - \bar{b}\bar{m}\,(\pi_t - \bar{\pi}), \qquad (13.3)$$
+
+$$\text{AS:}\quad \pi_t = \pi_{t-1} + \bar{\nu}\tilde{Y}_t + \bar{o}. \qquad (13.4)$$
+
+Last year's inflation $\pi_{t-1}$ in the AS curve is **expected inflation**: firms expect inflation to stay
+where it was (*adaptive expectations*, $\pi^e_t = \pi_{t-1}$). We write it as `pi_e` in the code, because
+Figure 20 will let expectations be formed differently.
+
+The model has two unknowns, $\tilde{Y}_t$ and $\pi_t$. Substitute the AS curve into the AD curve and solve
+for output; then the AS curve gives inflation:
+
+$$\tilde{Y}_t = \frac{\bar{a} - \bar{b}\bar{m}\,(\pi^e_t + \bar{o} - \bar{\pi})}{1 + \bar{b}\bar{m}\bar{\nu}}.$$
+
+**One baseline for every diagram.** The textbook draws its diagrams without numbers. All the diagrams of
+this notebook start from one illustrative set of parameters:
+
+- inflation target $\bar{\pi} = 2$ percent, the target of the U.S., the U.K., the euro area and Japan;
+- policy response $\bar{m} = 1/2$, John Taylor's value, used again in Figure 16;
+- interest sensitivity $\bar{b} = 2$, as in Chapter 11's example;
+- Phillips-curve slope $\bar{\nu} = 1$ (illustrative);
+- the shocks: an inflation shock $\bar{o} = 2$ points for one period, an aggregate demand shock
+  $\bar{a} = 2$ points for nine periods, and a disinflation from a target of 4 to 2 percent (the numbers of
+  textbook Figure 13.20).
+
+With these values $\bar{b}\bar{m}\bar{\nu} = 1$, so the denominator above is 2: after any shock, the economy
+closes **half** of the remaining inflation gap every period. That matches the spacing of the textbook's figures.
+$\bar{b}$ and $\bar{m}$ enter the dynamics only through their product, so the event figures have a slider for
+$\bar{m}$ and keep $\bar{b} = 2$.
+
+> **Python note.** `def` creates a *function*: a named recipe that takes inputs (the *arguments*) and gives
+> back a result with `return`. Writing `m=M_BAR` gives an argument a *default value*, used whenever we do not
+> pass one. A function can return two results at once, separated by a comma.
+
+```{python}
+PI_BAR, M_BAR, B_BAR, NU_BAR = 2.0, 0.5, 2.0, 1.0   # the baseline: target 2%, m = 1/2, b = 2, nu = 1
+PI_OLD = 4.0                                         # the inflation target before the disinflation
+A_LAST = 9                                           # the demand shock lasts from period 1 to period 9
+T_MAX = 20                                           # number of periods simulated after each event
+
+
+def ad_output(pi, pi_bar=PI_BAR, m=M_BAR, a=0.0, b=B_BAR):
+    """Equation 13.3, the AD curve: Y~ = a - b m (pi - pi_bar), in percent."""
+    return a - b * m * (pi - pi_bar)
+
+
+def as_inflation(Y, pi_e=PI_BAR, nu=NU_BAR, o=0.0):
+    """Equation 13.4, the AS curve: pi = pi_e + nu Y~ + o, with expected inflation pi_e (= pi_{t-1})."""
+    return pi_e + nu * Y + o
+
+
+def solve_asad(pi_e, a=0.0, o=0.0, pi_bar=PI_BAR, m=M_BAR, nu=NU_BAR):
+    """The point where the AD and AS curves cross: short-run output and inflation in one period."""
+    Y = (a - B_BAR * m * (pi_e + o - pi_bar)) / (1 + B_BAR * m * nu)
+    return Y, as_inflation(Y, pi_e, nu, o)
+```
+
+Let us try `solve_asad` on two cases: the steady state, and the first period of an inflation shock.
+
+> **Python note.** `Y, pi = solve_asad(...)` *unpacks* the two results into two variables. An *f-string* such
+> as `f"Y~ = {Y:.2f}"` inserts a value into text; `:.2f` means "show two decimals".
+
+```{python}
+Y, pi = solve_asad(pi_e=2.0)
+print(f"Steady state (expected inflation = target = 2%):  Y~ = {Y:.2f}%,  pi = {pi:.2f}%")
+Y, pi = solve_asad(pi_e=2.0, o=2.0)
+print(f"Inflation shock o = 2 hits the steady state:      Y~ = {Y:.2f}%,  pi = {pi:.2f}%")
+```
+
+In the steady state output is at potential and inflation equals the target. The shock raises inflation by
+only 1 point, not 2, because the central bank answers with a recession of 1 percent.
+
+<!-- cell -->
+
+### One loop for every event
+
+The events of this chapter play out over many periods. Each period, firms expect last period's inflation,
+and the economy jumps to the point where that period's AD and AS curves cross. `simulate` repeats this step
+period by period. It takes one list of demand shocks $\bar{a}$ and one list of inflation shocks $\bar{o}$, one
+value per period, and returns a table with one row per period. `shock_list` builds those lists.
+
+> **Python note.** `values.append(x)` adds `x` at the end of the list `values`, and `for t in range(1, 21)`
+> repeats the indented lines for t = 1, 2, ..., 20. `dict(period=0, Y=0.0)` is a *dictionary*: a set of named
+> values. `rows[-1]` is the last element of a list, and `rows[-1]["pi"]` its value named `"pi"`.
+> `pd.DataFrame(rows)` turns a list of dictionaries into a table, one row per dictionary.
+
+```{python}
+def shock_list(size, last):
+    """A shock of the given size in periods 1, ..., last and zero afterwards, for T_MAX periods."""
+    values = []
+    for t in range(1, T_MAX + 1):
+        if t <= last:
+            values.append(size)
+        else:
+            values.append(0.0)
+    return values
+
+
+NO_SHOCK = shock_list(0.0, 0)                   # T_MAX zeros
+
+
+def simulate(a_list, o_list, pi_start=PI_BAR, pi_bar=PI_BAR, m=M_BAR, nu=NU_BAR):
+    """Solve the AS/AD model period by period; period 0 is the old steady state with inflation pi_start."""
+    rows = [dict(period=0, a=0.0, o=0.0, target=pi_start, pi_e=pi_start, Y=0.0, pi=pi_start)]
+    for t in range(1, len(a_list) + 1):
+        pi_e = rows[-1]["pi"]                   # adaptive expectations: last period's inflation
+        Y, pi = solve_asad(pi_e, a_list[t - 1], o_list[t - 1], pi_bar, m, nu)
+        rows.append(dict(period=t, a=a_list[t - 1], o=o_list[t - 1], target=pi_bar, pi_e=pi_e, Y=Y, pi=pi))
+    return pd.DataFrame(rows)
+```
+
+```{python}
+simulate(NO_SHOCK, shock_list(2.0, 1)).head(6).round(3)
+```
+
+The table is the inflation shock of Figures 6 to 9: inflation jumps to 3 percent in period 1, then falls to
+2.5, 2.25, 2.125, ...; the gap to the 2 percent target halves every period, and so does the recession.
+The column `target` is the inflation target behind each period's AD curve, and `pi_e` is expected inflation,
+the height of that period's AS curve at $\tilde{Y} = 0$.
+
+<!-- cell -->
+
+### Drawing tools
+
+Every diagram below uses the same axes and the same few drawing steps, so we write them once:
+
+- `add_ad` and `add_as` draw one curve and write its name at its right end;
+- `add_point` marks a point with dashed guides to the axes, and `add_arrow` draws an arrow;
+- `asad_figure` starts a figure with one or two panels, and `asad_axes` fixes the axes and writes the title.
+
+> **Python note.** `np.linspace(-6, 6, 121)` creates 121 evenly spaced numbers from −6 to 6. Because our model
+> functions work on a whole array at once, one call gives a whole curve. `make_subplots(rows=1, cols=2)`
+> creates a figure with two panels side by side, and `add_trace(..., row=1, col=2)` draws in the second
+> panel. `(x >= 0) & (y <= 8)` is true where *both* conditions hold, `x[inside]` keeps the values where
+> `inside` is true, and `[-1]` takes the last of them. Labels such as `"AS<sub>2</sub>"` use HTML to write
+> AS₂.
+
+```{python}
+Y_GRID = np.linspace(-6, 6, 121)            # output levels at which we draw the AS curves
+PI_GRID = np.linspace(12, -4, 161)          # inflation rates, high to low, at which we draw the AD curves
+X_RANGE, PI_RANGE = [-4, 4], [-1, 8]        # fixed axes, so that you can see the curves move
+FADED = "rgba(0,128,112,0.35)"              # light teal for the AS curves of earlier periods
+
+
+def axis_names(col):
+    """The names Plotly gives the axes of panel col: x and y in panel 1, x2 and y2 in panel 2."""
+    if col == 1:
+        return "x", "y"
+    return f"x{col}", f"y{col}"
+
+
+def add_curve(fig, x, y, label, color, dash="solid", col=1):
+    """Draw one curve in panel col and write its label at its last point inside the axes."""
+    fig.add_trace(go.Scatter(x=x, y=y, mode="lines", name=label, showlegend=False,
+                             line=dict(color=color, width=3, dash=dash)), row=1, col=col)
+    inside = (x >= X_RANGE[0]) & (x <= X_RANGE[1]) & (y >= PI_RANGE[0]) & (y <= PI_RANGE[1])
+    if inside.any() and label != "":
+        xref, yref = axis_names(col)
+        fig.add_annotation(x=x[inside][-1], y=y[inside][-1], xref=xref, yref=yref, text=label, showarrow=False,
+                           xanchor="left", yanchor="bottom", font=dict(color=color, size=14))
+```
+
+```{python}
+def add_ad(fig, label, color, a=0.0, pi_bar=PI_BAR, m=M_BAR, b=B_BAR, dash="solid", col=1):
+    """Draw an AD curve (equation 13.3): output on the horizontal axis, inflation on the vertical axis."""
+    add_curve(fig, ad_output(PI_GRID, pi_bar, m, a, b), PI_GRID, label, color, dash, col)
+
+
+def add_as(fig, label, color, pi_e=PI_BAR, nu=NU_BAR, o=0.0, dash="solid", col=1):
+    """Draw an AS curve (equation 13.4)."""
+    add_curve(fig, Y_GRID, as_inflation(Y_GRID, pi_e, nu, o), label, color, dash, col)
+
+
+def add_point(fig, Y, pi, label, col=1, guides=True):
+    """Mark the point (Y, pi) with a dot and a label, and (if guides) dashed lines to both axes."""
+    if guides:
+        fig.add_trace(go.Scatter(x=[X_RANGE[0], Y, Y], y=[pi, pi, PI_RANGE[0]], mode="lines", showlegend=False,
+                                 hoverinfo="skip", line=dict(color="black", width=1, dash="dash")), row=1, col=col)
+    fig.add_trace(go.Scatter(x=[Y], y=[pi], mode="markers+text", text=[label], textposition="top right",
+                             name=label, showlegend=False, textfont=dict(size=16),
+                             marker=dict(color="black", size=10)), row=1, col=col)
+
+
+def add_arrow(fig, x0, y0, x1, y1, col=1):
+    """Draw an arrow from (x0, y0) to (x1, y1) in axis units; nothing if the two points almost coincide."""
+    if abs(x1 - x0) + abs(y1 - y0) > 0.15:
+        xref, yref = axis_names(col)
+        fig.add_annotation(x=x1, y=y1, ax=x0, ay=y0, xref=xref, yref=yref, axref=xref, ayref=yref, text="",
+                           showarrow=True, arrowhead=3, arrowwidth=2, arrowcolor="black")
+```
+
+```{python}
+def asad_figure(cols=1, titles=None):
+    """An empty figure with cols panels side by side (titles: one short title per panel)."""
+    return make_subplots(rows=1, cols=cols, subplot_titles=titles, horizontal_spacing=0.1)
+
+
+def asad_axes(fig, title, panels=1):
+    """Fixed AS/AD axes in the first panels (no tick in the bottom-left corner) and the title readout."""
+    for col in range(1, panels + 1):
+        fig.update_xaxes(title_text="Output, Ỹ (percent)", range=X_RANGE, tickvals=list(range(-3, 4)),
+                         zeroline=False, row=1, col=col)
+        fig.update_yaxes(title_text="Inflation, π (percent)", range=PI_RANGE, tickvals=list(range(0, 8)),
+                         zeroline=False, row=1, col=col)
+    fig.update_layout(title=title, legend=dict(x=0.99, y=0.99, xanchor="right", yanchor="top",
+                                               bgcolor="rgba(255,255,255,0.8)"))
+```
+
+## Figure 1: The aggregate demand curve
+
+**Goal.** Build the AD curve from the IS curve and the policy rule, and see what each parameter does to it.
+
+$$\left.\begin{array}{ll} \text{IS curve:} & \tilde{Y}_t = \bar{a} - \bar{b}(R_t - \bar{r}) \\ \text{Policy rule:} & R_t - \bar{r} = \bar{m}(\pi_t - \bar{\pi}) \end{array}\right\} \Rightarrow \text{AD curve: } \tilde{Y}_t = \bar{a} - \bar{b}\bar{m}(\pi_t - \bar{\pi})$$
+
+The AD curve slopes **down**, but not for the reason a demand curve for hamburgers does. It describes the
+central bank: when inflation is above target, the rule raises the real interest rate, investment falls, and
+output falls below potential. As with the IS curve, output goes on the horizontal axis.
+
+The dot marks the point where inflation equals the target. There the interest-rate term is zero and output is
+$\tilde{Y} = \bar{a}$: with no demand shock, potential output. When you change a parameter, the baseline curve
+stays behind as a dashed gray line.
+
+> **Python note.** `if ... :` runs the indented lines only when the condition is true. `!=` means "is not
+> equal to", and comparing two groups of numbers in brackets checks them all at once.
+
+```{python}
+def ad_curve(pi_bar=PI_BAR, m=M_BAR, b=B_BAR, a=0.0):
+    """Figure 13.1: the AD curve, with the point where inflation equals the target."""
+    fig = asad_figure()
+    if (pi_bar, m, b, a) != (PI_BAR, M_BAR, B_BAR, 0.0):
+        add_ad(fig, "AD (baseline)", GRAY, dash="dash")
+    add_ad(fig, "AD", BLUE, a, pi_bar, m, b)
+    add_point(fig, a, pi_bar, "π = π̄")
+    asad_axes(fig, f"AD: Ỹ = {a:.1f} − {b * m:.2f} × (π − {pi_bar:.1f});   at π = π̄ = {pi_bar:.1f}%, Ỹ = {a:.1f}%")
+    return fig
+```
+
+> **Python note.** `interact` turns each argument of a function into a slider and calls the function again
+> every time you move one. The `;` at the end only hides an extra line of text.
+
+```{python}
+#| kind: widget
+interact(ad_curve,
+         pi_bar=FloatSlider(value=2.0, min=0.0, max=5.0, step=0.5, description="inflation target π̄ (%)", style=WIDE),
+         m=FloatSlider(value=0.5, min=0.25, max=2.0, step=0.25, description="policy response m̄", style=WIDE),
+         b=FloatSlider(value=2.0, min=0.5, max=4.0, step=0.5, description="interest sensitivity b̄", style=WIDE),
+         a=FloatSlider(value=0.0, min=-3.0, max=3.0, step=0.5, description="demand shock ā", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 1 with a precomputed slider for the demand shock
+slider_figure(ad_curve, "a", [-2.0, -1.0, 0.0, 1.0, 2.0], start=0.0, label="demand shock ā")
+```
+
+**What to notice.**
+
+- The slope depends on the **product** $\bar{b}\bar{m}$: each point of inflation above target costs
+  $\bar{b}\bar{m} = 1$ point of output in the baseline. Raise $\bar{m}$ or $\bar{b}$ and the curve becomes flatter.
+- A demand shock $\bar{a}$ and a new target $\bar{\pi}$ **shift** the curve: $\bar{a}$ moves it right or left, $\bar{\pi}$ up
+  or down. The dot always sits at $(\bar{a}, \bar{\pi})$.
+- A change in inflation itself does not shift the curve; it is a movement along it (Figure 2).
+
+**Your turn.** The central bank raises its target from 2 to 3 percent. At an inflation rate of 3 percent, what
+output does the AD curve now give, compared with the baseline? Check with the sliders and with `ad_output`.
+
+<details><summary>Hint</summary>
+
+Compare `ad_output(3.0)` with `ad_output(3.0, pi_bar=3.0)`. A higher target means the central bank sees less
+"excess" inflation at any given rate.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 2: The AD curve after an inflation shock
+
+**Goal.** See that a change in inflation is a **movement along** the AD curve.
+
+The economy starts in steady state at point $A$: inflation at the 2 percent target, output at potential. Now
+inflation jumps to $\pi' = 3$ percent. The policy rule raises the real interest rate by
+$\bar{m}(\pi' - \bar{\pi}) = 0.5$ points, investment falls, and output falls to point $B$. The readout in the title
+follows the chain: inflation, then the interest rate, then output. Figures 2 and 3 share one function.
+
+```{python}
+def inflation_rises(pi_new=3.0, m=M_BAR):
+    """Figures 13.2-13.3: inflation rises from the target to pi_new; the economy moves along AD from A to B."""
+    Y_B = ad_output(pi_new, m=m)
+    fig = asad_figure()
+    if m != M_BAR:
+        add_ad(fig, "AD (m̄ = 0.5)", GRAY, dash="dash")
+    add_ad(fig, "AD", BLUE, m=m)
+    add_point(fig, 0.0, PI_BAR, "A")
+    add_point(fig, Y_B, pi_new, "B")
+    add_arrow(fig, -3.7, PI_BAR, -3.7, pi_new)      # inflation rises ...
+    add_arrow(fig, 0.0, -0.6, Y_B, -0.6)            # ... so output falls
+    rate = m * (pi_new - PI_BAR)
+    asad_axes(fig, f"π: {PI_BAR:.1f} → {pi_new:.1f}%   ⇒   R − r̄ = {rate:.2f}   ⇒   Ỹ: 0.00 → {Y_B:.2f}%")
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(inflation_rises,
+         pi_new=FloatSlider(value=3.0, min=0.0, max=6.0, step=0.5, description="new inflation rate π′ (%)", style=WIDE),
+         m=FloatSlider(value=0.5, min=0.25, max=2.0, step=0.25, description="policy response m̄", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 2 with a precomputed slider for the new inflation rate
+slider_figure(inflation_rises, "pi_new", [1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 5.0], start=3.0,
+              label="new inflation rate π′ (%)")
+```
+
+**What to notice.**
+
+- Only the point moves; the curve stays put. Inflation of 3 percent brings output to 1 percent below potential.
+- Move $\pi'$ below 2 percent: the central bank cuts the real interest rate and output rises above potential.
+- The rule works through the real interest rate: $R - \bar{r}$ in the title is the size of the policy response.
+
+<!-- cell -->
+
+### Key numbers: the policy rule
+
+The textbook's example: with $\bar{m} = 1/2$, inflation 2 points above target raises the real interest rate by
+1 point. Through the AD curve, that costs $\bar{b} \times 1 = 2$ points of output.
+
+```{python}
+m, pi = 0.5, 4.0                                 # inflation 2 points above the 2% target
+print(f"Rise in the real interest rate, m (pi - pi_bar) = {m * (pi - PI_BAR):.1f} point")
+print(f"Output on the AD curve at pi = 4%:  Y~ = {ad_output(pi):.1f}%")
+```
+
+**Your turn.** Find the inflation rate at which the baseline central bank pushes output to 3 percent below
+potential. Check your answer with `ad_output`.
+
+<details><summary>Hint</summary>
+
+Solve $-3 = -\bar{b}\bar{m}(\pi - 2)$ with $\bar{b}\bar{m} = 1$, then try `ad_output(...)` with your answer.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 3: An aggressive monetary policy rule
+
+**Goal.** See how the policy response $\bar{m}$ sets the slope of the AD curve.
+
+A central bank with a high $\bar{m}$ answers each point of extra inflation with a large rise in the real interest
+rate, and so with a deep recession. Its AD curve is **flat**: a small change in inflation means a big change in
+output. Here $\bar{m} = 1$, twice the baseline, and the dashed gray line is the baseline AD curve. We keep the
+same rise in inflation as in Figure 2, so you can compare the two recessions.
+
+```{python}
+#| kind: widget
+interact(inflation_rises,
+         pi_new=FloatSlider(value=3.0, min=0.0, max=6.0, step=0.5, description="new inflation rate π′ (%)", style=WIDE),
+         m=FloatSlider(value=1.0, min=0.25, max=2.0, step=0.25, description="policy response m̄", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 3 with a precomputed slider for the policy response
+slider_figure(inflation_rises, "m", [0.25, 0.5, 0.75, 1.0, 1.5, 2.0], start=1.0, label="policy response m̄")
+```
+
+**What to notice.**
+
+- With $\bar{m} = 1$ the same 1-point rise in inflation lowers output by 2 percent instead of 1.
+- The textbook asks what a *small* $\bar{m}$ does. Move the slider to 0.25: the AD curve is steep, and the central
+  bank barely reacts to inflation.
+- Both curves pass through $A$: whatever $\bar{m}$ is, the central bank wants output at potential when inflation is
+  on target.
+
+**Your turn.** For $\pi' = 3$ percent, make a small table of output at $B$ for $\bar{m}$ = 0.25, 0.5, 1 and 2.
+
+<details><summary>Hint</summary>
+
+Use a loop: `for m in [0.25, 0.5, 1.0, 2.0]:` and print `ad_output(3.0, m=m)` inside it.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 4: The aggregate supply curve
+
+**Goal.** Read the Phillips curve as an upward-sloping **aggregate supply** curve.
+
+$$\pi_t = \pi_{t-1} + \bar{\nu}\tilde{Y}_t + \bar{o}$$
+
+At the start of period $t$, last year's inflation $\pi_{t-1}$ is already known. So the Phillips curve is a relation
+between this year's inflation and output. When output is above potential, firms work overtime to meet demand,
+and they raise their prices by more than usual to cover the extra costs: inflation rises. The curve crosses
+$\tilde{Y} = 0$ at $\pi_{t-1}$ (plus any inflation shock $\bar{o}$), so it **shifts** whenever inflation changes.
+
+```{python}
+def as_curve(pi_prev=PI_BAR, nu=NU_BAR, o=0.0):
+    """Figure 13.4: the AS curve, which crosses Y~ = 0 at last year's inflation plus the shock."""
+    fig = asad_figure()
+    if (pi_prev, nu, o) != (PI_BAR, NU_BAR, 0.0):
+        add_as(fig, "AS (baseline)", GRAY, dash="dash")
+    add_as(fig, "AS", TEAL, pi_prev, nu, o)
+    add_point(fig, 0.0, pi_prev + o, "")
+    asad_axes(fig, f"AS: π = {pi_prev:.1f} + {nu:.2f} × Ỹ + {o:.1f};   at Ỹ = 0, π = {pi_prev + o:.1f}%")
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(as_curve,
+         pi_prev=FloatSlider(value=2.0, min=0.0, max=6.0, step=0.5, description="last year's inflation π_{t−1} (%)",
+                             style=WIDE),
+         nu=FloatSlider(value=1.0, min=0.25, max=2.0, step=0.25, description="slope ν̄", style=WIDE),
+         o=FloatSlider(value=0.0, min=-2.0, max=3.0, step=0.5, description="inflation shock ō", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 4 with a precomputed slider for last year's inflation
+slider_figure(as_curve, "pi_prev", [1.0, 2.0, 3.0, 4.0, 5.0], start=2.0, label="last year's inflation (%)")
+```
+
+**What to notice.**
+
+- Last year's inflation and the shock $\bar{o}$ move the curve up and down, one for one.
+- $\bar{\nu}$ turns the curve around the dot: a steeper curve means prices react more to a boom or a slump.
+- Because $\pi_{t-1}$ is *expected* inflation, the AS curve carries expectations into the diagram. That is the key
+  to every event below.
+
+**Your turn.** With $\pi_{t-1} = 2$ and $\bar{\nu} = 1$, how far above potential must output be for inflation to
+reach 3.5 percent? Check it with `as_inflation`.
+
+<details><summary>Hint</summary>
+
+Solve $3.5 = 2 + 1 \times \tilde{Y}$, then try `as_inflation(1.5)`.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 5: The AS/AD framework
+
+**Goal.** Put the two curves in one diagram and find the short-run equilibrium, and the steady state.
+
+This diagram is the whole short-run model: the inputs are the parameters ($\bar{\pi}$, $\bar{m}$, $\bar{\nu}$) and
+expected inflation, the outcomes are this period's output and inflation. In a **steady state** inflation does not
+change, so $\pi_t = \pi_{t-1}$. The AS curve then requires $\tilde{Y}^* = 0$, and the AD curve then requires
+$\pi^* = \bar{\pi}$: inflation on target and output at potential. The readout tells you whether the crossing point
+is a steady state.
+
+```{python}
+def asad_diagram(pi_e=PI_BAR, pi_bar=PI_BAR, m=M_BAR, nu=NU_BAR):
+    """Figure 13.5: the AS and AD curves and the short-run equilibrium where they cross."""
+    Y, pi = solve_asad(pi_e, pi_bar=pi_bar, m=m, nu=nu)
+    fig = asad_figure()
+    add_as(fig, "AS", TEAL, pi_e, nu)
+    add_ad(fig, "AD", BLUE, pi_bar=pi_bar, m=m)
+    add_point(fig, Y, pi, "")
+    state = "the steady state"
+    if pi_e != pi_bar:
+        state = "not a steady state"
+    asad_axes(fig, f"AS and AD cross at Ỹ = {Y:.2f}%, π = {pi:.2f}%: {state}")
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(asad_diagram,
+         pi_e=FloatSlider(value=2.0, min=0.0, max=6.0, step=0.5, description="expected inflation π_{t−1} (%)",
+                          style=WIDE),
+         pi_bar=FloatSlider(value=2.0, min=0.0, max=5.0, step=0.5, description="inflation target π̄ (%)", style=WIDE),
+         m=FloatSlider(value=0.5, min=0.25, max=2.0, step=0.25, description="policy response m̄", style=WIDE),
+         nu=FloatSlider(value=1.0, min=0.25, max=2.0, step=0.25, description="AS slope ν̄", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 5 with a precomputed slider for expected inflation
+slider_figure(asad_diagram, "pi_e", [1.0, 2.0, 3.0, 4.0, 5.0], start=2.0, label="expected inflation (%)")
+```
+
+**What to notice.**
+
+- When expected inflation equals the target, the curves cross at $(0, \bar{\pi})$ whatever $\bar{m}$ and $\bar{\nu}$ are.
+- Raise expected inflation to 4 percent: the AS curve shifts up, inflation rises and output falls. The crossing is
+  not a steady state, because inflation will differ from what firms expected, and the AS curve will move again
+  next period. The next figures follow that movement.
+- AD slopes down because of the central bank; AS slopes up because of firms' pricing. Neither is a market
+  demand or supply curve.
+
+**Your turn.** With expected inflation at 4 percent, what are output and inflation this period? Is the gap to the
+target of 2 percent larger or smaller than before?
+
+<details><summary>Hint</summary>
+
+Try `solve_asad(4.0)`. Compare the inflation it gives with 4 and with the target 2.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 6: The initial response to an inflation shock
+
+**Goal.** See the first period of **Event #1**: an inflation shock, such as a lasting rise in the price of oil.
+
+The shock $\bar{o} = 2$ hits for one period only. It shifts the AS curve up by 2 points, from AS to AS₁. If output
+stayed at potential, inflation would rise one for one, to 4 percent. But the policy rule fights the higher
+inflation with a higher interest rate, so the economy slides down the AD curve, from $A$ to $B$: inflation rises
+and output falls at the same time. This is **stagflation**, the U.S. experience after the oil shocks of the 1970s.
+
+Figures 6 to 9 show the same event at different periods, so we write one function. It simulates the event with
+`simulate` and draws period `t`: the AS curves of the earlier periods in light teal, the current one in full
+color, and the path so far, with the textbook's letters ($B$, $C$, $D$ for periods 1, 2, 3).
+
+> **Python note.** `path.loc[t]` is the row of period `t`, and `now.pi` is its value in the column `pi`.
+> `path.pi_e[s]` is the value of column `pi_e` in the row of period `s`. `x in some_list` is true when `x` is one
+> of the elements, and `"AD" if s == 0 else "AD₁"` picks the first value when the condition holds, the second
+> otherwise.
+
+```{python}
+def add_event_curves(fig, path, t, as_periods, m=M_BAR, nu=NU_BAR, col=1):
+    """Curves of a simulated event at period t: the old AS, the AS of as_periods (the last one solid), every AD."""
+    first, last = path.pi_e[0], as_periods[-1]
+    gap = abs(path.pi_e[last] + path.o[last] - first)      # how far today's AS is from the original AS
+    same = gap == 0
+    old_label = "AS" if same or gap > 0.6 else ""            # no label when it would sit on today's label
+    add_as(fig, old_label, TEAL if same else GRAY, first, nu, dash="solid" if same else "dash", col=col)
+    for s in as_periods:
+        if path.pi_e[s] + path.o[s] != first:                # skip curves that equal the original AS
+            label = f"AS<sub>{s}</sub>" if s in (as_periods[0], last) else ""
+            add_as(fig, label, TEAL if s == last else FADED, path.pi_e[s], nu, path.o[s], col=col)
+    drawn = []                                               # the AD curves already drawn: (a, target)
+    for s in range(t + 1):
+        pair = (path.a[s], path.target[s])
+        if pair not in drawn:
+            drawn.append(pair)
+            name = "AD" if s == 0 else f"AD<sub>{s}</sub>"
+            if pair == (path.a[t], path.target[t]):
+                add_ad(fig, name, BLUE, pair[0], pair[1], m, col=col)
+            else:
+                add_ad(fig, name, GRAY, pair[0], pair[1], m, dash="dash", col=col)
+```
+
+```{python}
+def add_event_path(fig, path, t, letters, col=1):
+    """The economy's path from A (period 0) to period t: dots, arrows, and the textbook's letters."""
+    add_point(fig, path.Y[0], path.pi[0], "A", col)
+    for s in range(1, t + 1):
+        add_arrow(fig, path.Y[s - 1], path.pi[s - 1], path.Y[s], path.pi[s], col)
+        if s in letters:
+            add_point(fig, path.Y[s], path.pi[s], letters[s], col)
+        else:
+            add_point(fig, path.Y[s], path.pi[s], "", col, guides=False)
+
+
+SHOCK_LETTERS = {1: "B", 2: "C", 3: "D"}                     # the textbook's letters for periods 1-3
+
+
+def inflation_shock(o=2.0, t=1, m=M_BAR, nu=NU_BAR):
+    """Figures 13.6 and 13.8: the economy t periods after a one-period inflation shock o."""
+    path = simulate(NO_SHOCK, shock_list(o, 1), m=m, nu=nu)
+    fig = asad_figure()
+    add_event_curves(fig, path, t, list(range(1, t + 1)), m, nu)
+    add_event_path(fig, path, t, SHOCK_LETTERS)
+    now = path.loc[t]
+    asad_axes(fig, f"Period {t}: π = {now.pi:.2f}%, Ỹ = {now.Y:.2f}%   (shock ō = {o:.1f} in period 1 only)")
+    return fig
+```
+
+> **Python note.** `IntSlider` is a slider for whole numbers, here the period `t`.
+
+```{python}
+#| kind: widget
+interact(inflation_shock,
+         o=FloatSlider(value=2.0, min=-2.0, max=4.0, step=0.5, description="inflation shock ō", style=WIDE),
+         t=IntSlider(value=1, min=1, max=12, step=1, description="period t", style=WIDE),
+         m=FloatSlider(value=0.5, min=0.25, max=2.0, step=0.25, description="policy response m̄", style=WIDE),
+         nu=FloatSlider(value=1.0, min=0.25, max=2.0, step=0.25, description="AS slope ν̄", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 6 with a precomputed slider for the size of the shock
+slider_figure(inflation_shock, "o", [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0], start=2.0, label="inflation shock ō")
+```
+
+**What to notice.**
+
+- The shock of 2 points raises inflation by only 1 point, to 3 percent, because output falls by 1 percent. Half of
+  the shock shows up as inflation, half as recession, since $\bar{b}\bar{m}\bar{\nu} = 1$.
+- Raise $\bar{m}$: the central bank fights harder, so inflation rises less and the recession is deeper.
+- A negative $\bar{o}$ (say, a fall in oil prices) gives the mirror image: lower inflation and a boom.
+
+**Your turn.** Use `solve_asad` to find point $B$ when the shock is $\bar{o} = 3$. Then find it again with
+$\bar{m} = 1$. Which policy gives less inflation, and what does it cost?
+
+<details><summary>Hint</summary>
+
+`solve_asad(2.0, o=3.0)` and `solve_asad(2.0, o=3.0, m=1.0)`. Expected inflation is still the old 2 percent.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 7: Two periods after an inflation shock
+
+**Goal.** See why the AS curve does **not** jump back after the shock ends.
+
+In period 2 the shock is over, $\bar{o} = 0$. But firms now expect last period's inflation, $\pi_1 = 3$ percent. So
+the new curve AS₂ crosses $\tilde{Y} = 0$ at $\pi_1$, above the original AS (panel a). High inflation raised expected
+inflation, and expectations adjust only slowly: inflation is **sticky**. In panel (b) the economy moves from $B$ to
+$C$: inflation falls a little, and the central bank lets output recover a little, though it stays below potential.
+
+> **Python note.** `for col in [1, 2]:` draws the same curves in both panels.
+
+```{python}
+def two_periods(o=2.0, m=M_BAR, nu=NU_BAR):
+    """Figure 13.7: (a) the AS curve of period 2 and (b) the move from B to C."""
+    path = simulate(NO_SHOCK, shock_list(o, 1), m=m, nu=nu)
+    fig = asad_figure(2, ("(a) The new AS curve, AS<sub>2</sub>", "(b) The economy moves from B to C"))
+    for col in [1, 2]:
+        add_event_curves(fig, path, 2, [1, 2], m, nu, col)
+    add_event_path(fig, path, 1, SHOCK_LETTERS, col=1)
+    add_point(fig, 0.0, path.pi[1], "", col=1)               # AS2 crosses Y~ = 0 at pi_1
+    add_event_path(fig, path, 2, SHOCK_LETTERS, col=2)
+    now = path.loc[2]
+    asad_axes(fig, f"Period 2: AS₂ starts from π₁ = {path.pi[1]:.2f}%; C: π = {now.pi:.2f}%, Ỹ = {now.Y:.2f}%",
+              panels=2)
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(two_periods,
+         o=FloatSlider(value=2.0, min=-2.0, max=4.0, step=0.5, description="inflation shock ō", style=WIDE),
+         m=FloatSlider(value=0.5, min=0.25, max=2.0, step=0.25, description="policy response m̄", style=WIDE),
+         nu=FloatSlider(value=1.0, min=0.25, max=2.0, step=0.25, description="AS slope ν̄", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 7 with a precomputed slider for the policy response
+slider_figure(two_periods, "m", [0.25, 0.5, 1.0, 1.5, 2.0], start=0.5, label="policy response m̄")
+```
+
+**What to notice.**
+
+- AS₂ lies between the original AS and AS₁: the shock is gone, but expected inflation is still 3 percent.
+- At $C$ inflation is 2.5 percent and output is −0.5 percent: both gaps are half of what they were at $B$.
+- The economy improves, but slowly. The same sticky expectations that keep inflation high keep the economy in a
+  slump.
+
+**Your turn.** Find inflation and output in period 2 yourself with `solve_asad`, starting from expected inflation
+$\pi_1 = 3$ and no shock.
+
+<details><summary>Hint</summary>
+
+`solve_asad(3.0)`. Compare with row 2 of `simulate(NO_SHOCK, shock_list(2.0, 1))`.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 8: Three periods after an inflation shock
+
+**Goal.** Follow the economy one more period and see the transition dynamics.
+
+In period 3 expected inflation falls again, to $\pi_2 = 2.5$ percent, so the AS curve shifts down once more, to
+AS₃, and the economy moves to $D$. It is the same function as in Figure 6, now starting at $t = 3$. Move the period
+slider to watch the AS curve creep back toward its original position.
+
+```{python}
+#| kind: widget
+interact(inflation_shock,
+         o=FloatSlider(value=2.0, min=-2.0, max=4.0, step=0.5, description="inflation shock ō", style=WIDE),
+         t=IntSlider(value=3, min=1, max=12, step=1, description="period t", style=WIDE),
+         m=FloatSlider(value=0.5, min=0.25, max=2.0, step=0.25, description="policy response m̄", style=WIDE),
+         nu=FloatSlider(value=1.0, min=0.25, max=2.0, step=0.25, description="AS slope ν̄", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 8 with a precomputed slider for the period
+slider_figure(inflation_shock, "t", [1, 2, 3, 4, 5, 6, 8], start=3, label="period t")
+```
+
+**What to notice.**
+
+- The points $B$, $C$, $D$ all lie on the same AD curve: the policy rule never changes; only the AS curve moves.
+- The steps get shorter: the economy moves fastest when it is furthest from the steady state, the same principle of
+  transition dynamics as in the Solow model.
+- By period 6 or so the AS curve is hard to tell apart from the original one.
+
+**Your turn.** How many periods does it take until inflation is within 0.1 point of the 2 percent target?
+
+<details><summary>Hint</summary>
+
+Simulate the event, `path = simulate(NO_SHOCK, shock_list(2.0, 1))`, and look at
+`path[(path.period > 0) & (path.pi < 2.1)]`: the first row is the answer. (Period 0 is the old steady state, so we leave
+it out.)
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 9: The effects of an inflation shock: summary
+
+**Goal.** See the whole event at once, in the AS/AD diagram and over time.
+
+Panel (a) is the textbook's summary: the jump from $A$ to $B$, then the slow return along the AD curve back to $A$.
+Panel (b) adds the same path as two time series, so you can read how long the stagflation lasts. One function draws
+the summaries of all three events (Figures 9, 11 and 15).
+
+```{python}
+def add_time_paths(fig, path, col=2):
+    """Inflation and output over time, with the inflation target, in panel col."""
+    fig.add_trace(go.Scatter(x=path.period, y=path.pi, name="Inflation π", mode="lines+markers",
+                             line=dict(color=BLUE, width=3)), row=1, col=col)
+    fig.add_trace(go.Scatter(x=path.period, y=path.Y, name="Output Ỹ", mode="lines+markers",
+                             line=dict(color=GREEN, width=3)), row=1, col=col)
+    fig.add_trace(go.Scatter(x=[0, T_MAX], y=[path.target[1], path.target[1]], name="Target π̄", mode="lines",
+                             line=dict(color=GRAY, width=2, dash="dot")), row=1, col=col)
+    fig.update_xaxes(title_text="Period", range=[-0.5, T_MAX + 0.5], tickvals=[0, 5, 10, 15, 20], row=1, col=col)
+    fig.update_yaxes(title_text="Percent", range=[-3, 7], tickvals=[-2, 0, 2, 4, 6], row=1, col=col)
+
+
+def event_summary(path, letters, as_periods, m=M_BAR, nu=NU_BAR):
+    """Figures 13.9, 13.11, 13.15: (a) the whole path in the AS/AD diagram, (b) the same path over time."""
+    fig = asad_figure(2, ("(a) The AS/AD diagram", "(b) Inflation and output over time"))
+    add_event_curves(fig, path, T_MAX, as_periods, m, nu)
+    add_event_path(fig, path, T_MAX, letters)
+    add_time_paths(fig, path)
+    return fig
+
+
+def inflation_shock_summary(o=2.0, m=M_BAR, nu=NU_BAR):
+    """Figure 13.9: a one-period inflation shock o, from the jump to B back to the steady state A."""
+    path = simulate(NO_SHOCK, shock_list(o, 1), m=m, nu=nu)
+    fig = event_summary(path, {1: "B"}, [1], m, nu)
+    asad_axes(fig, f"Shock ō = {o:.1f}: inflation peaks at {path.pi.max():.2f}%; sum of Ỹ = {path.Y.sum():.2f}")
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(inflation_shock_summary,
+         o=FloatSlider(value=2.0, min=-2.0, max=4.0, step=0.5, description="inflation shock ō", style=WIDE),
+         m=FloatSlider(value=0.5, min=0.25, max=2.0, step=0.25, description="policy response m̄", style=WIDE),
+         nu=FloatSlider(value=1.0, min=0.25, max=2.0, step=0.25, description="AS slope ν̄", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 9 with a precomputed slider for the slope of the AS curve
+slider_figure(inflation_shock_summary, "nu", [0.25, 0.5, 1.0, 1.5, 2.0], start=1.0, label="AS slope ν̄")
+```
+
+**What to notice.**
+
+- The shock lasts one period, but inflation stays above target for many periods, and output stays below potential
+  all that time. Price shocks are insidious because they raise *expected* inflation.
+- The sum of output over all periods is −2.00: the total recession needed to undo the shock. A flatter AS curve
+  (smaller $\bar{\nu}$) makes it longer and costlier, because prices then react less to a slump.
+- Change $\bar{m}$: the recession becomes deeper but shorter, and the sum of output barely moves.
+
+<!-- cell -->
+
+### Key numbers: the inflation gap halves every period
+
+With $\bar{b}\bar{m}\bar{\nu} = 1$, the AS/AD solution makes the gap between inflation and the target shrink by the
+factor $1/(1 + \bar{b}\bar{m}\bar{\nu}) = 1/2$ each period.
+
+```{python}
+path = simulate(NO_SHOCK, shock_list(2.0, 1))
+path["gap"] = path.pi - PI_BAR                   # inflation minus the target
+path["gap ratio"] = path.gap / path.gap.shift(1)  # this period's gap divided by last period's
+path.loc[0:6, ["period", "Y", "pi", "gap", "gap ratio"]].round(3)
+```
+
+> **Python note.** `path.gap.shift(1)` moves the column down by one row, so each row sees last period's gap.
+> `path.loc[0:6, [...]]` keeps rows 0 to 6 and the listed columns.
+
+From period 2 on the ratio is exactly 0.5. Inflation is 3, 2.5, 2.25, ... and output −1, −0.5, −0.25, ...
+
+**Your turn.** Over all periods, the total change in inflation is zero (it starts and ends at 2 percent). Use the AS
+curve to explain why the sum of output must then be $-\bar{o}/\bar{\nu} = -2$. Check it with `path.Y.sum()`.
+
+<details><summary>Hint</summary>
+
+Add up $\pi_t - \pi_{t-1} = \bar{\nu}\tilde{Y}_t + \bar{o}_t$ over all periods. The left side adds up to zero, and the
+shock appears only once.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 10: The initial response to disinflation
+
+**Goal.** See **Event #2**: the central bank lowers its inflation target, as Paul Volcker's Fed did in the 1980s.
+
+The economy starts in a steady state with a target, and inflation, of 4 percent. The central bank now adopts a new
+rule with the target $\bar{\pi}' = 2$ percent. The target appears only in the AD curve, so AD shifts **down** to AD₁:
+at any inflation rate the new rule wants lower output. Inflation of 4 percent is now "too high", the real interest
+rate rises, and the economy moves from $A$ to $B$. The function reuses `add_event_curves` and `add_event_path`:
+only the event changes.
+
+```{python}
+def disinflation(pi_new=2.0, t=1, m=M_BAR, nu=NU_BAR):
+    """Figures 13.10-13.11: t periods after the inflation target is cut from PI_OLD to pi_new."""
+    path = simulate(NO_SHOCK, NO_SHOCK, PI_OLD, pi_new, m, nu)
+    fig = asad_figure()
+    add_event_curves(fig, path, t, list(range(1, t + 1)), m, nu)
+    add_event_path(fig, path, t, {1: "B"})
+    if t > 1:
+        add_point(fig, 0.0, pi_new, "C")                     # the new steady state
+    now = path.loc[t]
+    asad_axes(fig, f"Target {PI_OLD:.1f} → {pi_new:.1f}%.  Period {t}: π = {now.pi:.2f}%, Ỹ = {now.Y:.2f}%")
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(disinflation,
+         pi_new=FloatSlider(value=2.0, min=0.0, max=4.0, step=0.5, description="new target π̄′ (%)", style=WIDE),
+         t=IntSlider(value=1, min=1, max=12, step=1, description="period t", style=WIDE),
+         m=FloatSlider(value=0.5, min=0.25, max=2.0, step=0.25, description="policy response m̄", style=WIDE),
+         nu=FloatSlider(value=1.0, min=0.25, max=2.0, step=0.25, description="AS slope ν̄", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 10 with a precomputed slider for the new target
+slider_figure(disinflation, "pi_new", [0.0, 1.0, 2.0, 3.0, 4.0], start=2.0, label="new target π̄′ (%)")
+```
+
+**What to notice.**
+
+- Cutting the target by 2 points shifts AD down by exactly 2 points: AD₁ crosses $\tilde{Y} = 0$ at the new target.
+- In period 1, inflation falls only to 3 percent, halfway between the old and the new target, and output falls 1
+  percent below potential.
+- The AS curve has not moved yet: firms still expect 4 percent inflation. Move the period slider to see it shift.
+
+**Your turn.** Suppose the Fed wants to cut its target from 4 to 1 percent instead. Find period-1 inflation and
+output.
+
+<details><summary>Hint</summary>
+
+`solve_asad(4.0, pi_bar=1.0)`: expected inflation is still the old 4 percent.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 11: The dynamics of disinflation
+
+**Goal.** Follow the disinflation to the new steady state $C$.
+
+After period 1, firms expect lower inflation, so the AS curve shifts down period by period, just as after the
+inflation shock. The economy slides down AD₁ from $B$ to the new steady state $C$, where inflation equals the new
+target and output is back at potential. The summary function of Figure 9 draws it; we add the point $C$.
+
+```{python}
+def disinflation_summary(pi_new=2.0, m=M_BAR, nu=NU_BAR):
+    """Figure 13.11: from A through B to the new steady state C, in the diagram and over time."""
+    path = simulate(NO_SHOCK, NO_SHOCK, PI_OLD, pi_new, m, nu)
+    fig = event_summary(path, {1: "B"}, [T_MAX], m, nu)
+    add_point(fig, 0.0, pi_new, "C")
+    asad_axes(fig, f"Target {PI_OLD:.1f} → {pi_new:.1f}%: output lost over {T_MAX} periods = {-path.Y.sum():.2f}%")
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(disinflation_summary,
+         pi_new=FloatSlider(value=2.0, min=0.0, max=4.0, step=0.5, description="new target π̄′ (%)", style=WIDE),
+         m=FloatSlider(value=0.5, min=0.25, max=2.0, step=0.25, description="policy response m̄", style=WIDE),
+         nu=FloatSlider(value=1.0, min=0.25, max=2.0, step=0.25, description="AS slope ν̄", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 11 with a precomputed slider for the policy response
+slider_figure(disinflation_summary, "m", [0.25, 0.5, 1.0, 1.5, 2.0], start=0.5, label="policy response m̄")
+```
+
+**What to notice.**
+
+- Inflation falls for good, from 4 to 2 percent, and output returns to potential. The price is a recession: about 2
+  percent of a year's output in total.
+- A more aggressive central bank (higher $\bar{m}$) makes the recession deeper and shorter, but the total loss stays
+  near 2. Only the AS slope $\bar{\nu}$ changes it: the total loss is $(\bar{\pi} - \bar{\pi}')/\bar{\nu}$.
+- Why must there be a recession at all? Because firms keep expecting the old inflation. If everyone believed the new
+  target at once, the economy could jump straight from $A$ to $C$. Figure 20 returns to this idea.
+
+**Your turn.** Make a table of the total output loss for $\bar{\nu}$ = 0.5, 1 and 2. Is the loss close to
+$2/\bar{\nu}$?
+
+<details><summary>Hint</summary>
+
+In a loop over the three values, compute `-simulate(NO_SHOCK, NO_SHOCK, PI_OLD, 2.0, nu=nu).Y.sum()`. With a small
+$\bar{\nu}$ the economy adjusts more slowly, but 20 periods are still enough to get very close.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 12: A positive aggregate demand shock
+
+**Goal.** See the first period of **Event #3**: a boom in demand, for example from a boom in Europe that raises the
+demand for U.S. exports.
+
+A positive $\bar{a}$ shifts the AD curve **out** to AD₁: at every inflation rate, output is higher. Firms see the extra
+demand and raise their prices, so the economy moves up the AS curve from $A$ to $B$. Part of the shock shows up as more
+output, part as more inflation. In our baseline the shock $\bar{a} = 2$ lasts nine periods. One function draws
+Figures 12 to 14, with the textbook's letters $B$, $C$ and $D$ at periods 1, 8 and 10.
+
+```{python}
+DEMAND_LETTERS = {1: "B", 8: "C", 10: "D"}
+
+
+def demand_shock(a=2.0, t=1, m=M_BAR, nu=NU_BAR):
+    """Figures 13.12-13.14: t periods after a demand shock a that lasts from period 1 to A_LAST."""
+    path = simulate(shock_list(a, A_LAST), NO_SHOCK, m=m, nu=nu)
+    fig = asad_figure()
+    add_event_curves(fig, path, t, list(range(1, t + 1)), m, nu)
+    add_event_path(fig, path, t, DEMAND_LETTERS)
+    now = path.loc[t]
+    asad_axes(fig, f"Period {t}: π = {now.pi:.2f}%, Ỹ = {now.Y:.2f}%   (ā = {a:.1f} in periods 1–{A_LAST})")
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(demand_shock,
+         a=FloatSlider(value=2.0, min=-3.0, max=4.0, step=0.5, description="demand shock ā", style=WIDE),
+         t=IntSlider(value=1, min=1, max=20, step=1, description="period t", style=WIDE),
+         m=FloatSlider(value=0.5, min=0.25, max=2.0, step=0.25, description="policy response m̄", style=WIDE),
+         nu=FloatSlider(value=1.0, min=0.25, max=2.0, step=0.25, description="AS slope ν̄", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 12 with a precomputed slider for the demand shock
+slider_figure(demand_shock, "a", [-2.0, -1.0, 0.0, 1.0, 2.0, 3.0, 4.0], start=2.0, label="demand shock ā")
+```
+
+**What to notice.**
+
+- A shock of 2 points raises output by 1 percent and inflation by 1 point, to 3 percent: again half and half.
+- A negative $\bar{a}$ is a fall in demand: output and inflation both fall.
+- The economy cannot stay at $B$. Inflation is above what firms expected, so the AS curve will shift. Which way?
+  Figure 13 answers.
+
+**Your turn.** With $\bar{\nu} = 2$ (prices react strongly to demand), how much of the shock $\bar{a} = 2$ goes into
+output and how much into inflation in period 1?
+
+<details><summary>Hint</summary>
+
+`solve_asad(2.0, a=2.0, nu=2.0)`.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 13: Dynamics as the AS curve shifts
+
+**Goal.** See that while the demand shock lasts, the economy drifts to **higher** inflation, not back to $A$.
+
+Inflation at $B$ is above the 2 percent firms expected, so next period they expect 3 percent, and the AS curve shifts
+**up**. Period by period, inflation rises and output falls back toward zero, along AD₁. At $C$ (period 8 in the
+textbook) output is back at potential, but inflation is well above target. There $\tilde{Y} = 0$ on AD₁, so
+
+$$0 = \bar{a} - \bar{b}\bar{m}\,(\pi^c - \bar{\pi}) \quad\Rightarrow\quad \pi^c = \bar{\pi} + \frac{\bar{a}}{\bar{b}\bar{m}}.$$
+
+It is the same `demand_shock` function, now at $t = 8$.
+
+```{python}
+#| kind: widget
+interact(demand_shock,
+         a=FloatSlider(value=2.0, min=-3.0, max=4.0, step=0.5, description="demand shock ā", style=WIDE),
+         t=IntSlider(value=8, min=1, max=20, step=1, description="period t", style=WIDE),
+         m=FloatSlider(value=0.5, min=0.25, max=2.0, step=0.25, description="policy response m̄", style=WIDE),
+         nu=FloatSlider(value=1.0, min=0.25, max=2.0, step=0.25, description="AS slope ν̄", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 13 with a precomputed slider for the period
+slider_figure(demand_shock, "t", [1, 2, 3, 4, 6, 8, 9], start=8, label="period t")
+```
+
+**What to notice.**
+
+- The economy climbs AD₁ from $B$ toward $C$: output falls back to potential while inflation rises toward 4 percent.
+- $C$ looks like a resting point, since output is at potential and inflation is stable. But it is not the steady
+  state: inflation is above the target, and the demand shock will not last forever.
+- A more aggressive central bank (higher $\bar{m}$) keeps $\pi^c$ closer to the target.
+
+<!-- cell -->
+
+### Key numbers: inflation at point C
+
+```{python}
+a, path = 2.0, simulate(shock_list(2.0, A_LAST), NO_SHOCK)
+print(f"pi_c = pi_bar + a / (b m) = {PI_BAR + a / (B_BAR * M_BAR):.3f}%")
+print(f"Simulated inflation in period 8 (the textbook's pi_8): {path.pi[8]:.3f}%")
+print(f"Simulated output in period 8: {path.Y[8]:.3f}%")
+```
+
+Inflation approaches $\pi^c = 4$ percent; after eight periods it is 3.992 percent and output is 0.008 percent. The
+textbook's label "eight periods" is arbitrary: the economy gets close to $C$ and never quite reaches it.
+
+**Your turn.** Compute $\pi^c$ for a central bank with $\bar{m} = 1$, and check it against period 12 of a simulation
+with `m=1.0`.
+
+<details><summary>Hint</summary>
+
+The formula gives $2 + 2/(2 \times 1)$. For the simulation, `simulate(shock_list(2.0, A_LAST), NO_SHOCK, m=1.0).pi[...]`.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 14: The unraveling after the aggregate demand shock ends
+
+**Goal.** See what happens when the boom ends: a recession.
+
+Demand shocks are temporary: in the long run $\bar{a} = 0$, because the shares of output must add up to 1. When the
+European boom ends after period 9, the AD curve shifts back to its original position. Output was already at
+potential, so this works like a negative shock: the economy jumps from $C$ to $D$, below potential. The recession
+then pulls inflation down, the AS curve shifts down period by period, and the economy slides down the original AD
+curve back to $A$. Again the same function, now at $t = 10$.
+
+```{python}
+#| kind: widget
+interact(demand_shock,
+         a=FloatSlider(value=2.0, min=-3.0, max=4.0, step=0.5, description="demand shock ā", style=WIDE),
+         t=IntSlider(value=10, min=1, max=20, step=1, description="period t", style=WIDE),
+         m=FloatSlider(value=0.5, min=0.25, max=2.0, step=0.25, description="policy response m̄", style=WIDE),
+         nu=FloatSlider(value=1.0, min=0.25, max=2.0, step=0.25, description="AS slope ν̄", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 14 with a precomputed slider for the period
+slider_figure(demand_shock, "t", [9, 10, 11, 12, 14, 16, 20], start=10, label="period t")
+```
+
+**What to notice.**
+
+- At $D$ inflation is 3 percent, the same as at $B$, but output is 1 percent **below** potential. The textbook labels
+  this $\pi_1 = \pi_{10}$; it holds here because $\bar{b}\bar{m}\bar{\nu} = 1$.
+- From $D$ the economy returns to $A$ exactly as after the inflation shock: inflation and the recession halve each
+  period.
+- Booms are matched by recessions: the inflation created by the boom can only be removed by a slump.
+
+**Your turn.** Check the textbook's claim $\pi_1 = \pi_{10}$ with the simulation. Does it still hold with $\bar{\nu} = 2$?
+
+<details><summary>Hint</summary>
+
+`path = simulate(shock_list(2.0, A_LAST), NO_SHOCK)`, then compare `path.pi[1]` with `path.pi[10]`. Repeat with
+`nu=2.0`.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 15: A positive aggregate demand shock: summary
+
+**Goal.** See the whole boom-and-bust cycle, and what happens if the shock ends sooner.
+
+The economy jumps from $A$ to $B$, drifts to $C$, jumps to $D$ when the shock ends, and returns to $A$: a
+**counterclockwise loop**. The textbook lets the economy reach $C$ before the boom ends, but the boom could end sooner.
+The slider sets the last period of the shock; the letters $C$ and $D$ mark that period and the next one.
+
+```{python}
+def demand_shock_summary(a=2.0, last=A_LAST, m=M_BAR, nu=NU_BAR):
+    """Figure 13.15: a demand shock a in periods 1 to last, in the AS/AD diagram and over time."""
+    path = simulate(shock_list(a, last), NO_SHOCK, m=m, nu=nu)
+    fig = event_summary(path, {1: "B", last: "C", last + 1: "D"}, [last], m, nu)
+    asad_axes(fig, f"ā = {a:.1f} in periods 1–{last}: π peaks at {path.pi.max():.2f}%; sum of Ỹ = {path.Y.sum():.2f}")
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(demand_shock_summary,
+         a=FloatSlider(value=2.0, min=-3.0, max=4.0, step=0.5, description="demand shock ā", style=WIDE),
+         last=IntSlider(value=9, min=2, max=15, step=1, description="last period of the shock", style=WIDE),
+         m=FloatSlider(value=0.5, min=0.25, max=2.0, step=0.25, description="policy response m̄", style=WIDE),
+         nu=FloatSlider(value=1.0, min=0.25, max=2.0, step=0.25, description="AS slope ν̄", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 15 with a precomputed slider for the last period of the shock
+slider_figure(demand_shock_summary, "last", [2, 3, 5, 7, 9, 12], start=9, label="last period of the shock")
+```
+
+**What to notice.**
+
+- The path runs **counterclockwise**: up and to the right (boom, rising inflation), up and to the left, then down and
+  to the left (recession, falling inflation), and back.
+- The sum of output over the whole cycle is about zero: the boom and the recession cancel out. What remains is a
+  long period of high inflation, a net cost. That is why central banks try to stabilize output.
+- End the shock early (2 or 3 periods): the loop is smaller, and inflation peaks lower.
+
+**Your turn.** For a shock that lasts 3 periods, find the highest inflation rate and the deepest recession in the
+simulation.
+
+<details><summary>Hint</summary>
+
+`path = simulate(shock_list(2.0, 3), NO_SHOCK)`, then `path.pi.max()` and `path.Y.min()`.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 16: The fed funds rate, actual and predicted
+
+**Goal.** Test the policy rule on U.S. data: does it predict the Federal Reserve's interest rate?
+
+The rule sets the *real* interest rate, but the Fed sets a *nominal* rate, the fed funds rate. The Fisher equation
+links the two, $i_t = R_t + \pi_t$, so the rule implies
+
+$$i_t = \bar{r} + \pi_t + \bar{m}\,(\pi_t - \bar{\pi}). \qquad (13.5)$$
+
+John Taylor picked numbers that are all about 2: $\bar{r} = 2\%$, $\bar{m} = 1/2$ and $\bar{\pi} = 2\%$. Then
+$i_t = 1 + 1.5\,\pi_t$: when inflation rises by 1 point, the nominal rate rises by 1.5 points, so the real rate rises
+too. For inflation we use core PCE inflation (prices of consumer spending without food and energy), the measure that
+reproduces the textbook's line.
+
+> **Python note.** `pd.read_csv` reads a data file into a *DataFrame*, a table with named columns, and
+> `parse_dates=["date"]` turns text such as `"1960-01-01"` into real dates. `.tail()` shows the last five rows.
+
+```{python}
+taylor = pd.read_csv(DATA_URL + "taylor_rule.csv", parse_dates=["date"])
+taylor.tail()
+```
+
+Each row is a quarter. `fed_funds` is the average fed funds rate in the quarter, and `core_inflation` is the core
+PCE inflation rate over the last four quarters, both in percent. The last row has no inflation yet: the data for
+that quarter were not published when the file was made. The rule will simply stop one quarter earlier.
+
+```{python}
+def policy_rule(pi, r_bar=2.0, m=M_BAR, pi_bar=PI_BAR):
+    """Equation 13.5: the nominal interest rate i = r_bar + pi + m (pi - pi_bar)."""
+    return r_bar + pi + m * (pi - pi_bar)
+
+
+def fed_funds_chart(r_bar=2.0, m=M_BAR):
+    """Figure 13.16: the actual fed funds rate and the rate predicted by the policy rule."""
+    chart = pd.DataFrame({"date": taylor.date, "Actual fed funds rate": taylor.fed_funds,
+                          "Policy rule": policy_rule(taylor.core_inflation, r_bar, m)})
+    recent = chart[chart.date >= "2009-01-01"]
+    gap = (recent["Actual fed funds rate"] - recent["Policy rule"]).mean()
+    fig = px.line(chart, x="date", y=["Actual fed funds rate", "Policy rule"],
+                  color_discrete_sequence=[BLUE, GREEN], labels={"date": "Year", "value": "Percent", "variable": ""},
+                  title=f"Rule with r̄ = {r_bar:.1f}, m̄ = {m:.2f}: actual minus rule since 2009 = {gap:.2f} points")
+    fig.update_traces(line_width=2.5)
+    fig.update_traces(line_dash="dash", selector=dict(name="Policy rule"))
+    fig.update_layout(xaxis_range=["1958-01-01", "2027-12-31"], yaxis=dict(range=[-1, 22], tickvals=[0, 4, 8, 12, 16, 20]),
+                      legend=dict(x=0.99, y=0.99, xanchor="right", yanchor="top"))
+    return fig
+```
+
+> **Python note.** `px.line` with a list `y=[...]` draws one line per column. `selector=dict(name=...)` changes only the
+> trace with that name.
+
+```{python}
+#| kind: widget
+interact(fed_funds_chart,
+         r_bar=FloatSlider(value=2.0, min=0.0, max=3.0, step=0.5, description="r̄ in the rule (%)", style=WIDE),
+         m=FloatSlider(value=0.5, min=0.0, max=1.0, step=0.25, description="m̄ in the rule", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 16 with a precomputed slider for r̄
+slider_figure(fed_funds_chart, "r_bar", [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0], start=2.0, label="r̄ in the rule (%)")
+```
+
+**What to notice.**
+
+- The simple rule follows the big swings of the actual rate surprisingly well: the rise in the 1970s, the peak around
+  1980, and the long decline afterward.
+- From the late 1960s to 1980 the actual rate was well **below** the rule: monetary policy was too loose, and inflation
+  rose through the 1970s.
+- In recessions (early 1990s, early 2000s and above all after 2008) the Fed set rates far below the rule. The full
+  Taylor rule also responds to output, which explains part of this.
+- Lower $\bar{r}$ to 1 or 0.5 percent, as many economists now do: the rule comes closer after 2008, but in 2021–2022 it
+  still calls for rates far above the actual ones. The Fed raised rates late after the Covid-19 pandemic.
+
+<!-- cell -->
+
+### Key numbers: how closely does the Fed follow the rule?
+
+> **Python note.** `taylor[(taylor.date >= start) & (taylor.date <= end)]` keeps the quarters between two dates.
+> `.corr()` gives the correlation between two columns: 1 means they move perfectly together.
+
+```{python}
+taylor["rule"] = policy_rule(taylor.core_inflation)
+taylor["gap"] = taylor.fed_funds - taylor.rule
+for start, end in [("1967", "1980-12-31"), ("1990", "1993-12-31"), ("2001", "2004-12-31"),
+                   ("2009", "2020-12-31"), ("2021", "2022-12-31")]:
+    part = taylor[(taylor.date >= start) & (taylor.date <= end)]
+    print(f"{start}-{end[:4]}: actual minus rule = {part.gap.mean():+.2f} points on average")
+book_span = taylor[taylor.date <= "2023-01-01"]
+print(f"Correlation of the actual rate with the rule, 1960Q1-2023Q1: {book_span.fed_funds.corr(book_span.rule):.2f}")
+print(f"Highest rule rate: {taylor.rule.max():.2f}% in {taylor.date[taylor.rule.idxmax()]:%Y-%m}")
+```
+
+The actual rate was below the rule by 2.3 points on average from 1967 to 1980, by 2.7 points from 2009 to 2020, and by
+6.7 points in 2021–2022. The correlation of 0.75 says the two lines move together most of the time.
+
+**Your turn.** Repeat the averages with $\bar{r} = 1$ percent. Which periods does the lower $\bar{r}$ explain, and which
+not?
+
+<details><summary>Hint</summary>
+
+Recompute the gap with `taylor.fed_funds - policy_rule(taylor.core_inflation, r_bar=1.0)` and rerun the loop. A lower
+$\bar{r}$ lowers the rule by the same amount in every quarter.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 17: Inflation-output loops in the U.S. economy
+
+**Goal.** Look for the model's counterclockwise loops in U.S. data.
+
+The model predicts that the economy moves in **counterclockwise loops** in a diagram with output on the horizontal
+axis and inflation on the vertical axis (Figure 15): a boom raises inflation, high inflation leads the central bank to
+cause a recession, and the recession brings inflation down. Each point below is one year: the output gap
+$\tilde{Y}$ (actual GDP relative to the Congressional Budget Office's estimate of potential GDP) and CPI inflation.
+
+```{python}
+loops = pd.read_csv(DATA_URL + "loops_vintages.csv")
+loops[loops.year.isin([2009, 2021, 2022, 2025])]
+```
+
+There are **two** output-gap columns. `output_gap` uses today's data; `output_gap_2023` uses the data as they were
+published in March 2023, when the textbook was written. GDP and, above all, the CBO's potential GDP get revised: today's
+estimate of potential output for 2021 is lower, so the same year now looks like a small boom (+0.8 percent) instead of
+a slump (−1.3 percent). The textbook's data stop in 2022, so `output_gap_2023` is empty (`NaN`) after that. Always
+check which **vintage** of the data a claim is based on.
+
+> **Python note.** `.isin([...])` is true for the rows whose value is in the list. A dictionary such as `WINDOWS` maps a
+> name to its settings, and `WINDOWS[years]` looks them up. `.where(condition, "")` keeps a value where the condition is
+> true and puts an empty text elsewhere: we label only a few key years and let hover show the rest.
+> `part.assign(label=...)` returns a copy of the table with the new column `label`.
+
+```{python}
+WINDOWS = {"1960–1985": (1960, 1985, [-8, 7], [0, 15], [2, 4, 6, 8, 10, 12, 14]),
+           "1985–2025": (1985, 2025, [-6, 3], [-1.5, 9], [0, 2, 4, 6, 8])}
+VINTAGES = {"Current data": "output_gap", "Textbook data (March 2023)": "output_gap_2023"}
+KEY_YEARS = [1960, 1966, 1969, 1974, 1975, 1979, 1980, 1982, 1985, 1989, 1991, 2000, 2007, 2009, 2011, 2015,
+             2019, 2020, 2021, 2022, 2025]
+
+
+def loops_chart(years="1960–1985", vintage="Current data"):
+    """Figure 13.17: annual (output gap, inflation) points connected in time order."""
+    first, last, x_range, y_range, y_ticks = WINDOWS[years]
+    column = VINTAGES[vintage]
+    part = loops[(loops.year >= first) & (loops.year <= last)].dropna(subset=[column])
+    part = part.assign(label=part.year.astype(str).where(part.year.isin(KEY_YEARS), ""))
+    fig = px.line(part, x=column, y="inflation", text="label", markers=True, hover_name="year",
+                  labels={column: "Output gap, Ỹ (percent)", "inflation": "CPI inflation (percent)"},
+                  title=f"Counterclockwise loops, {first}–{part.year.max()} ({vintage.lower()})")
+    fig.update_traces(line=dict(color=BLUE, width=2), marker=dict(color=TEAL, size=7), textposition="top center")
+    fig.update_layout(xaxis=dict(range=x_range, zeroline=True), yaxis=dict(range=y_range, tickvals=y_ticks))
+    return fig
+```
+
+> **Python note.** `ToggleButtons` shows one button per option, and the function receives the text of the chosen
+> button.
+
+```{python}
+#| kind: widget
+interact(loops_chart,
+         years=ToggleButtons(options=list(WINDOWS), value="1960–1985", description="years"),
+         vintage=ToggleButtons(options=list(VINTAGES), value="Current data", description="data"));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 17 with buttons for the two periods and the two data vintages
+choices = [("1960–1985", "Current data"), ("1985–2025", "Current data"), ("1985–2025", "Textbook data (March 2023)")]
+names = ["1960–1985", "1985–2025", "1985–2022, textbook data"]
+figures = [loops_chart(years, vintage) for years, vintage in choices]
+fig = go.Figure(layout=figures[0].layout)
+owner = []
+for i, f in enumerate(figures):
+    for trace in f.data:
+        trace.visible = (i == 0)
+        fig.add_trace(trace)
+        owner.append(i)
+buttons = []
+for i, (years, vintage) in enumerate(choices):
+    first, last, x_range, y_range, y_ticks = WINDOWS[years]
+    buttons.append(dict(label=names[i], method="update",
+                        args=[{"visible": [o == i for o in owner]},
+                              {"title.text": figures[i].layout.title.text, "xaxis.range": x_range,
+                               "yaxis.range": y_range, "yaxis.tickvals": y_ticks}]))
+fig.update_layout(margin=dict(t=120),                     # room for the buttons between the title and the plot
+                  updatemenus=[dict(type="buttons", direction="right", x=0, y=1.02, xanchor="left", yanchor="bottom",
+                                    buttons=buttons)])
+fig
+```
+
+**What to notice.**
+
+- Follow the years in 1960–1985: the boom of the late 1960s raises inflation, the high inflation of 1974–75 and
+  1979–80 is followed by deep recessions (1975, 1982), and inflation falls. The loops run counterclockwise, as the model
+  predicts.
+- After 1985 the loops are smaller: the Great Moderation. The big exceptions are the deep slump of 2009–2011, during
+  which inflation rose instead of falling, and the jump to 8 percent inflation in 2022.
+- Switch to the textbook data: the whole 1985–2022 cloud moves left by about 1 point. The shape of the loops is the
+  same, but statements about the level of the gap depend on the vintage.
+
+<!-- cell -->
+
+### Key numbers: two vintages of the same year
+
+The textbook says that in 2009 "output was more than 5 percent below potential", and that inflation rose from 2009 to
+2011 despite the slump.
+
+> **Python note.** `.set_index("year")` labels the rows by year, so `by_year.loc[2009, "inflation"]` picks one value.
+
+```{python}
+by_year = loops.set_index("year")
+print(f"2009 output gap: {by_year.loc[2009, 'output_gap_2023']:.2f}% (textbook data), "
+      f"{by_year.loc[2009, 'output_gap']:.2f}% (current data)")
+print(f"Inflation 2009 -> 2011: {by_year.loc[2009, 'inflation']:.2f}% -> {by_year.loc[2011, 'inflation']:.2f}%")
+revision = (loops.output_gap - loops.output_gap_2023)[loops.year >= 1985]
+print(f"Current minus textbook output gap, 1985-2022: {revision.mean():.2f} points on average, {revision.max():.2f} at most")
+```
+
+With the textbook's data the 2009 gap is −5.20 percent; with today's data it is −4.66 percent, so "more than 5 percent"
+is no longer true. Inflation did rise, from −0.32 to 3.14 percent, partly because of energy and commodity prices.
+
+**Your turn.** Find the year with the largest boom (highest output gap) and the year with the deepest slump since 1960,
+in the current data.
+
+<details><summary>Hint</summary>
+
+`loops.loc[loops.output_gap.idxmax()]` gives the row of the largest gap; `idxmin()` the smallest.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 18: Forecasting and the Great Recession
+
+**Goal.** See how professional forecasters missed the Great Recession, quarter after quarter.
+
+If economists understand fluctuations so well, can they forecast them? The **Survey of Professional Forecasters**,
+run by the Federal Reserve Bank of Philadelphia, asks experts every quarter for their forecast of U.S. employment.
+The economists James Stock and Mark Watson called this figure "the mother of all forecast errors".
+
+```{python}
+spf = pd.read_csv(DATA_URL + "fig13-18.csv", parse_dates=["date"])
+spf.head(3)
+```
+
+`employment_actual` is total nonfarm employment, in millions of jobs. Each `spf_...` column is the median forecast made
+in one quarter (from 2007Q4 to 2009Q4) for that quarter and the next four; it is empty (`NaN`) elsewhere. For a chart
+with one line per series, we first reshape the table to *long* form: one row per date and series.
+
+> **Python note.** `melt` stacks columns into rows: `id_vars="date"` stays a column, and the names of the other columns
+> go into a new column `series`. `.map(NAMES)` replaces each column name by its readable name from the dictionary.
+> `column[4:8]` takes characters 4 to 7 of a text, here the year.
+
+```{python}
+NAMES = {"employment_actual": "Actual employment"}
+for column in spf.columns[2:]:
+    NAMES[column] = "Forecast made in " + column[4:8] + "Q" + column[-1]
+long = spf.melt(id_vars="date", var_name="series", value_name="employment").dropna()
+long["series"] = long.series.map(NAMES)
+SHADES = ["black", "#c6dbef", "#9ecae1", "#6baed6", "#4292c6", "#2171b5", "#08519c", "#74c476", "#31a354", "#006d2c"]
+fig = px.line(long, x="date", y="employment", color="series", hover_name="series", markers=True,
+              color_discrete_sequence=SHADES, labels={"date": "Quarter", "employment": "Nonfarm employment (millions)",
+                                                      "series": ""},
+              title="Forecasters kept expecting a mild slowdown while jobs collapsed, 2008–2009")
+fig.update_traces(line_width=2)
+fig.update_traces(line_width=5, selector=dict(name="Actual employment"))
+fig.update_layout(yaxis=dict(range=[128.5, 140.5], tickvals=[130, 132, 134, 136, 138, 140]))
+fig.show()
+```
+
+**What to notice.**
+
+- The forecasts made from late 2007 to mid-2008 expected employment to keep **growing** or to hold steady: they did
+  not see the recession coming.
+- Even the forecast of 2008Q4, made after the financial panic of October 2008, expected a far milder fall than what
+  happened. Each new forecast was revised down, and was still too high.
+- Only in late 2009, near the trough, did the forecasts catch up with reality. Click the legend entries to show or hide
+  single forecasts.
+
+<!-- cell -->
+
+### Key numbers: forecast errors one year ahead
+
+For each survey, we compare the last point of its forecast path (four quarters ahead) with what actually happened.
+
+```{python}
+for column in spf.columns[2:]:
+    rows = spf.dropna(subset=[column])
+    end = rows.iloc[-1]                                  # the last quarter of this forecast path
+    error = end[column] - end.employment_actual
+    print(f"{NAMES[column]}: forecast for {end.date.year}Q{end.date.quarter} too high by {error:.2f} million jobs")
+```
+
+Every forecast was too high, by up to 7.2 million jobs (the survey of 2008Q3). The errors shrank to about 1 million only
+for the surveys of 2009Q2 to 2009Q4.
+
+**Your turn.** By how much did employment fall from its peak to its trough in this file, and in which quarters?
+
+<details><summary>Hint</summary>
+
+Use `spf.employment_actual.max()` and `.min()`, and `idxmax()`/`idxmin()` with `spf.date[...]` to find the quarters.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 19: Inflation in the OECD
+
+**Goal.** Compare inflation in the U.S., the U.K., the euro area and Japan since 1960.
+
+The U.S. Fed under Volcker, Greenspan, Bernanke and Yellen gets much credit for low inflation. But inflation fell just
+as much in other rich countries. Was it better policy, or good luck, such as no repeat of the 1970s oil shocks?
+
+```{python}
+oecd = pd.read_csv(DATA_URL + "fig13-19.csv")
+oecd = oecd.rename(columns={"inflation_us": "United States", "inflation_uk": "United Kingdom",
+                            "inflation_euro_area": "Euro area", "inflation_japan": "Japan"})
+oecd.tail(4)
+```
+
+Each value is the CPI inflation rate of one year, in percent. A data note: the textbook's U.S. line ends at about 6.3
+percent in 2022, but the full-year value is 8.0 percent (as in the textbook's own Figure 13.17). The textbook probably
+used an early partial-year number.
+
+```{python}
+long_oecd = oecd.melt(id_vars="year", var_name="country", value_name="inflation")
+fig = px.line(long_oecd, x="year", y="inflation", color="country", hover_name="country",
+              color_discrete_sequence=[BLUE, TEAL, GREEN, "#5aa0d8"],
+              labels={"year": "Year", "inflation": "Inflation (percent)", "country": ""},
+              title="Inflation was high everywhere in the 1970s and low after the 1980s")
+fig.update_traces(line_width=2.5)
+fig.update_layout(xaxis_range=[1958, 2027], yaxis=dict(range=[-3, 26], tickvals=[0, 5, 10, 15, 20, 25]),
+                  legend=dict(x=0.99, y=0.99, xanchor="right", yanchor="top"))
+fig.show()
+```
+
+**What to notice.**
+
+- In the 1970s inflation peaked above 20 percent in the U.K. (24.2 percent in 1975) and Japan (23.2 percent in 1974).
+- From the 1990s on, all four stayed low and stable; Japan was close to zero or negative for almost two decades.
+- In 2021–2022 inflation returned everywhere, then fell back in 2023–2025. Click the legend to compare two countries
+  at a time.
+
+<!-- cell -->
+
+### Key numbers: inflation by decade
+
+> **Python note.** `oecd.year // 10 * 10` turns each year into its decade (1974 becomes 1970). `groupby` puts the years
+> of each decade in one group, and `.mean()` averages each group.
+
+```{python}
+by_country = oecd.set_index("year")
+print("Peak inflation 1970-1979:")
+print(by_country.loc[1970:1979].max().round(2))
+oecd.drop(columns="year").groupby(oecd.year // 10 * 10).mean().round(2)
+```
+
+Average inflation in the 1970s was 7.1 percent in the U.S. and 12.6 percent in the U.K.; in the 2010s it was below 2.1
+percent in all four.
+
+**Your turn.** In how many years between 1995 and 2015 was inflation in Japan zero or below?
+
+<details><summary>Hint</summary>
+
+Filter `by_country.loc[1995:2015, "Japan"]` with `<= 0`, and count the rows with `len(...)` or `.sum()` of the condition.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 20: Costless disinflation by coordinating expectations
+
+**Goal.** See how a **credible** central bank could lower inflation without a recession.
+
+So far firms expected last year's inflation (adaptive expectations). Under **rational expectations**, an idea
+developed by Robert Lucas, people use all the information they have, including the central bank's announced target.
+The AS curve then uses expected inflation $\pi^e_t$ instead of $\pi_{t-1}$:
+
+$$\pi_t = \pi^e_t + \bar{\nu}\tilde{Y}_t + \bar{o}. \qquad (13.6)$$
+
+The Fed announces a cut in its target from 4 to 2 percent. If firms believe it and expect 2 percent, the AS curve moves
+down together with the AD curve, and the economy goes straight from $A$ to $B$ with output at potential. To see the
+middle ground, the slider sets the **credibility** of the announcement: the share of the cut that firms build into
+their expectations, $\pi^e = \text{credibility} \times \bar{\pi}' + (1 - \text{credibility}) \times 4$. Credibility 0 is
+the adaptive case of Figure 10.
+
+```{python}
+def credible_disinflation(credibility=1.0, pi_new=2.0, m=M_BAR, nu=NU_BAR):
+    """Figure 13.20: the target falls from PI_OLD to pi_new; expectations follow it in proportion to credibility."""
+    pi_e = credibility * pi_new + (1 - credibility) * PI_OLD
+    Y, pi = solve_asad(pi_e, pi_bar=pi_new, m=m, nu=nu)
+    fig = asad_figure()
+    if pi_e != PI_OLD:
+        add_as(fig, "AS", GRAY, PI_OLD, nu, dash="dash")
+    add_ad(fig, "AD", GRAY, pi_bar=PI_OLD, m=m, dash="dash")
+    add_as(fig, "AS′", TEAL, pi_e, nu)
+    add_ad(fig, "AD′", BLUE, pi_bar=pi_new, m=m)
+    add_point(fig, 0.0, PI_OLD, "A")
+    add_point(fig, Y, pi, "B")
+    add_arrow(fig, 0.0, PI_OLD, Y, pi)
+    asad_axes(fig, f"Credibility {credibility:.2f}: expected π = {pi_e:.2f}% → π = {pi:.2f}%, Ỹ = {Y:.2f}%")
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(credible_disinflation,
+         credibility=FloatSlider(value=1.0, min=0.0, max=1.0, step=0.25, description="credibility of the new target",
+                                 style=WIDE),
+         pi_new=FloatSlider(value=2.0, min=0.0, max=4.0, step=0.5, description="new target π̄′ (%)", style=WIDE),
+         m=FloatSlider(value=0.5, min=0.25, max=2.0, step=0.25, description="policy response m̄", style=WIDE),
+         nu=FloatSlider(value=1.0, min=0.25, max=2.0, step=0.25, description="AS slope ν̄", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 20 with a precomputed slider for credibility
+slider_figure(credible_disinflation, "credibility", [0.0, 0.25, 0.5, 0.75, 1.0], start=1.0,
+              label="credibility of the new target")
+```
+
+**What to notice.**
+
+- With full credibility, inflation falls to 2 percent at once and output stays at potential: a costless disinflation.
+- With credibility 0, we are back in Figure 10: inflation falls only to 3 percent and output to −1 percent.
+- In between, every bit of credibility saves output. This is why central banks explain their policy, announce
+  **inflation targets**, and build a reputation: managing expectations is one of the main tools of modern monetary
+  policy. It also explains the **time consistency problem**: a central bank that might later be tempted to inflate
+  cannot be fully believed, so a commitment to a rule (like Ulysses tied to the mast) can be worth more than discretion.
+
+<!-- cell -->
+
+### Key numbers: the cost of a disinflation
+
+We compare the total output lost while inflation falls from 4 to 2 percent, under adaptive expectations (the whole path
+of Figure 11) and with a fully credible announcement.
+
+```{python}
+adaptive = simulate(NO_SHOCK, NO_SHOCK, PI_OLD, 2.0)
+Y_credible, pi_credible = solve_asad(2.0, pi_bar=2.0)
+print(f"Adaptive expectations: output lost over {T_MAX} periods = {-adaptive.Y.sum():.2f}% of potential output")
+print(f"Fully credible target: period-1 output = {Y_credible:.2f}%, inflation = {pi_credible:.2f}%")
+```
+
+Under adaptive expectations the disinflation costs about 2 percent of a year's output; with full credibility it costs
+nothing. The Lucas critique makes the general point: a model with fixed expectations can give wrong answers about a new
+policy, because people change their expectations when the policy changes.
+
+**Your turn.** What output does period 1 bring with credibility 0.5? How much of the adaptive recession does half
+credibility avoid?
+
+<details><summary>Hint</summary>
+
+Expected inflation is `0.5 * 2.0 + 0.5 * 4.0`; pass it to `solve_asad(..., pi_bar=2.0)`.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 21: Nearly 300 years of inflation in the United Kingdom
+
+**Goal.** Judge monetary policy over three centuries: which period came closest to low and stable inflation?
+
+The economist Ricardo Reis split U.K. inflation since 1737 into 20-year windows. For each one, the horizontal axis shows
+average inflation and the vertical axis its **volatility**, the standard deviation of the yearly rates. The goal of a
+central bank is the point with 2 percent inflation and zero volatility.
+
+```{python}
+uk = pd.read_csv(DATA_URL + "fig13-21.csv")
+uk.tail(3)
+```
+
+Each row is one window. The last row covers only 9 years, 2017–2025, which include the burst of inflation of 2021–2023;
+it is not a full 20-year window, so we mark it differently.
+
+> **Python note.** `uk.loc[condition, "group"] = text` sets the column `group` in the rows where the condition is true.
+> `np.sqrt` is the square root, so `distance` is the straight-line distance from each point to the goal (2, 0).
+
+```{python}
+uk["group"] = "Other 20-year windows"
+uk.loc[uk.period == "1997–2016", "group"] = "1997–2016"
+uk.loc[uk.n_years < 20, "group"] = "2017–2025 (partial, 9 years)"
+uk["distance"] = np.sqrt((uk.avg_inflation - 2) ** 2 + uk.sd_inflation ** 2)
+POSITIONS = {"1757–1776": "middle left", "1777–1796": "middle left", "1817–1836": "middle left",
+             "1937–1956": "bottom center"}
+fig = px.scatter(uk, x="avg_inflation", y="sd_inflation", color="group", text="period", hover_name="period",
+                 hover_data={"distance": ":.2f", "group": False}, color_discrete_sequence=[TEAL, BLUE, GREEN],
+                 labels={"avg_inflation": "Average inflation (percent)", "sd_inflation": "Volatility of inflation (percent)",
+                         "group": "", "distance": "distance to the goal"},
+                 title="Only 1997–2016 came close to the goal of 2% inflation with low volatility")
+for trace in fig.data:
+    positions = []
+    for name in trace.hovertext:
+        positions.append(POSITIONS.get(name, "middle right"))
+    trace.textposition = positions
+fig.update_traces(marker_size=11, textfont_size=11)
+fig.update_traces(marker_symbol="circle-open", selector=dict(name="2017–2025 (partial, 9 years)"))
+fig.add_trace(go.Scatter(x=[2], y=[0], mode="markers+text", text=["Goal"], textposition="middle right", name="Goal",
+                         marker=dict(color="black", size=14, symbol="star")))
+fig.update_layout(xaxis=dict(range=[-3, 8.5], tickvals=[-2, 0, 2, 4, 6, 8]), yaxis=dict(range=[-0.7, 13], tickvals=[0, 2, 4, 6, 8, 10, 12]),
+                  legend=dict(x=0.99, y=0.99, xanchor="right", yanchor="top"))
+fig.show()
+```
+
+**What to notice.**
+
+- Most windows are far from the goal: high and volatile inflation in war years (1797–1816, 1917–1936), deflation in the
+  19th century, high inflation from 1937 to 1996.
+- 1997–2016, the years of Bank of England independence and inflation targeting, almost hit the goal: 1.9 percent
+  average inflation with a volatility of only 1.1.
+- The partial window 2017–2025 drifts away again, pulled by the inflation burst of 2021–2023. Hover over a point to see
+  its distance to the goal.
+
+<!-- cell -->
+
+### Key numbers: distance to the goal
+
+```{python}
+uk.sort_values("distance")[["period", "n_years", "avg_inflation", "sd_inflation", "distance"]].head(5).round(2)
+```
+
+1997–2016 is at a distance of 1.07 from the goal; the next-best full window, 1877–1896, is at 3.48, with deflation of
+about 1 percent a year. The partial window 2017–2025 sits at 3.16.
+
+**Your turn.** Which window was the most volatile, and how far was it from the goal?
+
+<details><summary>Hint</summary>
+
+`uk.loc[uk.sd_inflation.idxmax()]` gives the whole row.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Key numbers
+
+This table collects the main numbers of the chapter. Each one is computed with the functions and data above.
+
+```{python}
+shock = simulate(NO_SHOCK, shock_list(2.0, 1))
+boom = simulate(shock_list(2.0, A_LAST), NO_SHOCK)
+rows = [
+    ["Rise in R when inflation is 2 points above target (m = 1/2)", 0.5 * 2.0],
+    ["Inflation shock o = 2: inflation in period 1, %", shock.pi[1]],
+    ["Inflation shock o = 2: output in period 1, %", shock.Y[1]],
+    ["Inflation shock: sum of output over 20 periods", shock.Y.sum()],
+    ["Disinflation 4% -> 2%: output lost over 20 periods, %", -adaptive.Y.sum()],
+    ["Demand shock a = 2: pi_c = pi_bar + a / (b m), %", PI_BAR + 2.0 / (B_BAR * M_BAR)],
+    ["Demand shock: inflation in period 10 (= period 1), %", boom.pi[10]],
+    ["Policy rule i = 1 + 1.5 pi at 2% inflation, %", policy_rule(2.0)],
+    ["Correlation of the fed funds rate with the rule, 1960-2023Q1", book_span.fed_funds.corr(book_span.rule)],
+    ["Actual minus rule, 2009-2020 average, points", taylor[(taylor.date >= "2009") & (taylor.date < "2021")].gap.mean()],
+    ["Output gap 2009, textbook data (March 2023), %", by_year.loc[2009, "output_gap_2023"]],
+    ["Output gap 2009, current data, %", by_year.loc[2009, "output_gap"]],
+    ["Peak U.K. inflation in the 1970s, %", by_country.loc[1970:1979, "United Kingdom"].max()],
+    ["U.S. CPI inflation in 2022, %", by_country.loc[2022, "United States"]],
+    ["U.K. 1997-2016: distance to the goal", uk.distance[uk.period == "1997–2016"].iloc[0]],
+]
+pd.DataFrame(rows, columns=["Quantity", "Value"]).round(2)
+```
+
+## Summary
+
+- A **monetary policy rule** $R_t - \bar{r} = \bar{m}(\pi_t - \bar{\pi})$ turns the IS curve into the downward-sloping **AD
+  curve** $\tilde{Y}_t = \bar{a} - \bar{b}\bar{m}(\pi_t - \bar{\pi})$; the Phillips curve is the upward-sloping **AS curve**.
+  Their crossing gives this period's output and inflation; the steady state has inflation on target and output at
+  potential.
+- Because expected inflation is sticky, every shock is followed by slow **transition dynamics**: an inflation shock
+  brings stagflation, a lower target costs a recession, and a temporary demand boom must be paid for with a later
+  recession. The economy moves in **counterclockwise loops**, and the U.S. data show them too.
+- A simple rule with Taylor's numbers tracks the fed funds rate surprisingly well, with large gaps in the 1970s, after
+  2008 and in 2021–2022. Data revisions can change what the numbers say.
+- **Expectations** are central: a credible target can lower inflation at little cost, which is why modern central banks
+  adopt inflation targets and value their reputation.
+- The next chapter turns to **financial crises** and how they fit into the short-run model.

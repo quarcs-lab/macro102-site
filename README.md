@@ -21,6 +21,8 @@
 | 9 | [An Introduction to the Short Run](notebooks/ch09-an-introduction-to-the-short-run.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/ch09-an-introduction-to-the-short-run.ipynb) |
 | 10 | [The Great Recession and the Covid-19 Pandemic: A First Look](notebooks/ch10-the-great-recession-and-the-covid-19-pandemic-a-first-look.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/ch10-the-great-recession-and-the-covid-19-pandemic-a-first-look.ipynb) |
 | 11 | [The IS Curve](notebooks/ch11-the-is-curve.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/ch11-the-is-curve.ipynb) |
+| 12 | [Monetary Policy and the Phillips Curve](notebooks/ch12-monetary-policy-and-the-phillips-curve.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/ch12-monetary-policy-and-the-phillips-curve.ipynb) |
+| 13 | [Stabilization Policy and the AS/AD Framework](notebooks/ch13-stabilization-policy-and-the-as-ad-framework.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/ch13-stabilization-policy-and-the-as-ad-framework.ipynb) |
 <!-- END chapter-list -->
 
 ## Repository layout
