@@ -29,6 +29,7 @@
 | 17 | [Investment](notebooks/ch17-investment.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/ch17-investment.ipynb) |
 | 18 | [The Government and the Macroeconomy](notebooks/ch18-the-government-and-the-macroeconomy.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/ch18-the-government-and-the-macroeconomy.ipynb) |
 | 19 | [International Trade](notebooks/ch19-international-trade.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/ch19-international-trade.ipynb) |
+| 21 | [Parting Thoughts](notebooks/ch21-parting-thoughts.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/ch21-parting-thoughts.ipynb) |
 <!-- END chapter-list -->
 
 ## Repository layout

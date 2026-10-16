@@ -1,0 +1,493 @@
+# Chapter 21: Parting Thoughts
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/ch21-parting-thoughts.ipynb)
+
+*Data Science and Macroeconomic Models: A Python Companion to Intermediate Macroeconomics* · Carlos Mendez
+
+> **How to use this notebook.** This last notebook is a short recap of the whole book. In Colab, click
+> *Runtime → Run all*. Each lesson below restates one big idea, links back to the notebook and figure where you
+> built it, and recomputes one or two of its key numbers from a small data file you have already met. Each lesson
+> ends with a short **Your turn** task, and you can try it in the empty code cell below the task.
+
+<!-- cell -->
+
+## Learning goals
+
+The textbook ends by looking back at what macroeconomics has learned and ahead at what it still does not know.
+By the end of this notebook you will be able to:
+
+- state the **five main lessons** of the book in your own words: living standards, transition dynamics, the
+  classical dichotomy, the short-run Phillips curve trade-off and central-bank credibility;
+- find the model and the figure in earlier notebooks where each lesson was built;
+- recompute a key number for each lesson from real data, such as Japan's catch-up growth or the slope of the
+  U.S. Phillips curve;
+- name a few **open questions** at the frontier of research, such as the productivity slowdown after 2003;
+- reuse the Python you have learned: `read_csv`, filtering rows, `merge`, `pivot`, short functions and `np.polyfit`.
+
+<!-- cell -->
+
+## Setup
+
+We first load the Python libraries we need. You only have to run this cell once.
+
+> **Python note.** `import` loads a library, a toolbox written by other people, and gives it a short nickname
+> such as `np` for NumPy. The `try ... except` block runs a Colab-only line and simply skips it anywhere else.
+> This recap has no sliders, so it needs no `ipywidgets`.
+
+```{python}
+# Libraries used in this chapter
+import numpy as np                    # numbers and arrays
+import pandas as pd                   # data tables
+import plotly.express as px           # quick charts from data tables
+import plotly.io as pio
+
+# One light blue/green look for every chart
+BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
+pio.templates.default = "plotly_white"
+pio.templates["plotly_white"].layout.update(width=860, height=480)   # same size in Colab and on the website
+px.defaults.color_discrete_sequence = [BLUE, TEAL, GREEN, "#5aa0d8", "#0b4f47"]
+
+# Colab only: let Plotly charts appear inside the interactive widgets
+try:
+    import google.colab
+    google.colab.output.enable_custom_widget_manager()
+except ImportError:
+    pass                                        # not running in Colab: nothing to do
+
+# The data files of this chapter live in the book's GitHub repository
+DATA_URL = "https://raw.githubusercontent.com/quarcs-lab/macro102-site/main/data/ch21/"
+```
+
+Every data file of this notebook is a copy of a file from an earlier chapter. The data README of this chapter
+says where each one comes from.
+
+## Lesson 1: Capital, skills, hours and ideas set living standards
+
+**Goal.** Recall what makes some countries rich and others poor, and measure how much of the gap capital explains.
+
+In the long run, a country's income per person depends on four things: how much it invests in machines and in
+people's skills, how many hours people work, the stock of ideas and technology it can use, and how efficiently
+it combines all of these. You built this in the **production model** of Chapter 4, where output per person is
+
+$$y = \bar{A}\,k^{1/3}.$$
+
+Measured relative to the United States, a country's income is its total factor productivity (TFP) $\bar{A}$ times
+the part that capital alone explains, $k^{1/3}$. See
+[Chapter 4, Figure 5](https://quarcs-lab.github.io/macro102-site/notebooks/ch04-a-model-of-production.html#figure-5-the-models-prediction-for-per-capita-gdp)
+(the prediction from capital alone) and
+[Chapter 4, Figure 7](https://quarcs-lab.github.io/macro102-site/notebooks/ch04-a-model-of-production.html#figure-7-measuring-tfp-so-the-model-fits-exactly)
+(the TFP that makes the model fit). The Solow model of
+[Chapter 5, Figure 4](https://quarcs-lab.github.io/macro102-site/notebooks/ch05-the-solow-growth-model.html#figure-4-an-increase-in-the-investment-rate)
+then explained capital by the investment rate, and the Romer model of
+[Chapter 6, Figure 2](https://quarcs-lab.github.io/macro102-site/notebooks/ch06-growth-and-ideas.html#figure-2-the-balanced-growth-path-in-the-romer-model)
+showed that sustained growth comes from new ideas. Because an idea can be used by everyone at once, income per
+person grows with the whole stock of knowledge.
+
+> **Python note.** `a.merge(b, on=[...])` joins two tables row by row, matching the columns listed in `on`.
+> Here both tables have one row per country, so the result does too.
+
+```{python}
+predicted = pd.read_csv(DATA_URL + "fig4-5.csv")       # actual and capital-only prediction, U.S. = 1
+tfp = pd.read_csv(DATA_URL + "fig4-7.csv")             # implied TFP, U.S. = 1
+countries = predicted.merge(tfp, on=["iso3", "country", "gdp_pc_rel_2023"])
+# Venezuela's 2023 GDP per person in the PWT is not plausible (Chapter 4): hyperinflation broke the price data
+countries = countries[countries.iso3 != "VEN"]
+countries.head()
+```
+
+Each row is a country in 2023. `gdp_pc_rel_2023` is actual GDP per person, `pred_gdp_pc_2023` is what capital
+alone predicts, $k^{1/3}$, and `tfp_2023` is $\bar{A}$. Actual income equals prediction times TFP.
+
+```{python}
+poorest = countries.nsmallest(10, "gdp_pc_rel_2023")   # the ten poorest countries in the sample
+print(f"The ten poorest of {len(countries)} countries, on average (U.S. = 1):")
+print(f"  actual GDP per person         {poorest.gdp_pc_rel_2023.mean():.3f}")
+print(f"  predicted from capital alone  {poorest.pred_gdp_pc_2023.mean():.3f}")
+print(f"  TFP                           {poorest.tfp_2023.mean():.3f}")
+china = countries[countries.country == "China"]
+china[["country", "gdp_pc_rel_2023", "pred_gdp_pc_2023", "tfp_2023"]]
+```
+
+**What to notice.**
+
+- Capital alone would put the ten poorest countries at about a quarter of U.S. income (0.244). In fact they
+  earn about 2 percent of it (0.023). The other factor of ten is TFP, which averages 0.094.
+- China is at 30 percent of U.S. income. With its own capital and U.S. TFP it would be at 71 percent:
+  $0.298 = 0.422 \times 0.707$.
+- So the big question is not only "why so little capital?" but "why so little TFP?" We come back to it in the
+  open questions at the end.
+
+**Your turn.** Look up India in `countries`. What would its income be, relative to the United States, if it had
+U.S. TFP? Is India's gap mostly a capital gap or mostly a TFP gap?
+
+<details><summary>Hint</summary>
+
+Filter the rows with `countries[countries.country == "India"]`. With U.S. TFP ($\bar{A} = 1$), income would equal
+the capital-only prediction.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Lesson 2: Transition dynamics explain differences in growth rates
+
+**Goal.** See why countries far below their steady state grow fast, and check it with Japan's catch-up.
+
+A country on its balanced growth path grows at the rate set by the growth of world knowledge. A country below
+its steady state grows faster than that, and the gap shrinks; a country above it grows more slowly. This is the
+**principle of transition dynamics**. You first saw it in the Solow model and then in the cross-country data of
+[Chapter 5, Figure 8](https://quarcs-lab.github.io/macro102-site/notebooks/ch05-the-solow-growth-model.html#figure-8-growth-rates-in-the-oecd)
+and [Chapter 5, Figure 9](https://quarcs-lab.github.io/macro102-site/notebooks/ch05-the-solow-growth-model.html#figure-9-growth-rates-around-the-world),
+and in the combined Solow–Romer model of
+[Chapter 6, Figure 8](https://quarcs-lab.github.io/macro102-site/notebooks/ch06-growth-and-ideas.html#figure-8-output-after-a-rise-in-the-investment-rate).
+The long series for each country are in
+[Chapter 3, Figure 6](https://quarcs-lab.github.io/macro102-site/notebooks/ch03-an-overview-of-long-run-economic-growth.html#figure-6-per-capita-gdp-since-1870).
+
+> **Python note.** `pivot(index="year", columns="country", values="gdppc")` reshapes a long table (one row per
+> country and year) into a wide one: one row per year and one column per country.
+
+```{python}
+maddison = pd.read_csv(DATA_URL + "maddison_panel.csv")
+gdppc = maddison.pivot(index="year", columns="country", values="gdppc")   # 2022 dollars
+gdppc.loc[[1870, 1950, 2000, 2022], ["United States", "United Kingdom", "Japan"]]
+```
+
+We measure growth as the average annual growth rate in percent, $g = 100 \times \ln(y_{end}/y_{start})/(end -
+start)$, as in Chapter 3.
+
+```{python}
+def growth_rate(y, start, end):
+    """Average annual growth rate, percent: 100 ln(y_end / y_start) / years (Chapter 3)."""
+    return 100 * np.log(y.loc[end] / y.loc[start]) / (end - start)
+
+for country in ["United States", "United Kingdom"]:
+    print(f"{country}: {growth_rate(gdppc[country], 1870, 2022):.1f} percent a year, 1870–2022")
+for country in ["Japan", "United States"]:
+    print(f"{country}: {growth_rate(gdppc[country], 1950, 2000):.1f} percent a year, 1950–2000")
+```
+
+The textbook quotes 4.8 percent for Japan and 2.2 percent for the United States in the second half of the 20th
+century, which these data reproduce exactly. For the long run it quotes 2.0 percent for the United States and
+1.5 percent for the United Kingdom. The Maddison data give 1.6 and 1.2, lower for both but with a similar gap.
+(Chapter 3's U.S. series, built from the official national accounts, gives 1.9 percent.) Different data sets
+can disagree about the 19th century.
+
+Now the ratio of Japan's income to U.S. income, year by year:
+
+```{python}
+ratio = (gdppc["Japan"] / gdppc["United States"]).loc[1950:].reset_index(name="ratio")
+fig = px.line(ratio, x="year", y="ratio",
+              labels={"year": "Year", "ratio": "Japan's GDP per person relative to the U.S."},
+              title="Japan closed most of the gap by 1991, and then its growth slowed")
+fig.add_hline(y=0.75, line_dash="dash", line_color=GRAY,
+              annotation_text="0.75, the textbook's guess at Japan's steady state", annotation_position="top left")
+fig.update_traces(line=dict(color=TEAL, width=3))
+fig.update_yaxes(range=[0, 1.05], tickvals=[0.2, 0.4, 0.6, 0.8, 1])
+fig.show()
+print(f"1950: {ratio.ratio.iloc[0]:.2f}   peak: {ratio.ratio.max():.2f} in {ratio.year[ratio.ratio.idxmax()]}"
+      f"   2022: {ratio.ratio.iloc[-1]:.2f}")
+```
+
+**What to notice.**
+
+- In 1950 Japan earned only a fifth of U.S. income (0.20). Far below its steady state, it grew more than twice
+  as fast as the United States for four decades.
+- The ratio peaked at 0.85 in 1991. Since then Japan has grown more slowly than the United States, and the ratio
+  has drifted down to 0.65 in 2022, a little below the textbook's guess of 0.75.
+- Fast growth that fades as the gap closes is exactly what transition dynamics predicts. The same logic suggests
+  that China's fast growth will slow as it nears its own steady state.
+
+**Your turn.** Compute China's average growth rate from 2000 to 2022 and its income relative to the United States
+in 2022. Is China still far below the United States?
+
+<details><summary>Hint</summary>
+
+Use `growth_rate(gdppc["China"], 2000, 2022)`, and divide `gdppc.loc[2022, "China"]` by the U.S. value in the
+same year.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Lesson 3: In the long run, money drives inflation and real forces drive output
+
+**Goal.** Recall the classical dichotomy and test the quantity theory across 165 economies.
+
+In the long run, the real side of the economy (output, employment, wages) is set by real forces: the inputs and
+ideas of Lesson 1. The nominal side (the price level and inflation) is set by money. With a stable velocity of
+money, the **quantity theory** says that inflation equals money growth minus real GDP growth,
+
+$$\pi = g_M - g_Y.$$
+
+This split between the real and the nominal sides is the **classical dichotomy**. It means that, in the long run,
+there is no trade-off between inflation and real GDP. You tested it in
+[Chapter 8, Figure 3](https://quarcs-lab.github.io/macro102-site/notebooks/ch08-inflation.html#figure-3-money-growth-and-inflation-in-the-united-states)
+(U.S. decades) and
+[Chapter 8, Figure 4](https://quarcs-lab.github.io/macro102-site/notebooks/ch08-inflation.html#figure-4-money-growth-and-inflation-around-the-world)
+(countries). Behind fast money growth there is usually a government that cannot borrow and prints money to pay
+its bills. Long-run unemployment, by contrast, depends on labor-market institutions such as hiring and firing
+costs and unemployment insurance, as in
+[Chapter 7, Figure 7](https://quarcs-lab.github.io/macro102-site/notebooks/ch07-the-labor-market-wages-and-unemployment.html#figure-7-unemployment-in-the-united-states-europe-and-japan).
+
+```{python}
+world = pd.read_csv(DATA_URL + "fig8-4.csv")
+columns = ["country", "money_growth_1990_2025", "inflation_1990_2025"]
+world[world.iso3.isin(["JPN", "CHE", "USA", "TUR", "ARG", "BRA"])][columns]
+```
+
+Each row is one economy: average annual growth of broad money and average annual inflation, in percent, over
+1990–2025. Inflation runs from under 1 to over 200 percent, so we measure how close the economies are to one
+line with the correlation of the **logarithms**, the numbers behind a ratio scale (as in Chapter 8).
+
+```{python}
+g_M, pi = world.money_growth_1990_2025, world.inflation_1990_2025
+print(f"Correlation of the logs of money growth and inflation: {np.log10(g_M).corr(np.log10(pi)):.2f}")
+print(f"Median economy: money growth {g_M.median():.1f} percent, inflation {pi.median():.1f} percent")
+```
+
+**What to notice.**
+
+- The correlation of 0.85 is very high for data from 165 very different economies: where money grows fast,
+  prices rise fast.
+- Japan and Switzerland had money growth of 2–5 percent and inflation near 1 percent; Brazil had both above 200
+  percent.
+- In the median economy, money grew about 7 points faster than prices. With constant velocity that gap would be
+  real GDP growth; it is larger, because in many economies velocity fell (Chapter 8).
+
+**Your turn.** Does the link also hold among moderate-inflation economies? Keep only the economies with average
+inflation below 20 percent and compute the correlation of the logs again.
+
+<details><summary>Hint</summary>
+
+Filter first, `calm = world[world.inflation_1990_2025 < 20]`, then repeat the `np.log10(...).corr(...)` line
+with the columns of `calm`.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Lesson 4: In the short run, there is a trade-off between inflation and output
+
+**Goal.** Recall the Phillips curve and estimate its slope from U.S. data.
+
+In the short run, inflation is **sticky**: firms set prices partly by looking at past inflation, so inflation
+changes only gradually. What moves it is the state of the economy. The **Phillips curve** of Chapter 12 says
+
+$$\Delta\pi_t = \bar{\nu}\,\tilde{Y}_t + \bar{o},$$
+
+where $\tilde{Y}_t$ is short-run output, the percent gap between actual and potential GDP, and $\bar{o}$ is a
+price shock. A boom raises inflation and a slump lowers it. Sticky inflation also breaks the classical dichotomy
+in the short run: when the central bank raises the nominal interest rate, the real interest rate rises too,
+which lowers investment and output. See
+[Chapter 9, Figure 7](https://quarcs-lab.github.io/macro102-site/notebooks/ch09-an-introduction-to-the-short-run.html#figure-7-measuring-the-phillips-curve),
+[Chapter 12, Figure 4](https://quarcs-lab.github.io/macro102-site/notebooks/ch12-monetary-policy-and-the-phillips-curve.html#figure-4-raising-the-interest-rate-in-the-ismp-diagram),
+[Chapter 12, Figure 7](https://quarcs-lab.github.io/macro102-site/notebooks/ch12-monetary-policy-and-the-phillips-curve.html#figure-7-the-phillips-curve)
+and the inflation-output loops of
+[Chapter 13, Figure 17](https://quarcs-lab.github.io/macro102-site/notebooks/ch13-stabilization-policy-and-the-as-ad-framework.html#figure-17-inflation-output-loops-in-the-u.s.-economy).
+
+> **Python note.** `.diff()` subtracts the previous row from each row, so it turns inflation into the change in
+> inflation (the first year has no previous year and becomes empty, `NaN`). `np.polyfit(x, y, 1)` fits a
+> straight line $y = a + bx$ by least squares and returns the slope $b$ first.
+
+```{python}
+us = pd.read_csv(DATA_URL + "fig13-17.csv")            # U.S. output gap and CPI inflation, percent
+us["change"] = us.inflation.diff()                      # Δπ_t = π_t − π_(t−1)
+us = us.dropna()                                        # drop 1960, which has no previous year
+slope, intercept = np.polyfit(us.output_gap, us.change, 1)
+print(f"Estimated slope ν = {slope:.2f}, intercept {intercept:.2f}, from {len(us)} years ({us.year.min()}–{us.year.max()})")
+```
+
+```{python}
+fig = px.scatter(us, x="output_gap", y="change", hover_name="year", trendline="ols",
+                 labels={"output_gap": "Short-run output, Ỹ (percent)", "change": "Change in inflation, Δπ (points)"},
+                 title=f"Inflation tends to rise in booms and fall in slumps (slope ν = {slope:.2f})")
+fig.update_traces(marker=dict(color=TEAL, size=8))
+fig.update_traces(line=dict(color=BLUE, width=3), selector=dict(mode="lines"))
+fig.show()
+```
+
+**What to notice.**
+
+- The fitted slope is about 0.35: each percent of output above potential goes with inflation about a third of a
+  point higher than the year before. That is close to the "about 1/3" you measured in Chapter 9.
+- The points are widely scattered. Price shocks $\bar{o}$, such as the oil shocks of the 1970s and the
+  2021–2022 surge, move inflation far off the line (hover over the outliers).
+- The trade-off is short-run only. Over decades, Lesson 3's classical dichotomy takes over again.
+
+**Your turn.** Has the Phillips curve become flatter? Estimate the slope separately for 1961–1999 and for
+2000–2025.
+
+<details><summary>Hint</summary>
+
+Filter the rows by year, for example `early = us[us.year <= 1999]`, and repeat the `np.polyfit` line with the
+columns of `early`. Do the same for the later years.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Lesson 5: A credible central bank stabilizes output as well as inflation
+
+**Goal.** Measure what the Volcker disinflation cost in lost output, and see why credibility lowers that cost.
+
+The Phillips curve gives a central bank one sure way to bring inflation down: a recession. But if firms and
+workers *believe* that the bank will do whatever it takes, they lower their expected inflation on their own, and
+a smaller recession, or none, does the job. That is why credibility, transparency and explicit inflation targets
+matter so much. See the disinflation in
+[Chapter 12, Figure 12](https://quarcs-lab.github.io/macro102-site/notebooks/ch12-monetary-policy-and-the-phillips-curve.html#figure-12-the-disinflation-over-time),
+the costless disinflation of
+[Chapter 13, Figure 20](https://quarcs-lab.github.io/macro102-site/notebooks/ch13-stabilization-policy-and-the-as-ad-framework.html#figure-20-costless-disinflation-by-coordinating-expectations),
+and the low, stable inflation of the inflation-targeting era in
+[Chapter 13, Figure 19](https://quarcs-lab.github.io/macro102-site/notebooks/ch13-stabilization-policy-and-the-as-ad-framework.html#figure-19-inflation-in-the-oecd).
+
+One way to measure the cost of a disinflation is the **sacrifice ratio**: the output lost, added up over the
+years of the recession (the sum of the negative values of $\tilde{Y}$), divided by the fall in inflation.
+
+> **Python note.** `.clip(upper=0)` replaces every positive number by 0, so that only the years below potential
+> count as losses. A function can `return` several values at once, separated by commas.
+
+```{python}
+annual = pd.read_csv(DATA_URL + "fig13-17.csv").set_index("year")    # the same file, with the year as the row label
+
+def sacrifice_ratio(start, end):
+    """Output lost (sum of negative Ỹ) per point of lower inflation between two years (Chapter 13)."""
+    lost = -annual.loc[start:end, "output_gap"].clip(upper=0).sum()
+    fall = annual.loc[start, "inflation"] - annual.loc[end, "inflation"]
+    return lost, fall, lost / fall
+
+lost, fall, ratio_v = sacrifice_ratio(1980, 1985)
+print(f"1980–1985: inflation fell by {fall:.1f} points; output lost {lost:.1f} percent of a year's potential GDP")
+print(f"Sacrifice ratio: {ratio_v:.1f} percent of output per point of inflation")
+print(f"Average inflation 1970–1989: {annual.loc[1970:1989, 'inflation'].mean():.1f}%;  1993–2019: {annual.loc[1993:2019, 'inflation'].mean():.1f}%")
+```
+
+**What to notice.**
+
+- Between 1980 and 1985, U.S. inflation fell from 13.5 to 3.5 percent. The price was a deep recession: over the
+  six years, output summed to 16.4 percent of a year's potential GDP below potential, about 1.6 percent for each
+  point of disinflation.
+- A fully credible announcement could, in the model of Chapter 13, have lowered inflation with much smaller
+  losses. The Fed paid for its lost credibility of the 1970s.
+- Once credibility was rebuilt, inflation stayed low: it averaged 6.3 percent in 1970–1989 and 2.3 percent in
+  1993–2019.
+
+**Your turn.** How sensitive is the sacrifice ratio to the years we pick? Compute it for 1980–1983 and for
+1981–1986.
+
+<details><summary>Hint</summary>
+
+Call the function again with other years, for example `sacrifice_ratio(1980, 1983)`. It returns three numbers;
+the last one is the ratio.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Open questions at the frontier
+
+**Goal.** Name the big questions macroeconomics has not yet answered, and measure one of them.
+
+The textbook closes with problems that are still open. In short:
+
+- **Why are investment and TFP so low in poor countries?** Lesson 1 showed that TFP explains most of the income
+  gap. Weak property rights and the rule of law are part of the answer, but why are they weak?
+- **Which institutions work best?** For producing and spreading ideas (patents, prizes, research funding), for
+  sharing the gains from trade and capital flows, and for running monetary systems.
+- **How do we measure potential output in real time?** Mistaking a slowdown in potential for a recession leads
+  to too much stimulus, as in
+  [Chapter 12, Figure 13](https://quarcs-lab.github.io/macro102-site/notebooks/ch12-monetary-policy-and-the-phillips-curve.html#figure-13-mistaking-a-slowdown-in-potential-for-a-recession).
+- **Why do bubbles form, and what should policymakers do about them?** See the housing boom of
+  [Chapter 14, Figure 8](https://quarcs-lab.github.io/macro102-site/notebooks/ch14-financial-crises-and-the-short-run-model.html#figure-8-real-home-prices-in-the-united-states).
+- **How will governments pay for aging populations and rising health spending?** See the long-term projections of
+  [Chapter 18, Figure 6](https://quarcs-lab.github.io/macro102-site/notebooks/ch18-the-government-and-the-macroeconomy.html#figure-6-u.s.-federal-spending-and-revenues-19502075)
+  and health spending in
+  [Chapter 18, Figure 8](https://quarcs-lab.github.io/macro102-site/notebooks/ch18-the-government-and-the-macroeconomy.html#figure-8-health-spending-as-a-share-of-gdp-in-five-countries).
+
+The third question has a recent twist: since about 2003, U.S. productivity has grown much more slowly than
+around 2000. Is the slowdown temporary or permanent? You met it in
+[Chapter 6, Figure 6](https://quarcs-lab.github.io/macro102-site/notebooks/ch06-growth-and-ideas.html#figure-6-a-slowdown-in-u.s.-economic-growth)
+and [Chapter 14, Figure 11](https://quarcs-lab.github.io/macro102-site/notebooks/ch14-financial-crises-and-the-short-run-model.html#figure-11-u.s.-total-factor-productivity).
+We measure it with the BLS growth-accounting indexes of Chapter 6 and our `growth_rate` function from Lesson 2.
+
+```{python}
+bls = pd.read_csv(DATA_URL + "growth_accounting.csv").set_index("year")   # indexes, 2017 = 100
+for start, end in [(1995, 2003), (2003, 2025)]:
+    print(f"{start}–{end}: output per hour {growth_rate(bls.output_per_hour, start, end):.1f}% a year, "
+          f"TFP {growth_rate(bls.tfp, start, end):.1f}% a year")
+```
+
+**What to notice.**
+
+- Growth of output per hour fell from 3.2 percent a year in 1995–2003 to 1.8 percent since 2003, and TFP growth
+  roughly halved, from 1.5 to 0.8 percent.
+- A difference of 1.4 points a year adds up: over 22 years it is a gap of about a third in output per hour.
+- Nobody knows yet whether this is a long pause between big inventions or a lasting change. It is one of the
+  questions you might help answer.
+
+**Your turn.** Put the recent slowdown in perspective: compute the same two growth rates for 1948–1973 and
+1973–1995. Which earlier period does 2003–2025 resemble?
+
+<details><summary>Hint</summary>
+
+Add the two periods to the list in the `for` line, as `(1948, 1973), (1973, 1995)`.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Key numbers
+
+The table collects the chapter's numbers, recomputed with the functions above, next to the textbook's values.
+
+```{python}
+japan_us = gdppc["Japan"] / gdppc["United States"]
+rows = [
+    ["U.S. growth of GDP per person, long run (%)", "2.0 (150 years)", growth_rate(gdppc["United States"], 1870, 2022)],
+    ["U.K. growth of GDP per person, long run (%)", "1.5 (150 years)", growth_rate(gdppc["United Kingdom"], 1870, 2022)],
+    ["Japan growth, 1950–2000 (%)", "4.8", growth_rate(gdppc["Japan"], 1950, 2000)],
+    ["U.S. growth, 1950–2000 (%)", "2.2", growth_rate(gdppc["United States"], 1950, 2000)],
+    ["Japan / U.S. GDP per person, 1950", "about 0.25", japan_us.loc[1950]],
+    ["Japan / U.S. GDP per person, 2012–2022 average", "about 0.75", japan_us.loc[2012:2022].mean()],
+    ["Phillips curve slope ν, 1961–2025", "about 1/3 (Ch. 9)", slope],
+    ["Sacrifice ratio of the Volcker disinflation, 1980–1985", "—", sacrifice_ratio(1980, 1985)[2]],
+    ["U.S. output per hour growth since 2003 (%)", "markedly slower", growth_rate(bls.output_per_hour, 2003, 2025)],
+]
+pd.DataFrame(rows, columns=["Number", "Textbook", "Notebook"]).round(2)
+```
+
+The Maddison data give lower long-run growth rates than the textbook for both the United States and the United
+Kingdom, with a similar gap between them (Lesson 2). Japan's ratio to the United States was a little lower than
+the textbook's "about 25 percent" in 1950, and has drifted below its 0.75 in the last decade. The growth rates of
+1950–2000, the Phillips curve slope and the post-2003 productivity slowdown agree with the textbook.
+
+## Summary
+
+- **Long run, levels:** income per person depends on capital, skills, hours, ideas and TFP, and TFP explains most
+  of the gap between rich and poor countries. **Long run, growth:** sustained growth comes from new ideas.
+- **Transition dynamics:** countries far below their steady state grow fast, as Japan did after 1950, and slow
+  down as they catch up.
+- **Classical dichotomy:** in the long run, money growth drives inflation and real forces drive output, so there
+  is no long-run trade-off between them.
+- **Short run:** sticky inflation creates a Phillips curve trade-off and lets monetary policy move real output;
+  a credible central bank can lower inflation at a smaller cost.
+- This is the last chapter. Many big questions remain open, from low TFP in poor countries to the productivity
+  slowdown, bubbles and aging. Go back to any notebook, change a parameter or a data window, and start asking
+  your own questions.
