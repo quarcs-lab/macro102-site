@@ -12,7 +12,7 @@ Output: pwt_production.csv next to this script, one row per country and year (19
           y_rel     gdp_pc relative to the United States in the same year (U.S. = 1)
           k_rel     k_pc relative to the United States in the same year (U.S. = 1)
           tfp       implied TFP, y_rel / k_rel^(1/3) (equation 4.11)
-          sample    True if the country has rgdpo, pop and csh_i in 1960 and in that year
+          in_sample True if the country has rgdpo, pop and csh_i in 1960 and in that year
                     (the textbook's ~110-country sample for Figures 4.5 and 4.7)
 Capital is the collect-data rule (macro102 get_data.py, capital_pc): investment I = csh_i x rgdpo;
 K in the first year with investment = I / (0.03 + 0.05); K(t+1) = 0.95 K(t) + I(t). K in year T
@@ -68,14 +68,14 @@ def main():
     have = full.groupby("countrycode").year.agg(set)
     in1960 = set(have[have.map(lambda ys: 1960 in ys)].index)
     keys = set(zip(full.countrycode, full.year))
-    out["sample"] = [c in in1960 and (c, y) in keys for c, y in zip(out.iso3, out.year)]
+    out["in_sample"] = [c in in1960 and (c, y) in keys for c, y in zip(out.iso3, out.year)]
 
     out["gdp_pc"] = out.gdp_pc.round(1)
     out["k_pc"] = out.k_pc.round(0)
     for col in ("y_rel", "k_rel", "tfp"):
         out[col] = out[col].round(5)
     out.to_csv(os.path.join(HERE, "pwt_production.csv"), index=False)
-    n23 = out[(out.year == 2023) & out["sample"]].shape[0]
+    n23 = out[(out.year == 2023) & out["in_sample"]].shape[0]
     print(f"pwt_production.csv: {len(out)} rows, {out.iso3.nunique()} countries, "
           f"{out.year.min()}-{out.year.max()}; sample in 2023: {n23} countries")
 

@@ -19,13 +19,13 @@ is the method that reproduces the textbook (see `pwt_production.csv` below). "Re
 
 ## Wider file built for the notebook widgets
 
-- `pwt_production.csv`: `iso3, country, year, gdp_pc, k_pc, y_rel, k_rel, tfp, sample`. One row per country and year, 1950–2023, for 185 countries (11,201 rows).
+- `pwt_production.csv`: `iso3, country, year, gdp_pc, k_pc, y_rel, k_rel, tfp, in_sample`. One row per country and year, 1950–2023, for 185 countries (11,201 rows).
   - **Construction.** `build_data.py` builds it from the PWT 11.0 subset saved by macro102's `/collect-data` (`rgdpo, pop, csh_i`).
     - `gdp_pc` is rgdpo/pop in 2021 US$.
     - `k_pc` is capital per person: $I = \text{csh\_i} \times \text{rgdpo}$, then $K_{first} = I/(0.03+0.05)$ and $K_{t+1} = 0.95K_t + I_t$, with the stock measured at the start of the year.
     - `y_rel` and `k_rel` divide by the U.S. value of the same year, and `tfp` $= y_{rel}/k_{rel}^{1/3}$.
-    - `sample` marks the countries with data in 1960 and in that year, which gives 111 countries in every year 1960–2023.
+    - `in_sample` marks the countries with data in 1960 and in that year, which gives 111 countries in every year 1960–2023.
   - **Validation.** In 2023 it reproduces `fig4-4.csv`, `fig4-5.csv`, `fig4-6.csv` and `fig4-7.csv` to within 0.00003, and `fig4-9.csv` exactly.
   - **Known quirks:**
-    - Venezuela's 2023 GDP per person (about $160) is not plausible, because hyperinflation broke the PWT price data. It is the lowest point in Figures 5 and 7, and the notebook uses it as a data-cleaning example.
+    - Venezuela's 2023 GDP per person (about $160) is not plausible, because hyperinflation broke the PWT price data. The notebook finds it with a quick look at the data and drops it, as a data-cleaning example.
     - Capital in the first years after a country's data begin depends heavily on the starting guess $K_{first}$. The notebook therefore uses years from 1980 on.
