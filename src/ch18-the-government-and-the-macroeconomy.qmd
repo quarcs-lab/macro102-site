@@ -1,0 +1,1278 @@
+# Chapter 18: The Government and the Macroeconomy
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/ch18-the-government-and-the-macroeconomy.ipynb)
+
+*Data Science and Macroeconomic Models: A Python Companion to Intermediate Macroeconomics* · Carlos Mendez
+
+> **How to use this notebook.** Every figure in this chapter is drawn from data. Hover over a line to
+> read its values, and click a name in a legend to hide or show that series. In Colab, click
+> *Runtime → Run all*: some figures then get a menu, buttons or sliders, and the figure is drawn again
+> when you change them. On the book website the same figures come with a precomputed slider or a play
+> button. Each section ends with a short **Your turn** task, and you can try it in the empty code cell
+> below it.
+
+<!-- cell -->
+
+## Learning goals
+
+Governments spend between a third and more than half of GDP in the rich countries, and most of them
+have borrowed a lot. This chapter looks at the data on spending, taxes, deficits and debt, and at the
+accounting rules that tie them together. By the end of it you will be able to:
+
+- read the U.S. federal budget: where the money goes, where it comes from, and how large the deficit
+  is, in percent of GDP and in dollars per person (Table 18.1);
+- use the **flow budget constraint** and the **intertemporal budget constraint** to compute next year's
+  debt, the primary and total deficits, and the taxes a given path of spending requires;
+- explain why the **debt-GDP ratio** falls when GDP grows faster than the interest rate, and split the
+  changes in the U.S. ratio into deficits and growth;
+- compare government spending and debt across countries, and describe the fiscal problem of the
+  twenty-first century: the rise of health spending;
+- in Python: write small accounting functions, reshape tables with `melt` and `merge`, draw a chart with
+  two vertical axes, animate a bar chart, and compare two vintages of the same data.
+
+<!-- cell -->
+
+## Figures in this chapter
+
+The figures follow the order of the textbook chapter. The second column shows which textbook
+figure each notebook figure replicates.
+
+| Figure | Textbook figure | Type | What you can change |
+|---|---|---|---|
+| Figure 1 | 18.1 U.S. federal government revenue and spending | data | the period whose averages are drawn (menu); Table 18.1 for any fiscal year |
+| Figure 2 | 18.2 Federal debt and deficits in the United States | data | — (hover to read both scales) |
+| Figure 3 | 18.3 Government spending around the world, 2019 | data | the year of the OECD-wide chart (play button and slider) |
+| Figure 4 | 18.4 Debt-GDP ratios around the world | data | — (click a country in the legend; double-click to show it alone) |
+| Figure 5 | 18.5 U.S. private investment and the budget deficit | data | the period whose averages are drawn (buttons); the saving identity line (legend) |
+| Figure 6 | 18.6 U.S. federal spending and revenues, 1950–2075 | data | interest rate, GDP growth and a deficit cut for the debt projection (sliders) |
+| Figure 7 | 18.7 Components of federal spending, 1950–2075 | data | — (click a component in the legend) |
+| Figure 8 | 18.8 Health spending as a share of GDP in five countries | data | — (click a country in the legend) |
+
+<!-- cell -->
+
+## Setup
+
+We first load the Python libraries we need. You only have to run this cell once.
+
+> **Python note.** `import` loads a *library*, a toolbox written by other people. We give each
+> library a short nickname, for example `np` for NumPy, so that the code stays short. Text after
+> a `#` is a *comment*: Python ignores it, and it is there for human readers. The `try ... except`
+> block runs one Colab-only line and simply skips it anywhere else.
+
+```{python}
+# Libraries used in this chapter
+import numpy as np                    # numbers and arrays
+import pandas as pd                   # data tables
+import plotly.express as px           # quick charts from data tables
+import plotly.graph_objects as go     # charts built piece by piece
+import plotly.io as pio
+from ipywidgets import interact, Dropdown, ToggleButtons, FloatSlider
+
+# One light blue/green look for every chart
+BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
+LIGHT_BLUE, DARK_TEAL, ORANGE = "#5aa0d8", "#0b4f47", "#e0a33b"   # extra colors for five-country charts
+pio.templates.default = "plotly_white"
+pio.templates["plotly_white"].layout.update(width=860, height=480)   # same size in Colab and on the website
+px.defaults.color_discrete_sequence = [BLUE, TEAL, GREEN, LIGHT_BLUE, DARK_TEAL]
+WIDE = {"description_width": "initial"}         # show the full widget labels
+
+# Colab only: let Plotly charts appear inside the interactive widgets
+try:
+    import google.colab
+    google.colab.output.enable_custom_widget_manager()
+except ImportError:
+    pass                                        # not running in Colab: nothing to do
+
+# The data files of this chapter live in the book's GitHub repository
+DATA_URL = "https://raw.githubusercontent.com/quarcs-lab/macro102-site/main/data/ch18/"
+```
+
+The next cell defines a helper that only the book website needs. Run it and move on.
+
+```{python}
+#| kind: helper
+# @title Helper for the website versions (run this cell; you do not need to read it)
+def slider_figure(make_figure, name, values, start, label=None):
+    """Precompute make_figure(name=value) for every value and join the results with one slider.
+
+    The website cannot run Python, so each interactive figure also gets this precomputed version.
+    """
+    figures = [make_figure(**{name: v}) for v in values]
+    first = values.index(start)
+    fig = go.Figure(layout=figures[first].layout)
+    owner = []                                  # which precomputed figure each trace comes from
+    for i, f in enumerate(figures):
+        for trace in f.data:
+            trace.visible = (i == first)
+            fig.add_trace(trace)
+            owner.append(i)
+    steps = []
+    for i, f in enumerate(figures):
+        layout = {"title": f.layout.title.to_plotly_json(),
+                  "annotations": [a.to_plotly_json() for a in f.layout.annotations],
+                  "shapes": [s.to_plotly_json() for s in f.layout.shapes]}
+        visible = [o == i for o in owner]
+        steps.append(dict(method="update", label=str(values[i]), args=[{"visible": visible}, layout]))
+    fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
+                                    currentvalue=dict(prefix=(label or name) + " = "))])
+    return fig
+```
+
+## The model in code
+
+This chapter has no new model to solve: it describes government budgets with data. But behind the data
+there are a few **accounting equations**, which hold in every year and in every country. We turn each of
+them into a small Python function here, once, and the figures use them later.
+
+<!-- cell -->
+
+### The flow budget constraint (equations 18.1 and 18.2)
+
+In every period the government's **uses** of funds must equal its **sources** of funds:
+
+$$\underbrace{G_t + Tr_t + iB_t}_{\text{uses}} = \underbrace{T_t + \Delta B_{t+1} + \Delta M_{t+1}}_{\text{sources}}. \tag{18.1}$$
+
+The government buys goods and services $G_t$, pays transfers $Tr_t$ (Social Security, unemployment
+insurance, welfare) and pays interest $i$ on its debt $B_t$. It gets the money from taxes $T_t$, from new
+borrowing $\Delta B_{t+1} = B_{t+1} - B_t$ and from printing money $\Delta M_{t+1}$. As in the textbook, we set
+$\Delta M_{t+1} = 0$ and count transfers inside $G_t$. Then the constraint says how the debt moves:
+
+$$B_{t+1} = (1+i)B_t + \underbrace{G_t - T_t}_{\text{primary deficit}}. \tag{18.2}$$
+
+The **primary deficit** $G_t - T_t$ leaves out the interest payments. The **total deficit**
+$G_t + iB_t - T_t$ includes them, and it is the deficit that newspapers (and Table 18.1) report.
+
+> **Python note.** `def` creates a *function*: a named recipe that takes inputs (the *arguments*) and gives
+> back a result with `return`. The text in triple quotes is a one-line description. We write the interest rate
+> as a decimal number, so 5 percent is `0.05`.
+
+```{python}
+def next_debt(B, G, T, i):
+    """Equation (18.2): next period's debt, (1 + i) B + G - T."""
+    return (1 + i) * B + G - T
+
+
+def primary_deficit(G, T):
+    """Primary deficit: spending minus taxes, leaving out the interest payments."""
+    return G - T
+
+
+def total_deficit(G, T, i, B):
+    """Total deficit: spending plus the interest on the debt, minus taxes."""
+    return G + i * B - T
+```
+
+**A quick check: Exercise 5 of the textbook.** A government owes 5 trillion dollars at an interest rate of
+5 percent, and GDP (20 trillion dollars) grows by 4 percent a year. In case (a) it balances its **primary**
+budget ($G = T$). In case (b) it balances its **total** budget, so taxes also pay the interest.
+
+> **Python note.** A `for` loop repeats the indented lines once for each value in the list `[1, 2, 3]`. In each
+> pass, `B_a = next_debt(B_a, ...)` replaces the old debt by the new one. An *f-string* such as
+> `f"{B_a:.3f}"` puts a number into the text, here with 3 decimals.
+
+```{python}
+i, g = 0.05, 0.04                      # interest rate and GDP growth rate
+B_a, B_b, Y = 5.0, 5.0, 20.0           # debt in cases (a) and (b), and GDP, trillions of dollars
+for year in [1, 2, 3]:
+    T_b = 4.0 + i * B_b                # case (b): taxes cover spending of 4.0 and the interest
+    print(f"Year {year}: (a) primary deficit {primary_deficit(4.0, 4.0):.2f}, total {total_deficit(4.0, 4.0, i, B_a):.3f}"
+          f"   (b) primary deficit {primary_deficit(4.0, T_b):.2f}, total {total_deficit(4.0, T_b, i, B_b):.2f}")
+    B_a = next_debt(B_a, G=4.0, T=4.0, i=i)
+    B_b = next_debt(B_b, G=4.0, T=T_b, i=i)
+    Y = (1 + g) * Y
+    print(f"   debt (a) {B_a:.3f} = {100 * B_a / Y:.2f}% of GDP,  debt (b) {B_b:.3f} = {100 * B_b / Y:.2f}% of GDP")
+```
+
+In case (a) the total deficit is the interest bill, so the debt grows at the interest rate, 5 percent a year.
+In case (b) the primary surplus of 0.25 trillion pays the interest, and the debt stays at 5 trillion. With a
+balanced primary budget the debt-GDP ratio
+rises from 25 percent by about 1 percent a year: 5 percent minus 4 percent. With a balanced total budget the
+ratio falls by about 4 percent a year, as GDP grows.
+
+<!-- cell -->
+
+### The intertemporal budget constraint (equations 18.5 and 18.6)
+
+In a world that lasts two periods, all debt must be repaid by the end: $B_3 = 0$. Combining the flow
+constraints of the two periods gives the **intertemporal budget constraint**:
+
+$$\underbrace{G_1 + \frac{G_2}{1+i}}_{\text{pdv of spending}} + \underbrace{(1+i)B_1}_{\text{initial debt}} = \underbrace{T_1 + \frac{T_2}{1+i}}_{\text{pdv of taxes}}. \tag{18.5}$$
+
+A future amount is worth less today, so we divide it by $1+i$: that is its **present discounted value**
+(pdv). Moving the taxes to the left gives equation (18.6): the pdv of the budget balances $T - G$ must pay off
+the initial debt $(1+i)B_1$. The budget must balance, not period by period, but in present value.
+
+Here is a two-period example with the textbook's initial debt of 25 trillion dollars. The government spends 7
+trillion in each period, collects 5 trillion of taxes in period 1, and must find the taxes of period 2.
+
+```{python}
+def pdv(first, second, i):
+    """Present discounted value of an amount in period 1 and one in period 2 (equation 18.5)."""
+    return first + second / (1 + i)
+
+
+B1, i = 25.0, 0.05                     # initial debt (trillions of dollars) and interest rate
+G1, G2, T1 = 7.0, 7.0, 5.0
+B2 = next_debt(B1, G1, T1, i)          # equation (18.3): the debt at the start of period 2
+T2 = (1 + i) * B2 + G2                 # equation (18.4) with B3 = 0: period-2 taxes repay everything
+print(f"B2 = {B2:.2f}, so the period-2 taxes must be T2 = {T2:.2f} trillion dollars")
+print(f"Uses:    pdv of spending {pdv(G1, G2, i):.3f} + initial debt {(1 + i) * B1:.3f} = "
+      f"{pdv(G1, G2, i) + (1 + i) * B1:.3f}")
+print(f"Sources: pdv of taxes {pdv(T1, T2, i):.3f}")
+print(f"Equation (18.6): pdv of the budget balances {pdv(T1 - G1, T2 - G2, i):.3f} = (1 + i) B1")
+```
+
+The deficit of 2 trillion in period 1 and the inherited debt must both be paid with a large surplus in
+period 2: taxes of 36.66 trillion against spending of 7. **Borrowing today means higher taxes in the future.**
+
+<!-- cell -->
+
+### The debt-GDP ratio
+
+What matters for a country's ability to pay is not the debt in dollars but the debt relative to GDP, the tax
+base. Let nominal GDP grow at the rate $g$, and write $b = B/Y$ for the debt-GDP ratio and $d$ for the primary
+deficit as a share of GDP. Dividing equation (18.2) by GDP gives
+
+$$b_{\text{next}} = \frac{1+i}{1+g}\, b + d \quad\Longrightarrow\quad b_{\text{next}} - b \approx d + (i - g)\, b.$$
+
+The ratio rises with the primary deficit $d$. It also rises when the interest rate is above the growth rate,
+and **it falls when GDP grows faster than the interest rate**, even with a balanced primary budget.
+
+> **Python note.** `path = []` starts an empty list, and `path.append(b)` adds one value at its end. For a
+> pandas *Series* with years as row labels, `deficit.loc[1951:1974]` keeps the years 1951 to 1974 (both
+> included), and `.sum()` adds them up.
+
+```{python}
+def next_debt_ratio(b, i, g, d):
+    """Equation (18.2) divided by GDP: next year's debt ratio, (1 + i) / (1 + g) b + d."""
+    return (1 + i) / (1 + g) * b + d
+
+
+def debt_ratio_path(b, i, g, deficits):
+    """The debt ratio after each year of a list of primary deficits (all in percent of GDP)."""
+    path = []
+    for d in deficits:
+        b = next_debt_ratio(b, i, g, d)
+        path.append(b)
+    return path
+
+
+def debt_change_parts(debt, deficit, start, end):
+    """Split the change in the debt ratio from start to end into primary deficits and the rest."""
+    change = debt[end] - debt[start]
+    from_deficits = deficit.loc[start + 1:end].sum()
+    return change, from_deficits, change - from_deficits
+```
+
+The ratio tool repeats case (a) of Exercise 5 without computing the debt and GDP separately:
+
+```{python}
+case_a = debt_ratio_path(25.0, 0.05, 0.04, [0, 0, 0])      # a balanced primary budget for three years
+print("Debt ratio, case (a):", np.round(case_a, 2))
+print(f"Growth of the ratio: {100 * (case_a[0] / 25.0 - 1):.2f}% a year = 1.05 / 1.04 - 1")
+```
+
+The part of a change that is not explained by primary deficits, `change - from_deficits`, is the effect of
+interest minus growth, $(i-g)\,b$, summed over the years. We use it on the U.S. data in Figure 2.
+
+<!-- cell -->
+
+### Saving and investment (equation 18.7)
+
+Adding and subtracting taxes in the national income identity splits total saving into three parts:
+
+$$\underbrace{(Y - T - C)}_{\text{private saving}} + \underbrace{(T - G)}_{\text{government saving}} + \underbrace{(IM - EX)}_{\text{foreign saving}} = I. \tag{18.7}$$
+
+Investment is financed by households and firms, by the government and by foreigners. A budget deficit is
+negative government saving, so private or foreign saving must fill the gap, or investment falls. That fall is
+called **crowding out**.
+
+```{python}
+def private_and_foreign_saving(investment, government_saving):
+    """Equation (18.7) solved for the saving of households, firms and foreigners: I - (T - G)."""
+    return investment - government_saving
+```
+
+<!-- cell -->
+
+### Tools for the data
+
+Four small tools help with the figures. `period_mean` averages a series over some years, and
+`add_period_means` draws those averages on a chart. `per_person` turns a share of GDP into dollars per
+person. `actual_and_projection` and `one_legend_entry` prepare the long-run projections of Figures 6 and 7,
+where actual data (solid lines) are followed by projections (dashed lines).
+
+> **Python note.** `zip(columns, colors)` hands over one (column, color) pair at a time to the loop.
+> `fig.add_vrect` shades a band between two x values, and `fig.add_shape(type="line", ...)` draws a straight
+> line between two points.
+
+```{python}
+def period_mean(series, start, end):
+    """Average of a Series with years as row labels, from start to end (both included)."""
+    return series.loc[start:end].mean()
+
+
+def add_period_means(fig, data, columns, colors, start, end):
+    """Shade the years start-end and draw each column's average over them (Figures 1 and 5)."""
+    fig.add_vrect(x0=start - 0.5, x1=end + 0.5, fillcolor=GRAY, opacity=0.15, line_width=0)
+    for column, color in zip(columns, colors):
+        mean = period_mean(data[column], start, end)
+        fig.add_shape(type="line", x0=start - 0.5, x1=end + 0.5, y0=mean, y1=mean,
+                      line=dict(color=color, width=3, dash="dot"))
+    return fig
+
+
+def per_person(percent_of_gdp, gdp_billions, population_millions):
+    """Dollars per person of a budget line given in percent of GDP (Table 18.1)."""
+    return percent_of_gdp / 100 * gdp_billions * 1e9 / (population_millions * 1e6)
+```
+
+> **Python note.** `melt` turns a *wide* table (one column per series) into a *long* one (one row per year
+> and series), which is the shape Plotly Express likes. `.map({0: ..., 1: ...})` replaces each value by its
+> label, `.copy()` makes an independent copy, and `pd.concat([a, b])` stacks two tables. `trace.name.rsplit(", ", 1)`
+> cuts a text such as `"Revenues, actual"` at its last comma, into its two parts.
+
+```{python}
+def actual_and_projection(data, names):
+    """Long table for Figures 6 and 7: one row per year and series, actual data and CBO projection.
+
+    FY2025 is repeated in the projection, so that the dashed line starts where the solid line ends."""
+    long = data.rename(columns=names).melt(id_vars=["year", "projection"], value_vars=list(names.values()),
+                                           var_name="series", value_name="percent")
+    long["segment"] = long.projection.map({0: "actual", 1: "CBO projection"})
+    joint = long[long.year == 2025].copy()
+    joint["segment"] = "CBO projection"
+    return pd.concat([long, joint]).sort_values(["series", "segment", "year"])
+
+
+def one_legend_entry(fig):
+    """Plotly Express names each trace 'series, segment': keep one legend entry per series."""
+    for trace in fig.data:
+        series, segment = trace.name.rsplit(", ", 1)
+        trace.update(name=series, legendgroup=series, showlegend=(segment == "actual"))
+    return fig
+```
+
+## Figure 1: U.S. federal government revenue and spending
+
+**Goal.** See how large the federal government is, relative to the economy, and how its spending and revenue
+have changed since the 1930s.
+
+The data are the federal **outlays** (spending) and **receipts** (revenue) as a percentage of GDP, from the
+Office of Management and Budget (OMB). They are measured in **fiscal years**: the U.S. federal fiscal year 2025,
+for example, ran from October 2024 to September 2025.
+
+```{python}
+revenue_spending = pd.read_csv(DATA_URL + "fig18-1.csv")
+revenue_spending.tail(3)
+```
+
+`spending_gdp_pct` and `revenue_gdp_pct` are percentages of GDP, from FY1934 to FY2025. The menu draws the
+averages over one period as dotted lines. The textbook's dashed lines at 18 and 20 percent stay on the chart.
+
+> **Python note.** `rename(columns={...})` gives the columns readable names, which then appear in the
+> legend, and `set_index("year")` makes the years the row labels, as `period_mean` needs. `PERIODS` is a
+> *dictionary*: each name (the key) gives a pair of years (the value), and `start, end = PERIODS[period]`
+> unpacks the pair. `fig.add_hline` draws a horizontal line across the chart.
+
+```{python}
+named = revenue_spending.rename(columns={"spending_gdp_pct": "Spending", "revenue_gdp_pct": "Revenue"})
+by_year = named.set_index("year")
+PERIODS = {"FY1934–1939": (1934, 1939), "FY1950–1969": (1950, 1969), "FY1970–1997": (1970, 1997),
+           "FY1998–2001": (1998, 2001), "FY2002–2025": (2002, 2025), "FY1975–2024": (1975, 2024)}
+
+
+def budget_chart(period="FY1950–1969"):
+    """Figure 18.1: federal spending and revenue (% of GDP), with their averages over one period."""
+    start, end = PERIODS[period]
+    spending, revenue = period_mean(by_year.Spending, start, end), period_mean(by_year.Revenue, start, end)
+    fig = px.line(named, x="year", y=["Spending", "Revenue"], color_discrete_sequence=[BLUE, GREEN],
+                  labels={"year": "Fiscal year", "value": "Percentage of GDP", "variable": ""},
+                  title=f"{period}: spending averaged {spending:.1f}% and revenue {revenue:.1f}% of GDP")
+    fig.update_traces(line_width=3)
+    for level in [18, 20]:                       # the textbook's dashed reference lines
+        fig.add_hline(y=level, line=dict(color="black", width=1, dash="dash"))
+    add_period_means(fig, by_year, ["Spending", "Revenue"], [BLUE, GREEN], start, end)
+    fig.update_xaxes(range=[1930, 2028])
+    fig.update_yaxes(range=[0, 46], tickvals=[5, 10, 15, 20, 25, 30, 35, 40, 45])
+    fig.update_layout(legend=dict(x=0.99, y=0.99, xanchor="right", yanchor="top"))
+    return fig
+```
+
+> **Python note.** `interact` calls `budget_chart` again whenever you choose another period in the
+> `Dropdown` menu, and shows the figure it returns. The `;` at the end only hides an extra line of text.
+
+```{python}
+#| kind: widget
+interact(budget_chart, period=Dropdown(options=list(PERIODS), value="FY1950–1969", description="period",
+                                       style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 1 with a precomputed slider for the period
+slider_figure(budget_chart, "period", ["FY1934–1939", "FY1950–1969", "FY1970–1997", "FY1998–2001",
+                                       "FY2002–2025", "FY1975–2024"], start="FY1950–1969", label="period")
+```
+
+**What to notice.**
+
+- In the 1930s the federal government was small: revenue averaged 5.9 percent of GDP. World War II changed
+  that. Spending peaked at 42.7 percent of GDP in FY1944, almost all of it for national defense.
+- In the two decades after the war, spending and revenue were both close to 17–18 percent of GDP, and the
+  budget was roughly balanced (choose FY1950–1969).
+- From 1970 spending stayed above revenue in almost every year. FY1998–2001 were the exceptions, the only
+  surpluses since 1969. Spending jumped in the Great Recession (FY2009) and in the Covid-19
+  pandemic (FY2020).
+- The textbook's figure note says both averaged "about 20 percent" in recent decades. Choose FY1975–2024:
+  spending averaged 21.1 percent, but revenue only 17.3 percent. That gap is the deficit of Figure 2.
+
+<!-- cell -->
+
+### Key numbers: the war, the 1930s and the 20 percent ceiling
+
+```{python}
+print(f"Highest spending: {by_year.Spending.max():.1f}% of GDP in FY{by_year.Spending.idxmax()}")
+print(f"Revenue in FY1944: {by_year.Revenue[1944]:.1f}% of GDP")
+print(f"Average revenue, FY1934-1939: {period_mean(by_year.Revenue, 1934, 1939):.1f}% of GDP")
+print("Fiscal years with revenue of 20% of GDP or more:", by_year.index[by_year.Revenue >= 20].tolist())
+print(f"FY2025: spending {by_year.Spending[2025]:.1f}%, revenue {by_year.Revenue[2025]:.1f}% of GDP")
+```
+
+The textbook says spending peaked "at just under 44 percent" and revenue reached "nearly 21 percent" in 1944.
+Today's OMB tables give 42.7 and 20.5 percent: GDP of the 1940s has since been revised up, so the shares are
+a little smaller. Revenue reached 20 percent of GDP only twice, in FY1944 and FY2000. This is the textbook's
+"taxes have remained at or below 20 percent of GDP during virtually the entire history of the United States".
+
+<!-- cell -->
+
+### Table 18.1: the federal budget in 2023 and 2025
+
+Table 18.1 splits the budget into its main parts. The wider file `federal_budget.csv` has the same lines for
+every fiscal year since 1940, in percent of GDP, together with GDP (billions of dollars) and the population
+(millions, from 1960).
+
+```{python}
+budget = pd.read_csv(DATA_URL + "federal_budget.csv")
+budget[budget.year >= 2023][["year", "release", "gdp_billions", "population_millions", "total_spending",
+                             "total_revenue", "balance"]]
+```
+
+There are two rows for 2023. The textbook was written in early 2023, before fiscal year 2023 was over, so its
+table shows OMB's **estimate** from March 2023 (the row "estimate (FY2024 Budget)"). The **actual** numbers came
+in lower: spending 22.4 instead of 24.2 percent of GDP, revenue 16.2 instead of 18.2 percent.
+
+> **Python note.** `budget[(budget.year == year) & (budget.release == release)]` keeps the rows where both
+> conditions are true, and `.iloc[0]` takes the first of them. `round(-2)` rounds to the nearest 100.
+
+```{python}
+LINES = {"total_spending": "Total expenditures", "health": "Health (including Medicare)",
+         "social_security": "Social Security", "defense": "National defense", "income_security": "Income security",
+         "net_interest": "Net interest", "other_spending": "Other spending", "total_revenue": "Total revenues",
+         "individual_income_tax": "Individual income taxes",
+         "social_insurance_tax": "Social insurance and retirement receipts",
+         "corporate_income_tax": "Corporate income taxes", "other_revenue": "Other revenues",
+         "balance": "Budget balance (deficit < 0)"}
+
+
+def budget_table(year, release="actual (FY2027 Budget)"):
+    """Table 18.1 for one fiscal year: each line in percent of GDP and in dollars per person."""
+    row = budget[(budget.year == year) & (budget.release == release)].iloc[0]
+    table = pd.DataFrame({"Percent of GDP": row[list(LINES)].astype(float)})
+    table["Dollars per person"] = per_person(table["Percent of GDP"], row.gdp_billions,
+                                             row.population_millions).round(-2)
+    return table.rename(index=LINES)
+```
+
+We put the textbook's numbers next to the estimate it used, the actual 2023 numbers and the latest year, 2025.
+
+```{python}
+book = pd.DataFrame({"Textbook 2023, %": [23.9, 6.4, 5.1, 3.1, 3.0, 2.5, 3.9, 18.0, 8.7, 6.3, 2.0, 0.9, -5.9],
+                     "Textbook 2023, dollars": [19100, 5100, 4000, 2400, 2400, 2000, 3100, 14400, 7000, 5000,
+                                                1600, 800, -4700]},
+                    index=list(LINES.values()))
+estimate, actual, latest = budget_table(2023, "estimate (FY2024 Budget)"), budget_table(2023), budget_table(2025)
+table = pd.concat([book, estimate["Percent of GDP"].rename("2023 estimate, %"),
+                   actual["Percent of GDP"].rename("2023 actual, %"),
+                   latest["Percent of GDP"].rename("2025, %"), latest["Dollars per person"].rename("2025, dollars")],
+                  axis=1)
+table.round(1)
+```
+
+The estimate reproduces the textbook within 0.3 points of GDP and 200 dollars per person. In FY2025 federal
+spending was 23.1 percent of GDP, about 20,500 dollars per person, and revenue 17.3 percent. The deficit, 5.9
+percent of GDP, is the same share as in the textbook's table, but net interest has grown from 2.5 to 3.2
+percent of GDP, more than defense (3.0 percent).
+
+**Your turn.** Build Table 18.1 for fiscal year 2000, the last year of the late-1990s surpluses. Which lines
+were larger than today, and which were smaller?
+
+<details><summary>Hint</summary>
+
+Call `budget_table(2000)` and put it next to `budget_table(2025)` with `pd.concat([..., ...], axis=1)`. Compare
+net interest, health and individual income taxes.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 2: Federal debt and deficits in the United States
+
+**Goal.** Follow the U.S. **debt-GDP ratio** and the budget **surplus or deficit** together, and see how the
+deficits of each year build up the debt.
+
+The **government debt** is the stock of bonds the government has sold in the past and not yet repaid. Each
+year's deficit adds to it. The data are the federal debt **held by the public** (outside the government), at
+the end of each fiscal year, and the total surplus (+) or deficit (−), both in percent of GDP.
+
+```{python}
+debt_deficit = pd.read_csv(DATA_URL + "fig18-2.csv")
+debt_deficit[debt_deficit.year.between(1937, 1942)]
+```
+
+`.between(1937, 1942)` is true for the years 1937 to 1942, so we see six rows. `NaN` ("not a number") marks a
+missing value: OMB's debt table starts in FY1940. The textbook's figure has one
+more debt point, for 1939, from an older edition of the table. Plotly simply starts the debt line in 1940.
+
+The textbook draws the two series against two different vertical axes, with the deficit on the left and
+the debt on the right. We copy its scales: 0 on the left is level with 20 on the right.
+
+> **Python note.** `fig.add_trace(go.Scatter(..., yaxis="y2"))` adds a line that uses a second vertical axis.
+> In `update_layout`, `yaxis2=dict(overlaying="y", side="right", ...)` puts that axis on the right, over the
+> same plot. `fig.add_annotation` writes a label at a point of the chart; `<br>` starts a new line.
+
+```{python}
+debt_by_year = debt_deficit.set_index("year").debt_public_gdp_pct
+fig = px.line(debt_deficit, x="year", y="surplus_gdp_pct", labels={"year": "Fiscal year"},
+              title=f"Federal debt: {debt_by_year[1946]:.1f}% of GDP in FY1946, {debt_by_year[2025]:.1f}% in FY2025")
+fig.update_traces(line=dict(color=GREEN, width=3), name="Surplus or deficit")
+fig.add_trace(go.Scatter(x=debt_deficit.year, y=debt_deficit.debt_public_gdp_pct, yaxis="y2", name="Debt-GDP ratio",
+                         line=dict(color=BLUE, width=3)))
+fig.add_hline(y=0, line=dict(color="black", width=1, dash="dash"))
+fig.add_annotation(x=1975, y=27, text="Debt-GDP ratio (right scale)", showarrow=False,
+                   font=dict(color=BLUE, size=14))
+fig.add_annotation(x=1990, y=-17, text="Surplus (+) or deficit (−)<br>(left scale)", showarrow=False,
+                   font=dict(color=GREEN, size=14))
+fig.update_layout(showlegend=False, hovermode="x unified",
+                  yaxis=dict(title="Surplus or deficit (% of GDP)", range=[-34, 52], tickvals=[-30, -20, -10, 0, 10]),
+                  yaxis2=dict(title="Debt-GDP ratio (%)", overlaying="y", side="right", range=[-48, 124],
+                              tickvals=[20, 40, 60, 80, 100, 120], showgrid=False))
+fig.update_xaxes(range=[1930, 2028])
+fig.show()
+```
+
+**What to notice.**
+
+- To pay for World War II the government ran deficits of up to 29.6 percent of GDP (FY1943), and the debt
+  rose to 106.1 percent of GDP in FY1946: more than one year of the economy's whole output.
+- Over the next 30 years the ratio fell to 23.2 percent (FY1974). The budget was close to balance in most of
+  those years, so the deficits do not explain this decline. Economic growth does, as the key numbers below show.
+- The deficits from the late 1970s raised the ratio to 47.9 percent by FY1993. The surpluses of FY1998–2001
+  lowered it to 31.5 percent. Then the Great Recession (a deficit of 9.8 percent of GDP in FY2009) and the
+  pandemic (14.5 percent in FY2020) raised it to 98.5 percent, and it reached 99.5 percent in FY2025.
+
+<!-- cell -->
+
+### Key numbers: primary deficits and growth
+
+How did the United States pay off its war debt? Figure 6's file has federal revenue and spending excluding
+interest from FY1950, so their difference is the **primary balance**. The total balance of Figure 2 minus the
+primary balance is the interest paid. We first combine the two files.
+
+> **Python note.** `merge(..., on="year")` joins two tables row by row, matching the years. Rows whose year
+> is missing in one of the tables are dropped, so the result starts in FY1950.
+
+```{python}
+projections = pd.read_csv(DATA_URL + "fig18-6.csv")
+history = debt_deficit.merge(projections[projections.projection == 0], on="year")
+history["primary_deficit"] = history.spending_ex_interest - history.revenue
+history["net_interest"] = -history.surplus_gdp_pct - history.primary_deficit
+years = history.set_index("year")
+years.loc[[1985, 1999, 2006, 2010, 2025], ["surplus_gdp_pct", "primary_deficit", "net_interest"]].round(2)
+```
+
+These are the years of the textbook's Exercise 3. In FY1999 the total surplus was 1.3 percent of GDP, but the
+primary surplus was much larger, 3.8 percent, because 2.5 percent of GDP went to interest. In FY2025 the
+total deficit was 5.9 percent, of which 3.3 percent was interest and only 2.6 percent primary deficit.
+
+Now `debt_change_parts` splits the change in the debt ratio over four episodes.
+
+```{python}
+EPISODES = [(1950, 1974), (1981, 1993), (2001, 2008), (2007, 2025)]
+for start, end in EPISODES:
+    change, from_deficits, rest = debt_change_parts(years.debt_public_gdp_pct, years.primary_deficit, start, end)
+    print(f"FY{start}-{end}: debt ratio {change:+6.1f} points = primary deficits {from_deficits:+6.1f} "
+          f"+ interest minus growth {rest:+6.1f}")
+```
+
+From FY1950 to FY1974 the debt ratio fell by 55.4 points. Primary surpluses paid for only 14.1 points of that.
+The other 41.3 points came from the term $(i-g)\,b$: nominal GDP grew faster than the interest rate on the debt,
+so the debt shrank relative to the economy. **Growth, not repayment, paid off most of the war debt.** In
+FY2007–2025, too, low interest rates and the inflation of 2021–23 offset 16.2 of the 80.5 points added by primary
+deficits.
+
+**Your turn.** How much did the debt ratio change from FY1993 to FY2001, and how much of the change came from
+the primary surpluses of those years?
+
+<details><summary>Hint</summary>
+
+Call `debt_change_parts(years.debt_public_gdp_pct, years.primary_deficit, 1993, 2001)`. It returns three
+numbers: the change, the part from primary deficits (negative for surpluses) and the rest.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 3: Government spending around the world, 2019
+
+**Goal.** Compare the size of government, at all levels (federal, state and local), across rich countries.
+
+The OECD measures **general government** spending, which adds up the spending of the central, state and local
+governments. The textbook uses 2019, the last year before the pandemic. The data file adds the latest year
+available for all six countries, 2024.
+
+```{python}
+spending = pd.read_csv(DATA_URL + "fig18-3.csv")
+spending
+```
+
+> **Python note.** `melt` stacks the two year columns into one column of values, with a new column that says
+> which year each value belongs to. `barmode="group"` puts the bars of the two years side by side, and
+> `texttemplate="%{y:.1f}"` writes each bar's value above it.
+
+```{python}
+bars = spending.melt(id_vars=["iso3", "country"], value_vars=["gov_spending_2019", "gov_spending_2024"],
+                     var_name="year", value_name="gov_spending")
+bars["year"] = bars.year.map({"gov_spending_2019": "2019 (textbook year)", "gov_spending_2024": "2024 (latest)"})
+fig = px.bar(bars, x="country", y="gov_spending", color="year", barmode="group", hover_name="country",
+             color_discrete_sequence=[GREEN, LIGHT_BLUE], range_y=[0, 62],
+             labels={"country": "Country", "gov_spending": "Percentage of GDP", "year": ""},
+             title="General government spending: from 32% of GDP in Korea to 55% in France (2019)")
+fig.update_traces(texttemplate="%{y:.1f}", textposition="outside")
+fig.update_layout(legend=dict(x=0.01, y=0.99, xanchor="left", yanchor="top"))
+fig.show()
+```
+
+**What to notice.**
+
+- In 2019 the governments of France and Sweden spent about half of GDP or more, those of the U.S., Japan and
+  South Korea well under 40 percent. The U.S., at 38.2 percent, is among the lowest of the rich countries.
+- In 2024 spending was higher than in 2019 in all six countries, by 0.6 points in Sweden up to 5.7 points in
+  the U.K. (46.2 percent).
+
+<!-- cell -->
+
+### Data revisions: the same year, different numbers
+
+The textbook's bars for 2019 are not the same as ours. Statistical offices revise their data for years, for
+example when they measure GDP better. We compare the textbook's values with today's.
+
+```{python}
+textbook = pd.Series({"S. Korea": 33.9, "Japan": 38.9, "U.S.": 38.4, "U.K.": 40.8, "Sweden": 49.1, "France": 55.3})
+compare = spending.set_index("country")[["gov_spending_2019"]]
+compare["textbook"] = textbook
+compare["revision"] = compare.gov_spending_2019 - compare.textbook
+compare.round(1)
+```
+
+Korea's 2019 spending has been revised down by 2.0 points and Japan's by 1.1 points. With today's data, Japan
+spends a little less than the U.S., so the two bars have swapped places. The 2023 edition of the OECD data,
+which the textbook used, reproduces all six printed bars within 0.1 point.
+
+<!-- cell -->
+
+### All OECD countries, 2007–2024
+
+The wider file `gov_spending.csv` has the same measure for all 38 OECD countries from 2007. The animation shows
+one year at a time. The countries stay in their 2019 order, so you can watch a bar grow or shrink.
+
+> **Python note.** `oecd.iso3.isin(EURO_FOUR)` is true for the rows whose code is in the list, and
+> `oecd.loc[rows, "group"] = ...` changes the column `group` in those rows only. `animation_frame="year"` draws
+> one chart per year and adds a play button and a slider. `category_orders` fixes the order of the countries on
+> the x-axis. `.sort_values(...)` sorts a table, and
+> `.tolist()` turns a column into a plain Python list.
+
+```{python}
+oecd = pd.read_csv(DATA_URL + "gov_spending.csv")
+oecd = oecd[oecd.year <= 2024]                  # 2025 has data for only 26 countries so far
+EURO_FOUR = ["FRA", "DEU", "ITA", "ESP"]        # the textbook's euro-area examples
+oecd["group"] = "Other OECD"
+oecd.loc[oecd.iso3.isin(EURO_FOUR), "group"] = "France, Germany, Italy, Spain"
+oecd.loc[oecd.iso3 == "USA", "group"] = "United States"
+order = oecd[oecd.year == 2019].sort_values("gov_spending").country.tolist()
+fig = px.bar(oecd, x="country", y="gov_spending", color="group", animation_frame="year", hover_name="country",
+             category_orders={"country": order}, range_y=[0, 65],
+             color_discrete_map={"United States": BLUE, "France, Germany, Italy, Spain": TEAL, "Other OECD": GRAY},
+             labels={"country": "", "gov_spending": "Percentage of GDP", "group": "", "year": "Year"},
+             title="General government spending in the 38 OECD countries (in the 2019 order)")
+fig.update_layout(legend=dict(x=0.01, y=0.99, xanchor="left", yanchor="top"), xaxis_tickangle=-60, height=600)
+fig.layout.sliders[0].pad.t = 100               # room for the slanted country names above the slider
+fig.layout.updatemenus[0].pad.t = 110
+fig.show()
+```
+
+Press play: 2009 and 2020 are the years of the two recessions, when spending jumped almost everywhere (and GDP
+fell). Turkey's bar is missing in 2007–08 and after 2020, because it reports no data for those years.
+
+```{python}
+in_2019 = oecd[oecd.year == 2019]
+print(f"U.S. 2019: {in_2019[in_2019.iso3 == 'USA'].gov_spending.iloc[0]:.1f}%, the "
+      f"{int(in_2019.gov_spending.rank()[in_2019.iso3 == 'USA'].iloc[0])}th lowest of {len(in_2019)} countries")
+for year in [2019, 2024]:
+    four = oecd[(oecd.year == year) & oecd.iso3.isin(EURO_FOUR)]
+    print(f"{year}: average of France, Germany, Italy and Spain {four.gov_spending.mean():.1f}%")
+print(in_2019[in_2019.iso3.isin(["DNK", "FRA", "SWE"])][["country", "gov_spending"]].to_string(index=False))
+```
+
+The textbook's statements hold: the U.S. is among the lowest spenders (11th lowest of 38), and Denmark, France
+and Sweden spent "around 50 percent or higher". The four euro-area countries averaged 47.8 percent in 2019,
+close to the textbook's "about 50 percent", and 50.6 percent in 2024.
+
+**Your turn.** Which OECD country had the largest government in 2024, and which the smallest? Did the ranking
+of the U.S. change between 2019 and 2024?
+
+<details><summary>Hint</summary>
+
+Keep the rows of 2024 with `oecd[oecd.year == 2024]`, then sort them with `.sort_values("gov_spending")`. The
+first and last rows are the answer. `.rank()` gives every country's place.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 4: Debt-GDP ratios around the world
+
+**Goal.** Compare the government debt of five large rich countries since 1995.
+
+This figure uses **net** debt: the debt of all levels of government minus the financial assets they own, in
+percent of GDP. For some countries, such as Norway with its large oil fund, net debt is negative.
+
+```{python}
+net_debt = pd.read_csv(DATA_URL + "fig18-4.csv")
+net_debt.head(3)
+```
+
+Japan's column starts in 2005. The OECD no longer publishes Japan's balance sheets for earlier years, so the
+column `japan_eo` fills 1995–2005 with a similar OECD series, from its *Economic Outlook*. We draw it as a dotted
+line, and do not glue the two series into one: in 2005 they differ by 3.4 points (66.2 against 62.8).
+
+```{python}
+COUNTRIES = {"italy": "Italy", "japan": "Japan", "usa": "U.S.", "uk": "U.K.", "germany": "Germany",
+             "japan_eo": "Japan, 1995–2005 (Economic Outlook)"}
+long = net_debt.rename(columns=COUNTRIES).melt(id_vars="year", var_name="country", value_name="net_debt").dropna()
+fig = px.line(long, x="year", y="net_debt", color="country", hover_name="country", range_y=[0, 162],
+              color_discrete_map={"Italy": GREEN, "Japan": ORANGE, "U.S.": BLUE, "U.K.": LIGHT_BLUE,
+                                  "Germany": DARK_TEAL, "Japan, 1995–2005 (Economic Outlook)": ORANGE},
+              labels={"year": "Year", "net_debt": "Percentage of GDP", "country": ""},
+              title="Net government debt rose in four of the five countries after 2007")
+fig.update_traces(line_width=3)
+fig.update_traces(selector=dict(name="Japan, 1995–2005 (Economic Outlook)"), line_dash="dot")
+fig.update_xaxes(range=[1994, 2026.5])
+fig.update_yaxes(tickvals=[20, 40, 60, 80, 100, 120, 140, 160])
+fig.update_layout(legend=dict(x=0.01, y=0.99, xanchor="left", yanchor="top"))
+fig.show()
+```
+
+**What to notice.**
+
+- Japan's net debt rose from 18 percent of GDP in 1995 to a peak of 124 percent in 2020. Italy's peaked at 152
+  percent in 2020, the U.S. ratio at 122 percent. Germany's is the exception: after 2011 it fell, to 22 percent
+  in 2025.
+- The textbook's data end in 2021. Since then several ratios fell sharply, for example the U.K.'s from 101 to
+  68 percent in one year (2021 to 2022). These are stocks of assets and debts valued at **market prices**, so
+  they move with interest rates and asset prices, not only with deficits. When interest rates jumped in 2022,
+  the market value of old low-interest bonds fell, and high inflation raised nominal GDP. Both lowered the
+  ratios, most likely more than any change in the deficits.
+
+<!-- cell -->
+
+### Data check: a number in the textbook that the data do not support
+
+```{python}
+debt_table = net_debt.set_index("year")
+print(f"Japan, Economic Outlook series: 1995 {debt_table.japan_eo[1995]:.1f}%, 2005 {debt_table.japan_eo[2005]:.1f}%")
+print(f"Japan, balance sheets: 2021 {debt_table.japan[2021]:.1f}%, peak {debt_table.japan.max():.1f}% "
+      f"in {debt_table.japan.idxmax()}, 2023 {debt_table.japan[2023]:.1f}%")
+print(f"Italy 2021: {debt_table.italy[2021]:.1f}%   Germany 2021: {debt_table.germany[2021]:.1f}%")
+```
+
+The textbook says in one place that Japan's ratio rose to "more than 126 percent in 2021" and, in another, to
+"more than 140 percent in 2023". Neither series reaches 140 percent: in 2023 Japan's net debt was 93.7 percent
+of GDP. (The gross debt, before subtracting the government's assets, is much higher, which may explain the
+second number.) **When two numbers in a text disagree, check them in the data.**
+
+**Your turn.** By how many points did each country's ratio change from 2007, just before the financial crisis,
+to 2021? Which country's ratio rose the most? And in which years was Italy's ratio above 120 percent?
+
+<details><summary>Hint</summary>
+
+`debt_table.loc[2021] - debt_table.loc[2007]` subtracts two rows, one value per country. For Italy, keep the
+years with `debt_table.index[debt_table.italy > 120]`.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 5: U.S. private investment and the budget deficit
+
+**Goal.** Ask whether budget deficits **crowd out** investment, using equation (18.7).
+
+The data are gross private domestic investment and government saving (the federal budget balance, from the
+national accounts), both in percent of GDP, for calendar years.
+
+```{python}
+saving = pd.read_csv(DATA_URL + "fig18-5.csv")
+saving.head(3)
+```
+
+Equation (18.7) says that investment minus government saving is the saving of households, firms and
+foreigners. Our function `private_and_foreign_saving` computes it, and the chart hides it until you click its
+name in the legend. The buttons compare the averages before and after 1980.
+
+```{python}
+named_saving = saving.rename(columns={"investment_share": "Investment", "gov_saving_share": "Government saving"})
+named_saving["Private + foreign saving"] = private_and_foreign_saving(named_saving.Investment,
+                                                                      named_saving["Government saving"])
+saving_by_year = named_saving.set_index("year")
+SPLITS = {"1960–1979": (1960, 1979), "1980–2025": (1980, 2025)}
+
+
+def saving_chart(period="1980–2025"):
+    """Figure 18.5: investment and government saving (% of GDP), with their averages over one period."""
+    start, end = SPLITS[period]
+    I, S = period_mean(saving_by_year.Investment, start, end), period_mean(saving_by_year["Government saving"], start, end)
+    fig = px.line(named_saving, x="year", y=["Investment", "Government saving", "Private + foreign saving"],
+                  color_discrete_sequence=[BLUE, GREEN, GRAY], range_y=[-15, 35],
+                  labels={"year": "Year", "value": "Percentage of GDP", "variable": ""},
+                  title=f"{period}: investment averaged {I:.1f}%, government saving {S:.1f}% of GDP")
+    fig.update_traces(line_width=3)
+    fig.update_traces(selector=dict(name="Private + foreign saving"), visible="legendonly", line_dash="dash")
+    fig.add_hline(y=0, line=dict(color="black", width=1, dash="dash"))
+    add_period_means(fig, saving_by_year, ["Investment", "Government saving"], [BLUE, GREEN], start, end)
+    fig.update_xaxes(range=[1959, 2026.5])
+    fig.update_layout(legend=dict(x=0.01, y=0.57, xanchor="left", yanchor="top", bgcolor="rgba(255,255,255,0.8)"))
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(saving_chart, period=ToggleButtons(options=list(SPLITS), value="1980–2025", description="averages over"));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 5 with a precomputed slider for the period
+slider_figure(saving_chart, "period", ["1960–1979", "1980–2025"], start="1980–2025", label="averages over")
+```
+
+**What to notice.**
+
+- Government saving fell: from −2.2 percent of GDP on average in 1960–1979 to −4.1 percent in 1980–2025. Yet
+  investment did not fall. It averaged 17.3 percent before 1980 and 17.7 percent after.
+- From year to year the two lines move together: in the 1990s government saving rose from −5.1 to +1.6
+  percent of GDP, and investment from 15.3 to 19.9 percent. In 2009 both fell.
+- Click "Private + foreign saving" in the legend. By equation (18.7) it is the gap between the two lines.
+  It rose when deficits grew, to 31.4 percent of GDP in 2020: households, firms and foreigners filled most of
+  the gap left by the government, so the crowding out was small.
+
+<!-- cell -->
+
+### Key numbers: how strongly do the two lines move together?
+
+The textbook speaks of "some correlation in the year-to-year movements". A **correlation** of 1 means two
+series move exactly together, 0 means no relation.
+
+> **Python note.** `.diff()` takes the change from the previous year, and `a.corr(b)` is the correlation of two
+> Series.
+
+```{python}
+I, S = saving_by_year.Investment, saving_by_year["Government saving"]
+print(f"Correlation of the levels:            {I.corr(S):.2f}")
+print(f"Correlation of the changes each year: {I.diff().corr(S.diff()):.2f}")
+for start, end in SPLITS.values():
+    print(f"{start}-{end}: investment {period_mean(I, start, end):.2f}%, government saving "
+          f"{period_mean(S, start, end):.2f}%, private + foreign saving "
+          f"{period_mean(saving_by_year['Private + foreign saving'], start, end):.2f}%")
+```
+
+The changes are clearly correlated (0.55), the levels much less (0.29). In the short run, a larger deficit comes
+with lower investment. Over decades, private and foreign saving rose by 2.4 points of GDP and covered the larger
+deficits. The textbook's estimate is that private saving offsets "no more than 50 cents" of each dollar of
+deficit; Chapter 19 looks at the foreign part.
+
+**Your turn.** Compute the averages for 2010–2019 and for 2020–2025. Did investment fall when the deficits of
+the pandemic years arrived?
+
+<details><summary>Hint</summary>
+
+`period_mean(I, 2010, 2019)` and `period_mean(I, 2020, 2025)`, and the same with `S`.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 6: U.S. federal spending and revenues, 1950–2075
+
+**Goal.** See the **fiscal problem of the twenty-first century**: entitlement spending keeps rising, while
+revenue stays near 18 percent of GDP.
+
+The textbook's figure combines actual data up to 2000 with projections that the Congressional Budget Office (CBO)
+made in 2002, up to 2075. Our file has OMB's actual numbers up to FY2025 and CBO's newest long-term projections,
+from February 2026, which end in 2056. The column `projection` is 1 for the projected years.
+
+```{python}
+projections.tail(3)
+```
+
+`ss_medicare_medicaid` is the spending on the three big **entitlement** programs: Social Security, Medicare and
+Medicaid (with CHIP and the health insurance tax credits, as CBO counts them). Like the textbook, we draw the
+spending excluding interest. We add the textbook's CBO 2002 projections, read from its figure every ten years,
+as markers.
+
+```{python}
+SERIES = {"revenue": "Revenues", "spending_ex_interest": "Spending excluding interest",
+          "ss_medicare_medicaid": "Social Security, Medicare, Medicaid"}
+cbo_2002 = pd.DataFrame({"year": [2010, 2020, 2030, 2040, 2050, 2060, 2070, 2075],
+                         "Revenues": [19.2, 19.0, 19.0, 19.0, 19.0, 19.0, 19.0, 19.0],
+                         "Spending excluding interest": [16.5, 18.5, 21.0, 22.7, 23.7, 25.2, 27.2, 28.2],
+                         "Social Security, Medicare, Medicaid": [8.8, 11.3, 13.9, 15.5, 16.5, 18.0, 20.0, 21.1]})
+lines = actual_and_projection(projections, SERIES)
+lines.head(3)
+```
+
+```{python}
+COLORS_6 = {"Revenues": GREEN, "Spending excluding interest": DARK_TEAL, "Social Security, Medicare, Medicaid": BLUE}
+fig = px.line(lines, x="year", y="percent", color="series", line_dash="segment", hover_name="series",
+              color_discrete_map=COLORS_6, line_dash_map={"actual": "solid", "CBO projection": "dash"},
+              labels={"year": "Fiscal year", "percent": "Percentage of GDP"},
+              title=f"Entitlements: {projections.ss_medicare_medicaid.iloc[0]:.1f}% of GDP in 1950, "
+                    f"{lines[(lines.year == 2025) & (lines.series == SERIES['ss_medicare_medicaid'])].percent.iloc[0]:.1f}% "
+                    f"in 2025, {projections.ss_medicare_medicaid.iloc[-1]:.1f}% projected for 2056")
+one_legend_entry(fig)
+fig.update_traces(line_width=3)
+for name, color in COLORS_6.items():
+    fig.add_trace(go.Scatter(x=cbo_2002.year, y=cbo_2002[name], mode="markers", marker=dict(color=color, size=9,
+                             symbol="x"), name="CBO 2002 (textbook)", legendgroup="2002",
+                             showlegend=(name == "Revenues")))
+fig.add_vrect(x0=2025, x1=2056, fillcolor=GRAY, opacity=0.12, line_width=0)
+fig.update_xaxes(range=[1945, 2080])
+fig.update_yaxes(range=[0, 31], tickvals=[5, 10, 15, 20, 25, 30])
+fig.update_layout(legend=dict(x=0.01, y=0.99, xanchor="left", yanchor="top"), legend_title_text="")
+fig.show()
+```
+
+**What to notice.**
+
+- Entitlement spending grew from 0.3 percent of GDP in 1950 to 7.1 percent in 2000 and 11.2 percent in 2025.
+  It is now more than half of all non-interest spending, and CBO projects 14.1 percent by 2056.
+- Revenue has stayed between 14 and 20 percent of GDP for 75 years, and CBO projects 17.5 to 18.8
+  percent. Spending excluding interest stays above it, at about 20 to 21 percent: a **primary deficit** of about
+  2 percent of GDP in every projected year.
+- The new projection is much flatter than CBO's 2002 projection (the markers): non-interest spending of 21.0
+  percent in 2056, against about 24.5 percent projected for the same year in 2002. Click "CBO 2002 (textbook)" to
+  hide the markers. But actual spending since 2002 was far above the old projection, in 2009–12 and in 2020–21.
+
+<!-- cell -->
+
+### What the projection means for the debt
+
+The projected primary deficits are not zero, so the debt keeps growing. How fast the **ratio** grows depends on
+the interest rate $i$ and on the growth rate of nominal GDP $g$, through `debt_ratio_path`. The sliders also let
+you cut the primary deficit in every year from FY2026, by raising taxes or cutting spending: the two
+"possible solutions" of the textbook.
+
+```{python}
+cbo = projections[projections.projection == 1]
+cbo_deficits = (cbo.spending_ex_interest - cbo.revenue).tolist()     # projected primary deficits, FY2026-2056
+b_2025 = debt_by_year[2025]
+debt_history = debt_deficit[debt_deficit.year >= 1940]
+
+
+def debt_projection(i=4.0, g=4.0, cut=0.0):
+    """The debt ratio after FY2025 under CBO's primary deficits minus a cut (all in percent of GDP)."""
+    deficits = []
+    for d in cbo_deficits:
+        deficits.append(d - cut)
+    path = debt_ratio_path(b_2025, i / 100, g / 100, deficits)
+    fig = px.line(debt_history, x="year", y="debt_public_gdp_pct", range_y=[0, 250],
+                  labels={"year": "Fiscal year", "debt_public_gdp_pct": "Debt held by the public (% of GDP)"},
+                  title=f"Debt in FY2056: {path[-1]:.1f}% of GDP (FY2025: {b_2025:.1f}%), "
+                        f"average primary deficit {np.mean(deficits):.2f}%")
+    fig.update_traces(line=dict(color=BLUE, width=3))
+    fig.add_trace(go.Scatter(x=cbo.year, y=path, name="Projection", line=dict(color=BLUE, width=3, dash="dash"),
+                             showlegend=False))
+    fig.add_hline(y=b_2025, line=dict(color=GRAY, width=1, dash="dot"))
+    fig.add_vrect(x0=2025, x1=2056, fillcolor=GRAY, opacity=0.12, line_width=0)
+    fig.update_xaxes(range=[1938, 2058])
+    fig.update_yaxes(tickvals=[50, 100, 150, 200, 250])
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(debt_projection,
+         i=FloatSlider(value=4.0, min=0.0, max=8.0, step=0.5, description="interest rate i (%)", style=WIDE),
+         g=FloatSlider(value=4.0, min=0.0, max=8.0, step=0.5, description="nominal GDP growth g (%)", style=WIDE),
+         cut=FloatSlider(value=0.0, min=0.0, max=4.0, step=0.5, description="deficit cut (% of GDP)", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: the debt projection with a precomputed slider for the deficit cut (i = g = 4%)
+slider_figure(debt_projection, "cut", [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0], start=0.0, label="deficit cut (% of GDP)")
+```
+
+**What to notice.**
+
+- With $i = g$ the interest and growth effects cancel, and the ratio simply adds up the primary deficits: from
+  99.5 percent of GDP in FY2025 to about 164 percent in FY2056.
+- Set the interest rate one point above growth ($i = 5$, $g = 4$): the debt now grows faster than GDP even
+  without deficits, and the ratio ends at 209 percent. One point below ($i = 3$), the same deficits give 130
+  percent. This is the "magic elixir" of growth from Figure 2, working in either direction.
+- With $i = g$, a cut of about 2 percent of GDP in every year, the size of the average primary deficit, keeps
+  the ratio near its FY2025 level.
+
+<!-- cell -->
+
+### Key numbers: the projection in numbers
+
+```{python}
+cbo_2056 = cbo.set_index("year").loc[2056]
+print(f"FY2056 (CBO): revenue {cbo_2056.revenue:.1f}%, spending excluding interest {cbo_2056.spending_ex_interest:.1f}%, "
+      f"entitlements {cbo_2056.ss_medicare_medicaid:.1f}% of GDP")
+print(f"Average primary deficit FY2026-2056: {np.mean(cbo_deficits):.2f}% of GDP, sum {np.sum(cbo_deficits):.1f} points")
+for i in [3.0, 4.0, 5.0]:
+    print(f"i = {i}%, g = 4%: debt in FY2056 {debt_ratio_path(b_2025, i / 100, 0.04, cbo_deficits)[-1]:.1f}% of GDP")
+```
+
+The textbook's CBO 2002 projections had entitlements at 21.1 percent of GDP and total spending at nearly 40
+percent by 2075. The 2026 projections are lower, but they tell the same story: under current policies spending
+stays above revenue, and the debt ratio keeps rising.
+
+**Your turn.** Suppose the interest rate is 4.5 percent and nominal GDP grows by 3.5 percent. How large must
+the yearly deficit cut be to keep the debt ratio of FY2056 at about its FY2025 level?
+
+<details><summary>Hint</summary>
+
+Move the sliders in the widget, or try a few cuts in a loop: `debt_projection(4.5, 3.5, cut)` prints the
+FY2056 ratio in its title. You can also call `debt_ratio_path` directly with a list of deficits minus the cut.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 7: Components of federal spending, 1950–2075
+
+**Goal.** Find the main culprit behind the rise in federal spending: health care.
+
+The file splits the spending excluding interest of Figure 6 into three parts: Social Security, Medicare and
+Medicaid, and all other spending (defense, income security, education, roads and everything else). The three
+add up to the spending excluding interest of Figure 6.
+
+```{python}
+components = pd.read_csv(DATA_URL + "fig18-7.csv")
+components[components.year.isin([1950, 2000, 2025, 2056])]
+```
+
+```{python}
+PARTS = {"other_ex_interest": "All other spending", "social_security": "Social Security",
+         "medicare_medicaid": "Medicare and Medicaid"}
+COLORS_7 = {"All other spending": DARK_TEAL, "Social Security": BLUE, "Medicare and Medicaid": ORANGE}
+parts = actual_and_projection(components, PARTS)
+fig = px.line(parts, x="year", y="percent", color="series", line_dash="segment", hover_name="series",
+              color_discrete_map=COLORS_7, line_dash_map={"actual": "solid", "CBO projection": "dash"},
+              labels={"year": "Fiscal year", "percent": "Percentage of GDP"},
+              title="Medicare and Medicaid are projected to pass all other spending in 2041")
+one_legend_entry(fig)
+fig.update_traces(line_width=3)
+fig.add_vrect(x0=2025, x1=2056, fillcolor=GRAY, opacity=0.12, line_width=0)
+fig.update_xaxes(range=[1945, 2060])
+fig.update_yaxes(range=[0, 20.5], tickvals=[2, 4, 6, 8, 10, 12, 14, 16, 18, 20])
+fig.update_layout(legend=dict(x=0.99, y=0.99, xanchor="right", yanchor="top"), legend_title_text="")
+fig.show()
+```
+
+**What to notice.**
+
+- All other spending fell from about 13–14 percent of GDP before 1980 to 8.4 percent in 2000. It jumped in the
+  two crises (17.7 percent in 2020) and is projected to fall to 6.9 percent by 2056.
+- Social Security rose to about 4 percent of GDP by 1980, is 5.2 percent today, and is projected to level off
+  near 6 percent.
+- Medicare and Medicaid started in the mid-1960s and keep rising: 3.1 percent of GDP in 2000, 6.0 percent in
+  2025 and 8.1 percent projected for 2056. In the textbook's 2002 projection health reached 14.9 percent by
+  2075, but the direction is the same: **health is the part of the budget that grows.**
+
+<!-- cell -->
+
+### Key numbers: Social Security and health
+
+The case study in the textbook says that Social Security spending will rise "from about 4.2 percent of GDP to
+about 6 percent". Some combination of higher taxes and lower benefits must cover that gap.
+
+```{python}
+by_part = components.set_index("year")
+print(f"Social Security: 2000 {by_part.social_security[2000]:.2f}%, 2025 {by_part.social_security[2025]:.2f}%, "
+      f"2030 {by_part.social_security[2030]:.2f}%, 2056 {by_part.social_security[2056]:.2f}%")
+print(f"Medicare and Medicaid: 2000 {by_part.medicare_medicaid[2000]:.2f}%, 2030 {by_part.medicare_medicaid[2030]:.2f}%, "
+      f"2056 {by_part.medicare_medicaid[2056]:.2f}%")
+crossing = by_part.index[by_part.medicare_medicaid > by_part.other_ex_interest]
+print(f"First year in which health spending exceeds all other spending: {crossing[0]}")
+```
+
+Social Security goes from 4.0 percent of GDP in 2000 to 5.6 percent in 2030 and 6.0 percent in 2056, close to the
+textbook's 4.2 → 6.2 → level. Medicare and Medicaid go from 3.1 percent to 6.0 percent in 2030 and 8.1 percent
+in 2056: slower than the 2002 projection (7.7 percent in 2030), but still rising when Social Security has
+stopped.
+
+**Your turn.** Exercise 9b of the textbook: by how much would taxes have to rise, as a share of GDP, to pay for
+the increase in Social Security spending from FY2025 to FY2056? And for the increase in Medicare and Medicaid?
+
+<details><summary>Hint</summary>
+
+Subtract two values: `by_part.social_security[2056] - by_part.social_security[2025]`, and the same with
+`medicare_medicaid`.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 8: Health spending as a share of GDP in five countries
+
+**Goal.** Show that the rise of health spending is not only a U.S. problem.
+
+The data are the total current health expenditure, public and private, as a percentage of GDP, from the OECD
+Health Statistics.
+
+```{python}
+health = pd.read_csv(DATA_URL + "fig18-8.csv")
+health.isna().sum()
+```
+
+Some values are missing: France reports only every five years before 1990, and Germany has no value for 1991,
+the year after reunification. If we plotted the wide table, France's line would have holes. After `melt`, we
+drop the missing rows with `.dropna()`, so that each line connects the years that do exist. The OECD's current
+data start in 1970, so the textbook's points for 1960 and 1965 cannot be drawn, and the 2025 values are
+provisional estimates.
+
+```{python}
+NAMES_8 = {"usa": "U.S.", "germany": "Germany", "france": "France", "japan": "Japan", "uk": "U.K."}
+health_long = health.rename(columns=NAMES_8).melt(id_vars="year", var_name="country",
+                                                  value_name="health_share").dropna()
+other_four = health.dropna()[["germany", "france", "japan", "uk"]].mean(axis=1)   # only years with all four
+fig = px.line(health_long, x="year", y="health_share", color="country", hover_name="country", range_y=[2, 20],
+              color_discrete_map={"U.S.": BLUE, "Germany": DARK_TEAL, "France": GREEN, "Japan": ORANGE,
+                                  "U.K.": LIGHT_BLUE},
+              labels={"year": "Year", "health_share": "Percent of GDP", "country": ""},
+              title=f"U.S. health spending: {health.usa.iloc[0]:.1f}% of GDP in 1970, {health.usa.iloc[-1]:.1f}% in 2025")
+fig.update_traces(line_width=3)
+fig.add_trace(go.Scatter(x=health.dropna().year, y=other_four, name="Average of the other four",
+                         line=dict(color=GRAY, width=2, dash="dot")))
+fig.update_xaxes(range=[1968, 2027])
+fig.update_yaxes(tickvals=[4, 6, 8, 10, 12, 14, 16, 18, 20])
+fig.update_layout(legend=dict(x=0.01, y=0.99, xanchor="left", yanchor="top"))
+fig.show()
+```
+
+**What to notice.**
+
+- Health spending rose in all five countries, as a share of GDP. In the U.S. it nearly tripled, from 6.2
+  percent in 1970 to 17.6 percent in 2025. The average of the other four rose from 4.8 to about 11–12 percent.
+- The U.S. pulled away from the others in the 1980s. Since 2010 its share has stayed near 16–18 percent. Japan
+  and the U.K., the lowest spenders until 2010, came close to Germany and France.
+- The pandemic shows as a spike in 2020 (U.S. 18.7 percent, U.K. 12.0 percent): health spending rose and GDP
+  fell at the same time.
+
+<!-- cell -->
+
+### Key numbers: why health spending rises
+
+```{python}
+first_year, last_year = health.set_index("year").loc[1970], health.set_index("year").loc[2025]
+growth = 100 * ((last_year / first_year) ** (1 / 55) - 1)        # average growth of the share, percent a year
+pd.DataFrame({"1970": first_year, "2021": health.set_index("year").loc[2021], "2025": last_year,
+              "Share growth, % a year": growth}).round(2)
+```
+
+The share of GDP spent on health grew by between 1.4 and 1.9 percent a year in every country: health spending
+grew faster than income. The textbook's explanation is economic: as people get richer, an extra car or television
+adds less and less, but an extra year of life does not lose its value. So a rising share of income goes to
+health. That is why the fiscal problem is hard. If health spending is what people want, the government cannot
+simply cut it, and someone has to pay for it.
+
+**Your turn.** In which years was the U.K.'s health share above Japan's? In which year did the U.K. first pass
+Japan?
+
+<details><summary>Hint</summary>
+
+`health.year[health.uk > health.japan]` lists the years in which the U.K. was higher. The first of them is the
+answer to the second question.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Key numbers
+
+The chapter's main numbers, each computed above with this chapter's tools, next to the textbook's.
+
+```{python}
+rows = [
+    ["Federal spending, FY2023 (% of GDP; textbook estimate 23.9)", actual.loc["Total expenditures", "Percent of GDP"]],
+    ["Federal spending, FY2025 (% of GDP)", by_year.Spending[2025]],
+    ["Federal revenue, FY2025 (% of GDP)", by_year.Revenue[2025]],
+    ["Federal deficit, FY2025 (% of GDP)", -debt_deficit.set_index("year").surplus_gdp_pct[2025]],
+    ["Net interest, FY2025 (% of GDP)", years.net_interest[2025]],
+    ["Debt held by the public, FY1946 (% of GDP)", debt_by_year[1946]],
+    ["Debt held by the public, FY2025 (% of GDP)", b_2025],
+    ["Change in the debt ratio FY1950-74 from interest minus growth (points)",
+     debt_change_parts(years.debt_public_gdp_pct, years.primary_deficit, 1950, 1974)[2]],
+    ["U.S. general government spending, 2019 (% of GDP; textbook 38.4)", in_2019[in_2019.iso3 == "USA"].gov_spending.iloc[0]],
+    ["Investment, average 1980-2025 (% of GDP)", period_mean(I, 1980, 2025)],
+    ["Debt in FY2056 with i = g = 4% under CBO's deficits (% of GDP)", debt_projection().data[1].y[-1]],
+    ["Medicare and Medicaid, FY2056 projected (% of GDP)", by_part.medicare_medicaid[2056]],
+    ["U.S. health spending, 2025 (% of GDP)", health.usa.iloc[-1]],
+]
+pd.DataFrame(rows, columns=["Quantity", "Value"]).round(1)
+```
+
+<!-- cell -->
+
+## Summary
+
+- The U.S. federal government spends about 23 percent of GDP and collects about 17 percent. The deficit, about
+  6 percent of GDP in recent years, is financed by selling bonds, and the debt held by the public is back near
+  100 percent of GDP, the level of 1946.
+- The **flow budget constraint** links each year's deficit to the change in the debt. The **intertemporal
+  budget constraint** says that the budget must balance in present value: borrowing today means surpluses, and
+  higher taxes, later.
+- What matters is the debt relative to GDP. When GDP grows faster than the interest rate, the ratio falls even
+  without surpluses: that is how the United States paid down its World War II debt.
+- U.S. government spending is low compared with other rich countries, and its debt ratio is typical. Large
+  deficits have not lowered the U.S. investment rate, because private and foreign saving rose.
+- The fiscal problem of the twenty-first century is the rise of health spending, in the U.S. and in every rich
+  country. Chapter 19 turns to the international economy, including the foreign saving that has financed much
+  of the U.S. deficit.

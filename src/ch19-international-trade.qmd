@@ -1,0 +1,1080 @@
+# Chapter 19: International Trade
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/ch19-international-trade.ipynb)
+
+*Data Science and Macroeconomic Models: A Python Companion to Intermediate Macroeconomics* · Carlos Mendez
+
+> **How to use this notebook.** Every figure in this chapter is drawn from data. Hover over a line or a bar to
+> read its values, and click a name in a legend to hide or show that series. In Colab, click
+> *Runtime → Run all*: some figures then get sliders, buttons or a menu, and the figure is drawn again when you
+> change them. On the book website the same figures come with a precomputed slider. Each section ends with a short
+> **Your turn** task, and you can try it in the empty code cell below it.
+
+<!-- cell -->
+
+## Learning goals
+
+The United States buys more from the rest of the world than it sells to it, and it has done so every year since
+1976. Is that a problem? This chapter looks at the facts of trade and at a few small examples that explain why
+countries trade at all. By the end of it you will be able to:
+
+- read the U.S. trade data: exports, imports and the **trade balance** (net exports) as shares of GDP;
+- use the national income identity $Y = C + I + G + NX$, and its saving–investment form $NX = S - I$, to explain
+  why a trade deficit is borrowing from the rest of the world, and how deficits add up to a **foreign debt**;
+- solve the textbook's trade examples (trade across time, **comparative advantage**, free migration) and say who
+  gains from each;
+- compare trade balances across countries and periods, and check which year or which window a published number
+  really refers to;
+- in Python: write small accounting functions once and reuse them, reshape tables with `melt` and `pivot`, draw
+  grouped bar charts, average over a window with `.loc[start:end]`, and add up flows with `cumsum`.
+
+<!-- cell -->
+
+## Figures in this chapter
+
+The figures follow the order of the textbook chapter. The second column shows which textbook
+figure each notebook figure replicates.
+
+| Figure | Textbook figure | Type | What you can change |
+|---|---|---|---|
+| Figure 1 | 19.1 U.S. import and export shares of GDP | data | — (hover over the lines to read the values) |
+| Figure 2 | 19.2 The U.S. trade balance as a share of GDP | data | the years that are averaged (two sliders) |
+| Figure 3 | 19.3 The trade balance around the world | data | the year (slider) and the Penn World Table version (buttons) |
+| Figure 4 | 19.4 The trade balance in rapidly growing countries | data | the years that are averaged (two sliders) and the Penn World Table version (buttons) |
+| Figure 5 | 19.5 U.S. investment, budget deficit, and trade deficit | data | the episode that is measured (menu); click a line in the legend |
+| Figure 6 | 19.6 Net international investment position of the United States | data | — (click a data vintage or the summed trade balances in the legend) |
+
+<!-- cell -->
+
+## Setup
+
+We first load the Python libraries we need. You only have to run this cell once.
+
+> **Python note.** `import` loads a *library*, a toolbox written by other people. We give each
+> library a short nickname, for example `np` for NumPy, so that the code stays short. Text after
+> a `#` is a *comment*: Python ignores it, and it is there for human readers. The `try ... except`
+> block runs one Colab-only line and simply skips it anywhere else.
+
+```{python}
+# Libraries used in this chapter
+import numpy as np                    # numbers and arrays
+import pandas as pd                   # data tables
+import plotly.express as px           # quick charts from data tables
+import plotly.graph_objects as go     # charts built piece by piece
+import plotly.io as pio
+from ipywidgets import interact, IntSlider, ToggleButtons, Dropdown
+
+# One light blue/green look for every chart
+BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
+pio.templates.default = "plotly_white"
+pio.templates["plotly_white"].layout.update(width=860, height=480)   # same size in Colab and on the website
+px.defaults.color_discrete_sequence = [BLUE, TEAL, GREEN, "#5aa0d8", "#0b4f47"]
+WIDE = {"description_width": "initial"}         # show the full widget labels
+
+# Colab only: let Plotly charts appear inside the interactive widgets
+try:
+    import google.colab
+    google.colab.output.enable_custom_widget_manager()
+except ImportError:
+    pass                                        # not running in Colab: nothing to do
+
+# The data files of this chapter live in the book's GitHub repository
+DATA_URL = "https://raw.githubusercontent.com/quarcs-lab/macro102-site/main/data/ch19/"
+```
+
+The next cell defines a helper that only the book website needs. Run it and move on.
+
+```{python}
+#| kind: helper
+# @title Helper for the website versions (run this cell; you do not need to read it)
+def slider_figure(make_figure, name, values, start, label=None):
+    """Precompute make_figure(name=value) for every value and join the results with one slider.
+
+    The website cannot run Python, so each interactive figure also gets this precomputed version.
+    """
+    figures = [make_figure(**{name: v}) for v in values]
+    first = values.index(start)
+    fig = go.Figure(layout=figures[first].layout)
+    owner = []                                  # which precomputed figure each trace comes from
+    for i, f in enumerate(figures):
+        for trace in f.data:
+            trace.visible = (i == first)
+            fig.add_trace(trace)
+            owner.append(i)
+    steps = []
+    for i, f in enumerate(figures):
+        layout = {"title": f.layout.title.to_plotly_json(),
+                  "annotations": [a.to_plotly_json() for a in f.layout.annotations],
+                  "shapes": [s.to_plotly_json() for s in f.layout.shapes]}
+        visible = [o == i for o in owner]
+        steps.append(dict(method="update", label=str(values[i]), args=[{"visible": visible}, layout]))
+    fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
+                                    currentvalue=dict(prefix=(label or name) + " = "))])
+    return fig
+```
+
+## The model in code
+
+The figures of this chapter are all data, and they all rest on a few lines of **national income accounting**.
+We write these accounting rules once, as small functions, and every figure reuses them. Then we use the same
+functions to solve the textbook's three small trade examples (Tables 19.1 to 19.5).
+
+**The trade balance.** Exports $EX$ are goods and services that a country sells abroad, and imports $IM$ are those
+it buys abroad. The **trade balance**, or **net exports**, is the difference, $NX \equiv EX - IM$. A positive $NX$ is
+a trade **surplus**, a negative one a trade **deficit**. Figures always show such flows as a **share of GDP**,
+$100 \times X / Y$, so that years and countries of different size can be compared.
+
+**The national income identity.** Everything an economy produces, $Y$, is consumed ($C$), invested ($I$), bought by
+the government ($G$) or sold abroad on net ($NX$): $Y = C + I + G + NX$. Solved for net exports,
+
+$$NX = Y - (C + I + G), \qquad\text{so}\qquad NX < 0 \;\Rightarrow\; C + I + G > Y \quad (19.1)$$
+
+and $NX > 0 \Rightarrow C + I + G < Y$ (19.2). A country with a trade deficit uses more goods than it produces; the
+rest comes from abroad, on credit.
+
+> **Python note.** `def` creates a *function*: a named recipe that takes inputs (the *arguments*) and gives back a
+> result with `return`. The text in triple quotes is a short description. The same function works for single
+> numbers and for whole columns of a data table, because pandas does arithmetic on every row at once.
+
+```{python}
+def share_of_gdp(x, gdp):
+    """Any variable as a percent of GDP: 100 x / Y."""
+    return 100 * x / gdp
+
+
+def net_exports(exports, imports):
+    """The trade balance (net exports): NX = EX - IM."""
+    return exports - imports
+
+
+def net_exports_from_uses(Y, C, I, G):
+    """The national income identity Y = C + I + G + NX solved for NX (equations 19.1 and 19.2)."""
+    return Y - (C + I + G)
+```
+
+A quick check with round numbers: an economy produces 100, consumes 70, invests 20 and its government buys 15.
+
+```{python}
+Y, C, I, G = 100, 70, 20, 15
+NX = net_exports_from_uses(Y, C, I, G)
+print(f"NX = {Y} - ({C} + {I} + {G}) = {NX}, or {share_of_gdp(NX, Y):.0f}% of GDP")
+print(f"Domestic uses C + I + G = {C + I + G} > Y = {Y}: the country runs a trade deficit")
+```
+
+<!-- cell -->
+
+### Trade balances from GDP shares
+
+The Penn World Table, the source of Figures 3 and 4, does not report net exports directly. It reports the
+**shares** of GDP that go to consumption, investment and government purchases: $c = C/Y$, $i = I/Y$ and $g = G/Y$.
+Dividing the identity by $Y$ gives the trade balance as a share of GDP, $NX/Y = 1 - c - i - g$. In code, this is
+the same identity with $Y = 1$:
+
+```{python}
+def trade_balance_share(c, i, g):
+    """NX as a percent of GDP from the GDP shares of C, I and G: 100 (1 - c - i - g)."""
+    return 100 * net_exports_from_uses(1, c, i, g)
+
+
+def share_of_us_gdp(share, gdp, gdp_us):
+    """Rescale a share of a country's own GDP to a share of U.S. GDP (Figure 19.3, second bar)."""
+    return share * gdp / gdp_us
+
+
+print(f"c = 0.55, i = 0.25, g = 0.18: trade balance {trade_balance_share(0.55, 0.25, 0.18):.1f}% of GDP")
+```
+
+<!-- cell -->
+
+### Saving, investment and the trade balance (equation 19.6)
+
+Total saving pays for investment. Saving comes from three sources: households, $Y - T - C$; the government,
+$T - G$; and foreigners, $IM - EX$, the goods they send us on credit. **Domestic saving** is
+$S \equiv (Y - T - C) + (T - G) = Y - C - G$. Put into the identity, $Y - C - G = I + NX$, that is
+
+$$\underbrace{NX}_{\text{trade balance}} = \underbrace{S - I}_{\text{net capital outflow}}. \quad (19.6)$$
+
+A country that invests more than it saves ($S < I$) must borrow the difference abroad, and it does so by running a
+trade deficit. Two more functions measure the data over time: an **average over a window of years** and the
+**sum of past flows**, which turns yearly trade balances into a stock of foreign assets or debt.
+
+> **Python note.** For a table whose rows are years, `data.loc[start:end]` keeps the rows from `start` to `end`,
+> both included, and `.mean()` averages them (one average per column). `.cumsum()` is the *cumulative sum*: row by
+> row, the sum of all values so far.
+
+```{python}
+def domestic_saving(I, NX):
+    """Domestic saving S = Y - C - G, from equation (19.6): S = I + NX."""
+    return I + NX
+
+
+def net_capital_outflow(S, I):
+    """Equation (19.6): the trade balance equals domestic saving minus investment, NX = S - I."""
+    return S - I
+
+
+def period_average(data, start, end):
+    """Simple average over the years start to end (rows are years): one number per column."""
+    return data.loc[start:end].mean()
+
+
+def accumulate(start_value, flows):
+    """Net foreign assets: start from start_value and add each year's trade balance."""
+    return start_value + flows.cumsum()
+```
+
+```{python}
+S = Y - C - G                                   # the economy of the quick check above
+print(f"S = {S}, I = {I}: S - I = {net_capital_outflow(S, I)}, the same as NX = {NX}")
+print(f"... and back again: S = I + NX = {domestic_saving(I, NX)}")
+```
+
+<!-- cell -->
+
+### Trade across time (Table 19.1)
+
+Two islands grow wheat, which cannot be stored. Oddtopia has a harvest of 100 bushels in odd years and nothing in
+even years; Eventopia has the opposite luck. Each island lends half of a good harvest to the other and is repaid the
+next year, so both eat 50 bushels every year. With no investment and no government, $NX = Y - C$: the harvest
+minus what is eaten. The sum of past trade balances is what the other island owes.
+
+> **Python note.** `pd.DataFrame({...})` builds a table from a *dictionary* of columns. The `for` loop repeats the
+> indented lines for each island, and `island + " harvest"` glues two pieces of text into a column name. `.T`
+> turns the table on its side, so that the years become columns, as in the textbook.
+
+```{python}
+wheat = pd.DataFrame({"year": [1, 2, 3, 4, 5, 6],
+                      "Oddtopia harvest": [100, 0, 100, 0, 100, 0],
+                      "Eventopia harvest": [0, 100, 0, 100, 0, 100]})
+for island in ["Oddtopia", "Eventopia"]:
+    wheat[island + " consumption"] = 50                    # half of a good harvest, every year
+    wheat[island + " trade balance"] = net_exports_from_uses(wheat[island + " harvest"],
+                                                             wheat[island + " consumption"], 0, 0)
+    wheat[island + " is owed"] = accumulate(0, wheat[island + " trade balance"])
+wheat.set_index("year").T
+```
+
+```{python}
+book_balance = [50, -50, 50, -50, 50, -50]                 # Oddtopia's row of Table 19.1
+same = (wheat["Oddtopia trade balance"] == book_balance).all()
+print(f"Oddtopia's trade balance equals Table 19.1: {same}")
+for island in ["Oddtopia", "Eventopia"]:
+    print(f"{island}: average trade balance {wheat[island + ' trade balance'].mean():.0f}, "
+          f"consumption always {wheat[island + ' consumption'].iloc[0]}")
+```
+
+Each island runs a deficit in its bad years and a surplus in its good years, and both smooth their consumption
+perfectly: this is **risk sharing**. The average trade balance is zero: **in the long run, trade must be balanced**,
+because nobody lends without being repaid. A deficit today is a promise of a surplus later.
+
+<!-- cell -->
+
+### Comparative advantage: the North and the South (Tables 19.2 to 19.5)
+
+Two countries consume two goods, apples and computers, and spend half of their income on each. Labor is the only
+input (Table 19.2). Prices are quoted in apples, so an apple costs 1, a computer costs $p$ apples, and the wage $w$
+is in apples too. With half of income spent on each good, a worker eats $w/2$ apples (19.3) and buys $w/(2p)$
+computers (19.4).
+
+```{python}
+x_n, z_n, L_n = 160, 16, 100        # North: apples or computers per worker, number of workers (Table 19.2)
+x_s, z_s, L_s = 100, 2, 400         # South
+print(f"North / South productivity: apples {x_n / x_s:.1f} times, computers {z_n / z_s:.0f} times")
+```
+
+The North is better at both goods: it has an **absolute advantage** in both. But its lead is much larger in
+computers (8 times) than in apples (1.6 times), so it has a **comparative advantage** in computers, and the South
+in apples.
+
+**Autarky** (no trade). A worker can make $x$ apples or $z$ computers, so the wage is $w = x$ apples, and both
+sectors pay the same only if a computer costs $p = x/z$ apples. Half of the workers make each good.
+
+> **Python note.** `pd.Series({...})` builds a list of numbers with labels from a dictionary. `pd.DataFrame` then
+> puts two such lists side by side as the columns "North" and "South". `pd.concat([...], axis=1, keys=[...])`
+> places two tables next to each other under two headings.
+
+```{python}
+def autarky(x, z, L):
+    """Table 19.3: a closed economy whose L workers each make x apples or z computers."""
+    w = x                        # the wage in apples: what a worker makes in the apple sector
+    p = x / z                    # the price of a computer: both sectors must pay the same wage
+    return pd.Series({"Wage, w (apples)": w,
+                      "Price of a computer, p (apples)": p,
+                      "Apples per person": w / 2,              # equation (19.3), an apple costs 1
+                      "Computers per person": w / 2 / p,       # equation (19.4)
+                      "Workers making apples (%)": 50,
+                      "Workers making computers (%)": 50,
+                      "Apples produced": L / 2 * x,
+                      "Computers produced": L / 2 * z})
+
+
+table_19_3 = pd.DataFrame({"North": autarky(x_n, z_n, L_n), "South": autarky(x_s, z_s, L_s)})
+book_19_3 = pd.DataFrame({"North": [160, 10, 80, 8, 50, 50, 8000, 800],
+                          "South": [100, 50, 50, 1, 50, 50, 20000, 400]}, index=table_19_3.index)
+pd.concat([table_19_3, book_19_3], axis=1, keys=["Notebook", "Textbook"])
+```
+
+**Free trade.** Computers cost 10 apples in the North and 50 in the South, so it pays to buy computers in the North
+and sell them in the South (**arbitrage**). Each country then makes only the good it is relatively good at: the
+North makes only computers and the South only apples. World spending on computers equals world spending on apples
+(each is half of world income), so $p \times \text{computers} = \text{apples}$, and the world price is
+$p = \text{apples} / \text{computers}$.
+
+```{python}
+def free_trade(x_n, z_n, L_n, x_s, z_s, L_s):
+    """Table 19.4: the North makes only computers, the South only apples, and they trade."""
+    computers = L_n * z_n                      # world production of computers
+    apples = L_s * x_s                         # world production of apples
+    p = apples / computers                     # half of world spending goes to each good
+    w_n, w_s = z_n * p, x_s                    # wages in apples
+    north = pd.Series({"Wage, w (apples)": w_n, "Price of a computer, p (apples)": p,
+                       "Apples per person": w_n / 2, "Computers per person": w_n / 2 / p,
+                       "Workers making apples (%)": 0, "Workers making computers (%)": 100,
+                       "Apples produced": 0, "Computers produced": computers})
+    south = pd.Series({"Wage, w (apples)": w_s, "Price of a computer, p (apples)": p,
+                       "Apples per person": w_s / 2, "Computers per person": w_s / 2 / p,
+                       "Workers making apples (%)": 100, "Workers making computers (%)": 0,
+                       "Apples produced": apples, "Computers produced": 0})
+    return pd.DataFrame({"North": north, "South": south})
+
+
+table_19_4 = free_trade(x_n, z_n, L_n, x_s, z_s, L_s)
+table_19_4
+```
+
+The textbook's Table 19.4 has the same numbers: a world price of 25 apples, a northern wage of 400 apples, and
+consumption of 200 apples and 8 computers in the North and 50 apples and 2 computers in the South. Two checks: the
+markets clear, and complete specialization is really the outcome. It is, if the world price lies between the two
+autarky prices (the condition of the textbook's last exercise on this example), $x_s/z_s > p > x_n/z_n$.
+
+```{python}
+demand_computers = (table_19_4.loc["Computers per person"] * [L_n, L_s]).sum()
+demand_apples = (table_19_4.loc["Apples per person"] * [L_n, L_s]).sum()
+print(f"Computers: demand {demand_computers:,.0f} = supply {table_19_4.loc['Computers produced'].sum():,.0f}")
+print(f"Apples:    demand {demand_apples:,.0f} = supply {table_19_4.loc['Apples produced'].sum():,.0f}")
+p_world = table_19_4.loc["Price of a computer, p (apples)", "North"]
+print(f"Autarky price South {x_s / z_s:.0f} > world price {p_world:.0f} > autarky price North {x_n / z_n:.0f}: "
+      f"{x_s / z_s > p_world > x_n / z_n}")
+```
+
+**Free migration.** If workers can move instead of goods, every southern worker moves to the North, where wages are
+higher. The world then looks like the North under autarky, with all 500 workers (Table 19.5).
+
+```{python}
+migration = autarky(x_n, z_n, L_n + L_s)
+table_19_5 = pd.DataFrame({"Born in the North": migration, "Migrants from the South": migration})
+table_19_5
+```
+
+Who gains? The last table compares what one worker consumes under the three arrangements.
+
+```{python}
+regimes = {"Autarky": table_19_3, "Free trade": table_19_4,
+           "Free migration": pd.DataFrame({"North": migration, "South": migration})}
+rows = []
+for name in regimes:
+    t = regimes[name]
+    rows.append([name, t.loc["Apples per person", "North"], t.loc["Computers per person", "North"],
+                 t.loc["Apples per person", "South"], t.loc["Computers per person", "South"]])
+pd.DataFrame(rows, columns=["Regime", "North: apples", "North: computers", "South: apples", "South: computers"])
+```
+
+Free trade makes **both** countries better off: the North eats 200 apples instead of 80, and the South gets 2
+computers instead of 1. Free trade rests on **comparative** advantage. Free migration rests on **absolute** advantage:
+it gives all the gain to the southern workers (80 apples and 8 computers each), and the world produces more, 4,000
+computers instead of 1,600 with the same 40,000 apples. Change a number in the productivity cell (for example
+`z_n = 20`) and run the cells again to see how the tables change.
+
+## Figure 1: U.S. import and export shares of GDP
+
+**Goal.** See how much more the United States trades today than 75 years ago.
+
+The file `us_trade.csv` holds the U.S. national accounts we need, in billions of current dollars: GDP, exports,
+imports, net exports, private investment and the **net international investment position** (Figure 6), plus the
+same position as it was published in July 2023.
+
+> **Python note.** `set_index("year")` makes the years the row labels, so that `us.loc[2006]` is the row of 2006
+> and `us.exports` is one column, a *Series* with years as labels. `NaN` ("not a number") marks a missing value:
+> the investment position starts only in 1976.
+
+```{python}
+us = pd.read_csv(DATA_URL + "us_trade.csv").set_index("year")
+us.tail()
+```
+
+We turn exports and imports into shares of GDP with our function `share_of_gdp`, and check the result against the
+figure's own data file.
+
+```{python}
+shares = pd.DataFrame({"Exports": share_of_gdp(us.exports, us.gdp),
+                       "Imports": share_of_gdp(us.imports, us.gdp)})
+check = pd.read_csv(DATA_URL + "fig19-1.csv").set_index("year")
+print(f"Largest difference from fig19-1.csv: {(shares.Exports - check.exports_share).abs().max():.4f} points")
+shares.loc[[1950, 1957, 1976, 2006, 2022, 2025]].round(2)
+```
+
+> **Python note.** `px.line` with a list `y=[...]` draws one line per column. Instead of a legend, the textbook
+> writes the names next to the lines: `fig.add_annotation` puts a text at a point, and `yshift` moves it up or down
+> by a number of pixels.
+
+```{python}
+first, last = shares.index[0], shares.index[-1]
+fig = px.line(shares.reset_index(), x="year", y=["Exports", "Imports"], color_discrete_sequence=[BLUE, GREEN],
+              labels={"year": "Year", "value": "Percent of GDP", "variable": "Series"},
+              title=f"{first}–{last}: U.S. exports rose from {shares.Exports[first]:.1f}% to "
+                    f"{shares.Exports[last]:.1f}% of GDP, imports from {shares.Imports[first]:.1f}% to "
+                    f"{shares.Imports[last]:.1f}%")
+fig.update_traces(line_width=3)
+fig.add_annotation(x=last, y=shares.Imports[last], text="Imports", showarrow=False, xanchor="left", xshift=6,
+                   font=dict(size=15, color=GREEN))    # labels at the end of each line
+fig.add_annotation(x=last, y=shares.Exports[last], text="Exports", showarrow=False, xanchor="left", xshift=6,
+                   font=dict(size=15, color=BLUE))
+fig.update_layout(showlegend=False)
+fig.update_xaxes(range=[1948, 2033])
+fig.update_yaxes(range=[2, 18.5], tickvals=[4, 6, 8, 10, 12, 14, 16, 18])
+fig.show()
+```
+
+**What to notice.**
+
+- In the 1950s exports and imports were each only about 4 to 5 percent of GDP. Since then exports have more than
+  doubled and imports more than tripled.
+- The two lines move together until the early 1970s, and then they separate: imports have been above exports every
+  year since 1976. The gap between them is the trade deficit of Figure 2.
+- Trade falls sharply in world recessions (2009, 2020) and in the strong-dollar years of the mid-1980s, when U.S.
+  exports dropped to 7 percent of GDP.
+
+<!-- cell -->
+
+### Key numbers: how much does the United States trade?
+
+The textbook says that exports and imports rose "from under 5 percent of GDP in the 1950s to around 12 and 15
+percent of GDP, respectively, in recent years".
+
+> **Python note.** `~` means "not": `~above` is True in the years when imports were **not** above exports.
+> `.idxmax()` gives the label (here the year) of the largest value.
+
+```{python}
+fifties = shares.loc[1950:1959]
+print(f"1950s: highest export share {fifties.Exports.max():.2f}% ({fifties.Exports.idxmax()}), "
+      f"highest import share {fifties.Imports.max():.2f}%")
+print(f"2022, the textbook's last year: exports {shares.Exports[2022]:.2f}%, imports {shares.Imports[2022]:.2f}%")
+above = shares.Imports > shares.Exports
+print(f"Imports have been above exports every year since {above[~above].index.max() + 1}")
+openness = shares.Exports + shares.Imports
+print(f"Exports + imports: {openness[1950]:.1f}% of GDP in 1950, {openness.max():.1f}% at the peak "
+      f"({openness.idxmax()}), {openness[last]:.1f}% in {last}")
+```
+
+The textbook's "respectively" lists the two numbers the wrong way round: exports are about 12 percent of GDP
+(11.65 in 2022) and imports about 15 percent (15.18). And "under 5 percent" holds only after rounding: exports
+reached 5.07 percent in 1957. Exports and imports together, a common measure of how **open** an economy is, went
+from 8 percent of GDP in 1950 to a peak of 30.8 percent in 2011.
+
+**Your turn.** In which year did U.S. imports first exceed 15 percent of GDP? And in which years since then were
+they below 14 percent?
+
+<details><summary>Hint</summary>
+
+Keep the rows that pass a test: `shares[shares.Imports > 15]`. Its first row label, `.index[0]`, is the first year.
+For the second question, filter the years after that one with `shares.loc[year:]` and a second test.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 2: The U.S. trade balance as a share of GDP
+
+**Goal.** Measure the U.S. trade deficit and test the rule that trade must balance in the long run.
+
+The trade balance is exports minus imports. We compute it with `net_exports`, turn it into a share of GDP, and check
+it against the figure's data file, which was computed from the BEA's own net-exports series.
+
+```{python}
+us["trade_balance"] = share_of_gdp(net_exports(us.exports, us.imports), us.gdp)
+check = pd.read_csv(DATA_URL + "fig19-2.csv").set_index("year")
+print(f"Largest difference from fig19-2.csv: {(us.trade_balance - check.trade_balance_pct_gdp).abs().max():.4f} points")
+us.trade_balance.loc[[1950, 1975, 1976, 1987, 2006, 2025]].round(2)
+```
+
+The Oddtopia example says that the trade balance must average zero over a long period. The figure function shades a
+window of years and reports the average trade balance in it, using our `period_average`.
+
+> **Python note.** `min(a, b)` and `max(a, b)` give the smaller and the larger of two numbers, so the window stays
+> valid even if the two sliders cross. `(series < 0).sum()` counts the years with a deficit, because each True
+> counts as 1. `add_vrect` shades a band between two x values, and `add_shape(type="line", ...)` draws a segment.
+
+```{python}
+def trade_balance_chart(start=1976, end=2025):
+    """Figure 19.2: the U.S. trade balance (% of GDP), with its average from start to end."""
+    start, end = min(start, end), max(start, end)         # in case the sliders cross
+    avg = period_average(us.trade_balance, start, end)
+    deficits = (us.trade_balance.loc[start:end] < 0).sum()
+    fig = px.line(us.reset_index(), x="year", y="trade_balance", color_discrete_sequence=[BLUE],
+                  labels={"year": "Year", "trade_balance": "Percent of GDP"},
+                  title=f"{start}–{end}: average trade balance {avg:+.2f}% of GDP, "
+                        f"deficits in {deficits} of {end - start + 1} years")
+    fig.update_traces(line_width=3)
+    fig.add_hline(y=0, line_dash="dash", line_color="black", line_width=1)
+    fig.add_vrect(x0=start, x1=end, fillcolor=GRAY, opacity=0.15, line_width=0)
+    fig.add_shape(type="line", x0=start, x1=end, y0=avg, y1=avg, line=dict(color=TEAL, width=3, dash="dot"))
+    fig.add_annotation(x=1957, y=1.5, text="Trade surplus", showarrow=False, font=dict(size=14))
+    fig.add_annotation(x=1962, y=-4.5, text="Trade deficit", showarrow=False, font=dict(size=14))
+    fig.update_xaxes(range=[1948, 2027])
+    fig.update_yaxes(range=[-6.5, 2.5], tickvals=[-6, -5, -4, -3, -2, -1, 0, 1, 2])
+    return fig
+```
+
+> **Python note.** `interact` turns each argument of the function into a widget and draws the figure again whenever
+> you move one. `IntSlider` is a slider for whole numbers. The `;` at the end only hides an extra line of text.
+
+```{python}
+#| kind: widget
+interact(trade_balance_chart,
+         start=IntSlider(value=1976, min=1950, max=2025, step=1, description="first year", style=WIDE),
+         end=IntSlider(value=2025, min=1950, max=2025, step=1, description="last year", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 2 with a precomputed slider for the first year (last year 2025)
+slider_figure(trade_balance_chart, "start", [1950, 1960, 1976, 1990, 2000, 2010], start=1976, label="first year")
+```
+
+**What to notice.**
+
+- From 1950 to 1975 the United States usually had a small surplus (the dotted average line is above zero for that
+  window). After 1975 the pattern reversed: there has not been a single surplus year since.
+- The deficit grew in two waves, to about 3 percent of GDP in 1987 and to 5.7 percent in 2006, and has stayed near
+  3 percent since 2009. The dotted line is the average over the shaded years.
+- Over the whole period 1950–2025 the average is still negative, about −1.5 percent of GDP. Trade has not
+  balanced yet: according to the Oddtopia example, the rest of the world expects future U.S. surpluses.
+
+<!-- cell -->
+
+### Key numbers: the deficit in the text
+
+```{python}
+tb = us.trade_balance
+early = tb.loc[1950:1975]
+print(f"1950-1975: surplus in {(early > 0).sum()} of {len(early)} years; deficits in {list(early[early < 0].index)}")
+print(f"Surplus years after 1975: {list(tb.loc[1976:][tb.loc[1976:] > 0].index)}")
+print(f"Largest deficit: {tb.min():.2f}% of GDP in {tb.idxmin()}")
+print(f"2000-2022: from {tb.loc[2000:2022].min():.2f}% to {tb.loc[2000:2022].max():.2f}% of GDP")
+print(f"Average 2023-2025: {period_average(tb, 2023, 2025):.2f}% of GDP")
+print(f"2006: domestic uses C + I + G were {100 - tb[2006]:.1f}% of GDP (equation 19.1)")
+```
+
+The text's numbers hold: a surplus in 23 of the 26 years from 1950 to 1975, no surplus since, a deficit of 5.7
+percent in 2006 (the text says 5.6; the data have been revised since) and about 3 percent in recent years. In 2006,
+Americans consumed, invested and bought through their governments 105.7 percent of what they produced.
+
+**Your turn.** Choose the window 1950–1975 with the sliders, then 1976–2025. By how many percentage points of GDP
+did the average trade balance change between the two periods?
+
+<details><summary>Hint</summary>
+
+You can also compute it directly: `period_average(us.trade_balance, 1976, 2025) - period_average(us.trade_balance, 1950, 1975)`.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 3: The trade balance around the world
+
+**Goal.** Find the countries whose trade surpluses mirror the U.S. trade deficit.
+
+For the world as a whole, trade must balance: every import is someone else's export. So the U.S. deficit must show
+up as surpluses elsewhere. The Penn World Table (PWT) compares countries at the same prices (purchasing power
+parity, PPP). The file `pwt_trade.csv` holds, for nine countries, the GDP shares of consumption (`csh_c`),
+investment (`csh_i`) and government purchases (`csh_g`), and GDP at PPP (`cgdpo`, in millions of US dollars), in two
+versions of the table: PWT 10.01, the one the textbook used, which ends in 2019, and PWT 11.0, which runs to 2023.
+
+> **Python note.** A new column made from other columns is computed for every row at once. Here our function
+> `trade_balance_share` applies $100(1 - c - i - g)$ to all 576 rows.
+
+```{python}
+pwt = pd.read_csv(DATA_URL + "pwt_trade.csv")
+pwt["trade_balance"] = trade_balance_share(pwt.csh_c, pwt.csh_i, pwt.csh_g)
+pwt.head()
+```
+
+The second bar of the textbook's figure shows each country's trade balance as a share of **U.S.** GDP, so the bars
+of different countries can be added up and compared with the U.S. deficit: we multiply the share of own GDP by the
+country's GDP and divide by U.S. GDP.
+
+> **Python note.** `.isin(list)` is True for the rows whose value is in the list. `.melt(id_vars="country")` turns
+> the two measure columns into rows, one row per country and measure, the *long* shape that `px.bar` needs. With
+> `color="Measure"` and `barmode="group"`, the bars of the two measures stand side by side.
+
+```{python}
+FIG3 = ["U.S.", "Japan", "China", "France", "Germany"]
+
+
+def world_balance_chart(year=2023, vintage="PWT 11.0"):
+    """Figure 19.3: the trade balance as a share of own GDP and of U.S. GDP, in one year."""
+    if vintage == "PWT 10.01":
+        year = min(year, 2019)                              # PWT 10.01 ends in 2019
+    rows = pwt[(pwt.year == year) & (pwt.vintage == vintage) & pwt.country.isin(FIG3)]
+    one = rows.set_index("country").loc[FIG3]
+    bars = pd.DataFrame({"Share of own GDP": one.trade_balance,
+                         "Share of U.S. GDP": share_of_us_gdp(one.trade_balance, one.cgdpo, one.loc["U.S.", "cgdpo"])})
+    long = bars.reset_index().melt(id_vars="country", var_name="Measure", value_name="Percent")
+    fig = px.bar(long, x="country", y="Percent", color="Measure", barmode="group", hover_name="country",
+                 color_discrete_map={"Share of own GDP": BLUE, "Share of U.S. GDP": GREEN},
+                 labels={"country": "", "Percent": "Percent"},
+                 title=f"{year} ({vintage}): U.S. deficit {bars.loc['U.S.', 'Share of own GDP']:.1f}% of GDP; "
+                       f"China's surplus {bars.loc['China', 'Share of U.S. GDP']:.1f}% of U.S. GDP")
+    fig.add_hline(y=0, line_color="black", line_width=1)
+    fig.update_yaxes(range=[-9, 12.5], tickvals=[-8, -6, -4, -2, 0, 2, 4, 6, 8, 10, 12])
+    fig.update_layout(legend=dict(x=0.01, y=0.99, xanchor="left", yanchor="top", title=""))
+    return fig
+```
+
+> **Python note.** `ToggleButtons` shows a row of buttons, one per choice.
+
+```{python}
+#| kind: widget
+interact(world_balance_chart,
+         year=IntSlider(value=2023, min=2000, max=2023, step=1, description="year", style=WIDE),
+         vintage=ToggleButtons(options=["PWT 11.0", "PWT 10.01"], value="PWT 11.0", description="data"));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 3 with a precomputed slider for the year (PWT 11.0)
+slider_figure(world_balance_chart, "year", [2000, 2005, 2007, 2010, 2015, 2017, 2019, 2023], start=2023)
+```
+
+**What to notice.**
+
+- The United States has a deficit in every year, and France in every year since 2006. China and Germany run
+  surpluses in every year, and Japan in 19 of the 24 years, as in the textbook.
+- Measured in U.S. GDP (green bars), China's surplus is the largest. Germany's surplus is large relative to its own
+  economy, but Germany is much smaller than the United States, so its green bar is short.
+- In PWT 11.0 China's economy at PPP has been larger than the U.S. economy since 2017, so China's green bar is now
+  taller than its blue bar. Choose PWT 10.01 and 2017 to see the textbook's figure.
+
+<!-- cell -->
+
+### Key numbers: which year did the textbook plot?
+
+The textbook's figure is titled 2019, and the text says that "the U.S. trade deficit that year was about 4 percent of
+GDP". The values below are read off the textbook's bars.
+
+```{python}
+book = pd.DataFrame({"Share of own GDP": [-4.0, 1.8, 3.0, -2.9, 7.0],
+                     "Share of U.S. GDP": [-4.0, 0.45, 3.05, -0.45, 1.5]}, index=FIG3)
+compare = pd.DataFrame({"Textbook": book["Share of own GDP"]})
+for year in [2017, 2019]:
+    one = pwt[(pwt.year == year) & (pwt.vintage == "PWT 10.01")].set_index("country")
+    compare[f"PWT 10.01, {year}"] = one.trade_balance
+compare["PWT 11.0, 2019"] = pwt[(pwt.year == 2019) & (pwt.vintage == "PWT 11.0")].set_index("country").trade_balance
+compare.round(2)
+```
+
+The 2017 values of PWT 10.01 reproduce the textbook's bars within 0.05 points; the 2019 values do not (Germany 5.3,
+not 7.0; China 2.1, not 3.0). So the textbook's bars are **2017** data under a 2019 title, probably left over from
+an earlier edition. And a newer version of the same table changes the numbers again: in PWT 11.0, Japan's 2019
+surplus is almost zero. **Always check which year, and which version of a dataset, a figure really shows.**
+
+```{python}
+for vintage, year in [("PWT 10.01", 2017), ("PWT 11.0", 2023)]:
+    one = pwt[(pwt.year == year) & (pwt.vintage == vintage)].set_index("country").loc[FIG3]
+    in_us_gdp = share_of_us_gdp(one.trade_balance, one.cgdpo, one.loc["U.S.", "cgdpo"])
+    print(f"{year} ({vintage}): U.S. deficit {in_us_gdp['U.S.']:.2f}% of U.S. GDP; surpluses of the other four "
+          f"together {in_us_gdp.drop('U.S.').sum():.2f}%")
+```
+
+The four other countries' balances together are about as large as the whole U.S. deficit. China alone covers most
+of it.
+
+**Your turn.** With PWT 11.0, in which year since 2000 was the U.S. deficit largest as a share of its GDP? Was
+China's surplus, in percent of U.S. GDP, also large that year?
+
+<details><summary>Hint</summary>
+
+Keep the U.S. rows of one version, `us_pwt = pwt[(pwt.country == "U.S.") & (pwt.vintage == "PWT 11.0")]`, and
+look for the smallest value with `.set_index("year").trade_balance.idxmin()`. Then move the slider to that year.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 4: The trade balance in rapidly growing countries
+
+**Goal.** Test whether fast-growing countries borrow from abroad, as consumption smoothing predicts.
+
+A country that expects to be much richer tomorrow should borrow today, like a student who expects a high income
+later: it should run trade **deficits**. The textbook checks this for five fast-growing economies. Each bar is the
+simple average of the yearly trade balance over a window of years. We first make a table with one row per year and
+one column per country, so that `period_average` gives one average per country.
+
+> **Python note.** `.pivot(index="year", columns="country", values="trade_balance")` turns a long table into a
+> wide one: years as rows, countries as columns. `[FIG4]` then keeps the columns in the textbook's order. With
+> `text_auto=".1f"`, `px.bar` writes each bar's value, with one decimal, on the bar.
+
+```{python}
+FIG4 = ["China", "India", "Singapore", "Ireland", "S. Korea"]
+fast = pwt[pwt.country.isin(FIG4)]
+
+
+def fast_growers_chart(start=2000, end=2023, vintage="PWT 11.0"):
+    """Figure 19.4: the average trade balance (% of own GDP) of five fast-growing economies."""
+    wide = fast[fast.vintage == vintage].pivot(index="year", columns="country", values="trade_balance")[FIG4]
+    end = min(end, wide.index.max())                         # PWT 10.01 ends in 2019
+    avg = period_average(wide, start, end)
+    bars = avg.rename("average").reset_index()
+    fig = px.bar(bars, x="country", y="average", text_auto=".1f", hover_name="country",
+                 color_discrete_sequence=[GREEN],
+                 labels={"country": "", "average": "Percent of own GDP"},
+                 title=f"{start}–{end} ({vintage}): {(avg > 0).sum()} of 5 fast-growing economies "
+                       f"ran trade surpluses on average")
+    fig.add_hline(y=0, line_color="black", line_width=1)
+    fig.update_yaxes(range=[-5, 30], tickvals=[0, 5, 10, 15, 20, 25, 30])
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(fast_growers_chart,
+         start=IntSlider(value=2000, min=1990, max=2005, step=1, description="first year", style=WIDE),
+         end=IntSlider(value=2023, min=2010, max=2023, step=1, description="last year", style=WIDE),
+         vintage=ToggleButtons(options=["PWT 11.0", "PWT 10.01"], value="PWT 11.0", description="data"));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 4 with a precomputed slider for the last year (first year 2000, PWT 11.0)
+slider_figure(fast_growers_chart, "end", [2010, 2015, 2017, 2019, 2023], start=2023, label="last year")
+```
+
+**What to notice.**
+
+- With one exception, India, these fast-growing economies run trade **surpluses**, not deficits. They lend to the
+  rest of the world instead of borrowing from it.
+- This is the opposite of what consumption smoothing (the permanent-income idea of Chapter 16) predicts. The textbook
+  suggests that the causality may run the other way: countries that push their firms to export may grow faster.
+- Singapore's and Ireland's averages are very sensitive to the window. Move the first year back to 1990: Singapore's
+  average falls from 19.3 to 10.6 percent. The next subsection shows why.
+
+<!-- cell -->
+
+### Look at your data: an average can hide big swings
+
+```{python}
+annual = fast[fast.vintage == "PWT 11.0"]
+low, high = annual.loc[annual.trade_balance.idxmin()], annual.loc[annual.trade_balance.idxmax()]
+fig = px.line(annual, x="year", y="trade_balance", color="country", hover_name="country",
+              color_discrete_sequence=[BLUE, GRAY, TEAL, GREEN, "#5aa0d8"],
+              labels={"year": "Year", "trade_balance": "Percent of own GDP", "country": "Country"},
+              title=f"Yearly trade balances swing: {low.country} {low.trade_balance:.1f}% in {low.year}, "
+                    f"{high.country} {high.trade_balance:.1f}% in {high.year}")
+fig.add_hline(y=0, line_color="black", line_width=1)
+fig.update_yaxes(range=[-40, 60], tickvals=[-20, 0, 20, 40, 60])
+fig.show()
+```
+
+Two series behave strangely. Singapore's balance jumps from −33 percent of GDP in 1993 to +15 percent in 1998.
+Singapore is a trading hub: its exports and its imports are each more than twice its GDP in this table, so its
+trade balance is a small difference between two huge numbers, and a small error in either one moves it a lot.
+Ireland's balance swings from 32 percent of GDP in 2018 to 7 percent in 2019 and 50 percent in 2022: large
+multinational firms book much of their production and profits in Ireland, which moves its GDP and trade statistics
+far more than Irish living standards. Neither country's data are "wrong", but a single average hides all this, and
+it changes a lot with the choice of years. That is why the figure lets you choose the window.
+
+<!-- cell -->
+
+### Key numbers: which window did the textbook average?
+
+The textbook's title says 2000–2019 and its text says "from 1990 to 2019". The values below are read off its bars.
+
+```{python}
+book4 = pd.Series([2.9, -0.4, 16.1, 22.8, 3.5], index=FIG4)
+wide10 = fast[fast.vintage == "PWT 10.01"].pivot(index="year", columns="country", values="trade_balance")
+windows = pd.DataFrame({"Textbook": book4})
+for start, end in [(2000, 2017), (2000, 2019), (1990, 2019)]:
+    windows[f"PWT 10.01, {start}–{end}"] = period_average(wide10, start, end)
+windows.round(2)
+```
+
+Only the window 2000–2017 reproduces the bars, within 0.05 points: like Figure 3, the figure uses the data up to
+2017. The text's window, 1990–2019, would give Singapore 7.6 instead of 16.1. The finding itself does not depend on
+the window: India is the only deficit country in every column.
+
+**Your turn.** The first year slider stops at 2005. Compute the averages for the window 2010–2023 (PWT 11.0) in
+code. How many of the five economies run a surplus on average then, and which one changes sign?
+
+<details><summary>Hint</summary>
+
+Make the wide table of PWT 11.0 first:
+`wide11 = fast[fast.vintage == "PWT 11.0"].pivot(index="year", columns="country", values="trade_balance")`.
+Then `period_average(wide11, 2010, 2023)` gives all five averages at once.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 5: U.S. investment, budget deficit, and trade deficit
+
+**Goal.** See the **twin deficits**: large budget deficits that come with large trade deficits.
+
+Equation (19.6) says $NX = S - I$: a country that saves less than it invests must borrow the difference abroad. When
+the government runs a larger budget deficit, government saving $T - G$ falls, and so does domestic saving $S$. Either
+investment falls too, or foreigners fill the gap and the trade deficit grows. The file has the three series of the
+textbook's figure, as percent of GDP.
+
+```{python}
+twin = pd.read_csv(DATA_URL + "fig19-5.csv").set_index("year")
+twin.head()
+```
+
+The trade **deficit** is minus the trade balance, so $NX = -$(trade deficit). With our function `domestic_saving` we
+add a fourth line, domestic saving $S = I + NX$. The gap between saving and investment is then exactly the trade
+deficit.
+
+> **Python note.** `rename(columns={...})` gives the columns readable names, which then appear in the legend.
+
+```{python}
+named = twin.rename(columns={"investment_pct_gdp": "Investment", "budget_deficit_pct_gdp": "Budget deficit",
+                             "trade_deficit_pct_gdp": "Trade deficit"})
+named["Domestic saving, S = I + NX"] = domestic_saving(named.Investment, -named["Trade deficit"])
+gap = net_capital_outflow(named["Domestic saving, S = I + NX"], named.Investment)
+print(f"S - I equals minus the trade deficit in every year: {((gap + named['Trade deficit']).abs() < 1e-9).all()}")
+named.loc[[1979, 1986, 2006, 2025]].round(2)
+```
+
+The menu chooses an episode with a rising budget deficit. The title reports how much each line changed between the
+first and the last year of the episode.
+
+> **Python note.** `named.loc[end] - named.loc[start]` subtracts two rows, column by column. `Dropdown` is a menu,
+> and `list(EPISODES)` lists the keys of the dictionary, the names of the episodes.
+
+```{python}
+EPISODES = {"1980s: 1979 to 1986": (1979, 1986), "2000s: 2000 to 2006": (2000, 2006),
+            "Great Recession: 2007 to 2010": (2007, 2010), "Covid-19: 2019 to 2021": (2019, 2021)}
+LINES = ["Investment", "Budget deficit", "Trade deficit", "Domestic saving, S = I + NX"]
+
+
+def twin_deficits_chart(episode="1980s: 1979 to 1986"):
+    """Figure 19.5: investment, the budget deficit and the trade deficit (% of GDP), with one episode."""
+    start, end = EPISODES[episode]
+    change = named.loc[end] - named.loc[start]
+    fig = px.line(named.reset_index(), x="year", y=LINES, color_discrete_sequence=[TEAL, BLUE, GREEN, GRAY],
+                  labels={"year": "Year", "value": "Percent of GDP", "variable": ""},
+                  title=f"{start}→{end}: budget deficit {change['Budget deficit']:+.1f}, trade deficit "
+                        f"{change['Trade deficit']:+.1f}, investment {change['Investment']:+.1f} points")
+    fig.update_traces(line_width=3)
+    fig.update_traces(selector=dict(name=LINES[3]), line_width=2, line_dash="dot")
+    fig.add_hline(y=0, line_dash="dash", line_color="black", line_width=1)
+    fig.add_vrect(x0=start, x1=end, fillcolor=GRAY, opacity=0.2, line_width=0)
+    fig.update_xaxes(range=[1958, 2027])
+    fig.update_yaxes(range=[-5, 28], tickvals=[0, 5, 10, 15, 20, 25])        # room for the legend
+    fig.update_layout(legend=dict(orientation="h", x=0.01, y=0.99, xanchor="left", yanchor="top"))
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(twin_deficits_chart, episode=Dropdown(options=list(EPISODES), value="1980s: 1979 to 1986",
+                                               description="episode", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 5 with a precomputed slider for the episode
+slider_figure(twin_deficits_chart, "episode", ["1980s: 1979 to 1986", "2000s: 2000 to 2006",
+                                               "Great Recession: 2007 to 2010", "Covid-19: 2019 to 2021"],
+              start="1980s: 1979 to 1986")
+```
+
+**What to notice.**
+
+- From 1979 to 1986 the budget deficit rose by 2.9 points of GDP and the trade deficit by 2.0 points; investment fell
+  by 2.0 points, but it stayed high by historical standards. Foreign saving paid for part of the government's
+  borrowing: the first episode of twin deficits.
+- From 2000 to 2006 the pattern repeats: the budget deficit rose by 3.2 points and the trade deficit by 2.0 points,
+  while investment hardly changed (−0.3).
+- In the Great Recession the twins split: the budget deficit soared, investment collapsed, and the trade deficit
+  **fell**. In the Covid-19 years the budget deficit jumped by more than 7 points, the trade deficit rose by less than
+  1 point, and investment barely moved. Click "Domestic saving" in the legend to hide it; the gap between it and
+  investment is the trade deficit.
+
+<!-- cell -->
+
+### Key numbers: decades of twin deficits
+
+> **Python note.** `named.index // 10 * 10` turns each year into its decade (1987 → 1980): `//` divides and drops
+> the remainder. `.groupby(...)` then puts the years of each decade together, and `.mean()` averages them.
+
+```{python}
+decades = named.groupby(named.index // 10 * 10).mean().round(2)
+decades.index.name = "decade"
+decades
+```
+
+Compared with the 1970s, the 1980s had higher budget deficits (4.0 against 3.5 percent of GDP) and much higher trade
+deficits (1.75 against 0.18), with **no** fall in investment (18.5 against 18.0). Domestic saving has drifted down,
+from about 17 percent of GDP in the 1960s and 1970s to 13–15 percent since 2000, and the trade deficit has filled
+the gap.
+
+**Your turn.** In which year was U.S. domestic saving (as defined here) lowest, and how large was the trade deficit
+that year?
+
+<details><summary>Hint</summary>
+
+`named["Domestic saving, S = I + NX"].idxmin()` gives the year; then look up `named.loc[year]`.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 6: Net international investment position of the United States
+
+**Goal.** Follow how decades of trade deficits turned the United States from a lender into a debtor.
+
+The **net international investment position** (NIIP) is what U.S. residents own abroad (foreign shares, bonds,
+factories) minus what foreigners own in the United States, at the end of each year. When it is negative, it is the
+**net foreign debt**. Each year's trade deficit is new borrowing, so the position should fall by about the size of
+the deficit. With our function `accumulate`, we start from the 1976 position and add the trade balance of every later
+year, as in the Oddtopia table. We also compare the current data with the same series as published in July 2023,
+which the textbook used.
+
+```{python}
+niip = pd.DataFrame({
+    "Current data": share_of_gdp(us.niip, us.gdp),
+    "As published in July 2023 (the textbook)": share_of_gdp(us.niip_2023, us.gdp_2023),
+    "1976 position + sum of later trade balances": share_of_gdp(accumulate(us.niip[1976], us.net_exports.loc[1977:]),
+                                                                us.gdp)})
+check = pd.read_csv(DATA_URL + "fig19-6.csv").set_index("year")
+print(f"Largest difference from fig19-6.csv: {(niip['Current data'] - check.niip_pct_gdp).abs().max():.4f} points")
+niip.loc[[1980, 1988, 1989, 2008, 2019, 2021, 2022, 2025]].round(1)
+```
+
+```{python}
+long = niip.reset_index().melt(id_vars="year", var_name="Series", value_name="Percent of GDP").dropna()
+current = niip["Current data"].dropna()
+fig = px.line(long, x="year", y="Percent of GDP", color="Series", color_discrete_sequence=[BLUE, GRAY, TEAL],
+              labels={"year": "Year"},
+              title=f"The U.S. turned net debtor in {current[current < 0].index.min()}; its net foreign debt "
+                    f"was {-current.iloc[-1]:.1f}% of GDP in {current.index[-1]}")
+fig.update_traces(line_width=3)
+fig.update_traces(selector=dict(name="As published in July 2023 (the textbook)"), line_dash="dash", line_width=2)
+fig.update_traces(selector=dict(name="1976 position + sum of later trade balances"), line_dash="dot", line_width=2)
+fig.add_hline(y=0, line_dash="dash", line_color=GRAY, line_width=1)
+fig.add_annotation(x=1990, y=13, text="Net creditor to<br>rest of world", showarrow=False, font=dict(size=13))
+fig.add_annotation(x=1990, y=-45, text="Net debtor to<br>rest of world", showarrow=False, font=dict(size=13))
+fig.update_xaxes(range=[1970, 2030], tickvals=[1980, 1990, 2000, 2010, 2020, 2030])
+fig.update_yaxes(range=[-85, 22], tickvals=[-80, -60, -40, -20, 0, 20])
+fig.update_layout(legend=dict(x=0.01, y=0.02, xanchor="left", yanchor="bottom", title="",
+                              bgcolor="rgba(255,255,255,0.8)"))
+fig.show()
+```
+
+**What to notice.**
+
+- Until 1988 the United States was a **net creditor**: it owned more abroad than foreigners owned in the United
+  States. Since 1989 it has been a **net debtor**, and its net foreign debt has grown to about 70 percent of GDP.
+- The dotted line adds up the trade balances since 1976. It has the same downward trend: the foreign debt is,
+  roughly, the sum of past trade deficits. But the gap between the two lines is large in some years (37 points of
+  GDP in 2010), because the position also changes when asset prices and the dollar move, and with the income earned
+  on foreign assets. Until 2020 these effects kept the debt below the summed deficits; in 2021 and since 2023 it is above them.
+- The textbook's data (dashed) show a trough of about −80 percent in 2021. BEA has since revised the series: the
+  current data are 9 to 16 points of GDP less negative for 2020–2022, and the deepest point is now 2024.
+
+<!-- cell -->
+
+### Key numbers: the foreign debt
+
+The textbook says that the United States was a net creditor "up until the late 1980s" and that its net foreign debt
+"exceeded 60 percent of GDP in 2022".
+
+```{python}
+july_2023 = niip["As published in July 2023 (the textbook)"].dropna()
+print(f"Last year as a net creditor: {current[current > 0].index.max()}")
+print(f"2022: {current[2022]:.1f}% of GDP in current data, {july_2023[2022]:.1f}% as published in July 2023")
+print(f"Years below -60% of GDP in current data: {list(current[current < -60].index)}")
+print(f"Revision to the 2021 position: {(us.niip[2021] - us.niip_2023[2021]) / 1000:+.2f} trillion dollars")
+change, summed = us.niip[2025] - us.niip[1976], us.net_exports.loc[1977:2025].sum()
+print(f"1976 to 2025: position {change / 1000:+.1f} trillion dollars; sum of trade balances {summed / 1000:+.1f} trillion")
+```
+
+In the textbook's vintage the net foreign debt was 63.5 percent of GDP in 2022, as the text says. In the current data
+it is 54.6 percent for 2022, because BEA has revised the position upward by 1.9 to 3.4 trillion dollars for
+2020–2022. The statement still holds for the most recent years: the debt is above 60 percent of GDP in 2021 and in
+2023–2025. Over the whole period, trade deficits of 18.0 trillion dollars came with a fall of 22.0 trillion in the
+investment position.
+
+**Your turn.** Between which two consecutive years did the investment position (current data) fall the most, in
+points of GDP? Did the trade balance that year explain that fall?
+
+<details><summary>Hint</summary>
+
+`current.diff()` gives the change from the year before; `.idxmin()` finds the year of the largest fall. Compare it
+with `us.trade_balance` in that year.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Key numbers
+
+The table collects the chapter's main numbers. Each one is computed with the functions and data above, next to the
+value in the textbook.
+
+```{python}
+pwt10_2017 = pwt[(pwt.year == 2017) & (pwt.vintage == "PWT 10.01")].set_index("country").trade_balance
+rows = [
+    ["U.S. exports, 2022 (% of GDP)", shares.Exports[2022], "around 12"],
+    ["U.S. imports, 2022 (% of GDP)", shares.Imports[2022], "around 15"],
+    ["U.S. trade balance, 2006 (% of GDP)", tb[2006], "-5.6"],
+    ["U.S. trade balance, average 2023-2025 (% of GDP)", period_average(tb, 2023, 2025), "around -3"],
+    ["U.S. trade balance, 2017, PWT 10.01 (% of GDP)", pwt10_2017["U.S."], "about -4 (titled 2019)"],
+    ["Germany's trade balance, 2017, PWT 10.01 (% of GDP)", pwt10_2017["Germany"], "7.0 (figure)"],
+    ["Ireland, average 2000-2017, PWT 10.01 (% of GDP)", windows.loc["Ireland", "PWT 10.01, 2000–2017"], "22.8 (figure)"],
+    ["India, average 2000-2017, PWT 10.01 (% of GDP)", windows.loc["India", "PWT 10.01, 2000–2017"], "-0.4 (figure)"],
+    ["World price of a computer, free trade (apples)", table_19_4.loc["Price of a computer, p (apples)", "North"], "25"],
+    ["Northern wage, free trade (apples)", table_19_4.loc["Wage, w (apples)", "North"], "400"],
+    ["Southern computers per person, free trade", table_19_4.loc["Computers per person", "South"], "2"],
+    ["Migrants' apples per person, free migration", table_19_5.loc["Apples per person", "Migrants from the South"], "80"],
+    ["Last year as a net creditor", current[current > 0].index.max(), "late 1980s"],
+    ["NIIP 2022, current data (% of GDP)", current[2022], "-63.5 (debt above 60%)"],
+    ["NIIP 2022, as published in July 2023 (% of GDP)", july_2023[2022], "-63.5 (debt above 60%)"],
+]
+pd.DataFrame(rows, columns=["Quantity", "Notebook", "Textbook"]).round(2)
+```
+
+## Summary
+
+- Trade has become much more important: U.S. exports and imports have risen from about 4 percent of GDP each in 1950
+  to 11 and 14 percent. Since 1976 imports have exceeded exports every year, and the trade deficit reached 5.7 percent
+  of GDP in 2006.
+- The national income identity shows what a deficit means: with $NX < 0$, a country uses more than it produces
+  ($C + I + G > Y$), and it invests more than it saves ($NX = S - I$). The deficit is borrowing from the rest of the
+  world, and the sum of past deficits is the **net foreign debt**, about 70 percent of U.S. GDP today.
+- Trade can make everyone better off: across time it shares risks (Oddtopia and Eventopia), and across goods it lets
+  countries specialize by **comparative advantage** (the North and the South). Free migration follows **absolute**
+  advantage and can raise world output even more.
+- The data hold surprises: fast-growing economies tend to run surpluses, not deficits, and the large U.S. budget
+  deficits of the 1980s and 2000s came with large trade deficits (the **twin deficits**). They also teach care: the
+  textbook's "2019" bars are 2017 data, and revisions changed the recent foreign debt by up to 16 points of GDP.
+- The next chapter, **exchange rates and international finance**, brings trade into the short-run model and asks how
+  the exchange rate adjusts.
