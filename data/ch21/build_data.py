@@ -10,6 +10,7 @@ from the earlier chapters' data/ folders of the site repo into data/ch21/, uncha
   ch04/fig4-5.csv            actual and capital-only predicted GDP per person, 111 countries, 2023
   ch04/fig4-7.csv            GDP per person and implied TFP, same countries, 2023
   ch03/maddison_panel.csv    Maddison GDP per person, 7 countries, 1870-2022
+  ch03/maddison_world.csv    Maddison GDP per person and region, 169 economies, mostly 1950-2022 (country picker)
   ch08/fig8-4.csv            average money growth and inflation, 165 economies, 1990-2021 and 1990-2025
   ch13/fig13-17.csv          U.S. output gap and CPI inflation, 1960-2025
   ch06/growth_accounting.csv U.S. labor productivity and TFP indexes (BLS), 1948-2025
@@ -28,6 +29,7 @@ FILES = {   # source (relative to the site repo's data/ folder) -> columns that 
     "ch04/fig4-5.csv": ["iso3", "country", "gdp_pc_rel_2023", "pred_gdp_pc_2023"],
     "ch04/fig4-7.csv": ["iso3", "country", "gdp_pc_rel_2023", "tfp_2023"],
     "ch03/maddison_panel.csv": ["iso3", "country", "year", "gdppc"],
+    "ch03/maddison_world.csv": ["iso3", "country", "region", "year", "gdppc"],
     "ch08/fig8-4.csv": ["iso3", "country", "money_growth_1990_2025", "inflation_1990_2025"],
     "ch13/fig13-17.csv": ["year", "output_gap", "inflation"],
     "ch06/growth_accounting.csv": ["year", "output_per_hour", "tfp"],
@@ -59,6 +61,16 @@ def main():
     if len(both) != len(f5) or gap > 1e-4:
         raise SystemExit(f"fig4-5 and fig4-7 do not match ({len(both)} of {len(f5)} rows, gap {gap})")
     print(f"check: fig4-5 x fig4-7 reproduce y = A k^(1/3) in all {len(both)} countries (largest gap {gap:.1e})")
+    # the world panel must agree with the seven-country panel that Lesson 2's numbers use
+    panel = pd.read_csv(os.path.join(HERE, "maddison_panel.csv"))
+    world = pd.read_csv(os.path.join(HERE, "maddison_world.csv"))
+    both = panel.merge(world, on=["iso3", "year"], suffixes=("", "_w"))
+    gap = (both.gdppc - both.gdppc_w).abs().max()
+    us = world[world.iso3 == "USA"].year
+    if len(both) == 0 or gap > 0.5 or not set(range(1950, 2023)) <= set(us):
+        raise SystemExit(f"maddison_world.csv does not match maddison_panel.csv (gap {gap}) or lacks U.S. years")
+    print(f"check: maddison_world.csv reproduces maddison_panel.csv in {len(both)} common rows (largest gap {gap:.2f}); "
+          f"{world.iso3.nunique()} economies, U.S. complete 1950-2022")
 
 
 if __name__ == "__main__":

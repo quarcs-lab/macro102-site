@@ -1,7 +1,7 @@
 # Data for Chapter 19: International Trade
 
 Read by `notebooks/ch19-international-trade.ipynb` from `https://raw.githubusercontent.com/quarcs-lab/macro102-site/main/data/ch19/`.
-All files were retrieved on 2026-10-16 by the macro102 `/collect-data` skill (FRED and ALFRED of the Federal
+The files of the first two sections were retrieved on 2026-10-16 by the macro102 `/collect-data` skill (FRED and ALFRED of the Federal
 Reserve Bank of St. Louis, which republish BEA data, and the Penn World Table). Shares are in percent.
 
 ## Files copied from the macro102 collect-data output
@@ -54,3 +54,58 @@ sibling macro102 checkout (`original-scanned-book/ch19-international-trade/data/
   $100(1 - c - i - g)$ and its rescaling by `cgdpo` relative to the U.S. reproduce every column of `fig19-3.csv`,
   and the simple averages over each window reproduce every column of `fig19-4.csv`, all within 0.001 points. Used
   by Figures 3 and 4 to choose any year (Figure 3) or averaging window (Figure 4) and either vintage.
+
+## Multi-country files (conventions §6b)
+
+Built by `build_data.py` from public downloads (requests' default User-Agent), cached in the macro102 checkout under
+`.work/ch19/notebook-raw/`; delete a cached file to download it again. Retrieved on 2026-10-17. Country names follow
+the World Bank's list, shortened where it is awkward (`Egypt`, `Iran`, `Hong Kong`, `Türkiye`); the nine countries of
+the textbook figures keep the labels of `pwt_trade.csv` (`U.S.`, `S. Korea`), so that every file uses the same names.
+Aggregates (regions, income groups, the euro area) are dropped. All shares are in percent.
+
+- `countries.csv`: `iso3`, `country`, `region`, `income`. The 214 economies that appear in any of the files below,
+  with their World Bank region (seven regions; "Middle East, North Africa, Afghanistan & Pakistan" is shortened to
+  "Middle East & North Africa") and income group. Source: World Bank country API
+  (<https://api.worldbank.org/v2/country?format=json&per_page=400>). Taiwan, Anguilla, Montserrat, Guernsey and
+  Jersey are not in the World Bank list; their region is set by hand (income group left empty for all but Taiwan).
+  Used for the region menus of the website versions.
+- `wdi_trade.csv`: `iso3`, `country`, `year`, `exports`, `imports`, `trade_balance` (exports and imports of goods and
+  services and their difference, percent of GDP). 194 economies, 1960–2025 (9,038 rows; most series start later,
+  and 2025 covers only 138 economies), 322 kB. Source: World Bank WDI `NE.EXP.GNFS.ZS`, `NE.IMP.GNFS.ZS`,
+  `NE.RSB.GNFS.ZS` (<https://api.worldbank.org/v2/country/all/indicator/CODE?format=json&per_page=20000>).
+  Validation: the U.S. rows (1970–2024) reproduce `fig19-1.csv` and `fig19-2.csv` (BEA) within 0.09 points
+  (`build_data.py` stops above 0.3). Used by the many-country versions of Figures 1 and 2.
+- `pwt_trade_world.csv`: `iso3`, `country`, `vintage`, `year`, `csh_c`, `csh_i`, `csh_g`, `cgdpo` (as in
+  `pwt_trade.csv`), plus `rgdpna` (real GDP at constant 2021 national prices, millions of 2021 US dollars) and `pop`
+  (population, millions). PWT 11.0 only, all 185 economies, 1990–2023 (6,242 rows), 487 kB. Source: Penn World
+  Table 11.0, `pwt110.dta` (<https://doi.org/10.34894/FABVLR>; the bulk file is read from collect-data's cache
+  `.work/downloads/` when present, otherwise downloaded from DataverseNL). Validation: its rows for the nine
+  textbook countries reproduce `pwt_trade.csv` (PWT 11.0) within 1e-6 in the shares and 1e-6 (relative) in `cgdpo`,
+  the rounding of the `.dta` file's single-precision numbers. Known quirks: a few tiny economies have implausible
+  shares and therefore trade balances of −60 to −50,000 percent of GDP (Bermuda, Turks and Caicos, Anguilla,
+  Montserrat, Sint Maarten); the notebook sets aside economies with average balances beyond ±40 percent in the
+  growth scatter, and the map caps its color scale at ±20. Used by Figures 3 and 4 (country pickers, the world map
+  and the growth-versus-trade-balance scatter).
+- `twin_deficits_world.csv`: `iso3`, `country`, `year`, `investment` (gross capital formation, WDI
+  `NE.GDI.TOTL.ZS`), `budget_deficit` (minus general government net lending/borrowing, IMF World Economic Outlook,
+  October 2026, DataMapper indicator `GGXCNL_NGDP`, <https://www.imf.org/external/datamapper/api/v1/GGXCNL_NGDP>)
+  and `trade_deficit` (minus WDI `NE.RSB.GNFS.ZS`), percent of GDP. 209 economies, 1980–2025 (8,383 rows; 178
+  economies have both deficits in at least 5 years), 269 kB. The WEO's last years are IMF estimates; projections
+  after 2025 are dropped. Definitions differ from Figure 19.5: investment includes government investment, and the
+  budget deficit covers all levels of government, not only the federal one. Validation against `fig19-5.csv`: the
+  U.S. trade deficit agrees within 0.09 points (1980–2024; `build_data.py` stops above 0.3); U.S. investment is on
+  average 4.1 points above private investment, and the general-government deficit (IMF, from 2001 only) 1.2 points
+  above the federal one. Used by the many-country version of Figure 5.
+- `niip_world.csv`: `iso3`, `country`, `year`, `niip` (net international investment position at year end,
+  including gold, percent of GDP, both in US dollars: `100 × (Net IIP excl gold + Monetary Gold) / GDP (US$)`).
+  198 economies, 1970–2024 (9,135 rows), 227 kB. Source: Lane & Milesi-Ferretti, *External Wealth of Nations*
+  database, Brookings release of February 2026, year-end 2024
+  (<https://www.brookings.edu/wp-content/uploads/2026/02/EWN-dataset-year-end-2024_4.9.26.xlsx>). The sheet's own
+  ratio column covers only years with an official IIP, so the ratio is recomputed from the levels. IMF IFS country
+  names are matched to ISO3 codes through the World Bank and IMF lists plus a short table in `build_data.py`;
+  ECCU, the euro area and the Netherlands Antilles are dropped. Validation against `fig19-6.csv`: identical within
+  0.01 points from 1976 to 2019; from 2020 on the database keeps earlier BEA vintages, so its U.S. position is 7 to
+  15 points of GDP more negative than the current BEA data (2024: −90.6 against −75.3 percent; 2020–2022 are close
+  to the July 2023 vintage in `us_trade.csv`). Known quirks: financial centers, oil exporters and a few aid-dependent
+  economies have positions beyond ±300 percent of GDP (Qatar +1,578, Liberia −1,837). Used by the many-country
+  version of Figure 6.
