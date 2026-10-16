@@ -193,31 +193,59 @@ third lines are the textbook's example: when the real interest rate rises from 5
 falls by 2 percentage points of potential output, and output falls to 2 percent below potential.
 
 Every IS diagram below uses the same axes and the same few drawing steps, so we write them once.
-`add_is` draws an IS curve, `add_point` marks a point with dashed guides to the axes, `add_arrow` draws an
-arrow, and `is_axes` sets the fixed axes and the title.
+`add_is` draws an IS curve and writes its name at its lower end, as the textbook does; `is_end` finds that
+end, and `labels_crowd` tells us when the names of two curves would sit on top of each other. `add_point`
+marks a point with dashed guides to the axes (`label_side` moves its name away from a nearby curve), `add_arrow` draws an arrow, and `is_axes` sets the fixed axes
+and the title.
 
-> **Python note.** `np.linspace(0, 10, 101)` creates 101 evenly spaced numbers from 0 to 10: the interest
-> rates at which we draw each curve. Because `is_curve` works on a whole array at once, one call gives the
-> output for every rate. `go.Figure()` starts an empty chart and `add_trace` adds a line or a set of points.
-> `add_annotation` with `axref="x"` and `ayref="y"` draws an arrow from (`ax`, `ay`) to (`x`, `y`), both in
-> axis units. `!=` means "is not equal to", and `list(range(-8, 11, 2))` is the list -8, -6, ..., 10.
+> **Python note.** `max(a, b)` and `min(a, b)` give the larger and the smaller of two numbers, and `abs(x)` is
+> the size of `x` without its sign. `np.linspace(Y_top, Y_end, 101)` creates 101 evenly spaced output levels
+> between the two ends of the curve; because the formula works on a whole array at once, one line gives the
+> interest rate at each of them. `[""] * 100` is a list of 100 empty texts and `+ [label]` adds one more, so
+> only the last point of the curve shows its name (`mode="lines+text"`). `go.Figure()` starts an empty chart and
+> `add_trace` adds a line or a set of points. `add_annotation` with `axref="x"` and `ayref="y"` draws an arrow
+> from (`ax`, `ay`) to (`x`, `y`), both in axis units. `!=` means "is not equal to", and `list(range(-8, 11, 2))`
+> is the list -8, -6, ..., 10.
 
 ```{python}
-R_GRID = np.linspace(0, 10, 101)          # interest rates at which we draw every IS curve
 Y_RANGE, R_RANGE = [-10, 10], [0, 10]     # fixed axes, so that you can see the curves move
 
 
-def add_is(fig, name, color, a=A_BAR, b=B_BAR, r_bar=R_BAR, dash="solid"):
-    """Draw an IS curve: output Y~ on the horizontal axis, the real interest rate R on the vertical axis."""
-    fig.add_trace(go.Scatter(x=is_curve(R_GRID, a, b, r_bar), y=R_GRID, name=name, mode="lines",
-                             line=dict(color=color, width=4, dash=dash)))
+def is_end(a=A_BAR, b=B_BAR, r_bar=R_BAR):
+    """The lower end of an IS curve inside the axes: at R = 1, or at Y~ = 8 to leave room for its name."""
+    Y_end = min(8.0, is_curve(1.0, a, b, r_bar))
+    return Y_end, r_bar + (a - Y_end) / b     # the IS curve solved for R
 
 
-def add_point(fig, Y, R, label):
+def labels_crowd(a, b, r_bar):
+    """True when the end of the IS curve (a, b, r_bar) is so close to the baseline's end that two names overlap."""
+    Y1, R1 = is_end()
+    Y2, R2 = is_end(a, b, r_bar)
+    return abs(Y1 - Y2) < 1.0 and abs(R1 - R2) < 0.6
+
+
+def add_is(fig, label, color, a=A_BAR, b=B_BAR, r_bar=R_BAR, dash="solid"):
+    """Draw an IS curve (output Y~ across, the real interest rate R up), with its name at the lower end."""
+    Y_top = max(-9.5, is_curve(9.5, a, b, r_bar))      # upper end: R = 9.5, or the left edge
+    Y = np.linspace(Y_top, is_end(a, b, r_bar)[0], 101)
+    fig.add_trace(go.Scatter(x=Y, y=r_bar + (a - Y) / b, mode="lines+text", text=[""] * 100 + [label],
+                             textposition="bottom right", textfont=dict(size=15, color=color), cliponaxis=False,
+                             name=label, showlegend=False, line=dict(color=color, width=4, dash=dash)))
+```
+
+```{python}
+def label_side(Y, Y_other):
+    """Where to write a point's name: below left when another curve passes just to the right of the point."""
+    if Y_other > Y:
+        return "bottom left"
+    return "top right"
+
+
+def add_point(fig, Y, R, label, position="top right"):
     """Mark the point (Y, R) with a dot, a label and dashed guides to both axes."""
     fig.add_trace(go.Scatter(x=[Y_RANGE[0], Y, Y], y=[R, R, R_RANGE[0]], mode="lines", showlegend=False,
                              line=dict(color="black", width=1, dash="dash")))
-    fig.add_trace(go.Scatter(x=[Y], y=[R], mode="markers+text", text=[label], textposition="top right",
+    fig.add_trace(go.Scatter(x=[Y], y=[R], mode="markers+text", text=[label], textposition=position,
                              textfont=dict(size=16), showlegend=False, marker=dict(color="black", size=12)))
 
 
@@ -226,17 +254,15 @@ def add_arrow(fig, x0, y0, x1, y1):
     if (x0, y0) != (x1, y1):
         fig.add_annotation(x=x1, y=y1, ax=x0, ay=y0, xref="x", yref="y", axref="x", ayref="y", text="",
                            showarrow=True, arrowhead=3, arrowwidth=2, arrowcolor="black")
-```
 
-```{python}
+
 def is_axes(fig, title):
     """Fixed axes for every IS diagram (no tick in the bottom-left corner), with a readout in the title."""
     fig.update_layout(title=title,
                       xaxis=dict(title="Short-run output, Ỹ (percent)", range=Y_RANGE,
                                  tickvals=list(range(-8, 11, 2)), zeroline=False),
                       yaxis=dict(title="Real interest rate, R (percent)", range=R_RANGE,
-                                 tickvals=list(range(1, 11)), zeroline=False),
-                      legend=dict(x=0.99, y=0.99, xanchor="right", yanchor="top", bgcolor="rgba(255,255,255,0.8)"))
+                                 tickvals=list(range(1, 11)), zeroline=False))
 ```
 
 ## Figure 1: Introducing the IS curve
@@ -256,7 +282,7 @@ def introducing_is(R=5.0):
     """Figure 11.1: the IS curve, with the economy at the real interest rate R."""
     Y = is_curve(R)
     fig = go.Figure()
-    add_is(fig, "The IS curve", BLUE)
+    add_is(fig, "IS curve", BLUE)
     add_point(fig, Y, R, "")
     is_axes(fig, f"R = {R:.1f}%  →  investment = {investment_share(R):.1f}% of Ȳ  →  Ỹ = {Y:.1f}%")
     return fig
@@ -311,7 +337,8 @@ variable, and economists put the price (here the interest rate, the price of bor
 as in supply and demand.
 
 The black dot is the point where $R = \bar{r}$. There the IS equation gives $\tilde{Y} = \bar{a}$: with no demand
-shock, output is at potential. When you change a parameter, the baseline curve stays behind as a dashed gray line.
+shock, output is at potential. When you change a parameter, the baseline curve IS stays behind as a dashed gray
+line and the new curve is called IS′.
 
 > **Python note.** `if ... :` runs the indented lines only when the condition is true. Here it compares three
 > numbers at once: `(a, b, r_bar) != (A_BAR, B_BAR, R_BAR)` is true as soon as one of them differs from
@@ -322,10 +349,15 @@ def is_diagram(a=A_BAR, b=B_BAR, r_bar=R_BAR):
     """Figure 11.2: the IS curve Y~ = a - b (R - r_bar), with the point where R = r_bar (there Y~ = a)."""
     fig = go.Figure()
     if (a, b, r_bar) != (A_BAR, B_BAR, R_BAR):
-        add_is(fig, "Baseline IS (ā = 0, b̄ = 2, r̄ = 5)", GRAY, dash="dash")
-    add_is(fig, "IS", BLUE, a, b, r_bar)
+        old_label = "IS"
+        if labels_crowd(a, b, r_bar):           # the two names would overlap: keep only the new one
+            old_label = ""
+        add_is(fig, old_label, GRAY, dash="dash")
+        add_is(fig, "IS′", BLUE, a, b, r_bar)
+    else:
+        add_is(fig, "IS", BLUE)
     add_point(fig, a, r_bar, "R = r̄")
-    is_axes(fig, f"IS: Ỹ = {a:.1f} − {b:.2f} × (R − {r_bar:.1f});   at R = r̄ = {r_bar:.1f}%, Ỹ = {a:.1f}%")
+    is_axes(fig, f"IS: Ỹ = {a:.2f} − {b:.2f} × (R − {r_bar:.2f});   at R = r̄ = {r_bar:.2f}%, Ỹ = {a:.2f}%")
     return fig
 ```
 
@@ -386,19 +418,22 @@ def is_experiment(R_new=R_BAR, a_new=A_BAR, r_new=R_BAR, b=B_BAR):
     shifted = (a_new, r_new, b) != (A_BAR, R_BAR, B_BAR)
     fig = go.Figure()
     if shifted:
-        add_is(fig, "IS before", GRAY, dash="dash")
-        add_is(fig, "IS after, IS′", BLUE, a_new, b, r_new)
+        old_label = "IS"
+        if labels_crowd(a_new, b, r_new):       # the two names would overlap: keep only the new one
+            old_label = ""
+        add_is(fig, old_label, GRAY, dash="dash")
+        add_is(fig, "IS′", BLUE, a_new, b, r_new)
         add_arrow(fig, is_curve(7.5), 7.5, is_curve(7.5, a_new, b, r_new), 7.5)   # the shift of the curve
     else:
         add_is(fig, "IS", BLUE)
     if r_new != R_BAR:                       # the new curve crosses Y~ = 0 at the new r_bar'
         fig.add_shape(type="line", x0=Y_RANGE[0], y0=r_new, x1=0, y1=r_new, line=dict(color=GRAY, dash="dot"))
-    add_point(fig, 0.0, R_BAR, "A")
+    add_point(fig, 0.0, R_BAR, "A", label_side(0.0, is_curve(R_BAR, a_new, b, r_new)))   # A is on the old curve
     if (Y_B, R_new) != (0.0, R_BAR):
-        add_point(fig, Y_B, R_new, "B")
+        add_point(fig, Y_B, R_new, "B", label_side(Y_B, is_curve(R_new)))                 # B is on the new one
     add_arrow(fig, -9.3, R_BAR, -9.3, R_new)            # the change in the interest rate
     add_arrow(fig, 0.0, 0.6, Y_B, 0.6)                  # the change in output
-    is_axes(fig, f"R′ = {R_new:.1f}%, ā′ = {a_new:.1f}, r̄′ = {r_new:.1f}%:   Ỹ = 0.0% → {Y_B:.1f}%   (A → B)")
+    is_axes(fig, f"R′ = {R_new:.2f}%, ā′ = {a_new:.2f}, r̄′ = {r_new:.2f}%, b̄ = {b:.2f}:   Ỹ = 0.00% → {Y_B:.2f}%  (A → B)")
     return fig
 ```
 
@@ -627,16 +662,20 @@ def life_cycle(y_low=1.0, y_high=7.5, retire=65, T=80):
     fig = go.Figure()
     add_band(fig, np.minimum(income, c), flat, ages, "rgba(90,160,216,0.35)")    # borrowing and dissaving
     add_band(fig, flat, np.maximum(income, c), ages, "rgba(127,178,58,0.35)")    # saving
-    fig.add_trace(go.Scatter(x=ages, y=income, name="Income", line=dict(color=BLUE, width=4)))
-    fig.add_trace(go.Scatter(x=ages, y=flat, name="Consumption", line=dict(color=TEAL, width=4, dash="dash")))
+    fig.add_trace(go.Scatter(x=ages, y=income, name="Income", showlegend=False, line=dict(color=BLUE, width=4)))
+    fig.add_trace(go.Scatter(x=ages, y=flat, name="Consumption", showlegend=False,
+                             line=dict(color=TEAL, width=4, dash="dash")))
+    fig.add_annotation(x=T, y=c, text="Consumption", xanchor="right", yanchor="bottom", showarrow=False,
+                       font=dict(size=15, color=TEAL))                  # curve names at the right end
+    fig.add_annotation(x=T, y=y_low, text="Income", xanchor="right", yanchor="top", showarrow=False,
+                       font=dict(size=15, color=BLUE))
     fig.add_annotation(x=10, y=(y_low + c) / 2, text="Borrowing/<br>transfers", showarrow=False, font=dict(size=13))
     fig.add_annotation(x=(50 + retire - 5) / 2, y=(c + y_high) / 2, text="Saving", showarrow=False, font=dict(size=13))
     fig.add_annotation(x=(retire + T) / 2, y=(y_low + c) / 2, text="Dissaving", showarrow=False, font=dict(size=13))
     title = f"Consumption = average income = {c:.2f} a year; saving from age {saver.min():.0f} to {saver.max():.0f}"
     fig.update_layout(title=title,
                       xaxis=dict(title="Age in years", range=[0, 96], tickvals=list(range(10, 100, 10))),
-                      yaxis=dict(title="Income and consumption", range=[0, 10.5], tickvals=[2, 4, 6, 8, 10]),
-                      legend=dict(x=0.01, y=0.99, xanchor="left", yanchor="top"))
+                      yaxis=dict(title="Income and consumption", range=[0, 10.5], tickvals=[2, 4, 6, 8, 10]))
     return fig
 ```
 
@@ -747,7 +786,8 @@ def cbo_chart(view="2009–2016, as in the textbook"):
                              mode="lines", line=dict(color="black", width=1, dash="dot")))
     fig.add_annotation(x="2020-04-01", y=14.8, text="April 2020: 14.8%", showarrow=True, arrowhead=2, ax=-90, ay=0,
                        visible=(view != "2009–2016, as in the textbook"))   # only in the full window
-    fig.update_layout(xaxis_range=x_range, yaxis=dict(range=y_range, tickvals=ticks), height=540,
+    fig.update_layout(xaxis=dict(range=x_range, dtick="M24", tick0="2010-01-01"),   # a tick every 2 years from 2010
+                      yaxis=dict(range=y_range, tickvals=ticks), height=540,
                       legend=dict(orientation="h", y=-0.18, yanchor="top"))
     return fig
 ```
@@ -762,7 +802,8 @@ interact(cbo_chart, view=ToggleButtons(options=list(VIEWS), value="2009–2016, 
 # @title Website version: Figure 6 with buttons for the textbook's window and all the data
 fig = cbo_chart()
 book, full = VIEWS["2009–2016, as in the textbook"], VIEWS["2009–2026, all the data"]
-fig.update_layout(updatemenus=[dict(type="buttons", direction="right", x=0.01, y=0.02, xanchor="left", yanchor="bottom",
+fig.update_layout(margin=dict(t=120),                     # room for the buttons between the title and the plot
+                  updatemenus=[dict(type="buttons", direction="right", x=0, y=1.02, xanchor="left", yanchor="bottom",
                                     buttons=[
     dict(label="2009–2016, as in the textbook", method="relayout",
          args=[{"xaxis.range": book[0], "yaxis.range": book[1], "yaxis.tickvals": book[2], "annotations[0].visible": False}]),
@@ -956,7 +997,7 @@ interact(is_experiment,
 ```{python}
 #| kind: website
 # @title Website version: Figure 9 with a precomputed slider for the new marginal product of capital
-slider_figure(is_experiment, "r_new", [4.0, 4.5, 5.0, 5.5, 6.0, 6.5, 7.0], start=6.0, label="new marginal product r̄′ (%)")
+slider_figure(is_experiment, "r_new", [5.0, 5.5, 6.0, 6.5, 7.0], start=6.0, label="new marginal product r̄′ (%)")
 ```
 
 **What to notice.**

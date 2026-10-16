@@ -1,0 +1,1615 @@
+# Chapter 20: Exchange Rates and International Finance
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/ch20-exchange-rates-and-international-finance.ipynb)
+
+*Data Science and Macroeconomic Models: A Python Companion to Intermediate Macroeconomics* · Carlos Mendez
+
+> **How to use this notebook.** In Colab, click *Runtime → Run all*. After that, every model
+> figure has live sliders: move one and the model is solved again on the spot. On the book
+> website the same figures come with one precomputed slider. Each section ends with a short
+> **Your turn** task, and you can try it in the empty code cell below the task.
+
+<!-- cell -->
+
+## Learning goals
+
+Chapter 19 studied trade between countries. This chapter adds the price at which their currencies trade, the
+**exchange rate**, and asks what moves it in the long run and in the short run. By the end of it you will be able to:
+
+- tell the **nominal** exchange rate (the price of a currency) from the **real** exchange rate (the price of goods),
+  and explain both with the **law of one price** and sticky inflation;
+- test the law of one price on data: the yen and the dollar since 1971, and the Big Mac index;
+- add exchange rates to the short-run model: a **flatter IS curve**, and a rise in **foreign interest rates** as an
+  aggregate demand shock in the AS/AD framework;
+- explain the **policy trilemma** and read the history of exchange-rate regimes, currency crises and the euro crisis
+  in the data;
+- in Python: build price levels from inflation rates with `cumprod`, plot two vertical scales in one figure, switch
+  views with Plotly buttons, rebase an index, and reshape tables with `melt` for grouped bar charts.
+
+<!-- cell -->
+
+## Figures in this chapter
+
+The figures follow the order of the textbook chapter. The second column shows which textbook
+figure each notebook figure replicates. Table 20.1 (the Big Mac index) is recomputed inside Figure 2.
+
+| Figure | Textbook figure | Type | What you can change |
+|---|---|---|---|
+| Figure 1 | 20.1 The U.S. exchange rate versus the yen and the euro | data | hover to read both scales |
+| Figure 2 | 20.2 Inflation in the United States and Japan (with Table 20.1) | data | show or hide a country (legend), the Big Mac release |
+| Figure 3 | 20.3 The real exchange rate for Japan | data | show or hide each measure (legend), hover |
+| Figure 4 | 20.4 Increasing interest rates and the IS curve | model | new real interest rate R′, net-export sensitivity b̄ₙₓ, investment sensitivity b̄ᵢ |
+| Figure 5 | 20.5 An increase in foreign interest rates | model | foreign rate gap Rʷ − r̄, period t, b̄ₙₓ, policy response m̄ |
+| Figure 6 | 20.6 The U.K.-U.S. exchange rate | data | hover for each year |
+| Figure 7 | 20.7 The policy trilemma in open economies | model | exchange-rate regime, foreign rate rise, the rate the economy needs |
+| Figure 8 | 20.8 Depreciations during several currency crises | data | textbook span or latest data, linear or ratio scale (buttons) |
+| Figure 9 | 20.9 10-year government bond yields in Europe | data | show or hide a country (legend), hover |
+| Figure 10 | 20.10 Domestic bank lending in Europe | data | show or hide a year (legend) |
+| Figure 11 | 20.11 Current account balances in Europe | data | show or hide a period (legend) |
+| Figure 12 | 20.12 Government debt in Europe | data | show or hide a year (legend) |
+| Figure 13 | 20.13 Unit labor costs in Europe | data | base year of the index |
+| Figure 14 | 20.14 Total factor productivity in the United States and Europe | data | show or hide a country (legend) |
+
+<!-- cell -->
+
+## Setup
+
+We first load the Python libraries we need. You only have to run this cell once.
+
+> **Python note.** `import` loads a *library*, a toolbox written by other people. We give each
+> library a short nickname, for example `np` for NumPy, so that the code stays short. Text after
+> a `#` is a *comment*: Python ignores it, and it is there for human readers. The `try ... except`
+> block runs one Colab-only line and simply skips it anywhere else.
+
+```{python}
+# Libraries used in this chapter
+import numpy as np                              # numbers and arrays
+import pandas as pd                             # data tables
+import plotly.express as px                     # quick charts from data tables
+import plotly.graph_objects as go               # charts built piece by piece (model figures)
+import plotly.io as pio
+from ipywidgets import interact, FloatSlider, IntSlider, ToggleButtons, Dropdown
+
+# One light blue/green look for every chart
+BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
+pio.templates.default = "plotly_white"
+pio.templates["plotly_white"].layout.update(width=860, height=480)   # same size in Colab and on the website
+px.defaults.color_discrete_sequence = [BLUE, TEAL, GREEN, "#5aa0d8", "#0b4f47"]
+WIDE = {"description_width": "initial"}         # show the full slider labels
+
+# Colab only: let Plotly charts appear inside the interactive widgets
+try:
+    import google.colab
+    google.colab.output.enable_custom_widget_manager()
+except ImportError:
+    pass                                        # not running in Colab: nothing to do
+
+# The data files of this chapter live in the book's GitHub repository
+DATA_URL = "https://raw.githubusercontent.com/quarcs-lab/macro102-site/main/data/ch20/"
+```
+
+The next cell defines a helper that only the book website needs. Run it and move on.
+
+```{python}
+#| kind: helper
+# @title Helper for the website versions (run this cell; you do not need to read it)
+def slider_figure(make_figure, name, values, start, label=None):
+    """Precompute make_figure(name=value) for every value and join the results with one slider.
+
+    The website cannot run Python, so each interactive figure also gets this precomputed version.
+    """
+    figures = [make_figure(**{name: v}) for v in values]
+    first = values.index(start)
+    fig = go.Figure(layout=figures[first].layout)
+    owner = []                                  # which precomputed figure each trace comes from
+    for i, f in enumerate(figures):
+        for trace in f.data:
+            trace.visible = (i == first)
+            fig.add_trace(trace)
+            owner.append(i)
+    steps = []
+    for i, f in enumerate(figures):
+        layout = {"title": f.layout.title.to_plotly_json(),
+                  "annotations": [a.to_plotly_json() for a in f.layout.annotations],
+                  "shapes": [s.to_plotly_json() for s in f.layout.shapes]}
+        visible = [o == i for o in owner]
+        steps.append(dict(method="update", label=str(values[i]), args=[{"visible": visible}, layout]))
+    fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
+                                    currentvalue=dict(prefix=(label or name) + " = "))])
+    return fig
+```
+
+## The model in code
+
+**Exchange rates in the long run.** The nominal exchange rate $E$ is the number of units of foreign currency that
+one dollar buys, for example 0.92 euros. The **law of one price** says that, in the long run, a good sells for the
+same price everywhere once prices are written in the same currency. With $P$ the U.S. price and $P^w$ the foreign
+("world") price,
+
+$$EP = P^w. \qquad (20.1)$$
+
+Apply it to the whole basket of goods of each economy. The quantity theory of money pins down the two price levels
+in the long run, so the law of one price pins down the exchange rate:
+
+$$\bar{E} = \frac{\bar{P}^w}{\bar{P}}. \qquad (20.3)$$
+
+The **real exchange rate** $EP/P^w$ is the price of U.S. goods in units of foreign goods. If the law of one price
+holds, it equals 1 in the long run, $\overline{RER} = \bar{E}P/\bar{P}^w = 1$ (20.4). In the short run, $E$ jumps with
+financial news while prices are sticky, so the real exchange rate moves with $E$.
+
+**Exchange rates in the short-run model.** When the U.S. real interest rate $R_t$ rises, investors want dollars, the
+dollar appreciates, U.S. goods become expensive and net exports fall. When the foreign real interest rate $\bar{R}^w$
+rises, the opposite happens:
+
+$$\frac{NX_t}{\bar{Y}_t} = \bar{a}_{nx} - \bar{b}_{nx}\,(R_t - \bar{R}^w). \qquad (20.6)$$
+
+Adding and subtracting the marginal product of capital $\bar{r}$ shows that net exports react to $R_t - \bar{r}$ just
+like investment does. The IS curve keeps its old form, with two new pieces:
+
+$$\tilde{Y}_t = \bar{a} - \bar{b}\,(R_t - \bar{r}), \qquad \bar{b} \equiv \bar{b}_i + \bar{b}_{nx}, \qquad
+\bar{a} \equiv \bar{a}_c + \bar{a}_i + \bar{a}_g + \bar{a}_{nx} - 1 + \bar{b}_{nx}(\bar{R}^w - \bar{r}). \qquad (20.8)$$
+
+So a foreign interest rate above $\bar{r}$ works as a positive **aggregate demand shock** $\bar{b}_{nx}(\bar{R}^w - \bar{r})$.
+Combined with the policy rule of Chapter 13, the IS curve gives the AD curve
+$\tilde{Y}_t = \bar{a} - \bar{b}\bar{m}(\pi_t - \bar{\pi})$, and the Phillips curve gives the AS curve
+$\pi_t = \pi_{t-1} + \bar{\nu}\tilde{Y}_t$.
+
+**One baseline for every diagram.** The textbook draws its diagrams without numbers. Both model diagrams of this
+notebook start from one illustrative set of parameters:
+
+- marginal product of capital $\bar{r} = 5$ percent, as in Chapter 11's example, and no demand shock at home,
+  $\bar{a}_c + \bar{a}_i + \bar{a}_g + \bar{a}_{nx} = 1$;
+- interest sensitivities $\bar{b}_i = 1$ and $\bar{b}_{nx} = 1$, so the total $\bar{b} = 2$ is the value of Chapters 11
+  and 13, split half and half between investment and trade;
+- inflation target $\bar{\pi} = 2$ percent, policy response $\bar{m} = 1/2$ and Phillips-curve slope $\bar{\nu} = 1$,
+  as in Chapter 13;
+- the foreign shock of Figure 5: the foreign real interest rate is 2 points above $\bar{r}$, at 7 percent, in periods
+  1 to 9 and back at $\bar{r}$ afterwards.
+
+> **Python note.** `def` creates a *function*: a named recipe that takes inputs (the *arguments*) and gives back a
+> result with `return`. Writing `b_nx=B_NX` gives an argument a *default value*, used whenever we do not pass one.
+> Names in capital letters, such as `R_BAR`, are constants that we set once and never change.
+
+```{python}
+R_BAR, B_I, B_NX = 5.0, 1.0, 1.0            # marginal product of capital (%), interest sensitivities
+PI_BAR, M_BAR, NU_BAR = 2.0, 0.5, 1.0       # inflation target (%), policy response, Phillips-curve slope
+RW_GAP, A_LAST, T_MAX = 2.0, 9, 20          # foreign rate minus r_bar in periods 1-9; periods simulated
+
+
+def long_run_exchange_rate(P_w, P):
+    """Equation 20.3: the long-run nominal exchange rate E = P_w / P (foreign currency per dollar)."""
+    return P_w / P
+
+
+def real_exchange_rate(E, P, P_w):
+    """The real exchange rate E P / P_w: foreign goods needed to buy one U.S. good (equation 20.4)."""
+    return E * P / P_w
+
+
+def net_exports(R, R_w=R_BAR, a_nx=0.0, b_nx=B_NX):
+    """Equation 20.6: net exports in percent of potential output, NX/Y = a_nx - b_nx (R - R_w)."""
+    return a_nx - b_nx * (R - R_w)
+
+
+def foreign_shock(R_w, b_nx=B_NX, r_bar=R_BAR):
+    """The part of a_bar that comes from abroad in equation 20.8: b_nx (R_w - r_bar)."""
+    return b_nx * (R_w - r_bar)
+```
+
+```{python}
+def is_curve(R, a=0.0, b_i=B_I, b_nx=B_NX, r_bar=R_BAR):
+    """Equation 20.8, the open-economy IS curve: Y~ = a - (b_i + b_nx) (R - r_bar), in percent."""
+    return a - (b_i + b_nx) * (R - r_bar)
+
+
+def ad_output(pi, a=0.0, m=M_BAR, b=B_I + B_NX):
+    """The AD curve of Chapter 13 with the open-economy b: Y~ = a - b m (pi - pi_bar)."""
+    return a - b * m * (pi - PI_BAR)
+
+
+def as_inflation(Y, pi_e, nu=NU_BAR):
+    """The AS curve of Chapter 13: pi = pi_e + nu Y~, with expected inflation pi_e = last period's inflation."""
+    return pi_e + nu * Y
+
+
+def solve_asad(pi_e, a=0.0, m=M_BAR, b=B_I + B_NX, nu=NU_BAR):
+    """The point where the AD and AS curves cross: short-run output and inflation in one period."""
+    Y = (a - b * m * (pi_e - PI_BAR)) / (1 + b * m * nu)
+    return Y, as_inflation(Y, pi_e, nu)
+```
+
+Let us try the functions on a few textbook cases.
+
+> **Python note.** An *f-string* such as `f"E = {E:.2f}"` inserts the value of a variable into a piece of text;
+> `:.2f` means "show two decimals" and `:+.1f` also shows the sign. `Y, pi = solve_asad(...)` *unpacks* the two
+> results of the function into two variables.
+
+```{python}
+E = long_run_exchange_rate(P_w=92.0, P=100.0)       # a chip costs 92 euros in Germany and 100 dollars in the U.S.
+print(f"Law of one price: E = {E:.2f} euros per dollar")
+print(f"Real exchange rate at that E: {real_exchange_rate(E, 100.0, 92.0):.2f}; at E = 1.00: "
+      f"{real_exchange_rate(1.0, 100.0, 92.0):.2f}")
+print(f"Net exports when R rises from 5% to 6%: {net_exports(6.0):+.1f}% of potential output")
+print(f"IS curve at R = 6%: Y~ = {is_curve(6.0):+.1f}% (without the trade channel: {is_curve(6.0, b_nx=0.0):+.1f}%)")
+a = foreign_shock(R_BAR + RW_GAP)
+Y, pi = solve_asad(PI_BAR, a)
+print(f"Foreign rate 2 points above r_bar: a = {a:.1f}; first period Y~ = {Y:+.2f}%, inflation = {pi:.2f}%")
+```
+
+At 0.92 euros per dollar the chip costs the same in both countries, so the real exchange rate is 1. At 1 euro per
+dollar U.S. chips are about 9 percent too expensive. With the trade channel, a 1-point rise in the interest rate
+lowers output by 2 percent instead of 1. And a foreign interest rate 2 points above $\bar{r}$ is a demand shock of
+$\bar{a} = 2$: the same shock as Chapter 13's aggregate demand shock, so the same dynamics follow.
+
+<!-- cell -->
+
+### One loop for the dynamics
+
+Figure 5 follows the economy period by period. Each period, firms expect last period's inflation, and the economy
+jumps to the point where that period's AD and AS curves cross. `simulate` repeats this step; `shock_list` builds the
+list of demand shocks, one value per period.
+
+> **Python note.** `values.append(x)` adds `x` at the end of the list `values`, and `for t in range(1, 21)` repeats
+> the indented lines for t = 1, 2, ..., 20. `dict(period=0, Y=0.0)` is a *dictionary*, a set of named values, and
+> `rows[-1]["pi"]` is the value named `"pi"` in the last element of the list. `pd.DataFrame(rows)` turns a list of
+> dictionaries into a table, one row per dictionary.
+
+```{python}
+def shock_list(size, last=A_LAST):
+    """A demand shock of the given size in periods 1, ..., last and zero afterwards, for T_MAX periods."""
+    values = []
+    for t in range(1, T_MAX + 1):
+        if t <= last:
+            values.append(size)
+        else:
+            values.append(0.0)
+    return values
+
+
+def simulate(a_list, m=M_BAR, b=B_I + B_NX, nu=NU_BAR):
+    """Solve the AS/AD model period by period; period 0 is the steady state (Y~ = 0, pi = pi_bar)."""
+    rows = [dict(period=0, a=0.0, pi_e=PI_BAR, Y=0.0, pi=PI_BAR)]
+    for t in range(1, len(a_list) + 1):
+        pi_e = rows[-1]["pi"]                   # adaptive expectations: last period's inflation
+        Y, pi = solve_asad(pi_e, a_list[t - 1], m, b, nu)
+        rows.append(dict(period=t, a=a_list[t - 1], pi_e=pi_e, Y=Y, pi=pi))
+    return pd.DataFrame(rows)
+
+
+simulate(shock_list(2.0)).loc[[0, 1, 2, 8, 9, 10, 11]].round(3)
+```
+
+Inflation rises from 2 to 3 percent in period 1 and climbs toward 4 percent while the shock lasts. When the shock ends
+in period 10, output falls below potential and inflation starts back down to 2 percent.
+
+<!-- cell -->
+
+### Drawing tools
+
+Both model diagrams use the same few drawing steps, so we write them once:
+
+- `add_curve` draws a curve and writes its name at its last point inside the axes, as the textbook does;
+- `add_point` marks a point with a dot, a letter and dashed guides to the axes;
+- `add_arrow` draws an arrow between two points.
+
+> **Python note.** `(x >= 0) & (y <= 8)` is true where *both* conditions hold, `x[inside]` keeps the values where
+> `inside` is true, and `[-1]` takes the last of them. `add_annotation` with `axref="x"` and `ayref="y"` draws an
+> arrow from (`ax`, `ay`) to (`x`, `y`), both in axis units. Labels such as `"AS<sub>8</sub>"` use HTML to write AS₈.
+
+```{python}
+def add_curve(fig, x, y, label, color, x_range, y_range, dash="solid"):
+    """Draw one curve and write its label at its last point inside the axes (no label if label is "")."""
+    fig.add_trace(go.Scatter(x=x, y=y, mode="lines", name=label, showlegend=False,
+                             line=dict(color=color, width=3, dash=dash)))
+    inside = (x >= x_range[0]) & (x <= x_range[1]) & (y >= y_range[0]) & (y <= y_range[1])
+    if inside.any() and label != "":
+        fig.add_annotation(x=x[inside][-1], y=y[inside][-1], text=label, showarrow=False,
+                           xanchor="left", yanchor="bottom", font=dict(color=color, size=14))
+
+
+def add_point(fig, x, y, label, x0, y0, guides=True):
+    """Mark the point (x, y) with a dot and a label; with guides, dashed lines to the axes at x0 and y0."""
+    if guides:
+        fig.add_trace(go.Scatter(x=[x0, x, x], y=[y, y, y0], mode="lines", showlegend=False, hoverinfo="skip",
+                                 line=dict(color="black", width=1, dash="dash")))
+    fig.add_trace(go.Scatter(x=[x], y=[y], mode="markers+text", text=[label], textposition="top right",
+                             name=label, showlegend=False, textfont=dict(size=16), marker=dict(color="black", size=10)))
+
+
+def add_arrow(fig, x0, y0, x1, y1, color="black"):
+    """Draw an arrow from (x0, y0) to (x1, y1) in axis units; nothing if the two points almost coincide."""
+    if abs(x1 - x0) + abs(y1 - y0) > 0.15:
+        fig.add_annotation(x=x1, y=y1, ax=x0, ay=y0, xref="x", yref="y", axref="x", ayref="y", text="",
+                           showarrow=True, arrowhead=3, arrowwidth=2, arrowcolor=color)
+```
+
+## Figure 1: The U.S. exchange rate versus the yen and the euro
+
+**Goal.** See how the price of a dollar has moved since the end of fixed exchange rates in 1971.
+
+The exchange rate here is the price of a dollar in foreign currency: how many yen, or how many euros, one dollar
+buys. A fall is a **depreciation** of the dollar, a rise an **appreciation**. The two series have very different
+units (hundreds of yen, about one euro), so the textbook draws them on two vertical scales.
+
+> **Python note.** `parse_dates=["date"]` tells `read_csv` that the column `date` holds dates, so Plotly draws a
+> proper time axis. `.tail()` shows the last five rows. The euro only exists since 1999, so the column `eur_per_usd`
+> is empty (`NaN`, "not a number") before that.
+
+```{python}
+fx = pd.read_csv(DATA_URL + "fig20-1.csv", parse_dates=["date"])
+fx.tail()
+```
+
+Each row is a month: `yen_per_usd` is the average number of yen per dollar, and `eur_per_usd` the number of euros per
+dollar (the Federal Reserve publishes dollars per euro; the data file turns it around so that both lines are the price
+of a dollar).
+
+> **Python note.** `px.line` draws the yen line. `add_scatter(..., yaxis="y2")` adds the euro line on a second
+> vertical axis, which `yaxis2=dict(overlaying="y", side="right")` places on the right. `hovermode="x unified"`
+> shows both values of the month you point at in one box.
+
+```{python}
+fig = px.line(fx, x="date", y="yen_per_usd", labels={"date": "Year", "yen_per_usd": "Yen per dollar"},
+              title="Yen per dollar: 358 in 1971, 84 in 1995, between 76 and 162 since then")
+fig.update_traces(line_color=BLUE, name="Yen per dollar")
+fig.add_scatter(x=fx.date, y=fx.eur_per_usd, name="Euros per dollar", yaxis="y2", line=dict(color=TEAL))
+fig.update_layout(showlegend=False, hovermode="x unified",
+                  xaxis=dict(range=["1970-01-01", "2028-01-01"]),
+                  yaxis=dict(title="Yen per dollar (left scale)", range=[50, 400], tickvals=[100, 200, 300, 400],
+                             color=BLUE),
+                  yaxis2=dict(title="Euros per dollar (right scale)", range=[0.6, 1.3], tickvals=[0.75, 1.0, 1.25],
+                              color=TEAL,
+                              overlaying="y", side="right", showgrid=False))
+fig.add_annotation(x="1981-06-01", y=335, text="Yen per dollar<br>(left scale)", showarrow=False,
+                   font=dict(color=BLUE, size=14))
+fig.add_annotation(x="2010-01-01", y=1.2, yref="y2", text="Euros per dollar<br>(right scale)", showarrow=False,
+                   font=dict(color=TEAL, size=14))
+fig.show()
+```
+
+**What to notice.**
+
+- From 1971 to 1995 the dollar lost three quarters of its value against the yen: from 358 yen in January 1971 to
+  84 in April 1995.
+- Against the euro the dollar first appreciated, to 1.17 euros in October 2000, then depreciated to 0.63 in
+  July 2008, and has been between about 0.8 and 1.0 euros in most years since 2015.
+- The newest data go beyond the textbook: in 2024–2026 the dollar bought 143 to 162 yen. The 162 yen of July 2026
+  are the most since 1986.
+
+<!-- cell -->
+
+### Key numbers: the dates in the text
+
+> **Python note.** `fx.set_index("date")` uses the dates as row labels, and `.loc[...]` picks rows by label.
+> `pd.to_datetime([...])` turns a list of texts into dates, so that they match the row labels.
+
+```{python}
+months = pd.to_datetime(["1971-01-01", "1995-04-01", "1995-07-01", "2023-05-01",
+                         "1999-03-01", "2002-02-01", "2008-07-01", "2026-09-01"])
+fx.set_index("date").loc[months].round(3)
+```
+
+The textbook's numbers are all here: 357 (358) yen in 1971, 87 in mid-1995, 137 in early 2023; 0.92 euros in 1999,
+1.15 at the start of 2002 and the low of 0.64 in 2008.
+
+**Your turn.** Find the month in which the dollar bought the *fewest* yen, and the month in which it bought the most
+euros.
+
+<details><summary>Hint</summary>
+
+`fx.yen_per_usd.idxmin()` gives the row number of the smallest value, and `fx.loc[row]` shows that row. Use
+`idxmax()` for the euro.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 2: Inflation in the United States and Japan
+
+**Goal.** Check the law of one price's prediction: if the dollar depreciated against the yen for decades, U.S.
+inflation must have been higher than Japan's.
+
+Write equation (20.3) in growth rates. With $E$ = yen per dollar, $P^w$ the Japanese and $P$ the U.S. price level,
+
+$$\frac{\Delta \bar{E}}{\bar{E}} \approx \pi^{w} - \pi,$$
+
+so the dollar loses value against the yen by roughly the gap between U.S. and Japanese inflation.
+
+```{python}
+inflation = pd.read_csv(DATA_URL + "fig20-2.csv")
+inflation.tail()
+```
+
+The columns are annual consumer-price inflation, in percent. The U.S. value for 2025 is not published yet (`NaN`).
+After `melt` we drop that empty row with `.dropna()`, so that it does not break the line.
+
+> **Python note.** `rename(columns={...})` gives the columns readable names, which then appear in the legend.
+> `melt(id_vars="year")` turns the two country columns into rows: one row per year and country, with the old column
+> name in `country` and the value in `inflation`. That *long* shape is what `px.line(..., color="country")` needs.
+
+```{python}
+long = inflation.rename(columns={"inflation_us": "United States", "inflation_jpn": "Japan"})
+long = long.melt(id_vars="year", var_name="country", value_name="inflation").dropna()
+fig = px.line(long, x="year", y="inflation", color="country", hover_name="country",
+              color_discrete_map={"United States": BLUE, "Japan": TEAL},
+              labels={"year": "Year", "inflation": "Inflation (percent per year)", "country": ""},
+              title="Inflation was higher in the United States than in Japan in most years")
+fig.add_hline(y=0, line_dash="dash", line_color=GRAY)
+fig.update_layout(yaxis_range=[-3, 25], legend=dict(x=0.99, y=0.99, xanchor="right", yanchor="top"))
+fig.show()
+```
+
+**What to notice.**
+
+- Japan's inflation jumped to 23 percent in 1974, after the first oil shock; U.S. inflation peaked at 13.5 percent in 1980.
+- From the late 1990s Japan had **deflation** in many years (falling prices), while U.S. inflation stayed positive
+  except in 2009.
+- Click a country in the legend to hide it, and hover over the lines to read the values.
+
+<!-- cell -->
+
+### Key numbers: average inflation
+
+```{python}
+for first, last in [(1971, 1995), (1996, 2024), (1971, 2024)]:
+    span = inflation[(inflation.year >= first) & (inflation.year <= last)]
+    us, jp = span.inflation_us.mean(), span.inflation_jpn.mean()
+    print(f"{first}–{last}: United States {us:.2f}%, Japan {jp:.2f}%, gap {us - jp:.2f} points a year")
+```
+
+Between 1971 and 1995 U.S. inflation was higher by only about 1 point a year, as the textbook says. Figure 3 shows
+why that small gap cannot explain the dollar's fall from 358 to 84 yen.
+
+<!-- cell -->
+
+### Table 20.1: the Big Mac index
+
+*The Economist* compares the price of a Big Mac around the world. If the law of one price held for burgers, a Big Mac
+would cost the same number of dollars everywhere. The data file `big_mac.csv` holds every release of the index since
+2000, made by `data/ch20/build_data.py` from *The Economist*'s open data.
+
+```{python}
+big_mac = pd.read_csv(DATA_URL + "big_mac.csv")
+big_mac.head()
+```
+
+Each row is one economy in one release: the local price, the market exchange rate (local currency per dollar) and the
+dollar price, local price / exchange rate. `gdp_pc_2023` is GDP per person from the Penn World Table, which we use
+in Figure 3.
+
+> **Python note.** `set_index("country")` uses the country names as row labels, and `.loc[BOOK_ROWS]` picks the rows
+> in the order of the list. A new column is created simply by assigning to it: `table["vs_US_percent"] = ...`.
+
+```{python}
+BOOK_ROWS = ["United States", "Norway", "Euro area", "Mexico", "China", "Japan", "South Africa", "India"]
+
+
+def big_mac_table(release="2022-07-01"):
+    """Table 20.1: Big Mac prices in local currency and in dollars, for one release of the index."""
+    table = big_mac[big_mac.release == release].set_index("country").loc[BOOK_ROWS]
+    us_price = table.loc["United States", "dollar_price"]
+    table["vs_US_percent"] = 100 * (table.dollar_price / us_price - 1)      # dearer (+) or cheaper (-) than in the U.S.
+    return table[["local_price", "currency", "ex_rate", "dollar_price", "vs_US_percent"]].round(2)
+
+
+table = big_mac_table("2022-07-01")
+table["textbook"] = pd.Series({"United States": 5.15, "Norway": 6.26, "Euro area": 4.74, "Mexico": 3.43,
+                               "China": 3.56, "Japan": 2.83, "South Africa": 2.34, "India": 2.39})
+table
+```
+
+The textbook's table is the release of July 2022, and every dollar price matches. The one exception, the euro area,
+is only rounding: the textbook divides 4.65 euros by a rounded 0.98 euros per dollar. **Always look at what a data
+series measures**: India's row is not a beef Big Mac at all but the chicken Maharaja Mac, since McDonald's in India
+sells no beef.
+
+**What to notice.**
+
+- The law of one price clearly fails for Big Macs: from 2.34 dollars in South Africa to 6.26 dollars in Norway.
+- By the burger standard, Norway's krone was overvalued (21.6 percent dearer than in the U.S.) and China's yuan
+  undervalued (30.9 percent cheaper).
+
+**Your turn.** Make the table for the latest release, `"2026-07-01"`. Which currencies moved from cheaper than the U.S.
+to dearer, and which moved the other way?
+
+<details><summary>Hint</summary>
+
+Call `big_mac_table("2026-07-01")` and compare the column `vs_US_percent` with the 2022 table. Look at the euro area
+and Mexico. `sorted(big_mac.release.unique())` lists all releases.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 3: The real exchange rate for Japan
+
+**Goal.** See that the real exchange rate can move for decades, and learn one reason why: the Balassa-Samuelson effect.
+
+The real exchange rate from Japan's point of view is the price of Japanese goods in units of U.S. goods. With $E$ in
+yen per dollar, Japanese goods cost $P^{Japan}/E$ dollars, so
+
+$$RER^{Japan} = \frac{P^{Japan}/E}{P^{US}}.$$
+
+The textbook uses the Penn World Table, which compares the price of GDP in the two countries, as an index with
+1971 = 100.
+
+```{python}
+rer = pd.read_csv(DATA_URL + "fig20-3.csv")
+rer.tail()
+```
+
+We can also build the real exchange rate ourselves, from the data of Figures 1 and 2. Inflation tells us how fast the
+price level grows each year, so multiplying the growth factors $1 + \pi_t/100$ year after year gives the price level.
+
+> **Python note.** `fx.date.dt.year` takes the year out of each date, and `groupby("year").yen_per_usd.mean()` averages
+> the 12 months of each year. `.cumprod()` is the *cumulative product*: it multiplies the growth factors year after
+> year, $P_t = P_{t-1}(1+\pi_t/100)$. Dividing two pandas series lines up their rows by year automatically.
+
+```{python}
+fx["year"] = fx.date.dt.year
+yen = fx.groupby("year").yen_per_usd.mean()              # annual average, yen per dollar
+
+prices = inflation[inflation.year >= 1971].set_index("year")
+growth_us = 1 + prices.inflation_us / 100
+growth_jp = 1 + prices.inflation_jpn / 100
+P_us = growth_us.cumprod() / growth_us.loc[1971]          # consumer price level, 1971 = 1
+P_jp = growth_jp.cumprod() / growth_jp.loc[1971]
+
+estimate = (P_jp / yen) / P_us                            # dollar price of Japanese goods relative to U.S. goods
+estimate = (100 * estimate / estimate.loc[1971]).dropna()  # index, 1971 = 100
+estimate.loc[[1971, 1995, 2023, 2024]].round(1)
+```
+
+> **Python note.** `pd.DataFrame({...})` builds a table from a dictionary of series, one column each, lined up by year.
+> `line_dash="measure"` draws the two measures with different dash styles.
+
+```{python}
+compare = pd.DataFrame({"Penn World Table (GDP prices)": rer.set_index("year").rer_jpn,
+                        "Our estimate (consumer prices)": estimate})
+compare.index.name = "year"
+compare = compare.reset_index().melt(id_vars="year", var_name="measure", value_name="rer").dropna()
+fig = px.line(compare, x="year", y="rer", color="measure", line_dash="measure", hover_name="measure",
+              color_discrete_sequence=[BLUE, TEAL], range_y=[50, 320],
+              labels={"year": "Year", "rer": "Real exchange rate of Japan (1971 = 100)", "measure": ""},
+              title="Japan's real exchange rate rose 2.5-fold from 1971 to 1995, then fell back")
+fig.add_hline(y=100, line_dash="dot", line_color=GRAY)
+fig.update_layout(legend=dict(x=0.99, y=0.99, xanchor="right", yanchor="top"))
+fig.show()
+```
+
+**What to notice.**
+
+- Japanese goods became much more expensive relative to U.S. goods until 1995: the Penn World Table index peaks at
+  245. Since then they have become cheaper again, and in 2022–2023 the index fell below its 1971 level.
+- Our consumer-price estimate rises more (to 286 in 1995), because it compares consumer prices rather than the prices
+  of everything an economy produces, but it tells the same story year by year.
+
+<!-- cell -->
+
+### Key numbers: the law of one price, 1971–1995
+
+If the law of one price had held, the yen-dollar rate would have changed each year only by the inflation gap. We apply
+the growth factors of 1972–1995 to the 1971 rate.
+
+> **Python note.** `.prod()` multiplies all the values of a series, here the 24 yearly factors.
+
+```{python}
+years = inflation[(inflation.year >= 1972) & (inflation.year <= 1995)]
+ratio = ((1 + years.inflation_jpn / 100) / (1 + years.inflation_us / 100)).prod()
+print(f"Yen per dollar, 1971 average:                     {yen[1971]:.0f}")
+print(f"1995 rate predicted by the law of one price:      {yen[1971] * ratio:.0f}")
+print(f"Actual 1995 average:                              {yen[1995]:.0f}")
+```
+
+The inflation gap explains a fall to about 269 yen per dollar. The dollar actually fell to 94 yen, so the real
+exchange rate of the yen rose a lot. That is the "apparent contradiction" of the textbook's case study.
+
+<!-- cell -->
+
+### The Balassa-Samuelson effect in the Big Mac data
+
+The explanation is that only *traded* goods obey the law of one price. Haircuts and restaurant meals cannot be
+shipped, and their prices follow local wages. As an economy grows, wages rise, nontraded goods become dearer, and the
+real exchange rate **appreciates**. So richer countries should have dearer Big Macs (the burger includes the work of
+the staff and the rent of the restaurant). We check this with the latest Big Mac release and GDP per person.
+
+```{python}
+latest = big_mac[big_mac.release == big_mac.release.max()].dropna(subset=["gdp_pc_2023"])
+latest.sort_values("gdp_pc_2023").head(3)
+```
+
+Look at the first row. GDP per person in Venezuela appears to be about 160 dollars a year, which is not plausible:
+during Venezuela's hyperinflation the price data behind this number broke down (we met the same problem in
+Chapter 5). We drop Venezuela, and label only the economies of Table 20.1.
+
+> **Python note.** `log_x=True` puts GDP per person on a ratio scale, and `trendline="ols"` adds the best-fitting
+> straight line. `trendline_options=dict(log_x=True)` fits that line to the logarithm of GDP, so that it is straight
+> on the ratio scale. `.where(condition, "")` keeps a value where the condition holds and puts `""` elsewhere.
+> `latest.loc[rows, "position"] = ...` changes one column in the chosen rows only; `fig.data[0]` is the first trace
+> of the figure (the points), and we give it one text position per point.
+
+```{python}
+latest = latest[latest.iso3 != "VEN"].copy()
+latest["label"] = latest.country.where(latest.country.isin(BOOK_ROWS), "")
+latest["position"] = "top center"
+latest.loc[latest.country == "China", "position"] = "bottom center"     # keep China's label off the fitted line
+fig = px.scatter(latest, x="gdp_pc_2023", y="dollar_price", text="label", hover_name="country", log_x=True,
+                 trendline="ols", trendline_options=dict(log_x=True), range_x=[4000, 150000], range_y=[0, 10],
+                 labels={"gdp_pc_2023": "GDP per person, 2023 (2021 dollars, ratio scale)",
+                         "dollar_price": "Price of a Big Mac in dollars (July 2026)"},
+                 title="Big Macs cost more in richer countries: the Balassa-Samuelson effect")
+fig.update_traces(marker=dict(size=9, color=TEAL))
+fig.data[0].textposition = list(latest.position)           # one text position per point
+fig.update_layout(xaxis=dict(tickvals=[5000, 10000, 20000, 50000, 100000], ticktext=["5k", "10k", "20k", "50k", "100k"]),
+                  yaxis=dict(tickvals=[2, 4, 6, 8, 10]))
+fig.show()
+```
+
+**What to notice.**
+
+- The fitted line slopes up: a Big Mac costs about 2 dollars more for every tenfold rise in GDP per person. Indonesia,
+  India and the Philippines are cheap; Switzerland, Uruguay and Norway are the dearest.
+- The cloud is wide. Japan and Taiwan are rich but have cheap Big Macs. For Japan this is the weak yen of 2026, the
+  fall of the real exchange rate in the figure above.
+
+**Your turn.** Redo the scatter for the release of July 2012. Is the slope steeper or flatter than in 2026?
+
+<details><summary>Hint</summary>
+
+Replace `big_mac.release.max()` with `"2012-07-01"` in the first cell, then rerun the drop of Venezuela and the chart.
+Hover over the fitted line to read its equation.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+<!-- cell -->
+
+### Key numbers: the size of the foreign exchange market
+
+In the short run, the exchange rate is set in the market for currencies, and that market is enormous. The textbook
+compares the daily trade in foreign exchange, more than 5 trillion dollars, with GDP.
+
+```{python}
+forex_per_day = 5000                         # billions of dollars traded per day
+us_gdp_per_day = 25000 / 365                 # U.S. GDP of 25 trillion dollars a year, per day
+world_gdp_per_day = us_gdp_per_day / 0.15    # the U.S. produces about 15% of world GDP
+print(f"U.S. GDP per day: {us_gdp_per_day:.0f} billion dollars")
+print(f"Foreign exchange traded per day = {forex_per_day / us_gdp_per_day:.0f} times U.S. daily GDP")
+print(f"... and {forex_per_day / world_gdp_per_day:.0f} times world daily GDP")
+```
+
+The textbook rounds daily GDP up to 70 billion dollars and so finds "more than 75 times"; the exact ratio is 73. The
+short-run lesson (Table 20.2 of the textbook) is:
+
+| | Long run | Short run |
+|---|---|---|
+| Nominal exchange rate $E$ | set by relative price levels (quantity theory of money) | set in currency markets; moves with the interest rate $i$ |
+| Real exchange rate $EP/P^w$ | 1, by the law of one price | moves with unexpected changes in $E$, because inflation is sticky |
+
+<!-- cell -->
+
+## Figure 4: Increasing interest rates and the IS curve
+
+**Goal.** See why the IS curve is **flatter** in an open economy: a higher interest rate lowers net exports as well
+as investment.
+
+The central bank raises the real interest rate from $\bar{r}$ to $R'$. The economy moves along the IS curve from $A$
+to $B$. Two forces lower output:
+
+$$\uparrow R \;\Rightarrow\; \downarrow \frac{I}{\bar{Y}} \quad\text{and}\quad
+\uparrow R \Rightarrow \uparrow E \Rightarrow \uparrow \frac{EP}{P^w} \Rightarrow \downarrow \frac{NX}{\bar{Y}}.$$
+
+From equation (20.8), $\tilde{Y}' = -(\bar{b}_i + \bar{b}_{nx})(R' - \bar{r})$. The dashed gray line is the IS curve
+without the trade channel ($\bar{b}_{nx} = 0$), the closed economy of Chapter 11.
+
+```{python}
+R_LINE = np.linspace(9, 2, 141)              # real interest rates, high to low, at which we draw the IS curves
+X_IS, R_AXIS = [-11, 5], [2, 9]              # fixed axes, so that you can see the curve turn
+
+
+def tightening(R_new=6.0, b_nx=B_NX, b_i=B_I):
+    """Figure 20.4: the central bank raises R from r_bar to R_new; the economy moves along the IS curve."""
+    Y_new = is_curve(R_new, b_i=b_i, b_nx=b_nx)
+    fig = go.Figure()
+    if b_nx > 0:
+        add_curve(fig, is_curve(R_LINE, b_i=b_i, b_nx=0.0), R_LINE, "IS without trade", GRAY, X_IS, R_AXIS, "dash")
+    add_curve(fig, is_curve(R_LINE, b_i=b_i, b_nx=b_nx), R_LINE, "IS", BLUE, X_IS, R_AXIS)
+    add_point(fig, 0.0, R_BAR, "A", X_IS[0], R_AXIS[0])
+    add_point(fig, Y_new, R_new, "B", X_IS[0], R_AXIS[0])
+    add_arrow(fig, X_IS[0] + 0.6, R_BAR, X_IS[0] + 0.6, R_new)              # the interest rate rises ...
+    add_arrow(fig, 0.0, R_AXIS[0] + 0.3, Y_new, R_AXIS[0] + 0.3)            # ... and output falls
+    invest = -b_i * (R_new - R_BAR) + 0.0                                    # + 0.0 avoids printing -0.0
+    trade = -b_nx * (R_new - R_BAR) + 0.0
+    fig.update_layout(title=f"R′ = {R_new:.1f}%  →  Ỹ′ = {Y_new + 0.0:.1f}%   "
+                            f"(investment {invest:.1f}, net exports {trade:.1f})",
+                      xaxis=dict(title="Short-run output, Ỹ (percent)", range=X_IS, tickvals=list(range(-10, 5, 2)),
+                                 zeroline=False),
+                      yaxis=dict(title="Real interest rate, R (percent)", range=R_AXIS, tickvals=list(range(3, 9)),
+                                 zeroline=False))
+    return fig
+```
+
+> **Python note.** `interact` turns each argument of a function into a slider and calls the function again every time
+> you move one. The `;` at the end only hides an extra line of text.
+
+```{python}
+#| kind: widget
+interact(tightening,
+         R_new=FloatSlider(value=6.0, min=4.0, max=7.5, step=0.5, description="new real interest rate R′ (%)", style=WIDE),
+         b_nx=FloatSlider(value=1.0, min=0.0, max=2.0, step=0.25, description="net-export sensitivity b̄ₙₓ", style=WIDE),
+         b_i=FloatSlider(value=1.0, min=0.5, max=2.0, step=0.25, description="investment sensitivity b̄ᵢ", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 4 with a precomputed slider for the net-export sensitivity
+slider_figure(tightening, "b_nx", [0.0, 0.5, 1.0, 1.5, 2.0], start=1.0, label="net-export sensitivity b̄ₙₓ")
+```
+
+**What to notice.**
+
+- With the baseline, raising $R$ from 5 to 6 percent lowers output by 2 percent: 1 point through investment and
+  1 point through net exports. Without trade, output would fall by only 1 percent.
+- Raise $\bar{b}_{nx}$: the IS curve turns flatter and point $B$ moves left. The more net exports react to the
+  exchange rate, the more powerful monetary policy is.
+- Nothing else changes: the curve still passes through $A$, because at $R = \bar{r}$ there is no gap to react to.
+
+**Your turn.** With $\bar{b}_i = 1$, what value of $\bar{b}_{nx}$ makes a 1-point rise in $R$ lower output by 3 percent?
+Find it with the sliders, then check it with `is_curve`.
+
+<details><summary>Hint</summary>
+
+Output falls by $(\bar{b}_i + \bar{b}_{nx})$ percent per point. Try `is_curve(6.0, b_nx=2.0)`.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 5: An increase in foreign interest rates
+
+**Goal.** Follow the **international transmission of monetary policy**: the European Central Bank raises its interest
+rate, and the U.S. economy booms, then slumps.
+
+When the foreign real interest rate rises to $\bar{R}^w = 7$ percent, 2 points above $\bar{r}$, investors move from
+dollars to euros, the dollar depreciates, U.S. goods become cheap and U.S. net exports rise. In equation (20.8) this is
+a positive demand shock, $\bar{a} = \bar{b}_{nx}(\bar{R}^w - \bar{r}) = 2$, so the AD curve shifts out to AD₁. Then the
+familiar dynamics of Chapter 13 take over:
+
+- period 1: the economy jumps from $A$ to $B$, with output and inflation above normal;
+- periods 2–9: inflation rises, the Fed raises U.S. interest rates, and the economy climbs AD₁ toward $C$ (period 8 in
+  the textbook), with output back at potential but inflation above target;
+- period 10: the foreign rate falls back to $\bar{r}$, the shock ends, AD shifts back, and the economy drops to a
+  recession at $D$; it then slides down AD back to $A$.
+
+The function draws period `t`: the original AS curve, the AS curve of period `t`, both AD curves (the one that holds in
+period `t` in full color), the path so far with the textbook's letters, and the path still to come in gray.
+
+```{python}
+Y_LINE = np.linspace(-6, 6, 121)                # output levels at which we draw the AS curves
+PI_LINE = np.linspace(12, -4, 161)              # inflation rates, high to low, at which we draw the AD curves
+X_AD, PI_AXIS = [-3.5, 3.5], [-0.5, 7.5]        # fixed axes
+LETTERS = {0: "A", 1: "B", 8: "C", 10: "D"}     # the textbook's letters for periods 0, 1, 8 and 10
+FADED = "rgba(22,82,140,0.35)"                  # light blue for the AD curve that does not hold in period t
+
+
+def add_asad_curves(fig, a, pi_e, t, m, b):
+    """The AS curves (original and period t) and the AD curves (original and shifted) of Figure 5."""
+    add_curve(fig, Y_LINE, as_inflation(Y_LINE, PI_BAR), "AS", TEAL, X_AD, PI_AXIS)
+    if abs(pi_e - PI_BAR) > 0.05:                                   # skip the AS of period t if it is the old one
+        label = f"AS<sub>{t}</sub>" if abs(pi_e - PI_BAR) > 0.6 else ""
+        add_curve(fig, Y_LINE, as_inflation(Y_LINE, pi_e), label, TEAL, X_AD, PI_AXIS)
+    shock_on = 1 <= t <= A_LAST
+    ad_label = f"AD = AD<sub>{t}</sub>" if t > A_LAST else "AD"
+    add_curve(fig, ad_output(PI_LINE, 0.0, m, b), PI_LINE, ad_label, FADED if shock_on else BLUE, X_AD, PI_AXIS)
+    if a != 0:
+        label = "AD<sub>1</sub>" if abs(a / (b * m)) > 0.6 else ""  # no label when it would sit on AD's label
+        add_curve(fig, ad_output(PI_LINE, a, m, b), PI_LINE, label, BLUE if shock_on else FADED, X_AD, PI_AXIS)
+```
+
+```{python}
+def add_path(fig, path, t):
+    """The economy's path up to period t (dots, arrows, letters) and the rest of the path in gray."""
+    future = path[path.period >= t]
+    fig.add_trace(go.Scatter(x=future.Y, y=future.pi, mode="lines+markers", showlegend=False, hoverinfo="skip",
+                             line=dict(color=GRAY, width=1, dash="dot"), marker=dict(color=GRAY, size=5)))
+    for s in range(1, t + 1):
+        add_arrow(fig, path.Y[s - 1], path.pi[s - 1], path.Y[s], path.pi[s])
+    for s in range(t + 1):
+        if s in LETTERS:
+            add_point(fig, path.Y[s], path.pi[s], LETTERS[s], X_AD[0], PI_AXIS[0], guides=False)
+
+
+def foreign_rate_shock(gap=RW_GAP, t=10, b_nx=B_NX, m=M_BAR):
+    """Figure 20.5: period t after the foreign real interest rate rises gap points above r_bar in periods 1-9."""
+    a = foreign_shock(R_BAR + gap, b_nx)                 # equation 20.8: the demand shock from abroad
+    b = B_I + b_nx
+    path = simulate(shock_list(a), m, b)
+    now = path.loc[t]
+    fig = go.Figure()
+    add_asad_curves(fig, a, now.pi_e, t, m, b)
+    add_path(fig, path, t)
+    fig.update_layout(title=f"Period {t}: π = {now.pi:.2f}%, Ỹ = {round(now.Y, 2) + 0.0:+.2f}%   "
+                            f"(Rʷ − r̄ = {gap:.1f}, so ā = {a:.1f} in periods 1–{A_LAST})",
+                      xaxis=dict(title="Output, Ỹ (percent)", range=X_AD, tickvals=list(range(-3, 4)), zeroline=False),
+                      yaxis=dict(title="Inflation, π (percent)", range=PI_AXIS, tickvals=list(range(0, 8)), zeroline=False))
+    return fig
+```
+
+> **Python note.** `IntSlider` is a slider for whole numbers, here the period `t`. `path.loc[t]` is the row of period
+> `t`, and `now.pi` is its value in the column `pi`.
+
+```{python}
+#| kind: widget
+interact(foreign_rate_shock,
+         gap=FloatSlider(value=2.0, min=0.0, max=3.0, step=0.5, description="foreign rate gap Rʷ − r̄", style=WIDE),
+         t=IntSlider(value=10, min=1, max=20, step=1, description="period t", style=WIDE),
+         b_nx=FloatSlider(value=1.0, min=0.5, max=2.0, step=0.5, description="net-export sensitivity b̄ₙₓ", style=WIDE),
+         m=FloatSlider(value=0.5, min=0.5, max=2.0, step=0.25, description="policy response m̄", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 5 with a precomputed slider for the period
+slider_figure(foreign_rate_shock, "t", [1, 2, 4, 8, 9, 10, 12, 20], start=10, label="period t")
+```
+
+**What to notice.**
+
+- At $B$ (period 1) output is 1 percent above potential and inflation 3 percent: half of the shock goes into output,
+  half into inflation, because $\bar{b}\bar{m}\bar{\nu} = 1$ as in Chapter 13.
+- At $C$ output is back at potential, but inflation is close to $\bar{\pi} + \bar{a}/(\bar{b}\bar{m}) = 4$ percent. The AS
+  curves of periods 8, 9 and 10 are almost the same line, which is why the textbook draws $C$ and $D$ on one curve, AS₈.
+- When the shock ends, the economy pays for the boom with a recession at $D$: output 1 percent below potential.
+- The U.S. did nothing, yet its economy boomed and slumped: a change in interest rates abroad is a demand shock at home.
+
+**Your turn.** Suppose the ECB *cuts* its interest rate instead. You cannot set a negative gap with the slider, so use
+the code: simulate a gap of $-2$ and describe the path of output and inflation in periods 1, 8 and 10.
+
+<details><summary>Hint</summary>
+
+`simulate(shock_list(foreign_shock(R_BAR - 2.0)))` gives the whole path. The pattern is the mirror image of the one
+above.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 6: The U.K.-U.S. exchange rate
+
+**Goal.** Read two centuries of exchange-rate history in one line: the gold standard, Bretton Woods and floating rates.
+
+Under the **gold standard** each country fixed the price of an ounce of gold in its currency. From 1834 the United
+States paid about 20.67 dollars an ounce and the United Kingdom 4.25 pounds, so a dollar was worth
+$4.25/20.67 \approx 0.206$ pounds. Under **Bretton Woods** (1944 to the early 1970s) other currencies were pegged to the
+dollar, and the dollar to gold at 35 dollars an ounce. Since 1973 the major currencies **float**.
+
+```{python}
+uk = pd.read_csv(DATA_URL + "fig20-6.csv")
+uk.head()
+```
+
+> **Python note.** `px.area` draws a line and fills the area below it. `add_hline` draws a horizontal reference line
+> across the whole figure; `annotation_text` writes a short text next to it.
+
+```{python}
+fig = px.area(uk, x="year", y="gbp_per_usd", labels={"year": "Year", "gbp_per_usd": "Pounds per dollar"},
+              range_x=[1785, 2030], range_y=[0.1, 0.9],
+              title="Pounds per dollar: fixed under gold, steps under Bretton Woods, floating since 1973")
+fig.update_traces(line_color=BLUE, fillcolor="rgba(138,150,163,0.25)", hovertemplate="%{x}: %{y:.3f} pounds")
+fig.add_hline(y=4.25 / 20.67, line_dash="dot", line_color=TEAL, annotation_text="gold parity 0.206",
+              annotation_position="bottom right", annotation_font_color=TEAL)
+fig.add_annotation(x=1855, y=0.25, text="Gold standard", showarrow=False, font=dict(size=14))
+fig.add_annotation(x=1937, y=0.43, text="Bretton<br>Woods", showarrow=False, font=dict(size=14))
+fig.add_annotation(x=1997, y=0.42, text="Floating<br>exchange rates", showarrow=False, font=dict(size=14))
+fig.show()
+```
+
+**What to notice.**
+
+- For most of the 19th century the line is flat at the gold parity. The exception is the Civil War: the U.S. left
+  gold, and in 1864 the dollar fell to 0.100 pounds, half its value.
+- Bretton Woods shows up as long flat steps: 0.357 pounds (2.80 dollars per pound) in the 1950s and 1960s, 0.417
+  (2.40 dollars) after the pound's devaluation in 1967.
+- Since 1973 the line moves a lot every year. And over the two centuries the dollar appreciated, from 0.22 pounds
+  in 1791 to 0.76 in 2025, as the U.S. economy overtook the British one.
+
+<!-- cell -->
+
+### Key numbers: how stable is each regime?
+
+We measure stability by the typical yearly change of the exchange rate: the standard deviation of its percent changes.
+
+> **Python note.** `.pct_change()` computes the percent change from one row to the next (here, from one year to the
+> next), and `.std()` the standard deviation, the typical size of the changes. A dictionary maps each name to a
+> pair of years, and `first, last = REGIMES[name]` unpacks the pair.
+
+```{python}
+print(f"Gold parity: 4.25 / 20.67 = {4.25 / 20.67:.4f} pounds per dollar")
+REGIMES = {"Gold standard, 1880–1913": (1880, 1913), "Bretton Woods, 1951–1966": (1951, 1966),
+           "Floating rates, 1974–2025": (1974, 2025)}
+rate = uk.set_index("year").gbp_per_usd
+changes = 100 * rate.pct_change()
+for name in REGIMES:
+    first, last = REGIMES[name]
+    print(f"{name}: average {rate.loc[first:last].mean():.3f} pounds per dollar, "
+          f"typical yearly change {changes.loc[first:last].std():.2f}%")
+```
+
+Under the gold standard and Bretton Woods the exchange rate typically moved by less than half a percent a year; with
+floating rates, by more than 8 percent.
+
+**Your turn.** The textbook's case study says the dollar fell sharply during the Civil War. By how many percent did it
+fall from 1860 to 1864, and in which year was it back at the gold parity?
+
+<details><summary>Hint</summary>
+
+`rate.loc[1860:1880]` shows the years around the war. The percent change is `100 * (rate[1864] / rate[1860] - 1)`.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 7: The policy trilemma in open economies
+
+**Goal.** See why an open economy can have at most two of three good things: a stable exchange rate, its own
+monetary policy, and free flows of international finance.
+
+The textbook draws the **policy trilemma** as a triangle: the three goals are its corners, and each side is a regime
+that achieves the two goals at its ends and gives up the one opposite. Here the triangle is live. A small model
+from the chapter computes what happens when the foreign central bank (say, the Fed) raises its interest rate by
+$\Delta i^w$, while your economy needs its own interest rate to change by $\Delta i^{need}$:
+
+- with free financial flows, the exchange rate moves with the interest gap (Section 20.3: $\uparrow i \Rightarrow \uparrow E$),
+  $\%\Delta E = \eta\,(\Delta i - \Delta i^w)$, with an illustrative $\eta = 5$ percent per point;
+- **floating exchange rate**: the central bank sets $\Delta i = \Delta i^{need}$, and the exchange rate moves;
+- **currency board** (or monetary union): to keep $E$ fixed, the interest rate must follow abroad, $\Delta i = \Delta i^w$;
+- **capital controls**: the central bank sets $\Delta i = \Delta i^{need}$ and keeps $E$ fixed, because it rations the
+  trade in its currency, so money cannot flow freely.
+
+```{python}
+ETA = 5.0                                       # percent change of E per point of interest gap (illustrative)
+LOST = {"floating exchange rate": "stable exchange rate", "currency board": "monetary autonomy",
+        "capital controls": "free financial flows"}     # the goal each regime gives up: the opposite corner
+
+
+def trilemma_outcome(regime, di_world, di_need):
+    """Figure 20.7 as a model: the change in the domestic interest rate and the percent change in E."""
+    if regime == "currency board":
+        di = di_world                           # the peg forces the domestic rate to follow the foreign rate
+    else:
+        di = di_need                            # floating or capital controls: the central bank chooses
+    if regime == "floating exchange rate":
+        dE = ETA * (di - di_world)              # free capital flows move the exchange rate
+    else:
+        dE = 0.0                                # fixed by the peg, or by rationing the currency
+    return di, dE + 0.0, LOST[regime]
+
+
+print(trilemma_outcome("floating exchange rate", 1.0, 0.0))
+print(trilemma_outcome("currency board", 1.0, 0.0))
+```
+
+```{python}
+CORNERS = {"stable exchange rate": (1.0, 1.732), "monetary autonomy": (0.0, 0.0), "free financial flows": (2.0, 0.0)}
+CORNER_TEXT = {"stable exchange rate": (1.0, 1.83, "center", "bottom", "Stable exchange rate"),
+               "monetary autonomy": (-0.08, 0.0, "right", "middle", "Monetary policy<br>autonomy"),
+               "free financial flows": (2.08, 0.0, "left", "middle", "Free financial<br>flows")}
+SIDES = {"floating exchange rate": ("monetary autonomy", "free financial flows", 1.0, -0.12, 0),
+         "currency board": ("stable exchange rate", "free financial flows", 1.57, 0.94, 51),
+         "capital controls": ("monetary autonomy", "stable exchange rate", 0.43, 0.94, -51)}
+SIDE_TEXT = {"floating exchange rate": "Floating exchange rate", "currency board": "Monetary union or currency board",
+             "capital controls": "Capital controls"}
+```
+
+The four dictionaries above hold the geometry: the corners of the triangle, where each label goes, and which two
+corners each side joins (with its label position and angle). `draw_triangle` uses them.
+
+```{python}
+def draw_triangle(fig, regime):
+    """The trilemma triangle: the chosen side thick and green, the goal it gives up marked with a gray cross."""
+    fig.add_trace(go.Scatter(x=[0, 2, 1, 0], y=[0, 0, 1.732, 0], fill="toself", fillcolor="#e6f5f1", mode="lines",
+                             line=dict(color=GRAY, width=2), showlegend=False, hoverinfo="skip"))
+    for side in SIDES:
+        start, end, x, y, angle = SIDES[side]
+        chosen = side == regime
+        fig.add_trace(go.Scatter(x=[CORNERS[start][0], CORNERS[end][0]], y=[CORNERS[start][1], CORNERS[end][1]],
+                                 mode="lines", line=dict(color=GREEN if chosen else GRAY, width=9 if chosen else 2),
+                                 name=SIDE_TEXT[side], showlegend=False))
+        fig.add_annotation(x=x, y=y, text=SIDE_TEXT[side], textangle=angle, showarrow=False,
+                           font=dict(size=13, color=TEAL if chosen else GRAY))
+    for goal in CORNERS:
+        kept = goal != LOST[regime]
+        fig.add_trace(go.Scatter(x=[CORNERS[goal][0]], y=[CORNERS[goal][1]], mode="markers", name=goal,
+                                 showlegend=False, marker=dict(size=20, color=GREEN if kept else GRAY,
+                                                               symbol="circle" if kept else "x")))
+        x, y, xanchor, yanchor, text = CORNER_TEXT[goal]
+        fig.add_annotation(x=x, y=y, text=text, xanchor=xanchor, yanchor=yanchor, showarrow=False,
+                           font=dict(size=14, color="black" if kept else GRAY))
+```
+
+> **Python note.** `fill="toself"` fills the shape that the points of the trace enclose, here the triangle.
+> `textangle=51` turns a text by 51 degrees, so that it runs along a side, and `xanchor="right"` makes a text end at
+> its point instead of being centered on it. `visible=False` hides the axes, and the small `margin` lets the
+> triangle fill the figure. The box at the top right, an annotation with a border, holds the readout.
+
+```{python}
+def trilemma(regime="floating exchange rate", di_world=1.0, di_need=0.0):
+    """Figure 20.7: the policy trilemma; the foreign rate rises by di_world, the economy needs di_need."""
+    di, dE, lost = trilemma_outcome(regime, di_world, di_need)
+    flows = "blocked" if regime == "capital controls" else "free"
+    fig = go.Figure()
+    draw_triangle(fig, regime)
+    fig.add_annotation(x=2.72, y=1.97, xanchor="right", yanchor="top", showarrow=False, align="left",
+                       font=dict(size=13, color=BLUE), bordercolor=BLUE, borderpad=6, bgcolor="white",
+                       text=f"Interest rate: {di:+.1f} pt<br>Exchange rate: {dE:+.1f}%<br>Capital flows: {flows}")
+    fig.update_xaxes(visible=False, range=[-0.75, 2.75])
+    fig.update_yaxes(visible=False, range=[-0.38, 2.0])
+    fig.update_layout(title=f"{regime.capitalize()}: Δi = {di:+.1f}, %ΔE = {dE:+.1f}; lost: {lost}",
+                      margin=dict(l=30, r=30, t=60, b=30))
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(trilemma,
+         regime=ToggleButtons(options=["floating exchange rate", "currency board", "capital controls"],
+                              value="floating exchange rate", description="regime", style=WIDE),
+         di_world=FloatSlider(value=1.0, min=-2.0, max=3.0, step=0.5, description="foreign rate rise Δiʷ", style=WIDE),
+         di_need=FloatSlider(value=0.0, min=-2.0, max=3.0, step=0.5, description="rate change the economy needs", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 7 with a precomputed slider for the regime
+fig = slider_figure(trilemma, "regime", ["floating exchange rate", "currency board", "capital controls"],
+                   start="floating exchange rate", label="regime")
+fig.update_layout(height=580, margin=dict(b=130))         # room for the slider below the triangle
+fig.layout.sliders[0].x = 0.1                            # keep the end labels inside the figure
+fig.layout.sliders[0].len = 0.8
+fig
+```
+
+**What to notice.**
+
+- The Fed raises its rate by 1 point and your economy needs no change. With a **floating** rate you keep your interest
+  rate, and your currency depreciates by 5 percent: the United States today.
+- With a **currency board** the exchange rate stays put, but your interest rate must rise by 1 point although your
+  economy did not need it: Argentina in 1991–2001.
+- With **capital controls** you keep both, but only by blocking the free trade in your currency: China in 1996–2005.
+- Set the needed change equal to the foreign one: then the currency board costs nothing. The trilemma bites only when
+  your economy needs a different policy from the anchor country.
+
+**Your turn.** A currency board that runs out of foreign reserves cannot hold the peg. Use `trilemma_outcome` to
+compare the currency board with a floating rate when the foreign rate rises by 2 points and the economy needs a cut of
+1 point. Which goal does each regime sacrifice, and by how much?
+
+<details><summary>Hint</summary>
+
+`trilemma_outcome("currency board", 2.0, -1.0)` and `trilemma_outcome("floating exchange rate", 2.0, -1.0)`. The
+first gives the rate the economy *gets*; compare it with the one it needs.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 8: Depreciations during several currency crises
+
+**Goal.** See how quickly a currency can collapse when a fixed exchange rate breaks down.
+
+Each line is the dollar value of a currency, as an index with 1991 = 100: national currency per dollar in 1991 divided
+by national currency per dollar in each year (end of year). A fall to 40 means the currency buys only 40 percent of
+the dollars it bought in 1991.
+
+```{python}
+crises = pd.read_csv(DATA_URL + "fig20-8.csv")
+crises.head()
+```
+
+The data go to 2025, beyond the textbook's 1991–2004. By 2025 the Argentine peso is worth 0.07 percent of its 1991
+dollar value, so on the textbook's linear scale its line sits on zero. A **ratio scale** fixes this: equal distances
+are then equal percentage changes, so 100 → 10 looks the same as 1 → 0.1.
+
+> **Python note.** `updatemenus` adds buttons to the figure itself. Each button runs `relayout` with new axis
+> settings, so it works in Colab and on the website alike. On a log axis Plotly wants the range as powers of ten,
+> which is why we write `np.log10(...)`.
+
+```{python}
+CRISIS_NAMES = {"argentina": "Argentina", "korea": "South Korea", "mexico": "Mexico", "indonesia": "Indonesia"}
+long = crises.rename(columns=CRISIS_NAMES).melt(id_vars="year", var_name="country", value_name="index")
+fig = px.line(long, x="year", y="index", color="country", hover_name="country", markers=True,
+              range_x=[1990.5, 2004.5], range_y=[0, 120],
+              labels={"year": "Year", "index": "Dollar value of the currency (1991 = 100)", "country": ""},
+              title="Currency crises: four currencies against the dollar (1991 = 100)")
+fig.add_vline(x=2004, line_dash="dot", line_color=GRAY)
+textbook = {"xaxis.range": [1990.5, 2004.5], "yaxis.type": "linear", "yaxis.range": [0, 120], "yaxis.tickvals": None}
+latest_linear = {"xaxis.range": [1990.5, 2025.5], "yaxis.type": "linear", "yaxis.range": [0, 120], "yaxis.tickvals": None}
+latest_ratio = {"xaxis.range": [1990.5, 2025.5], "yaxis.type": "log", "yaxis.tickvals": [0.1, 1, 10, 100],
+                "yaxis.range": [float(np.log10(0.04)), float(np.log10(150))]}
+fig.update_layout(margin=dict(t=120), updatemenus=[dict(type="buttons", direction="right", x=0, y=1.02,
+                                                        xanchor="left", yanchor="bottom", buttons=[
+    dict(label="1991–2004 (textbook)", method="relayout", args=[textbook]),
+    dict(label="1991–2025", method="relayout", args=[latest_linear]),
+    dict(label="1991–2025, ratio scale", method="relayout", args=[latest_ratio])])])
+fig.show()
+```
+
+**What to notice.**
+
+- Mexico 1994–95: after a year of defending the peg with its reserves, the peso fell to 40 percent of its value.
+- Asia 1997–98: the Korean won lost about half of its dollar value in 1997, and the Indonesian rupiah fell to a
+  quarter of its 1991 value by 1998.
+- Argentina 2002: after ten years at exactly 1 peso per dollar, the currency board ended and the peso fell to a third.
+- Press the buttons. Since 2004 the won and the Mexican peso have drifted lower, while the Argentine peso kept
+  collapsing: only the ratio scale shows that it lost most of its value again and again.
+
+<!-- cell -->
+
+### Key numbers: the size of each crisis
+
+```{python}
+moments = crises.set_index("year").rename(columns=CRISIS_NAMES)
+for country, year in [("Mexico", 1995), ("South Korea", 1997), ("Indonesia", 1998), ("Argentina", 2002)]:
+    value = moments.loc[year, country]
+    print(f"{country}, {year}: index {value:.1f}, a loss of {100 - value:.0f}% of the 1991 dollar value")
+print(f"Argentina, 2025: index {moments.loc[2025, 'Argentina']:.2f}")
+```
+
+These are the textbook's numbers, with one exception: Korea's index in 1997 is 53.8 here and about 45 in the textbook.
+The won was extremely volatile in the last days of December 1997, so the "end-of-year" rate depends on the exact day
+and source; the IMF's current data record a less extreme rate than the vintage the textbook used.
+
+**Your turn.** In which year did the Mexican peso reach its lowest dollar value, and what is that value?
+
+<details><summary>Hint</summary>
+
+`moments.Mexico.idxmin()` gives the year, and `moments.Mexico.min()` the value.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 9: 10-year government bond yields in Europe
+
+**Goal.** See the euro crisis in its most useful single graph: interest rates on government debt in Germany, Italy and
+Spain.
+
+Before the euro, Italian and Spanish bonds paid much more than German ones, mostly because inflation was higher there.
+With one currency and one central bank, investors expected similar inflation, and the yields converged. After the
+global financial crisis they diverged again, this time because investors feared a **default** on **sovereign debt**.
+
+```{python}
+yields = pd.read_csv(DATA_URL + "fig20-9.csv", parse_dates=["date"])
+yields.tail(3)
+```
+
+The last Italian value (September 2026) is not published yet, so we drop it after `melt`.
+
+```{python}
+long = yields.rename(columns={"yield_de": "Germany", "yield_es": "Spain", "yield_it": "Italy"})
+long = long.melt(id_vars="date", var_name="country", value_name="yield").dropna()
+fig = px.line(long, x="date", y="yield", color="country", hover_name="country", range_y=[-2, 14.5],
+              color_discrete_map={"Germany": BLUE, "Spain": TEAL, "Italy": GREEN},
+              labels={"date": "Year", "yield": "10-year government bond yield (percent)", "country": ""},
+              title="Bond yields converged with the euro in 1999 and diverged in 2010–2012")
+fig.add_hline(y=0, line_dash="dash", line_color=GRAY)
+for date, text in [("1999-01-01", "euro"), ("2012-07-01", "Draghi")]:
+    fig.add_shape(type="line", x0=date, x1=date, y0=0, y1=1, yref="paper", line=dict(color=GRAY, dash="dot"))
+    fig.add_annotation(x=date, y=13, text=text, showarrow=False, xanchor="left", font=dict(color=GRAY))
+fig.update_layout(legend=dict(x=0.99, y=0.99, xanchor="right", yanchor="top"), yaxis_tickvals=list(range(0, 15, 2)))
+fig.show()
+```
+
+**What to notice.**
+
+- In 1995 Italy and Spain paid 4 to 6 points more than Germany. By the end of 1998 all three yields were close to
+  4 percent, and they moved together until 2008.
+- In 2011–2012 the Italian yield rose above 7 percent and the Spanish one to 6.8 percent, while Germany's fell. After
+  Mario Draghi promised in July 2012 that the ECB would do "whatever it takes", the gaps closed again.
+- German yields were negative in 2016 and in 2019–2021: investors paid the German government to hold their money.
+
+<!-- cell -->
+
+### Key numbers: the spreads over Germany
+
+The **spread** is the gap between a country's yield and Germany's. It measures how much more investors want to be
+paid to lend to that government.
+
+```{python}
+spreads = pd.DataFrame({"Spain": yields.yield_es - yields.yield_de, "Italy": yields.yield_it - yields.yield_de})
+spreads.index = yields.date
+dates = pd.to_datetime(["1995-04-01", "1998-12-01", "2008-08-01", "2011-11-01", "2012-07-01", "2026-08-01"])
+spreads.loc[dates].round(2)
+```
+
+**Your turn.** Find the month with the largest Spanish spread since 1999, and its value.
+
+<details><summary>Hint</summary>
+
+Keep the rows from 1999 with `spreads.loc["1999-01-01":]`, then use `.Spain.idxmax()` and `.Spain.max()`.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 10: Domestic bank lending in Europe
+
+**Goal.** See the credit boom in southern Europe after the euro arrived.
+
+The data are lending by domestic banks to the private sector, in percent of GDP, for the textbook's three years plus
+the latest year, 2023.
+
+```{python}
+lending = pd.read_csv(DATA_URL + "fig20-10.csv")
+lending
+```
+
+> **Python note.** `melt` stacks the four year columns into one column of values, with a new column that says which
+> year each value belongs to. `.map(YEARS)` replaces the column names by readable labels. `barmode="group"` puts the
+> bars of the four years side by side.
+
+```{python}
+YEARS = {"credit_gdp_1998": "1998", "credit_gdp_2002": "2002", "credit_gdp_2007": "2007",
+         "credit_gdp_2023": "2023 (latest)"}
+bars = lending.melt(id_vars=["iso3", "country"], value_vars=list(YEARS), var_name="year", value_name="credit")
+bars["year"] = bars.year.map(YEARS)
+fig = px.bar(bars, x="country", y="credit", color="year", barmode="group", hover_name="country",
+             color_discrete_sequence=[BLUE, TEAL, GREEN, "#5aa0d8"], range_y=[0, 200],
+             labels={"country": "", "credit": "Domestic bank lending (percent of GDP)", "year": ""},
+             title="Bank lending boomed in southern Europe after the euro, and has shrunk since")
+fig.update_layout(legend=dict(x=0.99, y=0.99, xanchor="right", yanchor="top"))
+fig.show()
+```
+
+**What to notice.**
+
+- From 1998 to 2007 bank lending rose from 32 to 84 percent of GDP in Greece and from 83 to 168 percent in Spain.
+  In Germany it fell.
+- The 2023 bars show the hangover: after the crisis, lending fell back, to 25 percent of GDP in Ireland.
+
+<!-- cell -->
+
+### Data revisions: the same years, different numbers
+
+The textbook's figure comes from a 2010 edition of the World Bank's database. Today's edition revises some bars.
+
+```{python}
+book = pd.DataFrame({"country": ["Greece", "Ireland", "Portugal", "Spain", "Italy", "Germany"],
+                     "textbook_2007": [84, 184, 159, 168, 96, 105]})
+revisions = lending[["country", "credit_gdp_2007"]].merge(book, on="country")
+revisions["revision"] = revisions.credit_gdp_2007 - revisions.textbook_2007
+revisions.round(1)
+```
+
+Greece and Spain are unchanged, but Ireland's 2007 lending is now 26 points lower. The story, a boom in the south
+after the euro, survives the revisions.
+
+**Your turn.** By how many percentage points of GDP did bank lending rise from 1998 to 2007 in each country? Which
+country had the largest rise?
+
+<details><summary>Hint</summary>
+
+`lending.credit_gdp_2007 - lending.credit_gdp_1998` gives the rises, in the order of the table. Add it as a new column
+to see the country names next to them.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 11: Current account balances in Europe
+
+**Goal.** See that northern Europe lent to southern Europe after the euro: the borrowing came from abroad, too.
+
+The **current account balance** is the trade balance plus the interest and dividends a country earns on its past
+lending abroad (minus those it pays). A deficit means the country borrows from the rest of the world. Each bar is the
+average over a period, in percent of GDP.
+
+```{python}
+current = pd.read_csv(DATA_URL + "fig20-11.csv")
+PERIODS = {"ca_gdp_1993_1997": "1993–1997", "ca_gdp_2003_2007": "2003–2007", "ca_gdp_2008_2011": "2008–2011",
+           "ca_gdp_2021_2025": "2021–2025 (latest)"}
+bars = current.melt(id_vars=["iso3", "country"], value_vars=list(PERIODS), var_name="period", value_name="balance")
+bars["period"] = bars.period.map(PERIODS)
+fig = px.bar(bars, x="country", y="balance", color="period", barmode="group", hover_name="country",
+             color_discrete_sequence=[BLUE, TEAL, GREEN, "#5aa0d8"], range_y=[-14, 14],
+             labels={"country": "", "balance": "Current account balance (percent of GDP)", "period": ""},
+             title="Current accounts: the south borrowed abroad after the euro, Germany lent")
+fig.add_hline(y=0, line_color="black", line_width=1)
+fig.update_layout(legend=dict(x=0.99, y=0.99, xanchor="right", yanchor="top"))
+fig.show()
+```
+
+**What to notice.**
+
+- Greece borrowed 2 percent of its GDP a year from abroad in 1993–97 and 9 percent in 2003–07; Spain went from about
+  1 to 7 percent. Germany turned from a small deficit into a surplus of about 5 percent of GDP.
+- Since 2021 Portugal, Spain and Italy have small surpluses; Greece still borrows 7.5 percent of GDP.
+- **A data warning:** Ireland's surplus of 10.8 percent in 2021–25 does not mean the Irish lend a lot abroad. The
+  profits of large multinational firms registered in Ireland pass through its accounts and inflate both GDP and the
+  current account.
+
+**Your turn.** For each country, compute the change in the current account from 1993–1997 to 2003–2007. Which country
+changed the most?
+
+<details><summary>Hint</summary>
+
+`current.ca_gdp_2003_2007 - current.ca_gdp_1993_1997`, then look for the most negative and the most positive number.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 12: Government debt in Europe
+
+**Goal.** See how the financial crisis pushed government debt up, and why a high debt can make a crisis
+self-fulfilling.
+
+```{python}
+debt = pd.read_csv(DATA_URL + "fig20-12.csv")
+DEBT_YEARS = {"debt_gdp_2007": "2007", "debt_gdp_2012": "2012", "debt_gdp_2017": "2017",
+              "debt_gdp_2025": "2025 (latest)"}
+bars = debt.melt(id_vars=["iso3", "country"], value_vars=list(DEBT_YEARS), var_name="year", value_name="debt")
+bars["year"] = bars.year.map(DEBT_YEARS)
+fig = px.bar(bars, x="country", y="debt", color="year", barmode="group", hover_name="country",
+             color_discrete_sequence=[BLUE, TEAL, GREEN, "#5aa0d8"], range_y=[0, 210],
+             labels={"country": "", "debt": "Government debt (percent of GDP)", "year": ""},
+             title="Government debt jumped after the financial crisis, most in Ireland and Greece")
+fig.update_layout(legend=dict(x=0.01, y=0.99, xanchor="left", yanchor="top"))
+fig.show()
+```
+
+**What to notice.**
+
+- Ireland's debt rose from 28 percent of GDP in 2007 to 131 percent in 2012, when the government took over the debts of
+  its banks.
+- By 2017 the debt of Italy, Greece and Spain was well above 100 percent of GDP; Greece's peaked at 195 percent.
+- By 2025 debt was below its 2017 level in all six countries; Germany's (63 percent) is even below its 2007 level.
+
+<!-- cell -->
+
+### Key numbers: the interest bill on a debt of 100 percent of GDP
+
+A government with debt $D$ must pay interest $R \cdot D$ every year, so the interest bill in percent of GDP is the
+debt-GDP ratio times the interest rate. If investors fear a default and ask for a higher rate, the bill grows, which
+makes a default more likely: the crisis can be **self-fulfilling**.
+
+```{python}
+def interest_bill(debt_ratio, R):
+    """Yearly interest payments in percent of GDP: debt-GDP ratio (percent) times the interest rate (percent)."""
+    return debt_ratio * R / 100
+
+
+for R in [1, 2, 5, 7, 10]:
+    print(f"Debt of 100% of GDP at an interest rate of {R:2d}%: interest of {interest_bill(100, R):4.1f}% of GDP a year")
+```
+
+Now the real numbers: Italy's and Germany's debt in 2012 at their bond yields of November 2011, the peak of the Italian
+yield. (This is an upper bound: only new borrowing pays the new rate.)
+
+```{python}
+november_2011 = yields.set_index("date").loc["2011-11-01"]
+debt_2012 = debt.set_index("country").debt_gdp_2012
+print(f"Italy:   {debt_2012['Italy']:.0f}% of GDP at {november_2011.yield_it:.2f}% = "
+      f"{interest_bill(debt_2012['Italy'], november_2011.yield_it):.1f}% of GDP a year")
+print(f"Germany: {debt_2012['Germany']:.0f}% of GDP at {november_2011.yield_de:.2f}% = "
+      f"{interest_bill(debt_2012['Germany'], november_2011.yield_de):.1f}% of GDP a year")
+```
+
+**Your turn.** Greece's debt was 171 percent of GDP in 2012. What interest rate would make its interest bill 10 percent
+of GDP a year? Check your answer with `interest_bill`.
+
+<details><summary>Hint</summary>
+
+Solve $171 \times R / 100 = 10$ for $R$, then try `interest_bill(171, ...)` with your answer.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 13: Unit labor costs in Europe
+
+**Goal.** See the euro area's long-term problem: wages in southern Europe rose much faster than productivity.
+
+The **unit labor cost** is the nominal wage divided by real output per worker: the wage cost of producing one unit of
+output. The data are an index, here with 1995 = 100. An index can start from any **base year**, and the choice changes
+the picture: with the base in 2008, the lines show what happened *since* the crisis.
+
+> **Python note.** Dividing a whole table by one of its rows, `table / table.loc[base]`, divides each column by its
+> own value in the base year, so every line passes through 100 there. `color_discrete_map` fixes each country's
+> color, so that a country keeps its color when the base changes.
+
+```{python}
+ulc = pd.read_csv(DATA_URL + "fig20-13.csv")
+ULC_NAMES = {"ulc_grc": "Greece", "ulc_ita": "Italy", "ulc_esp": "Spain", "ulc_fra": "France", "ulc_deu": "Germany"}
+ULC_COLORS = {"Greece": GREEN, "Italy": "#0b4f47", "Spain": TEAL, "France": "#5aa0d8", "Germany": BLUE}
+
+
+def ulc_chart(base=1995):
+    """Figure 20.13: unit labor costs, each country's index = 100 in the base year."""
+    table = ulc.set_index("year").rename(columns=ULC_NAMES)
+    table = 100 * table / table.loc[base]
+    long = table.reset_index().melt(id_vars="year", var_name="country", value_name="ulc")
+    fig = px.line(long, x="year", y="ulc", color="country", hover_name="country", color_discrete_map=ULC_COLORS,
+                  range_y=[40, 220], labels={"year": "Year", "ulc": f"Unit labor costs ({base} = 100)", "country": ""},
+                  title=f"Unit labor costs, {base} = 100: in 2025 Greece {table.loc[2025, 'Greece']:.0f}, "
+                        f"Germany {table.loc[2025, 'Germany']:.0f}")
+    fig.add_hline(y=100, line_dash="dot", line_color=GRAY)
+    fig.update_layout(legend=dict(x=0.01, y=0.99, xanchor="left", yanchor="top"), yaxis_tickvals=list(range(60, 221, 40)))
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(ulc_chart, base=Dropdown(options=[1995, 1999, 2008, 2015], value=1995, description="base year", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 13 with a precomputed slider for the base year
+slider_figure(ulc_chart, "base", [1995, 1999, 2008, 2015], start=1995, label="base year")
+```
+
+**What to notice.**
+
+- With 1995 = 100: by 2007 unit labor costs had risen by 70 percent in Greece and 42 percent in Spain, while in Germany
+  they had not risen at all (98). Southern goods became expensive inside a currency union that ruled out a devaluation.
+- Greece's costs fell from 194 in 2011 to 167 in 2019, and Spain's from 151 in 2009 to 142 in 2014: wages adjust only
+  slowly, even with very high unemployment.
+- Switch the base year to 2008. Since the crisis, Germany's costs have risen the most and Greece's the least: the gap
+  has been closing, slowly.
+
+**Your turn.** With the base year 1999 (the start of the euro), which country had the highest unit labor costs in
+2007, and by how much did they exceed Germany's?
+
+<details><summary>Hint</summary>
+
+Choose 1999 in the menu and hover over 2007. Or compute `ulc.set_index("year").loc[2007] / ulc.set_index("year").loc[1999]`.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 14: Total factor productivity in the United States and Europe
+
+**Goal.** See a deeper problem than the crisis: productivity has stalled or fallen in several European economies.
+
+Total factor productivity (TFP) is the $\bar{A}$ of the production model of Chapter 4: how much output an economy gets
+from its capital and labor. The index is 100 in 2000 for every country, so the lines show growth, not levels.
+
+```{python}
+tfp = pd.read_csv(DATA_URL + "fig20-14.csv")
+TFP_NAMES = {"tfp_usa": "United States", "tfp_deu": "Germany", "tfp_jpn": "Japan", "tfp_fra": "France",
+             "tfp_esp": "Spain", "tfp_ita": "Italy"}
+TFP_COLORS = {"United States": BLUE, "Germany": TEAL, "Japan": GRAY, "France": "#5aa0d8", "Spain": GREEN,
+              "Italy": "#0b4f47"}
+long = tfp.rename(columns=TFP_NAMES).melt(id_vars="year", var_name="country", value_name="tfp")
+fig = px.line(long, x="year", y="tfp", color="country", hover_name="country", color_discrete_map=TFP_COLORS,
+              range_y=[75, 120], labels={"year": "Year", "tfp": "Total factor productivity (2000 = 100)", "country": ""},
+              title="TFP since 2000: up in the U.S. and Germany, down in France, Spain and Italy")
+fig.add_hline(y=100, line_dash="dot", line_color=GRAY)
+fig.update_layout(legend=dict(x=1.02, y=1.0, xanchor="left", yanchor="top"))
+fig.show()
+```
+
+**What to notice.**
+
+- TFP in France, Spain and Italy was lower in 2019 than in 2000, and it is lower still in 2023. In Italy and Spain the
+  decline started in the 1990s; in France it began after 2006.
+- Germany kept up with the United States until 2019. The Covid year 2020 shows up as a dip everywhere except the U.S.
+
+<!-- cell -->
+
+### Key numbers: average TFP growth
+
+```{python}
+levels = tfp.set_index("year").rename(columns=TFP_NAMES)
+for first, last in [(1990, 2003), (2003, 2019), (2000, 2019), (2000, 2023)]:
+    growth = 100 * ((levels.loc[last] / levels.loc[first]) ** (1 / (last - first)) - 1)
+    print(f"{first}–{last}:", growth.round(2).to_dict())
+```
+
+U.S. TFP growth slowed from 0.88 percent a year in 1990–2003 to 0.38 percent in 2003–2019, the slowdown the case study
+mentions. In Italy TFP shrank by almost 1 percent a year after 2000.
+
+**Your turn.** Compare the level of TFP in 1990 and in 2023 for Italy and Spain. Is the margin note "TFP levels in Italy
+and Spain are lower today than in 1990" still true with the latest data?
+
+<details><summary>Hint</summary>
+
+`levels.loc[[1990, 2023], ["Italy", "Spain"]]`.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Key numbers
+
+This table collects the chapter's numbers, the textbook's next to ours. Each one is computed above, from the data or
+from the model functions.
+
+```{python}
+path = simulate(shock_list(foreign_shock(R_BAR + RW_GAP)))
+fx_monthly = fx.set_index("date")
+rows = [
+    ["Yen per dollar, January 1971", "357", fx_monthly.loc["1971-01-01", "yen_per_usd"]],
+    ["Yen per dollar, July 1995", "87", fx_monthly.loc["1995-07-01", "yen_per_usd"]],
+    ["Euros per dollar, July 2008 (low)", "0.64", fx_monthly.loc["2008-07-01", "eur_per_usd"]],
+    ["U.S. minus Japanese inflation, 1971–1995 (points)", "about 1",
+     inflation[(inflation.year >= 1971) & (inflation.year <= 1995)].eval("inflation_us - inflation_jpn").mean()],
+    ["Big Mac in Norway, dollars (July 2022)", "6.26", big_mac_table().loc["Norway", "dollar_price"]],
+    ["Real exchange rate of Japan, 1995 (1971 = 100)", "about 247", rer.set_index("year").rer_jpn[1995]],
+    ["Foreign exchange per day / U.S. daily GDP", "more than 75", forex_per_day / us_gdp_per_day],
+    ["Ỹ′ when R rises from 5% to 6% (model)", "—", is_curve(6.0)],
+    ["Inflation at C, period 8 (model, %)", "—", path.pi[8]],
+]
+```
+
+```{python}
+rows = rows + [
+    ["Pounds per dollar under gold", "0.205", 4.25 / 20.67],
+    ["Mexico 1995, dollar value of the peso (1991 = 100)", "about 40", moments.loc[1995, "Mexico"]],
+    ["Korea 1997 (1991 = 100)", "about 45", moments.loc[1997, "South Korea"]],
+    ["Bank lending in Spain, 2007 (% of GDP)", "168", lending.set_index("country").loc["Spain", "credit_gdp_2007"]],
+    ["Current account of Greece, 2003–2007 (% of GDP)", "−9", current.set_index("country").loc["Greece", "ca_gdp_2003_2007"]],
+    ["Debt of Ireland, 2012 (% of GDP)", "130", debt_2012["Ireland"]],
+    ["Interest bill: debt of 100% of GDP at 7%", "7", interest_bill(100, 7)],
+]
+pd.DataFrame(rows, columns=["Quantity", "Textbook", "This notebook"]).round(3)
+```
+
+## Summary
+
+- The **nominal exchange rate** is the price of a currency; the **real exchange rate** $EP/P^w$ is the price of goods.
+  In the long run the law of one price sets the real exchange rate to 1 and ties the nominal rate to relative price
+  levels, so more inflation means a weaker currency.
+- The law of one price holds only loosely. Japan's real exchange rate rose 2.5-fold until 1995, and Big Macs cost more
+  in rich countries: nontraded goods get dearer as wages rise (the **Balassa-Samuelson effect**).
+- In the short run, prices are sticky and the exchange rate moves with interest rates. Net exports then react to the
+  interest rate like investment, which makes the **IS curve flatter**, and a rise in **foreign interest rates** is a
+  positive demand shock at home that ends in a recession when it is reversed.
+- The **policy trilemma**: an open economy can have at most two of a stable exchange rate, monetary autonomy and free
+  capital flows. Gold, Bretton Woods, currency boards, capital controls and the euro are different choices of two,
+  and the crises in Mexico, Asia, Argentina and the euro area show what happens when a choice breaks down.
+- The next chapter, *Parting Thoughts*, looks back at the whole book and at the open questions of macroeconomics.

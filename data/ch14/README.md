@@ -21,7 +21,7 @@ H.6, Robert Shiller's online data). Percent values are in percent; money values 
 
 Known differences from the textbook (see the macro102 `data/figN-k/notes.md` files):
 
-- `fig14-4.csv`: data revisions raised short-run output after 2017 by about 1.5–2 points; the 2023 vintage column
+- `fig14-4.csv`: data revisions raised short-run output by about half a point before 2012 and 1–2 points since 2013; the 2023 vintage column
   reproduces the textbook's line.
 - `fig14-5.csv`: units are chained 2017 dollars (the textbook used 2012 dollars).
 - `fig14-6.csv`: M1 was redefined in May 2020 (savings deposits moved into M1), so its 12-month growth is 291–357
@@ -30,8 +30,8 @@ Known differences from the textbook (see the macro102 `data/figN-k/notes.md` fil
   by remaining maturity, so the long-term layer is not zero before 2009.
 - `fig14-10.csv`: the textbook's expectations come from fed funds futures; these come from the Treasury yield curve
   and include a small term premium.
-- `fig14-11.csv`: BLS revisions raised private-business TFP after 2010 (growth 2004–2022 of 0.62 percent a year
-  instead of the textbook's 0.5).
+- `fig14-11.csv`: BLS revisions raised private-business TFP growth (2004–2022: 0.62 percent a year instead of the
+  textbook's 0.5); the strong years since 2022 bring 2004–2025 to 0.72.
 
 ## Wider files built for the notebook
 

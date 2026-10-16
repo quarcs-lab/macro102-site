@@ -263,7 +263,7 @@ long.head()
 
 The textbook stacks the shares on top of each other: net exports at the bottom, then consumption,
 investment, and government purchases up to 100 percent. `px.area` stacks areas in the order of
-`category_orders`. Because net exports are negative in recent decades, consumption starts *below*
+`category_orders`, and `color_discrete_map` gives each component a fixed color. Because net exports are negative in recent decades, consumption starts *below*
 zero in those years.
 
 ```{python}
@@ -314,6 +314,10 @@ slider_figure(composition_chart, "style", ["stacked areas", "separate lines"], s
   since. The deficit was deepest in 2006. Hover over the lines to read the values, and click a
   component in the legend to hide it.
 
+> **Python note.** `.set_index("year")` uses the years as row labels, so `by_year.loc[1950:]` keeps the
+> rows from 1950 on. `.idxmax()` returns the row label (here the year) of the largest value, and
+> `.idxmin()` that of the smallest.
+
 ```{python}
 by_year = shares.set_index("year")
 print("Average shares, 1950-2025 (percent):")
@@ -323,10 +327,6 @@ print(f"Investment fell to {by_year.investment_share.min():.1f}% in {by_year.inv
 print(f"Deepest trade deficit: {by_year.net_exports_share.min():.1f}% in {by_year.net_exports_share.idxmin()}")
 print(f"Last year with a trade surplus: {by_year[by_year.net_exports_share > 0].index.max()}")
 ```
-
-> **Python note.** `.set_index("year")` uses the years as row labels, so `by_year.loc[1950:]` keeps the
-> rows from 1950 on. `.idxmax()` returns the row label (here the year) of the largest value, and
-> `.idxmin()` that of the smallest.
 
 ### Key numbers: Table 2.1, the expenditure approach
 
@@ -423,7 +423,7 @@ fig = px.line(recent, x="year", y=["Government purchases", "Investment", "Net ex
 fig.add_trace(go.Scatter(x=recent.year, y=recent.Consumption, name="Consumption (right axis)",
                          line=dict(color=BLUE, width=3), yaxis="y2"))
 fig.add_hline(y=0, line_dash="dash", line_color="black", line_width=1)
-fig.update_layout(yaxis=dict(range=[-6, 46], tickvals=[-5, 0, 5, 10, 15, 20, 25]),
+fig.update_layout(yaxis=dict(range=[-6, 46], tickvals=[0, 5, 10, 15, 20, 25]),   # no label in the bottom-left corner
                   yaxis2=dict(title="Consumption (percent of GDP)", overlaying="y", side="right",
                               range=[36, 70], tickvals=[60, 64, 68], showgrid=False),
                   legend=dict(x=1.1))                          # move the legend clear of the right axis
@@ -443,6 +443,7 @@ others. The chart below shows the changes directly.
 
 > **Python note.** `wide.loc[base_year:] - wide.loc[base_year]` subtracts one row from every row of the
 > table, column by column. The result is the change of each share since the base year, in percentage points.
+> `.reset_index()` turns the year labels back into an ordinary column, which `melt` and Plotly need.
 
 ```{python}
 CHANGE_COLORS = {"Consumption": BLUE, "Investment": GREEN, "Government purchases": TEAL, "Net exports": "#e0a33b"}
@@ -483,8 +484,9 @@ slider_figure(changes_chart, "base_year", [1970, 1980, 1990, 2000, 2010], start=
   government purchases (−6.2 points) and in net exports (−3.4 points). Investment ended a little higher.
 - Investment is the most volatile share. It fell to 13.3 percent of GDP in 2009, during the Great
   Recession.
-- Choose 2000 or 2010 as the base year: the big shifts happened before 2000, and since then the
-  shares have been fairly stable.
+- Choose 2000 as the base year: the big shift into consumption happened before 2000 (only +1.6 points
+  since then). With 2010 as the base, investment rises and government purchases fall by 3.6 points
+  each, because 2010 came just after the Great Recession, when investment was low.
 
 **Your turn.** Check the accounting yourself: compute the change in each share between 1980 and 2025,
 and add the four changes. Why is the sum (almost exactly) zero?
@@ -546,7 +548,7 @@ def labor_share_chart(start=1970):
     fig.add_trace(go.Scatter(x=after.year, y=intercept + slope * after.year, name=f"Trend since {start}",
                              line=dict(color=GREEN, width=3, dash="dash")))
     fig.update_xaxes(range=[1950, 2025])
-    fig.update_yaxes(range=[0.55, 0.75])
+    fig.update_yaxes(range=[0.55, 0.75], tickvals=[0.6, 0.65, 0.7, 0.75])   # no label in the bottom-left corner
     # slope is per year, as a fraction: x 100 for percentage points, x 10 for a decade
     fig.update_layout(title=f"Labor share: trend since {start} is {1000 * slope:+.1f} percentage points per decade")
     return fig
@@ -715,9 +717,13 @@ fig
 
 - Prices rose slowly until the mid-1960s, much faster in the 1970s and early 1980s, and then at a
   steadier pace, until the jump of 2021–2022.
-- On the linear scale the line rises about as steeply in the 2000s as around 1980, because the same
+- On the linear scale the line rises about as steeply in the 2000s as in the 1970s, because the same
   percentage increase adds more index points when prices are already high. Switch to the ratio scale:
   there the slope is the *percentage* rate of change, and the 1970s clearly stand out.
+
+> **Python note.** With dates as row labels, `level["1965"]` picks the four quarters of 1965, and
+> `.mean()` averages them. The formula $(\text{end}/\text{start})^{1/\text{years}} - 1$ is the average
+> annual growth rate.
 
 ```{python}
 level = deflator.set_index("date").gdp_deflator_2012_100
@@ -725,10 +731,6 @@ for start, end in [(1947, 1965), (1965, 1983), (1983, 2019), (2019, 2025)]:
     yearly = (level[str(end)].mean() / level[str(start)].mean()) ** (1 / (end - start)) - 1
     print(f"{start}-{end}: prices rose {yearly:.1%} a year on average")
 ```
-
-> **Python note.** With dates as row labels, `level["1965"]` picks the four quarters of 1965, and
-> `.mean()` averages them. The formula $(\text{end}/\text{start})^{1/\text{years}} - 1$ is the average
-> annual growth rate.
 
 ### Key numbers: nominal GDP = price level × real GDP
 
@@ -809,6 +811,9 @@ inflation = pd.read_csv(DATA_URL + "fig2-5.csv", parse_dates=["date"]).set_index
 gap = (year_ago.loc[inflation.index] - inflation.inflation_gdpdef).abs().max()
 print(f"Largest difference from FRED's numbers: {gap:.4f} percentage points")
 ```
+
+> **Python note.** `.dropna()` drops the rows that hold `NaN`, here the first quarters. A date knows its
+> parts: `last.date.year` is its year and `last.date.quarter` its quarter (1 to 4).
 
 ```{python}
 def inflation_chart(measure="change from a year ago"):

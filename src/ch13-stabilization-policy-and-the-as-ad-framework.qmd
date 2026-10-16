@@ -318,9 +318,13 @@ def add_point(fig, Y, pi, label, col=1, guides=True):
     if guides:
         fig.add_trace(go.Scatter(x=[X_RANGE[0], Y, Y], y=[pi, pi, PI_RANGE[0]], mode="lines", showlegend=False,
                                  hoverinfo="skip", line=dict(color="black", width=1, dash="dash")), row=1, col=col)
-    fig.add_trace(go.Scatter(x=[Y], y=[pi], mode="markers+text", text=[label], textposition="top right",
-                             name=label, showlegend=False, textfont=dict(size=16),
+    fig.add_trace(go.Scatter(x=[Y], y=[pi], mode="markers", name=label, showlegend=False,
                              marker=dict(color="black", size=10)), row=1, col=col)
+    if label != "":
+        xref, yref = axis_names(col)
+        # well above the dot and a little to the right: clear of the curves and the dashed guides through it
+        fig.add_annotation(x=Y, y=pi, xref=xref, yref=yref, text=label, showarrow=False, xanchor="left",
+                           yanchor="bottom", xshift=4, yshift=8, font=dict(size=16))
 
 
 def add_arrow(fig, x0, y0, x1, y1, col=1):
@@ -363,14 +367,18 @@ $\tilde{Y} = \bar{a}$: with no demand shock, potential output. When you change a
 stays behind as a dashed gray line.
 
 > **Python note.** `if ... :` runs the indented lines only when the condition is true. `!=` means "is not
-> equal to", and comparing two groups of numbers in brackets checks them all at once.
+> equal to", and comparing two groups of numbers in parentheses checks them all at once. `2.5 < x < 4.2` is
+> true when `x` lies between the two numbers. We use it to leave out a label that the new curve would cross.
 
 ```{python}
 def ad_curve(pi_bar=PI_BAR, m=M_BAR, b=B_BAR, a=0.0):
     """Figure 13.1: the AD curve, with the point where inflation equals the target."""
     fig = asad_figure()
     if (pi_bar, m, b, a) != (PI_BAR, M_BAR, B_BAR, 0.0):
-        add_ad(fig, "AD (baseline)", GRAY, dash="dash")
+        label = "AD (baseline)"
+        if 2.5 < ad_output(-0.5, pi_bar, m, a, b) < 4.2:     # the new AD curve would run into this label
+            label = ""
+        add_ad(fig, label, GRAY, dash="dash")
     add_ad(fig, "AD", BLUE, a, pi_bar, m, b)
     add_point(fig, a, pi_bar, "π = π̄")
     asad_axes(fig, f"AD: Ỹ = {a:.1f} − {b * m:.2f} × (π − {pi_bar:.1f});   at π = π̄ = {pi_bar:.1f}%, Ỹ = {a:.1f}%")
@@ -433,10 +441,14 @@ def inflation_rises(pi_new=3.0, m=M_BAR):
     Y_B = ad_output(pi_new, m=m)
     fig = asad_figure()
     if m != M_BAR:
-        add_ad(fig, "AD (m̄ = 0.5)", GRAY, dash="dash")
+        label = "AD (m̄ = 0.5)"
+        if 2.5 < ad_output(-0.5, m=m) < 4.2:              # the new AD curve would run into this label
+            label = ""
+        add_ad(fig, label, GRAY, dash="dash")
     add_ad(fig, "AD", BLUE, m=m)
     add_point(fig, 0.0, PI_BAR, "A")
-    add_point(fig, Y_B, pi_new, "B")
+    if pi_new != PI_BAR:                                 # no second letter on top of A
+        add_point(fig, Y_B, pi_new, "B")
     add_arrow(fig, -3.7, PI_BAR, -3.7, pi_new)      # inflation rises ...
     add_arrow(fig, 0.0, -0.6, Y_B, -0.6)            # ... so output falls
     rate = m * (pi_new - PI_BAR)
@@ -550,7 +562,10 @@ def as_curve(pi_prev=PI_BAR, nu=NU_BAR, o=0.0):
     """Figure 13.4: the AS curve, which crosses Y~ = 0 at last year's inflation plus the shock."""
     fig = asad_figure()
     if (pi_prev, nu, o) != (PI_BAR, NU_BAR, 0.0):
-        add_as(fig, "AS (baseline)", GRAY, dash="dash")
+        label = "AS (baseline)"
+        if abs(as_inflation(4.0, pi_prev, nu, o) - 6.0) < 0.6:   # the two labels at the right edge would overlap
+            label = ""
+        add_as(fig, label, GRAY, dash="dash")
     add_as(fig, "AS", TEAL, pi_prev, nu, o)
     add_point(fig, 0.0, pi_prev + o, "")
     asad_axes(fig, f"AS: π = {pi_prev:.1f} + {nu:.2f} × Ỹ + {o:.1f};   at Ỹ = 0, π = {pi_prev + o:.1f}%")
@@ -673,7 +688,8 @@ color, and the path so far, with the textbook's letters ($B$, $C$, $D$ for perio
 > **Python note.** `path.loc[t]` is the row of period `t`, and `now.pi` is its value in the column `pi`.
 > `path.pi_e[s]` is the value of column `pi_e` in the row of period `s`. `x in some_list` is true when `x` is one
 > of the elements, and `"AD" if s == 0 else "AD₁"` picks the first value when the condition holds, the second
-> otherwise.
+> otherwise. `round(x, 2) + 0.0` rounds to two decimals; adding `0.0` turns a rounded −0.0 into 0.0, so a title
+> never shows "−0.00".
 
 ```{python}
 def add_event_curves(fig, path, t, as_periods, m=M_BAR, nu=NU_BAR, col=1):
@@ -696,6 +712,8 @@ def add_event_curves(fig, path, t, as_periods, m=M_BAR, nu=NU_BAR, col=1):
             if pair == (path.a[t], path.target[t]):
                 add_ad(fig, name, BLUE, pair[0], pair[1], m, col=col)
             else:
+                if pair[0] == path.a[t] and abs(pair[1] - path.target[t]) < 0.6:   # it would sit on today's label
+                    name = ""
                 add_ad(fig, name, GRAY, pair[0], pair[1], m, dash="dash", col=col)
 ```
 
@@ -705,7 +723,8 @@ def add_event_path(fig, path, t, letters, col=1):
     add_point(fig, path.Y[0], path.pi[0], "A", col)
     for s in range(1, t + 1):
         add_arrow(fig, path.Y[s - 1], path.pi[s - 1], path.Y[s], path.pi[s], col)
-        if s in letters:
+        moved = (path.Y[s], path.pi[s]) != (path.Y[0], path.pi[0])   # with no shock, no letter on top of A
+        if s in letters and moved:
             add_point(fig, path.Y[s], path.pi[s], letters[s], col)
         else:
             add_point(fig, path.Y[s], path.pi[s], "", col, guides=False)
@@ -721,7 +740,7 @@ def inflation_shock(o=2.0, t=1, m=M_BAR, nu=NU_BAR):
     add_event_curves(fig, path, t, list(range(1, t + 1)), m, nu)
     add_event_path(fig, path, t, SHOCK_LETTERS)
     now = path.loc[t]
-    asad_axes(fig, f"Period {t}: π = {now.pi:.2f}%, Ỹ = {now.Y:.2f}%   (shock ō = {o:.1f} in period 1 only)")
+    asad_axes(fig, f"Period {t}: π = {now.pi:.2f}%, Ỹ = {round(now.Y, 2) + 0.0:.2f}%   (shock ō = {o:.1f} in period 1 only)")
     return fig
 ```
 
@@ -904,7 +923,7 @@ def inflation_shock_summary(o=2.0, m=M_BAR, nu=NU_BAR):
     """Figure 13.9: a one-period inflation shock o, from the jump to B back to the steady state A."""
     path = simulate(NO_SHOCK, shock_list(o, 1), m=m, nu=nu)
     fig = event_summary(path, {1: "B"}, [1], m, nu)
-    asad_axes(fig, f"Shock ō = {o:.1f}: inflation peaks at {path.pi.max():.2f}%; sum of Ỹ = {path.Y.sum():.2f}")
+    asad_axes(fig, f"Shock ō = {o:.1f}: inflation peaks at {path.pi.max():.2f}%; sum of Ỹ = {round(path.Y.sum(), 2) + 0.0:.2f}")
     return fig
 ```
 
@@ -984,7 +1003,7 @@ def disinflation(pi_new=2.0, t=1, m=M_BAR, nu=NU_BAR):
     if t > 1:
         add_point(fig, 0.0, pi_new, "C")                     # the new steady state
     now = path.loc[t]
-    asad_axes(fig, f"Target {PI_OLD:.1f} → {pi_new:.1f}%.  Period {t}: π = {now.pi:.2f}%, Ỹ = {now.Y:.2f}%")
+    asad_axes(fig, f"Target {PI_OLD:.1f} → {pi_new:.1f}%.  Period {t}: π = {now.pi:.2f}%, Ỹ = {round(now.Y, 2) + 0.0:.2f}%")
     return fig
 ```
 
@@ -1038,7 +1057,7 @@ def disinflation_summary(pi_new=2.0, m=M_BAR, nu=NU_BAR):
     path = simulate(NO_SHOCK, NO_SHOCK, PI_OLD, pi_new, m, nu)
     fig = event_summary(path, {1: "B"}, [T_MAX], m, nu)
     add_point(fig, 0.0, pi_new, "C")
-    asad_axes(fig, f"Target {PI_OLD:.1f} → {pi_new:.1f}%: output lost over {T_MAX} periods = {-path.Y.sum():.2f}%")
+    asad_axes(fig, f"Target {PI_OLD:.1f} → {pi_new:.1f}%: output lost over {T_MAX} periods = {round(-path.Y.sum(), 2) + 0.0:.2f}%")
     return fig
 ```
 
@@ -1101,7 +1120,7 @@ def demand_shock(a=2.0, t=1, m=M_BAR, nu=NU_BAR):
     add_event_curves(fig, path, t, list(range(1, t + 1)), m, nu)
     add_event_path(fig, path, t, DEMAND_LETTERS)
     now = path.loc[t]
-    asad_axes(fig, f"Period {t}: π = {now.pi:.2f}%, Ỹ = {now.Y:.2f}%   (ā = {a:.1f} in periods 1–{A_LAST})")
+    asad_axes(fig, f"Period {t}: π = {now.pi:.2f}%, Ỹ = {round(now.Y, 2) + 0.0:.2f}%   (ā = {a:.1f} in periods 1–{A_LAST})")
     return fig
 ```
 
@@ -1263,7 +1282,7 @@ def demand_shock_summary(a=2.0, last=A_LAST, m=M_BAR, nu=NU_BAR):
     """Figure 13.15: a demand shock a in periods 1 to last, in the AS/AD diagram and over time."""
     path = simulate(shock_list(a, last), NO_SHOCK, m=m, nu=nu)
     fig = event_summary(path, {1: "B", last: "C", last + 1: "D"}, [last], m, nu)
-    asad_axes(fig, f"ā = {a:.1f} in periods 1–{last}: π peaks at {path.pi.max():.2f}%; sum of Ỹ = {path.Y.sum():.2f}")
+    asad_axes(fig, f"ā = {a:.1f} in periods 1–{last}: π peaks at {path.pi.max():.2f}%; sum of Ỹ = {round(path.Y.sum(), 2) + 0.0:.2f}")
     return fig
 ```
 
@@ -1313,7 +1332,7 @@ links the two, $i_t = R_t + \pi_t$, so the rule implies
 
 $$i_t = \bar{r} + \pi_t + \bar{m}\,(\pi_t - \bar{\pi}). \qquad (13.5)$$
 
-John Taylor picked numbers that are all about 2: $\bar{r} = 2\%$, $\bar{m} = 1/2$ and $\bar{\pi} = 2\%$. Then
+John Taylor picked numbers that are all built on the number 2: $\bar{r} = 2\%$, $\bar{m} = 1/2$ and $\bar{\pi} = 2\%$. Then
 $i_t = 1 + 1.5\,\pi_t$: when inflation rises by 1 point, the nominal rate rises by 1.5 points, so the real rate rises
 too. For inflation we use core PCE inflation (prices of consumer spending without food and energy), the measure that
 reproduces the textbook's line.
@@ -1343,12 +1362,13 @@ def fed_funds_chart(r_bar=2.0, m=M_BAR):
     recent = chart[chart.date >= "2009-01-01"]
     gap = (recent["Actual fed funds rate"] - recent["Policy rule"]).mean()
     fig = px.line(chart, x="date", y=["Actual fed funds rate", "Policy rule"],
-                  color_discrete_sequence=[BLUE, GREEN], labels={"date": "Year", "value": "Percent", "variable": ""},
+                  color_discrete_sequence=[BLUE, GREEN],
+                  labels={"date": "Year", "value": "Percent", "variable": "Series"},
                   title=f"Rule with r̄ = {r_bar:.1f}, m̄ = {m:.2f}: actual minus rule since 2009 = {gap:.2f} points")
     fig.update_traces(line_width=2.5)
     fig.update_traces(line_dash="dash", selector=dict(name="Policy rule"))
     fig.update_layout(xaxis_range=["1958-01-01", "2027-12-31"], yaxis=dict(range=[-1, 22], tickvals=[0, 4, 8, 12, 16, 20]),
-                      legend=dict(x=0.99, y=0.99, xanchor="right", yanchor="top"))
+                      legend=dict(x=0.99, y=0.99, xanchor="right", yanchor="top"), legend_title_text="")
     return fig
 ```
 
@@ -1384,7 +1404,8 @@ slider_figure(fed_funds_chart, "r_bar", [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0], sta
 ### Key numbers: how closely does the Fed follow the rule?
 
 > **Python note.** `taylor[(taylor.date >= start) & (taylor.date <= end)]` keeps the quarters between two dates.
-> `.corr()` gives the correlation between two columns: 1 means they move perfectly together.
+> `.corr()` gives the correlation between two columns: 1 means they move perfectly together. `idxmax()` gives the
+> row number of the largest value, and `:%Y-%m` in an f-string writes a date as year-month.
 
 ```{python}
 taylor["rule"] = policy_rule(taylor.core_inflation)
@@ -1439,14 +1460,17 @@ check which **vintage** of the data a claim is based on.
 > **Python note.** `.isin([...])` is true for the rows whose value is in the list. A dictionary such as `WINDOWS` maps a
 > name to its settings, and `WINDOWS[years]` looks them up. `.where(condition, "")` keeps a value where the condition is
 > true and puts an empty text elsewhere: we label only a few key years and let hover show the rest.
-> `part.assign(label=...)` returns a copy of the table with the new column `label`.
+> `.astype(str)` turns the years into text. `part.assign(label=...)` returns a copy of the table with the new
+> column `label`. `MOVED.get(year, "top center")` looks up `year` in the dictionary `MOVED` and gives
+> `"top center"` when the year is not in it.
 
 ```{python}
 WINDOWS = {"1960–1985": (1960, 1985, [-8, 7], [0, 15], [2, 4, 6, 8, 10, 12, 14]),
            "1985–2025": (1985, 2025, [-6, 3], [-1.5, 9], [0, 2, 4, 6, 8])}
 VINTAGES = {"Current data": "output_gap", "Textbook data": "output_gap_2023"}   # the textbook used the March 2023 vintage
-KEY_YEARS = [1960, 1966, 1969, 1974, 1975, 1979, 1980, 1982, 1985, 1989, 1991, 2000, 2007, 2009, 2011, 2015,
+KEY_YEARS = [1960, 1966, 1969, 1974, 1975, 1979, 1980, 1982, 1985, 1989, 1991, 2000, 2009, 2011, 2015,
              2019, 2020, 2021, 2022, 2025]
+MOVED = {2020: "bottom center", 2021: "middle right", 2025: "bottom center"}   # labels moved off nearby points
 
 
 def loops_chart(years="1960–1985", vintage="Current data"):
@@ -1458,7 +1482,10 @@ def loops_chart(years="1960–1985", vintage="Current data"):
     fig = px.line(part, x=column, y="inflation", text="label", markers=True, hover_name="year",
                   labels={column: "Output gap, Ỹ (percent)", "inflation": "CPI inflation (percent)"},
                   title=f"Counterclockwise loops, {first}–{part.year.max()} ({vintage.lower()})")
-    fig.update_traces(line=dict(color=BLUE, width=2), marker=dict(color=TEAL, size=7), textposition="top center")
+    positions = []
+    for year in part.year:
+        positions.append(MOVED.get(year, "top center"))
+    fig.update_traces(line=dict(color=BLUE, width=2), marker=dict(color=TEAL, size=7), textposition=positions)
     fig.update_layout(xaxis=dict(range=x_range, zeroline=True), yaxis=dict(range=y_range, tickvals=y_ticks))
     return fig
 ```
@@ -1563,7 +1590,8 @@ with one line per series, we first reshape the table to *long* form: one row per
 
 > **Python note.** `melt` stacks columns into rows: `id_vars="date"` stays a column, and the names of the other columns
 > go into a new column `series`. `.map(NAMES)` replaces each column name by its readable name from the dictionary.
-> `column[4:8]` takes characters 4 to 7 of a text, here the year.
+> `spf.columns[2:]` is the list of column names from the third one on (the forecasts). `column[4:8]` takes
+> characters 4 to 7 of a text, here the year, and `column[-1]` its last character, here the quarter.
 
 ```{python}
 NAMES = {"employment_actual": "Actual employment"}
@@ -1574,11 +1602,11 @@ long["series"] = long.series.map(NAMES)
 SHADES = ["black", "#c6dbef", "#9ecae1", "#6baed6", "#4292c6", "#2171b5", "#08519c", "#74c476", "#31a354", "#006d2c"]
 fig = px.line(long, x="date", y="employment", color="series", hover_name="series", markers=True,
               color_discrete_sequence=SHADES, labels={"date": "Quarter", "employment": "Nonfarm employment (millions)",
-                                                      "series": ""},
+                                                      "series": "Series"},
               title="Forecasters kept expecting a mild slowdown while jobs collapsed, 2008–2009")
 fig.update_traces(line_width=2)
 fig.update_traces(line_width=5, selector=dict(name="Actual employment"))
-fig.update_layout(yaxis=dict(range=[128.5, 140.5], tickvals=[130, 132, 134, 136, 138, 140]))
+fig.update_layout(yaxis=dict(range=[128.5, 140.5], tickvals=[130, 132, 134, 136, 138, 140]), legend_title_text="")
 fig.show()
 ```
 
@@ -1588,7 +1616,7 @@ fig.show()
   not see the recession coming.
 - Even the forecast of 2008Q4, made after the financial panic of October 2008, expected a far milder fall than what
   happened. Each new forecast was revised down, and was still too high.
-- Only in late 2009, near the trough, did the forecasts catch up with reality. Click the legend entries to show or hide
+- Only from mid-2009, near the trough, did the forecasts catch up with reality. Click the legend entries to show or hide
   single forecasts.
 
 <!-- cell -->
@@ -1643,11 +1671,11 @@ used an early partial-year number.
 long_oecd = oecd.melt(id_vars="year", var_name="country", value_name="inflation")
 fig = px.line(long_oecd, x="year", y="inflation", color="country", hover_name="country",
               color_discrete_sequence=[BLUE, TEAL, GREEN, "#5aa0d8"],
-              labels={"year": "Year", "inflation": "Inflation (percent)", "country": ""},
+              labels={"year": "Year", "inflation": "Inflation (percent)", "country": "Economy"},
               title="Inflation was high everywhere in the 1970s and low after the 1980s")
 fig.update_traces(line_width=2.5)
 fig.update_layout(xaxis_range=[1958, 2027], yaxis=dict(range=[-3, 26], tickvals=[0, 5, 10, 15, 20, 25]),
-                  legend=dict(x=0.99, y=0.99, xanchor="right", yanchor="top"))
+                  legend=dict(x=0.99, y=0.99, xanchor="right", yanchor="top"), legend_title_text="")
 fig.show()
 ```
 
@@ -1655,8 +1683,8 @@ fig.show()
 
 - In the 1970s inflation peaked above 20 percent in the U.K. (24.2 percent in 1975) and Japan (23.2 percent in 1974).
 - From the 1990s on, all four stayed low and stable; Japan was close to zero or negative for almost two decades.
-- In 2021–2022 inflation returned everywhere, then fell back in 2023–2025. Click the legend to compare two countries
-  at a time.
+- In 2021–2022 inflation returned in the U.S., the U.K. and the euro area, then fell back in 2023–2024. In Japan it
+  came later, from 2022, and was still about 3 percent in 2025. Click the legend to compare two countries at a time.
 
 <!-- cell -->
 
@@ -1710,9 +1738,14 @@ def credible_disinflation(credibility=1.0, pi_new=2.0, m=M_BAR, nu=NU_BAR):
     pi_e = credibility * pi_new + (1 - credibility) * PI_OLD
     Y, pi = solve_asad(pi_e, pi_bar=pi_new, m=m, nu=nu)
     fig = asad_figure()
+    old_as, old_ad = "AS", "AD"
+    if abs(pi_e - PI_OLD) < 0.6:                        # no label when it would sit on the label of AS′
+        old_as = ""
+    if abs(pi_new - PI_OLD) < 0.6:                      # ... or on the label of AD′
+        old_ad = ""
     if pi_e != PI_OLD:
-        add_as(fig, "AS", GRAY, PI_OLD, nu, dash="dash")
-    add_ad(fig, "AD", GRAY, pi_bar=PI_OLD, m=m, dash="dash")
+        add_as(fig, old_as, GRAY, PI_OLD, nu, dash="dash")
+    add_ad(fig, old_ad, GRAY, pi_bar=PI_OLD, m=m, dash="dash")
     add_as(fig, "AS′", TEAL, pi_e, nu)
     add_ad(fig, "AD′", BLUE, pi_bar=pi_new, m=m)
     add_point(fig, 0.0, PI_OLD, "A")
@@ -1798,6 +1831,8 @@ it is not a full 20-year window, so we mark it differently.
 
 > **Python note.** `uk.loc[condition, "group"] = text` sets the column `group` in the rows where the condition is true.
 > `np.sqrt` is the square root, so `distance` is the straight-line distance from each point to the goal (2, 0).
+> `fig.data` is the list of traces of a figure, one per color group here, and `trace.hovertext` the names of its
+> points; for each one we look up a label position in `POSITIONS`, with `"middle right"` as the default.
 
 ```{python}
 uk["group"] = "Other 20-year windows"
@@ -1805,11 +1840,11 @@ uk.loc[uk.period == "1997–2016", "group"] = "1997–2016"
 uk.loc[uk.n_years < 20, "group"] = "2017–2025 (partial, 9 years)"
 uk["distance"] = np.sqrt((uk.avg_inflation - 2) ** 2 + uk.sd_inflation ** 2)
 POSITIONS = {"1757–1776": "middle left", "1777–1796": "middle left", "1817–1836": "middle left",
-             "1937–1956": "bottom center"}
+             "1837–1856": "top right", "1937–1956": "bottom center"}
 fig = px.scatter(uk, x="avg_inflation", y="sd_inflation", color="group", text="period", hover_name="period",
                  hover_data={"distance": ":.2f", "group": False}, color_discrete_sequence=[TEAL, BLUE, GREEN],
                  labels={"avg_inflation": "Average inflation (percent)", "sd_inflation": "Volatility of inflation (percent)",
-                         "group": "", "distance": "distance to the goal"},
+                         "group": "Group", "distance": "distance to the goal"},
                  title="Only 1997–2016 came close to the goal of 2% inflation with low volatility")
 for trace in fig.data:
     positions = []
@@ -1821,14 +1856,14 @@ fig.update_traces(marker_symbol="circle-open", selector=dict(name="2017–2025 (
 fig.add_trace(go.Scatter(x=[2], y=[0], mode="markers+text", text=["Goal"], textposition="middle right", name="Goal",
                          marker=dict(color="black", size=14, symbol="star")))
 fig.update_layout(xaxis=dict(range=[-3, 8.5], tickvals=[-2, 0, 2, 4, 6, 8]), yaxis=dict(range=[-0.7, 13], tickvals=[0, 2, 4, 6, 8, 10, 12]),
-                  legend=dict(x=0.99, y=0.99, xanchor="right", yanchor="top"))
+                  legend=dict(x=0.99, y=0.99, xanchor="right", yanchor="top"), legend_title_text="")
 fig.show()
 ```
 
 **What to notice.**
 
-- Most windows are far from the goal: high and volatile inflation in war years (1797–1816, 1917–1936), deflation in the
-  19th century, high inflation from 1937 to 1996.
+- Most windows are far from the goal: very volatile inflation in the war years (1797–1816, 1917–1936), although it
+  averaged only 1.5 to 2 percent, deflation in much of the 19th century, and high inflation from 1937 to 1996.
 - 1997–2016, the years of Bank of England independence and inflation targeting, almost hit the goal: 1.9 percent
   average inflation with a volatility of only 1.1.
 - The partial window 2017–2025 drifts away again, pulled by the inflation burst of 2021–2023. Hover over a point to see

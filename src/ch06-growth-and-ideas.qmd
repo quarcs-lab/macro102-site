@@ -209,6 +209,66 @@ print(f"Equation (6.11), gamma * n:     {100 * 0.7 * 0.05:.2f}% a year")
 print(f"Two textbook cases: gamma = 2, n = 1%: {2 * 1}%;  gamma = 1/2, n = 4%: {0.5 * 4:.0f}%")
 ```
 
+<!-- cell -->
+
+### Drawing the paths
+
+Figures 2, 3, 4 and 8 all plot output per person over time, so they share the same axes and the same way of
+drawing an experiment. We write both once here. On a **ratio scale** (a logarithmic axis), equal distances
+mean equal *percentage* changes, so a variable that grows at a constant rate is a straight line.
+
+> **Python note.** On a log axis Plotly wants the axis limits as powers of ten, which is why we write
+> `np.log10(...)`. `tickvals` sets the numbers printed on the axis: on the ratio scale each one is twice the
+> one below. A trace with `mode="text"` writes words at a point of the chart, which is how we label each
+> line at its end, as the textbook does.
+
+```{python}
+TICKS = [100, 200, 400, 800, 1600, 3200, 6400]           # ratio scale: no label at the bottom corner
+LINEAR_TICKS = [1000, 2000, 3000, 4000, 5000, 6000]      # linear scale: no label at the bottom corner
+
+
+def vertical_axis(fig, scale):
+    """Output per person on a ratio (log) or linear vertical axis, with fixed ranges."""
+    if scale == "ratio":
+        fig.update_yaxes(type="log", range=[np.log10(50), np.log10(6400)], tickvals=TICKS)
+    else:
+        fig.update_yaxes(type="linear", range=[0, 6400], tickvals=LINEAR_TICKS)
+    fig.update_yaxes(title_text=f"Output per person, y ({scale} scale)")
+    fig.update_xaxes(title_text="Year", range=[2000, 2120])
+
+
+def add_label(fig, x, y, text):
+    """Write a label just to the right of the point (x, y)."""
+    fig.add_trace(go.Scatter(x=[x], y=[y], mode="text", text=[text], textposition="middle right",
+                             cliponaxis=False, hoverinfo="skip"))
+```
+
+```{python}
+def experiment_chart(years, y, y_old, y_new, scale):
+    """Figures 6.3, 6.4 and 6.8: the path of y, the old and new BGPs after 2030 and the level effect."""
+    after = years >= 2030                                  # True for 2030 and later
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=years[after], y=y_old[after], name="Old BGP", line=dict(color=GRAY, width=3, dash="dash")))
+    fig.add_trace(go.Scatter(x=years[after], y=y_new[after], name="New BGP", line=dict(color=GREEN, width=3, dash="dash")))
+    fig.add_trace(go.Scatter(x=years, y=y, name="Output per person, y", line=dict(color=BLUE, width=3)))
+    fig.add_trace(go.Scatter(x=[2093, 2093], y=[y_old[-1], y_new[-1]], name="Level effect",
+                             mode="lines+markers", line=dict(color="black", width=2)))
+    if scale == "ratio":                                   # distance between the two BGPs, as a share of the axis
+        gap = abs(np.log10(y_new[-1] / y_old[-1])) / np.log10(6400 / 50)
+        middle = (y_old[-1] * y_new[-1]) ** 0.5
+    else:
+        gap = abs(y_new[-1] - y_old[-1]) / 6400
+        middle = (y_old[-1] + y_new[-1]) / 2
+    add_label(fig, 2095, y_old[-1], "Old BGP")
+    if gap > 0.06:                                         # hide the label when it would overlap "Old BGP"
+        add_label(fig, 2095, y_new[-1], "New BGP")
+    if gap > 0.2:                                          # enough room between the two labels
+        add_label(fig, 2095, middle, "Level effect")
+    vertical_axis(fig, scale)
+    fig.update_layout(showlegend=False)
+    return fig
+```
+
 ## Figure 1: A fixed cost leads to increasing returns
 
 **Goal.** See why a fixed cost of research turns a constant-returns technology into one with
@@ -254,7 +314,7 @@ def fixed_cost(F=2.5, X=7.2):
         gain = f"×{doses(X, F) / doses(half, F):.2f}"
     else:
         gain = "from zero"
-    fig.update_xaxes(title_text="Input, X (billions of dollars)", range=[0, 10])
+    fig.update_xaxes(title_text="Input, X (billions of dollars)", range=[0, 10], tickvals=[2, 4, 6, 8, 10])  # no label at the bottom-left corner
     fig.update_yaxes(title_text="Output, Y (millions of doses)", range=[0, 1000], row=1, col=1)
     fig.update_yaxes(range=[0, 800], row=1, col=2)
     fig.update_layout(title=f"Doubling X from {half:.1f} to {X:.1f} billion: output ×2 in (a), {gain} in (b)",
@@ -333,26 +393,8 @@ More people means more researchers, and more researchers find more ideas. Becaus
 every new idea raises the income of *everyone*. So as long as the population grows, output per person
 grows too, at a constant rate.
 
-On a **ratio scale** (a logarithmic axis), equal distances mean equal *percentage* changes, so a
-variable that grows at a constant rate is a straight line, and the slope of the line is the growth rate.
-We will use the same vertical axis in Figures 2, 3, 4 and 8, so we write it once as a small function.
-
-> **Python note.** On a log axis Plotly wants the axis limits as powers of ten, which is why we write
-> `np.log10(...)`. `tickvals` sets the numbers printed on the axis: each one is twice the one below.
-
-```{python}
-TICKS = [100, 200, 400, 800, 1600, 3200, 6400]           # no label at the bottom corner
-
-
-def vertical_axis(fig, scale):
-    """Output per person on a ratio (log) or linear vertical axis, with fixed ranges."""
-    if scale == "ratio":
-        fig.update_yaxes(type="log", range=[np.log10(50), np.log10(6400)], tickvals=TICKS)
-    else:
-        fig.update_yaxes(type="linear", range=[0, 6400])
-    fig.update_yaxes(title_text=f"Output per person, y ({scale} scale)")
-    fig.update_xaxes(title_text="Year", range=[2000, 2095])
-```
+On a **ratio scale** a variable that grows at a constant rate is a straight line, and the slope of the
+line is the growth rate. The chart uses `vertical_axis` and `add_label` from "The model in code".
 
 ```{python}
 def romer_bgp(gamma=0.7, n=0.05, scale="ratio"):
@@ -361,6 +403,7 @@ def romer_bgp(gamma=0.7, n=0.05, scale="ratio"):
     growth = 100 * (y[1] / y[0] - 1)
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=years, y=y, name="Output per person, y", line=dict(color=BLUE, width=3)))
+    add_label(fig, 2081, y[-1], "Constant growth")
     vertical_axis(fig, scale)
     fig.update_layout(title=f"Constant growth of {growth:.2f}% a year (γ·n = {100 * gamma * n:.2f}%); "
                             f"y in 2080 = {y[-1]:,.0f}", showlegend=False)
@@ -387,7 +430,7 @@ fig.update_layout(updatemenus=[dict(type="buttons", direction="right", x=0.01, y
          args=[{"yaxis.type": "log", "yaxis.range": [np.log10(50), np.log10(6400)], "yaxis.tickvals": TICKS,
                 "yaxis.title.text": "Output per person, y (ratio scale)"}]),
     dict(label="linear scale", method="relayout",
-         args=[{"yaxis.type": "linear", "yaxis.range": [0, 6400], "yaxis.tickvals": None,
+         args=[{"yaxis.type": "linear", "yaxis.range": [0, 6400], "yaxis.tickvals": LINEAR_TICKS,
                 "yaxis.title.text": "Output per person, y (linear scale)"}])])])
 fig
 ```
@@ -429,22 +472,16 @@ is higher by the factor $(\bar{z}'/\bar{z})^{\gamma}$: a **level effect**.
 suddenly *below* its new BGP. By the **principle of transition dynamics**, it grows fast at first,
 and then more and more slowly as it gets close to the new path.
 
-We reuse `simulate_romer`. The old BGP is simply a simulation in which nothing changes.
+We reuse `simulate_romer`. The old BGP is simply a simulation in which nothing changes, and
+`experiment_chart` from "The model in code" draws the three paths.
 
 ```{python}
 def rise_in_z(z_new=8.0, scale="ratio"):
     """Figure 6.3: output per person when research productivity rises from 1 to z_new in 2030."""
     years, y, y_bgp = simulate_romer(z_new=z_new)
     years, y_old, y_old_bgp = simulate_romer()             # no change: the old balanced growth path
-    after = years >= 2030                                  # True for 2030 and later
     level = y_bgp[-1] / y_old[-1]
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=years[after], y=y_old[after], name="Old BGP", line=dict(color=GRAY, width=3, dash="dash")))
-    fig.add_trace(go.Scatter(x=years[after], y=y_bgp[after], name="New BGP", line=dict(color=GREEN, width=3, dash="dash")))
-    fig.add_trace(go.Scatter(x=years, y=y, name="Output per person, y", line=dict(color=BLUE, width=3)))
-    fig.add_trace(go.Scatter(x=[2093, 2093], y=[y_old[-1], y_bgp[-1]], name=f"Level effect: ×{level:.2f}",
-                             mode="lines+markers", line=dict(color="black", width=2)))
-    vertical_axis(fig, scale)
+    fig = experiment_chart(years, y, y_old, y_bgp, scale)
     # y[30] is 2030, y[31] is 2031 and y[-1] is the last year, 2090
     fig.update_layout(title=f"New BGP ×{level:.2f} the old | growth {100 * (y[31] / y[30] - 1):.1f}% in 2031, "
                             f"{100 * (y[-1] / y[-2] - 1):.1f}% in 2090 (BGP: {100 * (y[1] / y[0] - 1):.1f}%)")
@@ -479,7 +516,7 @@ cell below, since the slider moves in steps of 0.5). By what percentage is the n
 
 <details><summary>Hint</summary>
 
-Call `rise_in_z(z_new=0.9)` to see the chart, and compare its level effect in the legend with $0.9^{0.6}$.
+Call `rise_in_z(z_new=0.9)` to see the chart, and compare the level effect in its title with $0.9^{0.6}$.
 
 </details>
 
@@ -507,17 +544,10 @@ def rise_in_l(l_new=0.35, scale="ratio"):
     """Figure 6.4: output per person when the research share rises from 0.03 to l_new in 2030."""
     years, y, y_bgp = simulate_romer(l_old=0.03, l_new=l_new)
     years, y_old, y_old_bgp = simulate_romer(l_old=0.03, l_new=0.03)   # the old balanced growth path
-    after = years >= 2030
     level = y_bgp[-1] / y_old[-1]
     impact = 100 * (y[30] / y_old[30] - 1)                 # change in 2030 compared with the old path
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=years[after], y=y_old[after], name="Old BGP", line=dict(color=GRAY, width=3, dash="dash")))
-    fig.add_trace(go.Scatter(x=years[after], y=y_bgp[after], name="New BGP", line=dict(color=GREEN, width=3, dash="dash")))
-    fig.add_trace(go.Scatter(x=years, y=y, name="Output per person, y", line=dict(color=BLUE, width=3)))
-    fig.add_trace(go.Scatter(x=[2093, 2093], y=[y_old[-1], y_bgp[-1]], name=f"Level effect: ×{level:.2f}",
-                             mode="lines+markers", line=dict(color="black", width=2)))
-    vertical_axis(fig, scale)
-    fig.update_layout(title=f"Impact in 2030: {impact:+.0f}% | new BGP ×{level:.2f} the old | "
+    fig = experiment_chart(years, y, y_old, y_bgp, scale)
+    fig.update_layout(title=f"Impact in 2030: {impact:+.1f}% | new BGP ×{level:.2f} the old | "
                             f"growth in 2031: {100 * (y[31] / y[30] - 1):.1f}%")
     return fig
 ```
@@ -550,6 +580,10 @@ slider_figure(rise_in_l, "l_new", [0.05, 0.1, 0.2, 0.35, 0.5, 0.65, 0.8], start=
 The level effect $\dfrac{(1-\bar{\ell}')\,\bar{\ell}'^{\,\gamma}}{(1-\bar{\ell})\,\bar{\ell}^{\gamma}}$ is
 **hump shaped** in the new share $\bar{\ell}'$. The table computes it for several shares, starting
 from $\bar{\ell} = 0.03$ with $\gamma = 0.6$.
+
+> **Python note.** `rows = []` starts an empty list, and the loop appends one `[share, ratio]` pair to it per
+> share. `pd.DataFrame(rows, columns=[...])` then turns the list of rows into a table, and `.round(2)` keeps
+> two decimals.
 
 ```{python}
 def bgp_level(l, gamma=0.6):
@@ -602,7 +636,9 @@ combines them with equal weights, and `extended_with_world_bank` marks the years
 added from a second source (World Bank prices). The textbook uses proprietary data, so our index differs
 somewhat in levels but has the same ups and downs.
 
-> **Python note.** `prices.set_index("year").commodity_index` makes the years the row labels of the index
+> **Python note.** `px.line(prices, x="year", y="commodity_index", ...)` draws a line chart straight from the
+> table: `x` and `y` name its columns, and `labels` gives them readable names on the axes.
+> `prices.set_index("year").commodity_index` makes the years the row labels of the index
 > column, so that `index[2000]` picks the value for 2000. `add_hline` draws a horizontal line.
 
 ```{python}
@@ -615,6 +651,7 @@ fig.update_traces(line=dict(color=TEAL, width=3))
 fig.add_hline(y=100, line_dash="dash", line_color=GRAY)
 fig.add_hline(y=20, line_dash="dash", line_color=GRAY)
 fig.update_layout(yaxis_range=[0, 140], xaxis_range=[1900, 2026])
+fig.update_yaxes(tickvals=[20, 40, 60, 80, 100, 120, 140])        # no label at the bottom-left corner
 fig.show()
 ```
 
@@ -682,7 +719,7 @@ fig = px.line(long, x="year", y="price", color="commodity", log_y=True,
               title="Aluminum became far cheaper; coal spiked in 2022")
 fig.update_traces(line=dict(width=1.5))
 fig.update_traces(line=dict(color="black", width=4), selector=dict(name="Index"))
-fig.update_yaxes(tickvals=[5, 10, 20, 50, 100, 200, 500, 1000], range=[np.log10(4), np.log10(1000)])
+fig.update_yaxes(tickvals=[10, 20, 50, 100, 200, 500, 1000], range=[np.log10(4), np.log10(1000)])   # no corner label
 fig.show()
 ```
 
@@ -883,7 +920,7 @@ def word_processor(F=100.0, p=20.0):
     fig.add_trace(go.Scatter(x=[F + breakeven], y=[breakeven], name=f"Break-even point at a price of {p:.0f} dollars",
                              mode="markers", marker=dict(color="black", size=12)))
     fig.update_layout(title=f"At a price of {p:.0f} dollars a copy, the firm breaks even at {breakeven:.2f} million copies",
-                      xaxis=dict(title="Input, X (millions of dollars)", range=[0, 210]),
+                      xaxis=dict(title="Input, X (millions of dollars)", range=[0, 210], tickvals=[50, 100, 150, 200]),  # no corner label
                       yaxis=dict(title="Output, Y (millions of copies)", range=[0, 105]))
     return fig
 ```
@@ -987,15 +1024,8 @@ def rise_in_s(s_old=0.05, s_new=0.6, scale="ratio"):
     """Figure 6.8: output per person when the investment rate rises from s_old to s_new in 2030."""
     years, y, y_bgp = simulate_combined(s_old=s_old, s_new=s_new)
     years, y_old, y_old_bgp = simulate_combined(s_old=s_old, s_new=s_old)   # the old balanced growth path
-    after = years >= 2030
     level = y_bgp[-1] / y_old[-1]
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=years[after], y=y_old[after], name="Old BGP", line=dict(color=GRAY, width=3, dash="dash")))
-    fig.add_trace(go.Scatter(x=years[after], y=y_bgp[after], name="New BGP", line=dict(color=GREEN, width=3, dash="dash")))
-    fig.add_trace(go.Scatter(x=years, y=y, name="Output per person, y", line=dict(color=BLUE, width=3)))
-    fig.add_trace(go.Scatter(x=[2093, 2093], y=[y_old[-1], y_bgp[-1]], name=f"Level effect: ×{level:.2f}",
-                             mode="lines+markers", line=dict(color="black", width=2)))
-    vertical_axis(fig, scale)
+    fig = experiment_chart(years, y, y_old, y_bgp, scale)
     fig.update_layout(title=f"New BGP ×{level:.2f} the old | growth {100 * (y[31] / y[30] - 1):.1f}% in 2031, "
                             f"{100 * (y[-1] / y[-2] - 1):.1f}% in 2090 (BGP: {100 * (y[1] / y[0] - 1):.1f}%)")
     return fig

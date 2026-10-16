@@ -170,6 +170,45 @@ print(f"Steady-state output per person  y* = {y_star:.2f}")
 print(f"Check with equation (5.9):      y* = {(0.4 / 0.1) ** 0.5 * 1.0 ** 1.5:.2f}")
 ```
 
+### Drawing the curves
+
+As in the textbook, every curve of a Solow diagram carries its name on the plot, right after its last point
+inside the axes, so the diagrams need no legend. The helper `add_curve` below draws one curve and writes its
+name. If the name of another curve already sits close by, it leaves the name out, so that two names never
+overlap. The black dots carry short labels such as $k^*$.
+
+> **Python note.** `y <= y_max` gives `True` or `False` for every point, and `k[inside]` keeps only the points
+> where it is `True`: the part of the curve inside the axes. `[-1]` takes the last element of an array. A `for`
+> loop repeats its indented lines once for each element, here for each name already on the figure.
+> `if ... else` chooses between two cases, and `abs` is the absolute value. A bare `return` leaves the function
+> early. The `row` and `col` arguments say in which panel to draw; we need them only in Figures 5 and 7.
+
+```{python}
+def add_curve(fig, k, y, label, color, y_max, dash="solid", row=None, col=None):
+    """Draw one curve of a Solow diagram and write its name at its last point inside the axes."""
+    inside = y <= y_max                                   # the part of the curve below the top of the axes
+    fig.add_trace(go.Scatter(x=k[inside], y=y[inside], name=label, mode="lines",
+                             line=dict(color=color, width=3, dash=dash)), row=row, col=col)
+    k_end, y_end = k[inside][-1], y[inside][-1]
+    for old in fig.layout.annotations:                    # is another name already close by?
+        if old.showarrow is False and old.xref != "paper":
+            if abs(old.y - y_end) < y_max / 12 and abs(old.x - k_end) < k[-1] / 3:
+                return                                    # yes: leave this name out
+    if inside[-1]:
+        anchor = "middle"                                 # the curve reaches the right edge: name right after it
+    else:
+        anchor = "top"                                    # the curve leaves through the top: name just below the top
+    fig.add_annotation(x=k_end, y=y_end, text=label, showarrow=False, xanchor="left", yanchor=anchor, xshift=5,
+                       font=dict(color=color, size=13), row=row, col=col)
+
+
+def add_arrow(fig, k_from, k_to, height):
+    """Draw an arrow along the k-axis from k_from to k_to (none if the two are the same)."""
+    if abs(k_to - k_from) > 0.1:
+        fig.add_annotation(x=k_to, y=height, ax=k_from, ay=height, xref="x", yref="y", axref="x", ayref="y",
+                           showarrow=True, arrowhead=3, arrowwidth=2, arrowcolor=GREEN)
+```
+
 ## Figure 1: The Solow diagram
 
 **Goal.** See why the economy moves toward the steady state $k^*$ from any starting point $k_0$.
@@ -181,31 +220,34 @@ The Solow diagram plots the two parts of equation (5.7) against capital per pers
 
 When investment is above depreciation, net investment is positive, so capital grows. When it is
 below, capital shrinks. Where the two cross, capital stops changing: that point is the steady state $k^*$.
+In the figure, the green bar at a starting point $k_0$ is net investment, the gap between the two curves, and
+the green arrow on the horizontal axis shows where capital moves.
 
 > **Python note.** `np.linspace(0, 20, 200)` creates 200 evenly spaced numbers from 0 to 20:
 > the values of $k$ at which we draw the curves. `go.Figure()` starts an empty chart, and each
-> `add_trace` adds one curve or set of points. We fix the axis ranges so that you can *see*
-> the curves move when a parameter changes.
+> `add_trace` adds one curve or set of points; our `add_curve` calls it for each curve, and
+> `add_annotation` writes a piece of text or an arrow on the chart. We fix the axis ranges so
+> that you can *see* the curves move when a parameter changes.
 
 ```{python}
 def solow_diagram(s=0.4, d=0.1, A=1.0, k0=2.7):
     """The Solow diagram (Figure 5.1): investment s*y and depreciation d*k against k."""
     k = np.linspace(0, 20, 200)                     # capital per person on the x-axis
+    y_max = 2.2                                      # top of the vertical axis
     k_star = steady_state_k(s, d, A)
-    net = s * output(k0, A) - d * k0                 # net investment at the starting point
+    net = round(s * output(k0, A) - d * k0, 3) + 0.0  # net investment at the starting point (+ 0.0 avoids "-0.000")
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=k, y=s * output(k, A), name="Investment, s·y", line=dict(color=TEAL, width=3)))
-    fig.add_trace(go.Scatter(x=k, y=d * k, name="Depreciation, d·k", line=dict(color=BLUE, width=3)))
+    add_curve(fig, k, s * output(k, A), "Investment, s·y", TEAL, y_max)
+    add_curve(fig, k, d * k, "Depreciation, d·k", BLUE, y_max)
     fig.add_trace(go.Scatter(x=[k0, k0], y=[d * k0, s * output(k0, A)], name="Net investment at k0",
                              mode="lines", line=dict(color=GREEN, width=5)))
-    fig.add_trace(go.Scatter(x=[k_star], y=[d * k_star], name="Steady state", mode="markers",
-                             marker=dict(color="black", size=11)))
-    # An arrow on the x-axis: capital moves from k0 toward k*
-    fig.add_annotation(x=k_star, y=0.05, ax=k0, ay=0.05, xref="x", yref="y", axref="x", ayref="y",
-                       showarrow=True, arrowhead=3, arrowwidth=2, arrowcolor=GREEN)
-    fig.update_layout(title=f"k* = {k_star:.2f}   |   net investment at k0 = {k0}: {net:+.3f}",
-                      xaxis=dict(title="Capital per person, k", range=[0, 20]),
-                      yaxis=dict(title="Investment and depreciation", range=[0, 2]))
+    fig.add_trace(go.Scatter(x=[k_star], y=[d * k_star], name="Steady state", mode="markers+text",
+                             text=["k*"], textposition="top left", marker=dict(color="black", size=11)))
+    add_arrow(fig, k0, k_star, 0.05)                 # an arrow on the x-axis: capital moves from k0 toward k*
+    fig.update_layout(title=f"k* = {k_star:.2f}   |   net investment at k0 = {k0:.1f}: {net:+.3f}",
+                      xaxis=dict(title="Capital per person, k", range=[0, 20], tickvals=[5, 10, 15, 20]),
+                      yaxis=dict(title="Investment and depreciation", range=[0, y_max]),
+                      showlegend=False, margin=dict(r=150))
     return fig
 ```
 
@@ -263,18 +305,22 @@ between the output curve and the investment curve: $c = y - \bar{s}y = (1-\bar{s
 def solow_with_output(s=0.4, d=0.1, A=1.0):
     """The Solow diagram with output (Figure 5.2): y, s*y and d*k, with consumption at k*."""
     k = np.linspace(0, 20, 200)
+    y_max = 3.0
     k_star = steady_state_k(s, d, A)
     y_star = output(k_star, A)
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=k, y=output(k, A), name="Output, y", line=dict(color=GREEN, width=3)))
-    fig.add_trace(go.Scatter(x=k, y=s * output(k, A), name="Investment, s·y", line=dict(color=TEAL, width=3)))
-    fig.add_trace(go.Scatter(x=k, y=d * k, name="Depreciation, d·k", line=dict(color=BLUE, width=3)))
+    add_curve(fig, k, output(k, A), "Output, y", GREEN, y_max)
+    add_curve(fig, k, s * output(k, A), "Investment, s·y", TEAL, y_max)
+    add_curve(fig, k, d * k, "Depreciation, d·k", BLUE, y_max)
     # Consumption in the steady state: the gap between y* and s*y*
     fig.add_trace(go.Scatter(x=[k_star, k_star], y=[s * y_star, y_star], name="Consumption, c*",
                              mode="lines+markers", line=dict(color="black", width=4)))
+    if k_star < 20:                                  # label the bar only when it is inside the axes
+        fig.add_annotation(x=k_star, y=(1 + s) / 2 * y_star, text="c*", showarrow=False, xanchor="left", xshift=6)
     fig.update_layout(title=f"y* = {y_star:.2f}   investment = {s * y_star:.2f}   consumption c* = {(1 - s) * y_star:.2f}",
-                      xaxis=dict(title="Capital per person, k", range=[0, 20]),
-                      yaxis=dict(title="Output, investment and depreciation", range=[0, 3]))
+                      xaxis=dict(title="Capital per person, k", range=[0, 20], tickvals=[5, 10, 15, 20]),
+                      yaxis=dict(title="Output, investment, depreciation", range=[0, y_max]),
+                      showlegend=False, margin=dict(r=150))
     return fig
 ```
 
@@ -295,7 +341,7 @@ slider_figure(solow_with_output, "s", [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0
 
 **What to notice.**
 
-- The black bar is steady-state consumption. A higher $\bar{s}$ raises $y^*$, but it also means a larger share of output is invested rather than consumed.
+- The black bar $c^*$ is steady-state consumption. A higher $\bar{s}$ raises $y^*$, but it also means a larger share of output is invested rather than consumed.
 - Productivity $\bar{A}$ moves *both* the output curve and the investment curve. That is why it has such a large effect on $y^*$: the exponent on $\bar{A}$ in equation (5.9) is $3/2$.
 
 **Your turn.** Move the investment rate from 0.1 to 0.9 and watch the consumption readout in the
@@ -335,7 +381,8 @@ capital.head()
 
 Each row is a country. `inv_rate_avg_1990_2023` is the average investment rate (percent of GDP)
 and `ky_2023` is the capital-output ratio in 2023. The function below draws the data and adds
-the model's prediction, $K/Y = s/d$, as a straight line.
+the model's prediction, $K/Y = s/d$, as a straight line with `add_curve`. The investment rate in the data is in
+percent, so the code divides it by 100.
 
 ```{python}
 def capital_output_chart(d=0.07):
@@ -344,10 +391,10 @@ def capital_output_chart(d=0.07):
                      labels={"inv_rate_avg_1990_2023": "Investment rate, s (percent, 1990–2023 average)",
                              "ky_2023": "Capital-output ratio, K/Y (2023)"})
     s = np.linspace(0, 55, 100)                      # investment rates, in percent
-    fig.add_trace(go.Scatter(x=s, y=(s / 100) / d, name="Solow model: K/Y = s/d",
-                             line=dict(color=TEAL, width=3)))
+    add_curve(fig, s, (s / 100) / d, "Solow: K/Y = s/d", TEAL, 7)
     fig.update_layout(title=f"Data and the Solow prediction with d = {d:.2f}",
-                      xaxis_range=[0, 55], yaxis_range=[0, 7])
+                      xaxis=dict(range=[0, 55], tickvals=[10, 20, 30, 40, 50]), yaxis_range=[0, 7],
+                      margin=dict(r=150))
     return fig
 ```
 
@@ -367,8 +414,8 @@ slider_figure(capital_output_chart, "d", [0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.
 **What to notice.**
 
 - The points slope upward, as the model predicts: countries that invest more have more capital relative to output.
-- Hover over the points. Singapore and South Korea sit at the top right, and the United States lies in the middle.
-- A depreciation rate around 6–8 percent makes the model line run through the cloud of points.
+- Hover over the points. Singapore and South Korea invest the most and sit at the far right, and the United States lies in the middle.
+- A depreciation rate of about 7–9 percent makes the model line run through the middle of the cloud of points.
 
 **Your turn.** Use the slider to find the depreciation rate whose line fits the data best by eye.
 Then hover over three countries that lie far from the line and write down their names.
@@ -410,6 +457,10 @@ Look at the first row. GDP per person in Venezuela appears to be about 160 dolla
 is not plausible. During Venezuela's hyperinflation the price data behind this number broke down.
 **Always look at your data before using it.** We drop Venezuela and continue.
 
+> **Python note.** `.head(5)` and `.tail(5)` keep the first and the last five rows of the sorted table.
+> `groupby("country").inv_rate.mean()` splits the table by country and averages the investment rate within
+> each country. `", ".join(...)` glues a list of names into one line of text, with commas in between.
+
 ```{python}
 panel = panel[panel.country != "Venezuela (Bolivarian Republic of)"]
 latest = panel[panel.year == 2023].dropna(subset=["gdp_pc"]).sort_values("gdp_pc")
@@ -443,19 +494,24 @@ investment now exceeds depreciation, so capital accumulates until the new steady
 def increase_in_s(s=0.4, s_new=0.6, d=0.1, A=1.0):
     """Figure 5.4: the investment curve shifts up when s rises to s_new."""
     k = np.linspace(0, 25, 200)
+    y_max = 2.75
     k_old, k_new = steady_state_k(s, d, A), steady_state_k(s_new, d, A)
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=k, y=s * output(k, A), name="Old investment, s·y",
-                             line=dict(color=GRAY, width=3, dash="dash")))
-    fig.add_trace(go.Scatter(x=k, y=s_new * output(k, A), name="New investment, s'·y", line=dict(color=TEAL, width=3)))
-    fig.add_trace(go.Scatter(x=k, y=d * k, name="Depreciation, d·k", line=dict(color=BLUE, width=3)))
+    add_curve(fig, k, s_new * output(k, A), "s′·y (new)", TEAL, y_max)       # new curves first: their names win
+    add_curve(fig, k, d * k, "Depreciation, d·k", BLUE, y_max)
+    add_curve(fig, k, s * output(k, A), "s·y (old)", GRAY, y_max, dash="dash")
+    if k_new > k_old:                                # place the two dot labels where no curve passes
+        places = ["bottom right", "top left"]
+    else:
+        places = ["top left", "bottom right"]
     fig.add_trace(go.Scatter(x=[k_old, k_new], y=[d * k_old, d * k_new], name="k* (old) and k** (new)",
-                             mode="markers", marker=dict(color="black", size=11)))
-    fig.add_annotation(x=k_new, y=0.08, ax=k_old, ay=0.08, xref="x", yref="y", axref="x", ayref="y",
-                       showarrow=True, arrowhead=3, arrowwidth=2, arrowcolor=GREEN)
+                             mode="markers+text", text=["k*", "k**"], textposition=places,
+                             marker=dict(color="black", size=11)))
+    add_arrow(fig, k_old, k_new, 0.08)
     fig.update_layout(title=f"k* = {k_old:.2f}  →  k** = {k_new:.2f}   (k**/k* = {k_new / k_old:.2f})",
-                      xaxis=dict(title="Capital per person, k", range=[0, 25]),
-                      yaxis=dict(title="Investment and depreciation", range=[0, 2.5]))
+                      xaxis=dict(title="Capital per person, k", range=[0, 25], tickvals=[5, 10, 15, 20, 25]),
+                      yaxis=dict(title="Investment and depreciation", range=[0, y_max]),
+                      showlegend=False, margin=dict(r=150))
     return fig
 ```
 
@@ -503,8 +559,9 @@ equation (5.7) one year at a time. This is called a **simulation**. The function
 economy in its old steady state and changes the parameters in `change_year`. We will reuse it in
 Figures 7 and 13.
 
-> **Python note.** A `for` loop repeats the indented lines once for each year. `if ... else`
-> chooses between two cases. `y_path.append(...)` adds one more number to the end of a list.
+> **Python note.** Here the `for` loop repeats the indented lines once for each year, and `if ... else`
+> picks the parameters of that year. `y_path = []` starts an empty list, and `y_path.append(...)` adds one
+> more number to its end. `np.arange(2000, 2101)` gives the whole years from 2000 to 2100.
 
 ```{python}
 def simulate(s_old=0.4, s_new=0.4, d_old=0.1, d_new=0.1, destroyed=0.0,
@@ -530,6 +587,8 @@ def simulate(s_old=0.4, s_new=0.4, d_old=0.1, d_new=0.1, destroyed=0.0,
 ```
 
 The figure has two panels: (a) the Solow diagram with output, and (b) output per person over time.
+Panel (a) is small, so its curves carry short names: output $y$, the old investment curve $\bar{s}y$
+(dashed), the new one $\bar{s}'y$, and depreciation $\bar{d}k$.
 
 On a **ratio scale** (a logarithmic axis), equal distances mean equal *percentage* changes. The
 slope of the line is then the growth rate.
@@ -544,23 +603,25 @@ def output_after_s(s_new=0.6, scale="ratio"):
     s, d = 0.4, 0.1                                      # old investment rate and depreciation rate
     years, y = simulate(s_old=s, s_new=s_new, d_old=d, d_new=d)
     k = np.linspace(0, 25, 200)
-    growth_2021 = 100 * (y[21] / y[20] - 1)              # y[20] is 2020 and y[21] is 2021
-    fig = make_subplots(rows=1, cols=2, subplot_titles=("(a) Solow diagram", "(b) Output over time"))
-    fig.add_trace(go.Scatter(x=k, y=output(k), name="Output, y", line=dict(color=GREEN, width=3)), row=1, col=1)
-    fig.add_trace(go.Scatter(x=k, y=s * output(k), name="Old investment", line=dict(color=GRAY, dash="dash")), row=1, col=1)
-    fig.add_trace(go.Scatter(x=k, y=s_new * output(k), name="New investment", line=dict(color=TEAL, width=3)), row=1, col=1)
-    fig.add_trace(go.Scatter(x=k, y=d * k, name="Depreciation", line=dict(color=BLUE, width=3)), row=1, col=1)
+    growth_2021 = round(100 * (y[21] / y[20] - 1), 1) + 0.0   # y[20] is 2020 and y[21] is 2021
+    fig = make_subplots(rows=1, cols=2, horizontal_spacing=0.14, subplot_titles=("(a) Solow diagram", "(b) Output over time"))
+    add_curve(fig, k, output(k), "y", GREEN, 3.4, row=1, col=1)
+    add_curve(fig, k, s_new * output(k), "s′·y", TEAL, 3.4, row=1, col=1)
+    add_curve(fig, k, d * k, "d·k", BLUE, 3.4, row=1, col=1)
+    add_curve(fig, k, s * output(k), "s·y", GRAY, 3.4, dash="dash", row=1, col=1)
     fig.add_trace(go.Scatter(x=[steady_state_k(s, d), steady_state_k(s_new, d)], y=[y[0], y[-1]], name="y* and y**",
-                             mode="markers", marker=dict(color="black", size=10)), row=1, col=1)
+                             mode="markers+text", text=["y*", "y**"], textposition=["top left", "bottom right"],
+                             marker=dict(color="black", size=10)), row=1, col=1)
     fig.add_trace(go.Scatter(x=years, y=y, name="Output per person over time", line=dict(color=GREEN, width=3)), row=1, col=2)
-    fig.update_xaxes(title_text="Capital per person, k", range=[0, 25], row=1, col=1)
-    fig.update_yaxes(range=[0, 3.5], row=1, col=1)
-    fig.update_xaxes(title_text="Year", row=1, col=2)
+    fig.update_xaxes(title_text="Capital per person, k", range=[0, 25], tickvals=[5, 10, 15, 20, 25], row=1, col=1)
+    fig.update_yaxes(range=[0, 3.4], row=1, col=1)
+    fig.update_xaxes(title_text="Year", range=[2000, 2100], tickvals=[2020, 2040, 2060, 2080, 2100], row=1, col=2)
     if scale == "ratio":
-        fig.update_yaxes(type="log", range=[np.log10(1.0), np.log10(3.5)], row=1, col=2)
+        fig.update_yaxes(type="log", range=[np.log10(1.0), np.log10(3.4)], row=1, col=2)
     else:
-        fig.update_yaxes(range=[1.0, 3.5], row=1, col=2)
-    fig.update_layout(title=f"y* = {y[0]:.2f} → y** = {y[-1]:.2f}   |   growth in 2021: {growth_2021:+.1f}%")
+        fig.update_yaxes(range=[1.0, 3.4], row=1, col=2)
+    fig.update_layout(title=f"y* = {y[0]:.2f} → y** = {y[-1]:.2f}   |   growth in 2021: {growth_2021:+.1f}%",
+                      showlegend=False)
     return fig
 ```
 
@@ -573,8 +634,15 @@ interact(output_after_s,
 
 ```{python}
 #| kind: website
-# @title Website version: Figure 5 with a precomputed slider for the new investment rate
-slider_figure(output_after_s, "s_new", [0.3, 0.4, 0.5, 0.6, 0.7, 0.8], start=0.6, label="new investment rate s'")
+# @title Website version: Figure 5 with a precomputed slider for the new investment rate and buttons for the scale
+fig = slider_figure(output_after_s, "s_new", [0.3, 0.4, 0.5, 0.6, 0.7, 0.8], start=0.6, label="new investment rate s'")
+fig.update_layout(updatemenus=[dict(type="buttons", direction="right", x=0.99, y=0.02, xanchor="right",
+                                    yanchor="bottom", buttons=[
+    dict(label="ratio scale", method="relayout",
+         args=[{"yaxis2.type": "log", "yaxis2.range": [np.log10(1.0), np.log10(3.4)]}]),
+    dict(label="linear scale", method="relayout",
+         args=[{"yaxis2.type": "linear", "yaxis2.range": [1.0, 3.4]}])])])
+fig
 ```
 
 **What to notice.**
@@ -609,18 +677,24 @@ depreciation exceeds investment, so capital falls until it reaches a lower stead
 def increase_in_d(d=0.1, d_new=0.15, s=0.4, A=1.0):
     """Figure 5.6: the depreciation line rotates up when d rises to d_new."""
     k = np.linspace(0, 20, 200)
+    y_max = 2.4
     k_old, k_new = steady_state_k(s, d, A), steady_state_k(s, d_new, A)
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=k, y=s * output(k, A), name="Investment, s·y", line=dict(color=TEAL, width=3)))
-    fig.add_trace(go.Scatter(x=k, y=d * k, name="Old depreciation, d·k", line=dict(color=GRAY, width=3, dash="dash")))
-    fig.add_trace(go.Scatter(x=k, y=d_new * k, name="New depreciation, d'·k", line=dict(color=BLUE, width=3)))
+    add_curve(fig, k, s * output(k, A), "Investment, s·y", TEAL, y_max)
+    add_curve(fig, k, d_new * k, "d′·k (new)", BLUE, y_max)                  # new line first: its name wins
+    add_curve(fig, k, d * k, "d·k (old)", GRAY, y_max, dash="dash")
+    if k_new < k_old:                                # place the two dot labels where no curve passes
+        places = ["bottom right", "top left"]
+    else:
+        places = ["top left", "bottom right"]
     fig.add_trace(go.Scatter(x=[k_old, k_new], y=[d * k_old, d_new * k_new], name="k* (old) and k** (new)",
-                             mode="markers", marker=dict(color="black", size=11)))
-    fig.add_annotation(x=k_new, y=0.06, ax=k_old, ay=0.06, xref="x", yref="y", axref="x", ayref="y",
-                       showarrow=True, arrowhead=3, arrowwidth=2, arrowcolor=GREEN)
+                             mode="markers+text", text=["k*", "k**"], textposition=places,
+                             marker=dict(color="black", size=11)))
+    add_arrow(fig, k_old, k_new, 0.06)
     fig.update_layout(title=f"k* = {k_old:.2f}  →  k** = {k_new:.2f}   (k**/k* = {k_new / k_old:.2f})",
-                      xaxis=dict(title="Capital per person, k", range=[0, 20]),
-                      yaxis=dict(title="Investment and depreciation", range=[0, 2]))
+                      xaxis=dict(title="Capital per person, k", range=[0, 20], tickvals=[5, 10, 15, 20]),
+                      yaxis=dict(title="Investment and depreciation", range=[0, y_max]),
+                      showlegend=False, margin=dict(r=150))
     return fig
 ```
 
@@ -662,31 +736,34 @@ You need $(\bar{d}/\bar{d}')^{3/2} = 1/2$, so $\bar{d}' = \bar{d} \times 2^{2/3}
 ## Figure 7: Output after an increase in the depreciation rate
 
 **Goal.** Follow output per person year by year after the depreciation rate rises in 2020. We reuse
-`simulate` from Figure 5. This time only `d_new` changes.
+`simulate` from Figure 5. This time only `d_new` changes. As in Figure 5, panel (a) uses short curve names:
+the old depreciation line $\bar{d}k$ is dashed and the new one is $\bar{d}'k$.
 
 ```{python}
 def output_after_d(d_new=0.15, scale="ratio"):
     """Figure 5.7: the Solow diagram with output (a) and output over time (b) when d rises in 2020."""
     s, d = 0.4, 0.1                                      # investment rate and old depreciation rate
     years, y = simulate(s_old=s, s_new=s, d_old=d, d_new=d_new)
-    k = np.linspace(0, 20, 200)
-    growth_2021 = 100 * (y[21] / y[20] - 1)
-    fig = make_subplots(rows=1, cols=2, subplot_titles=("(a) Solow diagram", "(b) Output over time"))
-    fig.add_trace(go.Scatter(x=k, y=output(k), name="Output, y", line=dict(color=GREEN, width=3)), row=1, col=1)
-    fig.add_trace(go.Scatter(x=k, y=s * output(k), name="Investment", line=dict(color=TEAL, width=3)), row=1, col=1)
-    fig.add_trace(go.Scatter(x=k, y=d * k, name="Old depreciation", line=dict(color=GRAY, dash="dash")), row=1, col=1)
-    fig.add_trace(go.Scatter(x=k, y=d_new * k, name="New depreciation", line=dict(color=BLUE, width=3)), row=1, col=1)
+    k = np.linspace(0, 25, 200)
+    growth_2021 = round(100 * (y[21] / y[20] - 1), 1) + 0.0
+    fig = make_subplots(rows=1, cols=2, horizontal_spacing=0.14, subplot_titles=("(a) Solow diagram", "(b) Output over time"))
+    add_curve(fig, k, output(k), "y", GREEN, 3.4, row=1, col=1)
+    add_curve(fig, k, s * output(k), "s·y", TEAL, 3.4, row=1, col=1)
+    add_curve(fig, k, d_new * k, "d′·k", BLUE, 3.4, row=1, col=1)
+    add_curve(fig, k, d * k, "d·k", GRAY, 3.4, dash="dash", row=1, col=1)
     fig.add_trace(go.Scatter(x=[steady_state_k(s, d), steady_state_k(s, d_new)], y=[y[0], y[-1]], name="y* and y**",
-                             mode="markers", marker=dict(color="black", size=10)), row=1, col=1)
+                             mode="markers+text", text=["y*", "y**"], textposition=["top left", "bottom right"],
+                             marker=dict(color="black", size=10)), row=1, col=1)
     fig.add_trace(go.Scatter(x=years, y=y, name="Output per person over time", line=dict(color=GREEN, width=3)), row=1, col=2)
-    fig.update_xaxes(title_text="Capital per person, k", range=[0, 20], row=1, col=1)
-    fig.update_yaxes(range=[0, 3], row=1, col=1)
-    fig.update_xaxes(title_text="Year", row=1, col=2)
+    fig.update_xaxes(title_text="Capital per person, k", range=[0, 25], tickvals=[5, 10, 15, 20, 25], row=1, col=1)
+    fig.update_yaxes(range=[0, 3.4], row=1, col=1)
+    fig.update_xaxes(title_text="Year", range=[2000, 2100], tickvals=[2020, 2040, 2060, 2080, 2100], row=1, col=2)
     if scale == "ratio":
-        fig.update_yaxes(type="log", range=[np.log10(1.0), np.log10(3.0)], row=1, col=2)
+        fig.update_yaxes(type="log", range=[np.log10(1.0), np.log10(2.9)], row=1, col=2)
     else:
-        fig.update_yaxes(range=[1.0, 3.0], row=1, col=2)
-    fig.update_layout(title=f"y* = {y[0]:.2f} → y** = {y[-1]:.2f}   |   growth in 2021: {growth_2021:+.1f}%")
+        fig.update_yaxes(range=[1.0, 2.9], row=1, col=2)
+    fig.update_layout(title=f"y* = {y[0]:.2f} → y** = {y[-1]:.2f}   |   growth in 2021: {growth_2021:+.1f}%",
+                      showlegend=False)
     return fig
 ```
 
@@ -699,9 +776,16 @@ interact(output_after_d,
 
 ```{python}
 #| kind: website
-# @title Website version: Figure 7 with a precomputed slider for the new depreciation rate
-slider_figure(output_after_d, "d_new", [0.06, 0.08, 0.1, 0.12, 0.15, 0.18, 0.2], start=0.15,
-              label="new depreciation rate d'")
+# @title Website version: Figure 7 with a precomputed slider for the new depreciation rate and buttons for the scale
+fig = slider_figure(output_after_d, "d_new", [0.06, 0.08, 0.1, 0.12, 0.15, 0.18, 0.2], start=0.15,
+                    label="new depreciation rate d'")
+fig.update_layout(updatemenus=[dict(type="buttons", direction="right", x=0.99, y=0.02, xanchor="right",
+                                    yanchor="bottom", buttons=[
+    dict(label="ratio scale", method="relayout",
+         args=[{"yaxis2.type": "log", "yaxis2.range": [np.log10(1.0), np.log10(2.9)]}]),
+    dict(label="linear scale", method="relayout",
+         args=[{"yaxis2.type": "linear", "yaxis2.range": [1.0, 2.9]}])])])
+fig
 ```
 
 **What to notice.**
@@ -734,7 +818,8 @@ countries that the textbook uses, measuring growth from a starting year up to 20
 
 > **Python note.** The function below builds a small table. `merge` joins two tables on a common
 > column, here the country code `iso3`, much like matching rows by ID in a spreadsheet. The growth
-> rate is the *average annual* growth: $(\text{end}/\text{start})^{1/\text{years}} - 1$.
+> rate is the *average annual* growth: $(\text{end}/\text{start})^{1/\text{years}} - 1$. After the loop,
+> `pd.concat(tables)` stacks the list of tables on top of each other into one long table.
 
 ```{python}
 def growth_since(start, end=2023):
@@ -776,7 +861,7 @@ fig.show()
 
 - In 1960, Japan, Portugal, Spain and Ireland were relatively poor, and they grew fastest. Countries that were rich in 1960, such as the United States, Canada, New Zealand and Switzerland, grew slowly.
 - The regression line slopes down: the OECD countries **converged** toward similar income levels.
-- Press play. The downward slope becomes weaker for later starting years, as most OECD countries got close to their steady states.
+- Press play. The line slopes down for every starting year, from 1960 to 2000: within the OECD, the countries that were poorer at the start kept growing faster.
 
 **Your turn.** Compute the growth rate of Ireland from 1960 to 2023 yourself, from the two values of
 GDP per person in the `panel` table. Check that your number matches the chart.
@@ -808,17 +893,18 @@ growth["group"] = growth.oecd.map({True: "OECD", False: "Rest of the world"})
 fig = px.scatter(growth, x="gdp_pc_start", y="growth", color="group", hover_name="country",
                  animation_frame="start_year", trendline="ols", trendline_scope="overall",
                  trendline_options=dict(log_x=True),
-                 log_x=True, range_x=[300, 200000], range_y=[-5, 9],
+                 log_x=True, range_x=[300, 400000], range_y=[-6, 10],
                  labels={"gdp_pc_start": "GDP per person in the starting year (2021 dollars, ratio scale)",
                          "growth": "Average annual growth to 2023 (percent)", "group": "Countries",
                          "start_year": "Starting year"},
-                 title="Growth rates around the world: no clear catch-up")
+                 title="Growth rates around the world: much less catch-up than in the OECD")
 fig.show()
 ```
 
 **What to notice.**
 
-- For the world as a whole, the regression line is nearly flat: poor countries did *not* grow faster on average.
+- For the world as a whole, starting in 1960, the regression line is nearly flat: poor countries did *not* grow faster on average.
+  Press play: for later starting years the line tilts down a little, but always less than in the OECD.
 - According to the Solow model, this suggests that most poor countries are close to a **low steady state**. They have low investment rates and low productivity, rather than having been pushed below a high steady state.
 - A few countries, such as South Korea, China and Botswana, grew very fast. Their steady states probably moved up.
 
@@ -852,11 +938,13 @@ def investment_chart(country_a="Republic of Korea", country_b="Philippines"):
                   color_discrete_map={country_a: BLUE, country_b: TEAL, "United States": GREEN},
                   labels={"inv_rate": "Investment rate (percent of GDP)", "year": "Year"},
                   title=f"Investment rates: {country_a}, {country_b} and the United States")
-    fig.update_layout(yaxis_range=[0, 60], xaxis_range=[1950, 2023])
+    fig.update_layout(yaxis_range=[0, 60], xaxis=dict(range=[1950, 2023], tickvals=[1960, 1980, 2000, 2020]),
+                      legend_title_text="")
     return fig
 ```
 
-> **Python note.** A `Dropdown` is a menu: here it lists every country in the data.
+> **Python note.** In `investment_chart`, `panel.country.isin([...])` keeps the rows whose country is in the
+> list. A `Dropdown` is a menu: here it lists every country in the data.
 > `sorted(...)` puts the names in alphabetical order, and `.unique()` keeps each name only once.
 
 ```{python}
@@ -870,7 +958,7 @@ interact(investment_chart,
 ```{python}
 #| kind: website
 # @title Website version: Figure 10 with a precomputed slider for the comparison country
-slider_figure(investment_chart, "country_b", ["Philippines", "China", "India", "Brazil", "Mexico", "Nigeria"],
+slider_figure(investment_chart, "country_b", ["Philippines", "China", "India", "Brazil", "Mexico", "Indonesia"],
               start="Philippines", label="compared with")
 ```
 
@@ -926,23 +1014,27 @@ is therefore used up just to keep capital *per person* constant. The capital acc
 $$\Delta k_{t+1} = \bar{s}y_t - (\bar{n}+\bar{d})\,k_t \qquad (5.15)$$
 
 so population growth works like extra depreciation. The steady state is
-$y^* = \bar{A}^{3/2}\left(\frac{\bar{s}}{\bar{n}+\bar{d}}\right)^{1/2}$ (5.16).
+$y^* = \bar{A}^{3/2}\left(\frac{\bar{s}}{\bar{n}+\bar{d}}\right)^{1/2}$ (5.16). In the figure, the dashed gray
+line $\bar{d}k$ shows the case without population growth. We keep $\bar{n}+\bar{d}=0.10$ at the start, so the
+baseline is the same as in Figure 1.
 
 ```{python}
 def solow_with_population(s=0.4, n=0.02, d=0.08, A=1.0):
     """Figure 5.11: investment s*y against the line (n + d)*k."""
     k = np.linspace(0, 20, 200)
+    y_max = 2.2
     k_star = steady_state_k(s, d, A, n=n)
     y_star = output(k_star, A)
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=k, y=s * output(k, A), name="Investment, s·y", line=dict(color=TEAL, width=3)))
-    fig.add_trace(go.Scatter(x=k, y=(n + d) * k, name="(n + d)·k", line=dict(color=BLUE, width=3)))
-    fig.add_trace(go.Scatter(x=k, y=d * k, name="d·k (no population growth)", line=dict(color=GRAY, dash="dash")))
-    fig.add_trace(go.Scatter(x=[k_star], y=[(n + d) * k_star], name="Steady state", mode="markers",
-                             marker=dict(color="black", size=11)))
+    add_curve(fig, k, s * output(k, A), "Investment, s·y", TEAL, y_max)
+    add_curve(fig, k, (n + d) * k, "(n + d)·k", BLUE, y_max)
+    add_curve(fig, k, d * k, "d·k", GRAY, y_max, dash="dash")                # the line without population growth
+    fig.add_trace(go.Scatter(x=[k_star], y=[(n + d) * k_star], name="Steady state", mode="markers+text",
+                             text=["k*"], textposition="top left", marker=dict(color="black", size=11)))
     fig.update_layout(title=f"k* = {k_star:.2f}   y* = {y_star:.2f}   |   total GDP grows at n = {100 * n:.1f}% a year",
-                      xaxis=dict(title="Capital per person, k", range=[0, 20]),
-                      yaxis=dict(title="Investment and (n + d)·k", range=[0, 2]))
+                      xaxis=dict(title="Capital per person, k", range=[0, 20], tickvals=[5, 10, 15, 20]),
+                      yaxis=dict(title="Investment and (n + d)·k", range=[0, y_max]),
+                      showlegend=False, margin=dict(r=150))
     return fig
 ```
 
@@ -999,16 +1091,18 @@ def earthquake_diagram(destroyed=0.5):
     k_star = steady_state_k(s, d, A)
     k0 = (1 - destroyed) * k_star
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=k, y=output(k, A), name="Output, y", line=dict(color=GREEN, width=3)))
-    fig.add_trace(go.Scatter(x=k, y=s * output(k, A), name="Investment, s·y", line=dict(color=TEAL, width=3)))
-    fig.add_trace(go.Scatter(x=k, y=d * k, name="Depreciation, d·k", line=dict(color=BLUE, width=3)))
+    add_curve(fig, k, output(k, A), "Output, y", GREEN, 2.7)
+    add_curve(fig, k, s * output(k, A), "Investment, s·y", TEAL, 2.7)
+    add_curve(fig, k, d * k, "Depreciation, d·k", BLUE, 2.7)
     fig.add_trace(go.Scatter(x=[k_star, k0], y=[output(k_star, A), output(k0, A)], name="Output before and after",
-                             mode="markers", marker=dict(color="black", size=11)))
+                             mode="markers+text", text=["y*", "y0"], textposition="top left",
+                             marker=dict(color="black", size=11)))
     fig.add_annotation(x=k0, y=0.15, ax=k_star, ay=0.15, xref="x", yref="y", axref="x", ayref="y",
                        showarrow=True, arrowhead=3, arrowwidth=2, arrowcolor="crimson", text="earthquake")
     fig.update_layout(title=f"k falls from {k_star:.1f} to {k0:.1f};  output falls to {output(k0) / output(k_star):.0%} of y*",
-                      xaxis=dict(title="Capital per person, k", range=[0, 14]),
-                      yaxis=dict(title="Output, investment and depreciation", range=[0, 2.7]))
+                      xaxis=dict(title="Capital per person, k", range=[0, 14], tickvals=[2, 4, 6, 8, 10, 12, 14]),
+                      yaxis=dict(title="Output, investment, depreciation", range=[0, 2.7]),
+                      showlegend=False, margin=dict(r=150))
     return fig
 ```
 
@@ -1066,7 +1160,8 @@ def output_after_earthquake(destroyed=0.5, scale="ratio"):
     else:
         fig.update_yaxes(range=[0.8, 2.2])
     fig.update_layout(title=f"Output falls by {100 * (1 - y[20] / y[0]):.0f}% in 2020 and is back within 1% of y* in {back[0]}",
-                      xaxis_title="Year", yaxis_title="Output per person, y")
+                      xaxis=dict(title="Year", range=[2000, 2100], tickvals=[2020, 2040, 2060, 2080, 2100]),
+                      yaxis_title="Output per person, y")
     return fig
 ```
 
@@ -1079,9 +1174,16 @@ interact(output_after_earthquake,
 
 ```{python}
 #| kind: website
-# @title Website version: Figure 13 with a precomputed slider for the share of capital destroyed
-slider_figure(output_after_earthquake, "destroyed", [0.1, 0.3, 0.5, 0.7, 0.9], start=0.5,
-              label="share of capital destroyed")
+# @title Website version: Figure 13 with a precomputed slider for the share destroyed and buttons for the scale
+fig = slider_figure(output_after_earthquake, "destroyed", [0.1, 0.3, 0.5, 0.7, 0.9], start=0.5,
+                    label="share of capital destroyed")
+fig.update_layout(updatemenus=[dict(type="buttons", direction="right", x=0.99, y=0.02, xanchor="right",
+                                    yanchor="bottom", buttons=[
+    dict(label="ratio scale", method="relayout",
+         args=[{"yaxis.type": "log", "yaxis.range": [np.log10(0.8), np.log10(2.2)]}]),
+    dict(label="linear scale", method="relayout",
+         args=[{"yaxis.type": "linear", "yaxis.range": [0.8, 2.2]}])])])
+fig
 ```
 
 **What to notice.**

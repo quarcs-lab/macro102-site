@@ -192,24 +192,40 @@ L_tax, w_tax = equilibrium(tau=0.25)
 print(f"With a 25% income tax:  L' = {L_tax:.2f}, firms pay w' = {w_tax:.2f}, workers keep {0.75 * w_tax:.2f}")
 ```
 
-Two small drawing helpers save us from repeating the same lines in every figure. `add_curve` draws
-one curve; `add_point` marks an equilibrium with a dot, a label and dotted lines down to the axes.
+Three small drawing helpers save us from repeating the same lines in every figure. `add_curve` draws
+one curve and writes its name (such as $L^s$) at one end, as the textbook does, and skips the name when it
+would sit on top of another curve's name (`avoid`); `add_point` marks an
+equilibrium with a dot, a label and dotted lines down to the axes; `market_axes` gives every diagram
+the same fixed axes.
 
-> **Python note.** `np.linspace(0, 110, 111)` creates 111 evenly spaced numbers from 0 to 110: the
+> **Python note.** `np.linspace(0, 100, 101)` creates 101 evenly spaced numbers from 0 to 100: the
 > employment levels at which we compute each curve. `go.Figure()` starts an empty chart and
-> `add_trace` adds one line or set of points to it. `row` and `col` are only needed in figures with
-> several panels; `None` means "the only panel".
+> `add_trace` adds one line or set of points to it. `w[inside]` keeps only the points where the
+> condition `inside` is true. `row` and `col` are only needed in figures with several panels; `None`
+> means "the only panel".
 
 ```{python}
-L_grid = np.linspace(0, 110, 111)          # employment levels used to draw every curve
+L_grid = np.linspace(0, 100, 101)          # employment levels used to draw every curve
 
 
-def add_curve(fig, w, name, color, dash="solid", row=None, col=None):
-    """Draw one curve: the wage w at every employment level in L_grid (no legend entry if name is "")."""
-    fig.add_trace(go.Scatter(x=L_grid, y=w, name=name, showlegend=(name != ""),
+def add_curve(fig, w, label, color, dash="solid", row=None, col=None, start=False, avoid=None):
+    """Draw one curve inside the axes and write its label at the end (start=True: the top-left end)."""
+    inside = (w >= 0) & (w <= 110)                      # keep the part of the curve inside the axes
+    L, w = L_grid[inside], w[inside]
+    fig.add_trace(go.Scatter(x=L, y=w, mode="lines", name=label, showlegend=False,
                              line=dict(color=color, width=3, dash=dash)), row=row, col=col)
+    if start:                                           # downward curves: label above the top-left end
+        spot, anchor = (L[0], w[0]), "bottom"
+    else:
+        spot, anchor = (L[-1], w[-1]), "middle"
+    near = avoid is not None and abs(spot[0] - avoid[0]) < 8 and abs(spot[1] - avoid[1]) < 8
+    if label != "" and not near:                        # skip a label that would sit on another one
+        fig.add_annotation(x=spot[0], y=spot[1], text=label, showarrow=False, xanchor="left", xshift=5,
+                           yanchor=anchor, font=dict(color=color, size=15), row=row, col=col)
+    return spot
+```
 
-
+```{python}
 def add_point(fig, L_point, w_point, label, row=None, col=None):
     """Mark an equilibrium with a dot, a short label and dotted lines down to the axes."""
     fig.add_trace(go.Scatter(x=[0, L_point, L_point], y=[w_point, w_point, 0], mode="lines", showlegend=False,
@@ -217,6 +233,41 @@ def add_point(fig, L_point, w_point, label, row=None, col=None):
     fig.add_trace(go.Scatter(x=[L_point], y=[w_point], mode="markers+text", text=[label], showlegend=False,
                              textposition="top center", textfont=dict(size=15),
                              marker=dict(color="black", size=11)), row=row, col=col)
+
+
+def market_axes(fig, title, x_title="Employment, L", y_title="Wage, w"):
+    """Fixed axes for every labor-market diagram (no tick label in the bottom-left corner) and the title."""
+    fig.update_xaxes(title_text=x_title, range=[0, 110], tickvals=[20, 40, 60, 80, 100], zeroline=False)
+    fig.update_yaxes(title_text=y_title, range=[0, 110], tickvals=[20, 40, 60, 80, 100], zeroline=False)
+    fig.update_layout(title=title)
+    return fig
+```
+
+<!-- cell -->
+
+### Shading recessions
+
+Three data figures shade the U.S. recessions, so we write the shading once, here. A small file lists
+the start (peak) and end (trough) month of every U.S. recession since the 1950s, as dated by the NBER.
+
+> **Python note.** `pd.read_csv(...)` reads a data file into a *DataFrame*, a table with named
+> columns. `parse_dates=[...]` turns text such as `"2020-02-01"` into real dates. A `for` loop repeats
+> the indented lines once for each recession: `zip(recessions.peak, recessions.trough)` hands over one
+> (peak, trough) pair at a time. The `if` skips recessions that ended before the chart starts, and
+> `fig.add_vrect` shades the band between two dates.
+
+```{python}
+recessions = pd.read_csv(DATA_URL + "recessions.csv", parse_dates=["peak", "trough"])
+
+
+def shade_recessions(fig, start):
+    """Figures 7.1, 7.2 and 7.10: shade every NBER recession (peak to trough) that ends after the date start."""
+    for peak, trough in zip(recessions.peak, recessions.trough):
+        if trough >= pd.Timestamp(start):
+            fig.add_vrect(x0=peak, x1=trough, fillcolor=BLUE, opacity=0.15, line_width=0)
+
+
+recessions.tail(3)
 ```
 
 ## Figure 1: The U.S. employment-population ratio
@@ -224,44 +275,30 @@ def add_point(fig, L_point, w_point, label, row=None, col=None):
 **Goal.** See the long-run trend and the recessions in the share of adults who work.
 
 The **employment-population ratio** is the percentage of the population aged 16 and over that has a
-job. The data are monthly, from the Bureau of Labor Statistics. A second small file lists the start
-(peak) and end (trough) month of every U.S. recession since the 1950s, as dated by the NBER.
+job. The data are monthly, from the Bureau of Labor Statistics. The recessions are shaded with
+`shade_recessions` from "The model in code".
 
-> **Python note.** `pd.read_csv(...)` reads a data file into a *DataFrame*, a table with named
-> columns. `parse_dates=["date"]` turns text such as `"2020-04-01"` into real dates. `.tail()` shows
-> the last five rows.
+> **Python note.** `.tail()` shows the last five rows of a DataFrame.
 
 ```{python}
 emp = pd.read_csv(DATA_URL + "fig7-1.csv", parse_dates=["date"])
-recessions = pd.read_csv(DATA_URL + "recessions.csv", parse_dates=["peak", "trough"])
 emp.tail()
 ```
 
 September 2025 is followed by November 2025: October 2025 is missing because the survey was not
 carried out during that autumn's federal government shutdown. The chart simply joins the two months.
 
-We will shade recessions in three charts, so we write the shading once, as a function.
-
-> **Python note.** A `for` loop repeats the indented lines once for each recession:
-> `zip(recessions.peak, recessions.trough)` hands over one (peak, trough) pair at a time. The `if`
-> skips recessions that ended before the chart starts, and `fig.add_vrect` shades the band between two
-> dates. `px.area` draws a line and fills the area below it. `rangeslider_visible=True` adds a small
-> copy of the chart below the axis: drag its handles to zoom in on a period.
+> **Python note.** `px.area` draws a line and fills the area below it. `tickvals` chooses the numbers
+> printed on an axis. `rangeslider_visible=True` adds a small copy of the chart below the axis: drag
+> its handles to zoom in on a period.
 
 ```{python}
-def shade_recessions(fig, start):
-    """Shade every NBER recession (peak to trough) that ends after the date start."""
-    for peak, trough in zip(recessions.peak, recessions.trough):
-        if trough >= pd.Timestamp(start):
-            fig.add_vrect(x0=peak, x1=trough, fillcolor=BLUE, opacity=0.15, line_width=0)
-
-
 fig = px.area(emp, x="date", y="emp_pop_ratio", hover_name="date",
-              labels={"date": "Year", "emp_pop_ratio": "Employment-population ratio (percent)"},
+              labels={"date": "Year", "emp_pop_ratio": "Employment-population ratio (%)"},
               title="More adults work than in 1960, but every recession cuts employment")
 fig.update_traces(line=dict(color=TEAL, width=2))
 shade_recessions(fig, "1960-01-01")
-fig.update_yaxes(range=[50, 66])
+fig.update_yaxes(range=[50, 66], tickvals=[52, 56, 60, 64])         # no label in the bottom-left corner
 fig.update_xaxes(rangeslider_visible=True)
 fig.show()
 ```
@@ -305,13 +342,14 @@ the low point came later, in November 2010).
 The textbook says that the rise in the ratio came entirely from women. A second file splits the ratio
 by sex. We average the months of each year to compare years.
 
-> **Python note.** `groupby(emp_sex.date.dt.year).mean()` collects the rows of each calendar year and
-> averages them, and `.loc[[1960, 2000, 2025]]` picks three rows by their label.
+> **Python note.** `px.line(..., y=["men", "women"])` draws one line per column, and the legend names
+> the columns. `groupby(emp_sex.date.dt.year).mean()` collects the rows of each calendar year and
+> averages them, and `.loc[[1960, 2000, 2019, 2025]]` picks four rows by their label.
 
 ```{python}
 emp_sex = pd.read_csv(DATA_URL + "emp_pop_by_sex.csv", parse_dates=["date"])
 fig = px.line(emp_sex, x="date", y=["men", "women"], hover_name="date",
-              labels={"date": "Year", "value": "Employment-population ratio (percent)", "variable": "Group"},
+              labels={"date": "Year", "value": "Employment-population ratio (%)", "variable": "Group"},
               title="Fewer men and many more women work than in the 1950s")
 shade_recessions(fig, "1948-01-01")
 fig.show()
@@ -348,11 +386,11 @@ available to work. The **labor force** is everybody who is employed or unemploye
 ```{python}
 unrate = pd.read_csv(DATA_URL + "fig7-2.csv", parse_dates=["date"])
 fig = px.area(unrate, x="date", y="unemployment_rate", hover_name="date",
-              labels={"date": "Year", "unemployment_rate": "Unemployment rate (percent)"},
+              labels={"date": "Year", "unemployment_rate": "Unemployment rate (%)"},
               title="Unemployment jumps in every recession and falls slowly afterwards")
 fig.update_traces(line=dict(color=BLUE, width=2))
 shade_recessions(fig, "1950-01-01")
-fig.update_yaxes(range=[0, 16])
+fig.update_yaxes(range=[0, 16], tickvals=[2, 4, 6, 8, 10, 12, 14])   # no label in the bottom-left corner
 fig.update_xaxes(rangeslider_visible=True)
 fig.show()
 ```
@@ -444,16 +482,13 @@ def labor_market(a_d=100.0, b_d=1.0, a_s=10.0, b_s=1.0):
     """Figure 7.3: labor supply, labor demand and the equilibrium (L*, w*)."""
     L_star, w_star = equilibrium(a_d, b_d, a_s, b_s)
     fig = go.Figure()
+    add_curve(fig, labor_supply(L_grid, a_s, b_s), "Lˢ", TEAL)
+    add_curve(fig, labor_demand(L_grid, a_d, b_d), "Lᵈ", BLUE, start=True)
     if (a_d, b_d, a_s, b_s) != (100.0, 1.0, 10.0, 1.0):          # keep the starting curves for comparison
-        add_curve(fig, labor_supply(L_grid), "Starting curves", GRAY, "dash")
+        add_curve(fig, labor_supply(L_grid), "", GRAY, "dash")
         add_curve(fig, labor_demand(L_grid), "", GRAY, "dash")
-    add_curve(fig, labor_supply(L_grid, a_s, b_s), "Labor supply, Lˢ", TEAL)
-    add_curve(fig, labor_demand(L_grid, a_d, b_d), "Labor demand, Lᵈ", BLUE)
     add_point(fig, L_star, w_star, "")
-    fig.update_layout(title=f"The labor market clears at w* = {w_star:.1f} and L* = {L_star:.1f}",
-                      xaxis=dict(title="Employment, L", range=[0, 100]),
-                      yaxis=dict(title="Wage, w", range=[0, 110]))
-    return fig
+    return market_axes(fig, f"The labor market clears at w* = {w_star:.1f} and L* = {L_star:.1f}")
 ```
 
 > **Python note.** `interact` calls the function and redraws its figure every time you move a
@@ -515,17 +550,15 @@ def income_tax(tau=0.25, b_s=1.0):
     L_B, w_B = equilibrium(b_s=b_s, tau=tau)
     kept = (1 - tau) * w_B                                       # what workers keep at B
     fig = go.Figure()
-    add_curve(fig, labor_supply(L_grid, b_s=b_s), "Labor supply, no tax", GRAY, "dash")
-    add_curve(fig, labor_supply(L_grid, b_s=b_s) / (1 - tau), "Labor supply with the tax, Lˢ′", TEAL)
-    add_curve(fig, labor_demand(L_grid), "Labor demand, Lᵈ", BLUE)
+    taxed = add_curve(fig, labor_supply(L_grid, b_s=b_s) / (1 - tau), "Lˢ′", TEAL)
+    add_curve(fig, labor_supply(L_grid, b_s=b_s), "Lˢ", GRAY, "dash", avoid=taxed)
+    add_curve(fig, labor_demand(L_grid), "Lᵈ", BLUE, start=True)
     add_point(fig, L_A, w_A, "A")
     add_point(fig, L_B, w_B, "B")
     fig.add_trace(go.Scatter(x=[L_B, L_B], y=[kept, w_B], mode="lines+markers", name="Tax wedge",
-                             line=dict(color=GREEN, width=6)))
-    fig.update_layout(title=f"τ = {tau:.0%}: L′ = {L_B:.1f}, firms pay w′ = {w_B:.1f}, workers keep {kept:.1f}",
-                      xaxis=dict(title="Employment, L", range=[0, 100]),
-                      yaxis=dict(title="Wage paid by firms, w", range=[0, 110]))
-    return fig
+                             showlegend=True, line=dict(color=GREEN, width=6)))
+    title = f"τ = {tau:.0%}: L′ = {L_B:.1f}, firms pay w′ = {w_B:.1f}, workers keep {kept:.1f}"
+    return market_axes(fig, title, y_title="Wage paid by firms, w")
 ```
 
 ```{python}
@@ -582,19 +615,16 @@ def demand_fall(shift=20.0, b_s=1.0):
     L_A, w_A = equilibrium(b_s=b_s)
     L_B, w_B = equilibrium(a_d=100 - shift, b_s=b_s)
     fig = go.Figure()
-    add_curve(fig, labor_demand(L_grid), "Labor demand before, Lᵈ", GRAY, "dash")
-    add_curve(fig, labor_demand(L_grid, 100 - shift), "Labor demand after, Lᵈ′", BLUE)
-    add_curve(fig, labor_supply(L_grid, b_s=b_s), "Labor supply, Lˢ", TEAL)
+    after = add_curve(fig, labor_demand(L_grid, 100 - shift), "Lᵈ′", BLUE, start=True)
+    add_curve(fig, labor_demand(L_grid), "Lᵈ", GRAY, "dash", start=True, avoid=after)
+    add_curve(fig, labor_supply(L_grid, b_s=b_s), "Lˢ", TEAL)
     add_point(fig, L_A, w_A, "A")
     add_point(fig, L_B, w_B, "B")
     if shift > 0:
-        fig.add_annotation(x=75, y=labor_demand(75, 100 - shift) + 1, ax=75, ay=labor_demand(75) - 1,
+        fig.add_annotation(x=60, y=labor_demand(60, 100 - shift) + 1, ax=60, ay=labor_demand(60) - 1,
                            xref="x", yref="y", axref="x", ayref="y", text="", showarrow=True,
                            arrowhead=3, arrowwidth=2, arrowcolor="black")
-    fig.update_layout(title=f"Demand falls by {shift:.0f}: w {w_A:.1f} → {w_B:.1f}, L {L_A:.1f} → {L_B:.1f}",
-                      xaxis=dict(title="Employment, L", range=[0, 100]),
-                      yaxis=dict(title="Wage, w", range=[0, 110]))
-    return fig
+    return market_axes(fig, f"Demand falls by {shift:.0f}: w {w_A:.1f} → {w_B:.1f}, L {L_A:.1f} → {L_B:.1f}")
 ```
 
 ```{python}
@@ -653,21 +683,19 @@ def wage_rigidity(shift=20.0, wage="rigid"):
     L_C = demand_at_wage(w_bar, a_d=100 - shift)                 # C: firms' demand at w-bar
     jobless = supply_at_wage(w_bar) - L_C                        # want to work at w-bar, but no job
     fig = go.Figure()
-    add_curve(fig, labor_demand(L_grid), "Labor demand before, Lᵈ", GRAY, "dash")
-    add_curve(fig, labor_demand(L_grid, 100 - shift), "Labor demand after, Lᵈ′", BLUE)
-    add_curve(fig, labor_supply(L_grid), "Labor supply, Lˢ", TEAL)
+    after = add_curve(fig, labor_demand(L_grid, 100 - shift), "Lᵈ′", BLUE, start=True)
+    add_curve(fig, labor_demand(L_grid), "Lᵈ", GRAY, "dash", start=True, avoid=after)
+    add_curve(fig, labor_supply(L_grid), "Lˢ", TEAL)
     add_point(fig, L_A, w_bar, "A")
     if wage == "rigid":
         add_point(fig, L_C, w_bar, "C")
         fig.add_trace(go.Scatter(x=[L_C, L_A], y=[w_bar, w_bar], mode="lines", name="Want a job, cannot find one",
-                                 line=dict(color=GREEN, width=6)))
-        title = f"Rigid wage w̄ = {w_bar:.0f}: L″ = {L_C:.1f} (flexible: L′ = {L_B:.1f}); jobless gap {jobless:.1f}"
+                                 showlegend=True, line=dict(color=GREEN, width=6)))
+        title = f"Rigid wage w̄ = {w_bar:.1f}: L″ = {L_C:.1f} (flexible: L′ = {L_B:.1f}); jobless gap {jobless:.1f}"
     else:
         add_point(fig, L_B, w_B, "B")
         title = f"Flexible wage: the wage falls to w′ = {w_B:.1f} and employment to L′ = {L_B:.1f}"
-    fig.update_layout(title=title, xaxis=dict(title="Employment, L", range=[0, 100]),
-                      yaxis=dict(title="Wage, w", range=[0, 110]))
-    return fig
+    return market_axes(fig, title)
 ```
 
 > **Python note.** `ToggleButtons` shows one button per option; the function receives the text of the
@@ -731,6 +759,7 @@ def bathtub_path(s=0.01, f=0.20):
                   title=f"s = {s:.3f}, f = {f:.2f}: unemployment settles at u* = s/(f+s) = {u_star:.1f}%")
     fig.update_traces(line=dict(color=BLUE, width=3))
     fig.add_hline(y=u_star, line_dash="dash", line_color=GRAY)
+    fig.update_xaxes(tickvals=[12, 24, 36, 48, 60])     # one tick a year; no label in the bottom-left corner
     fig.update_yaxes(range=[0, 25])
     return fig
 ```
@@ -932,10 +961,10 @@ named = college.rename(columns={"college_premium_log_pct": "College wage premium
                                 "college_share_employment_pct": "Share of employment with a college degree"})
 fig = px.line(named, x="year", y=["College wage premium (log points)", "Share of employment with a college degree"],
               hover_name="year", color_discrete_sequence=[BLUE, TEAL],
-              labels={"year": "Year", "value": "Percent", "variable": ""},
+              labels={"year": "Year", "value": "Percent"},
               title="College graduates became more numerous and better paid at the same time")
 fig.update_yaxes(range=[0, 60])
-fig.update_layout(legend=dict(orientation="h", y=-0.2, yanchor="top"), hovermode="x unified")
+fig.update_layout(legend=dict(orientation="h", y=-0.2, yanchor="top"), legend_title_text="", hovermode="x unified")
 fig.show()
 ```
 
@@ -1007,14 +1036,15 @@ year that a college degree adds (\$90,000 instead of \$60,000) is worth about \$
 years of tuition and lost earnings.
 
 The chart shows why: each bar is one year's \$100,000 wage valued today. Distant wages count for less, but
-they still add up.
+they still add up. (`np.arange(45)` gives the whole numbers 0, 1, ..., 44.)
 
 ```{python}
 years = np.arange(45)
 today = pd.DataFrame({"year": years, "value": 100_000 / 1.03 ** years})
 fig = px.bar(today, x="year", y="value", hover_name="year", color_discrete_sequence=[TEAL],
-             labels={"year": "Years from today", "value": "Value today of that year's wage (dollars)"},
+             labels={"year": "Years from today", "value": "Value today (dollars)"},
              title=f"45 years of 100,000-dollar wages at R = 3% are worth {today.value.sum():,.0f} dollars today")
+fig.update_xaxes(tickvals=[10, 20, 30, 40])            # no label in the bottom-left corner
 fig.show()
 ```
 
@@ -1044,18 +1074,19 @@ keep unchanged. Panel (b) is the market for college graduates, with demand
 $w = (90 + \text{shift}_d) - 0.4L$ and supply $w = (30 - \text{shift}_s) + 0.6L$. Before the shifts, the
 college wage is 66 and the high school wage 55, a premium of 20 percent.
 
-We draw the college market in a function of its own, because Figure 13 uses it again. The equilibrium
-before the shifts is marked $*$ and the one after them $**$.
+We draw the college market in a function of its own, because Figure 13 uses it again. The curves before
+the shifts are dashed gray ($L^s$, $L^d$) and the curves after them solid ($L^{s\prime}$, $L^{d\prime}$). The
+equilibrium before the shifts is marked $*$ and the one after them $**$.
 
 ```{python}
 def college_market(fig, shift_d, shift_s, row=None, col=None):
     """Figures 7.9b and 7.13: the college labor market before (*) and after (**) both curves shift."""
     L_1, w_1 = equilibrium(a_d=90.0, b_d=0.4, a_s=30.0, b_s=0.6)
     L_2, w_2 = equilibrium(a_d=90.0 + shift_d, b_d=0.4, a_s=30.0 - shift_s, b_s=0.6)
-    add_curve(fig, labor_supply(L_grid, 30.0, 0.6), "Before the shifts", GRAY, "dash", row, col)
-    add_curve(fig, labor_demand(L_grid, 90.0, 0.4), "", GRAY, "dash", row, col)
-    add_curve(fig, labor_supply(L_grid, 30.0 - shift_s, 0.6), "Labor supply", TEAL, "solid", row, col)
-    add_curve(fig, labor_demand(L_grid, 90.0 + shift_d, 0.4), "Labor demand", BLUE, "solid", row, col)
+    supply = add_curve(fig, labor_supply(L_grid, 30.0 - shift_s, 0.6), "Lˢ′", TEAL, "solid", row, col)
+    demand = add_curve(fig, labor_demand(L_grid, 90.0 + shift_d, 0.4), "Lᵈ′", BLUE, "solid", row, col, start=True)
+    add_curve(fig, labor_supply(L_grid, 30.0, 0.6), "Lˢ", GRAY, "dash", row, col, avoid=supply)
+    add_curve(fig, labor_demand(L_grid, 90.0, 0.4), "Lᵈ", GRAY, "dash", row, col, start=True, avoid=demand)
     add_point(fig, L_1, w_1, "*", row, col)
     add_point(fig, L_2, w_2, "**", row, col)
     return w_1, w_2
@@ -1069,15 +1100,12 @@ def rising_return(shift_d=15.0, shift_s=10.0):
     """Figure 7.9: (a) the high school market is unchanged; (b) college demand shifts out more than supply."""
     L_hs, w_hs = equilibrium()
     fig = make_subplots(rows=1, cols=2, subplot_titles=("(a) High school graduates", "(b) College graduates"))
-    add_curve(fig, labor_supply(L_grid), "", TEAL, "solid", 1, 1)
-    add_curve(fig, labor_demand(L_grid), "", BLUE, "solid", 1, 1)
+    add_curve(fig, labor_supply(L_grid), "Lˢ", TEAL, "solid", 1, 1)
+    add_curve(fig, labor_demand(L_grid), "Lᵈ", BLUE, "solid", 1, 1, start=True)
     add_point(fig, L_hs, w_hs, "*", 1, 1)
     w_1, w_2 = college_market(fig, shift_d, shift_s, 1, 2)
-    fig.update_xaxes(title_text="Employment", range=[0, 100])
-    fig.update_yaxes(title_text="Wage", range=[0, 110])
-    fig.update_layout(title=f"College wage {w_1:.1f} → {w_2:.1f}; premium over high school "
-                            f"{w_1 / w_hs - 1:.0%} → {w_2 / w_hs - 1:.0%}")
-    return fig
+    title = f"College wage {w_1:.1f} → {w_2:.1f}; premium over high school {w_1 / w_hs - 1:.0%} → {w_2 / w_hs - 1:.0%}"
+    return market_axes(fig, title, x_title="Employment", y_title="Wage")
 ```
 
 ```{python}
@@ -1128,11 +1156,11 @@ Statistics payroll survey.
 ```{python}
 manuf = pd.read_csv(DATA_URL + "fig7-10.csv", parse_dates=["date"])
 fig = px.area(manuf, x="date", y="manufacturing_emp_millions", hover_name="date",
-              labels={"date": "Year", "manufacturing_emp_millions": "Employment in manufacturing (millions)"},
+              labels={"date": "Year", "manufacturing_emp_millions": "Manufacturing jobs (millions)"},
               title="Manufacturing jobs peaked in 1979 and fell sharply after 2000")
 fig.update_traces(line=dict(color=GREEN, width=2))
 shade_recessions(fig, "1950-01-01")
-fig.update_yaxes(range=[10, 20])
+fig.update_yaxes(range=[10, 20], tickvals=[12, 14, 16, 18, 20])      # no label in the bottom-left corner
 fig.update_xaxes(rangeslider_visible=True, range=["1950-01-01", "2030-01-01"])
 fig.show()
 ```
@@ -1338,10 +1366,8 @@ def premium_1970s(shift_d=10.0, shift_s=25.0):
     w_1, w_2 = college_market(fig, shift_d, shift_s)
     L_1 = equilibrium(a_d=90.0, b_d=0.4, a_s=30.0, b_s=0.6)[0]
     L_2 = equilibrium(a_d=90.0 + shift_d, b_d=0.4, a_s=30.0 - shift_s, b_s=0.6)[0]
-    fig.update_layout(title=f"College employment {L_1:.1f} → {L_2:.1f}, college wage {w_1:.1f} → {w_2:.1f}",
-                      xaxis=dict(title="Employment of college graduates", range=[0, 110]),
-                      yaxis=dict(title="Wage of college graduates", range=[0, 110]))
-    return fig
+    return market_axes(fig, f"College employment {L_1:.1f} → {L_2:.1f}, college wage {w_1:.1f} → {w_2:.1f}",
+                       x_title="Employment of college graduates", y_title="Wage of college graduates")
 ```
 
 ```{python}
@@ -1396,8 +1422,8 @@ rows = [
     ["Employment after demand falls by 20, rigid wage L''", demand_at_wage(55, a_d=80)],
     ["Natural rate of unemployment, s = 0.01, f = 0.20 (%)", 100 * 0.01 / (0.20 + 0.01)],
     ["Europe's unemployment rate, 1960-1975 average (%)", early["Europe"].mean()],
-    ["Present value of $100 a year for 20 years at 10%", pdv(100, 0.10, 20)],
-    ["Present value of a working life ($100,000 for 45 years at 3%, $ million)", pdv(100_000, 0.03, 45) / 1e6],
+    ["Present value of 100 dollars a year for 20 years at 10%", pdv(100, 0.10, 20)],
+    ["Present value of a working life (100,000 dollars for 45 years at 3%, million dollars)", pdv(100_000, 0.03, 45) / 1e6],
     ["College wage premium, 2020 (log points)", c.loc[2020, "college_premium_log_pct"]],
     ["Manufacturing jobs lost, Jan. 2000 to Feb. 2010 (million)", fall],
     ["U.S. income share of the top 0.1%, 2022 (%)", top.set_index("year").loc[2022, "United States"]],

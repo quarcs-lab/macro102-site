@@ -258,17 +258,20 @@ from 10 down to 5 percent, and it stays there once the interest rate is back at 
 
 All the diagrams of this chapter are built from the same few pieces, so we write them once:
 
-- `add_line` draws a curve through some points and writes its label at the right end, as the textbook does;
+- `add_line` draws a curve through some points and writes its label at the right end, as the textbook does. When an
+  older curve of the same panel ends within 0.6 axis units, its label is removed, so that two labels never overlap;
 - `add_is`, `add_pc` and `add_demand` draw an IS curve, a Phillips curve and a money demand curve inside
   the fixed axes;
-- `add_point` marks a point with dashed guides to the axes, and `add_arrow` draws an arrow;
+- `add_point` marks a point with dashed guides to the axes and writes its label at the top right, or wherever
+  `where` says, and `add_arrow` draws an arrow;
 - `set_axes` sets fixed axes, so that you can see the curves move when you change a slider.
 
 Every function takes `row` and `col` arguments, so it can draw in one panel of a figure with several panels.
 
 > **Python note.** `go.Figure()` starts an empty chart and `add_trace` adds a line or a set of points. `[""] * 3`
 > is the list `["", "", ""]`, and `+ [label]` adds one more element, so only the last point of a curve gets the
-> label. `max(a, b)` and `min(a, b)` give the larger and the smaller of two numbers. `!=` means "is not equal to".
+> label. `fig.data[-1]` is the trace just added and `fig.data[:-1]` all the earlier ones. `max(a, b)` and `min(a, b)`
+> give the larger and the smaller of two numbers, and `abs(x)` the size of `x` without its sign. `!=` means "is not equal to".
 
 ```{python}
 def add_line(fig, x, y, label, color, dash="solid", row=None, col=None):
@@ -277,13 +280,19 @@ def add_line(fig, x, y, label, color, dash="solid", row=None, col=None):
     fig.add_trace(go.Scatter(x=x, y=y, mode="lines+text", text=text, textposition="middle right",
                              textfont=dict(size=15, color=color), cliponaxis=False, showlegend=False,
                              line=dict(color=color, width=4, dash=dash)), row=row, col=col)
+    new = fig.data[-1]
+    for old in fig.data[:-1]:                  # an older curve of the same panel ending close by loses its label
+        close = abs(old.x[-1] - new.x[-1]) < 0.6 and abs(old.y[-1] - new.y[-1]) < 0.6
+        if old.mode == "lines+text" and old.xaxis == new.xaxis and close:
+            old.text = None
+```
 
-
-def add_point(fig, x, y, label, x0, y0, row=None, col=None):
-    """Mark the point (x, y) with a dot, a label and dashed guides to the axes, which start at (x0, y0)."""
+```{python}
+def add_point(fig, x, y, label, x0, y0, row=None, col=None, where="top right"):
+    """Mark the point (x, y) with a dot, a label (at `where`) and dashed guides to the axes, which start at (x0, y0)."""
     fig.add_trace(go.Scatter(x=[x0, x, x], y=[y, y, y0], mode="lines", showlegend=False, hoverinfo="skip",
                              line=dict(color="black", width=1, dash="dash")), row=row, col=col)
-    fig.add_trace(go.Scatter(x=[x], y=[y], mode="markers+text", text=[label], textposition="top right",
+    fig.add_trace(go.Scatter(x=[x], y=[y], mode="markers+text", text=[label], textposition=where,
                              textfont=dict(size=16), showlegend=False, marker=dict(color="black", size=12)),
                   row=row, col=col)
 
@@ -402,7 +411,7 @@ def short_run_model(i=7.0, pi=2.0, a=0.0):
         add_arrow(fig, 3.4 * k + 1.2, 0.0, 3.4 * k + 2.2, 0.0)
         fig.add_annotation(x=3.4 * k + 1.7, y=0.5, text=links[k], showarrow=False, font=dict(size=12))
     fig.add_annotation(x=5.1, y=-1.7, showarrow=False, font=dict(size=14),
-                       text=f"Inflation next year: {pi:.1f}% + ({dpi:+.2f}) = {pi + dpi:.2f}%")
+                       text=f"Inflation next year: {pi:.2f}% + ({dpi:+.2f}) = {pi + dpi:.2f}%")
     fig.update_xaxes(visible=False, range=[-1.5, 11.7])
     fig.update_yaxes(visible=False, range=[-2.2, 1.8], scaleanchor="x")
     fig.update_layout(title=f"i = {i:.1f}%, π = {pi:.1f}%  →  R = {R:.1f}%  →  Ỹ = {Y:+.1f}%  →  Δπ = {dpi:+.2f}")
@@ -524,8 +533,8 @@ fig
 
 - The rate has ranged from about 0.05 percent (2020–2021) to 19.1 percent (June 1981): the textbook's "nearly
   20 percent".
-- Under Paul Volcker (Fed chair from 1979) the rate reached 17.6 percent in 1980 and above 19 percent in 1981, the
-  tight money that ended the Great Inflation (Figures 10–12).
+- Under Paul Volcker (Fed chair from 1979) the rate reached 17.6 percent in April 1980 and 18.9 percent in December
+  1980, and above 19 percent in 1981: the tight money that ended the Great Inflation (Figures 10–12).
 - The rate was close to zero in 2009–2015 and again in 2020–2021, then rose quickly in 2022–2023 to fight the
   return of inflation. Rate cuts followed from September 2024.
 - The rate usually falls during and after recessions (the shaded bands): the Fed lowers it to stimulate the economy.
@@ -600,7 +609,7 @@ interact(ismp_experiment,
 ```{python}
 #| kind: website
 # @title Website version: Figure 3 with a precomputed slider for the demand shock
-slider_figure(ismp_experiment, "a_new", [-2.0, -1.0, 0.0, 1.0, 2.0], start=0.0, label="demand shock ā")
+slider_figure(ismp_experiment, "a_new", [-3.0, -2.0, 0.0, 2.0, 3.0], start=0.0, label="demand shock ā")
 ```
 
 **What to notice.**
@@ -644,7 +653,7 @@ interact(ismp_experiment,
 ```{python}
 #| kind: website
 # @title Website version: Figure 4 with a precomputed slider for the new real interest rate
-slider_figure(ismp_experiment, "R_new", [5.0, 5.5, 6.0, 6.5, 7.0], start=6.0, label="new real interest rate R′ (%)")
+slider_figure(ismp_experiment, "R_new", [5.0, 6.0, 6.5, 7.0], start=6.0, label="new real interest rate R′ (%)")
 ```
 
 **What to notice.**
@@ -705,7 +714,7 @@ def housing_bubble(a_new=-2.0, b=B_BAR):
     add_line(fig, MP_X, [R_BAR, R_BAR], "MP", GRAY, "dash", 1, 2)
     add_line(fig, MP_X, [R_new, R_new], "MP′", BLUE, "solid", 1, 2)
     add_arrow(fig, -7.3, R_BAR, -7.3, R_new, 1, 2)
-    add_point(fig, 0.0, R_new, "C", -8, 0, 1, 2)
+    add_point(fig, 0.0, R_new, "C", -8, 0, 1, 2, where="bottom left")    # below left, clear of A
     add_arrow(fig, Y_B, 0.6, 0.0, 0.6, 1, 2)
     fig.update_layout(title=f"ā′ = {a_new:.1f}: B at Ỹ = {Y_B:+.1f}%;  R′ = {R_new:.2f}% brings C back to Ỹ = 0.0%")
     return fig
@@ -721,7 +730,7 @@ interact(housing_bubble,
 ```{python}
 #| kind: website
 # @title Website version: Figure 5 with a precomputed slider for the demand shock
-slider_figure(housing_bubble, "a_new", [-3.0, -2.5, -2.0, -1.5, -1.0, -0.5], start=-2.0, label="demand shock after the bust ā′")
+slider_figure(housing_bubble, "a_new", [-3.0, -2.5, -2.0, -1.5, -1.0], start=-2.0, label="demand shock after the bust ā′")
 ```
 
 **What to notice.**
@@ -879,7 +888,7 @@ price shock `o_new` and the slope `nu`.
 > unpacks each into four names. `dict(X_OUTPUT, title=...)` copies the settings of `X_OUTPUT` and replaces the title.
 
 ```{python}
-REGIONS = [(-7.6, 3.6, "left", "Δπ > 0: inflation rises"), (7.6, -3.6, "right", "Δπ < 0: inflation falls")]
+REGIONS = [(-7.6, 3.4, "left", "Δπ > 0:<br>inflation rises"), (7.6, -3.4, "right", "Δπ < 0:<br>inflation falls")]
 X_SLUMP_BOOM = dict(X_OUTPUT, title="←  Slumping economy          Short-run output, Ỹ (%)          Booming economy  →")
 
 
@@ -893,9 +902,9 @@ def pc_experiment(Y_new=0.0, o_new=O_BAR, nu=NU):
         add_arrow(fig, 2.0, phillips(2.0, nu), 2.0, phillips(2.0, nu, o_new))      # the shift of the curve
     else:
         add_pc(fig, "Phillips curve", GREEN, nu)
-    add_point(fig, 0.0, phillips(0.0, nu, o_new), "A", -8, -4)
+    add_point(fig, 0.0, phillips(0.0, nu, o_new), "A", -8, -4, where="top left")    # top left: off the rising curve
     if Y_new != 0.0:
-        add_point(fig, Y_new, dpi, "B", -8, -4)
+        add_point(fig, Y_new, dpi, "B", -8, -4, where="top left")
         add_arrow(fig, 0.0, -3.7, Y_new, -3.7)                                        # the change in output
     for x, y, anchor, text in REGIONS:
         fig.add_annotation(x=x, y=y, text=text, showarrow=False, xanchor=anchor, font=dict(size=13, color=GRAY))
@@ -1107,7 +1116,7 @@ interact(tightening,
 ```{python}
 #| kind: website
 # @title Website version: Figure 10 with a precomputed slider for the nominal interest rate
-slider_figure(tightening, "i_new", [15.0, 15.5, 16.0, 16.5, 17.0, 17.5, 18.0], start=16.0, label="new nominal interest rate i′ (%)")
+slider_figure(tightening, "i_new", [15.0, 16.0, 16.5, 17.0, 17.5, 18.0], start=16.0, label="new nominal interest rate i′ (%)")
 ```
 
 **What to notice.**
@@ -1269,7 +1278,7 @@ Output is an index with 1973 = 100. This small model is used only here, so we de
 
 > **Python note.** `np.exp` is the exponential function: an index growing at g percent a year is
 > $100\,e^{g\,(t - 1973)/100}$. `np.minimum(x, 0)` keeps the negative values of `x` and sets the others to 0, and
-> `np.maximum(x, 0)` does the opposite. `years == 1980` is true only in the year 1980.
+> `np.maximum(x, 0)` does the opposite. `continue` skips the rest of the loop for the current item.
 
 ```{python}
 def output_paths(g_old=3.5, g_new=2.5, gap_max=4.0):
@@ -1295,6 +1304,8 @@ def slowdown(g_old=3.5, g_new=2.5, gap_max=4.0):
     fig.add_trace(go.Scatter(x=years, y=true, name="True potential output", line=dict(color=BLUE, width=4, dash="dash")))
     gaps = [(actual[-1], believed[-1], "Ỹ perceived < 0"), (true[-1], actual[-1], "Ỹ true > 0")]
     for low, high, text in gaps:
+        if high - low < 4:                             # no bracket (and no false label) for a gap that is not there
+            continue
         fig.add_trace(go.Scatter(x=[1985.4, 1985.4], y=[low, high], mode="lines", showlegend=False, line=dict(color="black", width=2)))
         fig.add_annotation(x=1985.6, y=(low + high) / 2, text=text, showarrow=False, xanchor="left", font=dict(size=13))
     k = 1980 - 1965                                    # the position of 1980 in the arrays
@@ -1302,7 +1313,7 @@ def slowdown(g_old=3.5, g_new=2.5, gap_max=4.0):
     fig.update_layout(title=f"1980: perceived Ỹ = {perceived_gap[k]:+.1f}%, true Ỹ = {true_gap[k]:+.1f}%;"
                             f" inflation +{dpi:.1f} points since 1973",
                       xaxis=dict(title="Year", range=[1964, 1990], tickvals=[1965, 1970, 1973, 1980, 1985]),
-                      yaxis=dict(title="Output (index, 1973 = 100)", range=[70, 150]),
+                      yaxis=dict(title="Output (index, 1973 = 100)", range=[70, 160]),
                       legend=dict(x=0.01, y=0.99, xanchor="left", yanchor="top"))
     return fig
 ```
@@ -1398,6 +1409,9 @@ print(f"Pre-Covid trend growth: {100 * (np.exp(4 * slope) - 1):.2f}% a year;  20
 gdp[gdp.date.dt.year.between(2020, 2022)].round(2)
 ```
 
+> **Python note.** `rename(columns={...})` gives columns new names; we use the readable names that the legend should
+> show. Passing a list of columns as `y=[...]` makes `px.line` draw one line per column.
+
 ```{python}
 chart = gdp.rename(columns={"real_gdp": "Real GDP", "trend": "Pre-Covid trend (2015–2019)"})
 fig = px.line(chart, x="date", y=["Real GDP", "Pre-Covid trend (2015–2019)"], markers=True,
@@ -1473,8 +1487,9 @@ fig.show()
   January 2020 to 0.2 percent in May 2020.
 - Within a year it rose to levels not seen in four decades: 9.0 percent in June 2022 (the last higher reading was 9.6
   percent in November 1981). Core inflation peaked later, at 6.6 percent in September 2022.
-- Inflation then came down, without a recession, to between 2.3 and 3.0 percent from mid-2024 through 2025. In 2026 headline inflation rose
-  back to 3–4 percent while core inflation stayed near 2.5 percent, a sign of a new price shock ($\bar{o} > 0$).
+- Inflation then came down, without a recession, to between 2.3 and 3.0 percent from mid-2024 through 2025. From March 2026 headline inflation
+  rose back above 3 percent (4.2 percent in May) while core inflation stayed near 2.5 percent, a sign of a new price
+  shock ($\bar{o} > 0$).
 
 **Your turn.** In which month did all-items inflation first fall below 3 percent after its 2022 peak?
 
@@ -1626,9 +1641,11 @@ def money_experiment(M_new=M_BAR, m0_new=M0):
         add_line(fig, [M_BAR, M_BAR], [0.5, 9.5], "Mˢ", GRAY, "dash")
         add_arrow(fig, M_BAR, 1.0, M_new, 1.0)                     # the change in the money supply
     add_line(fig, [M_new, M_new], [0.5, 9.5], "Mˢ′" if M_new != M_BAR else "Mˢ", TEAL)
-    add_point(fig, M_BAR, i_star, "i*", 0, 0)
+    where = "bottom left" if m0_new > M0 else "top right"      # keep i* clear of a higher demand curve
+    add_point(fig, M_BAR, i_star, "i*", 0, 0, where=where)
     if i_new != i_star:
-        add_point(fig, M_new, i_new, "i**", 0, 0)
+        where = "bottom left" if m0_new < M0 else "top right"  # ... and i** clear of the old, higher one
+        add_point(fig, M_new, i_new, "i**", 0, 0, where=where)
         add_arrow(fig, 0.5, i_star, 0.5, i_new)                    # the change in the interest rate
     set_axes(fig, X_MONEY, Y_NOMINAL)
     fig.update_layout(title=f"Money supply {M_new:.1f}, demand Mᵈ = {m0_new:.1f} − i  →  i = {i_star:.1f}% → {i_new:.1f}%",
@@ -1832,7 +1849,7 @@ def perceived_panels(fig, a_perc, R_new):
     add_arrow(fig, 0.0, 0.6, a_perc, 0.6, 1, 1)
     add_line(fig, MP_X, [R_BAR, R_BAR], "MP", GRAY, "dash", 1, 2)
     add_line(fig, MP_X, [R_new, R_new], "MP′", BLUE, row=1, col=2)
-    add_point(fig, 0.0, R_new, "C", -8, 0, 1, 2)
+    add_point(fig, 0.0, R_new, "C", -8, 0, 1, 2, where="bottom left")    # below left, clear of A
     add_arrow(fig, a_perc, 0.6, 0.0, 0.6, 1, 2)
 ```
 
@@ -1850,11 +1867,11 @@ def great_inflation(a_perc=-2.0, nu=NU):
     add_line(fig, MP_X, [R_BAR, R_BAR], "MP", GRAY, "dash", 2, 1)
     add_line(fig, MP_X, [R_new, R_new], "MP′", BLUE, row=2, col=1)
     add_point(fig, 0.0, R_BAR, "A", -8, 0, 2, 1)
-    add_point(fig, Y_true, R_new, "C", -8, 0, 2, 1)
+    add_point(fig, Y_true, R_new, "C", -8, 0, 2, 1, where="bottom left")  # clear of the old MP line
     add_arrow(fig, 0.0, 0.6, Y_true, 0.6, 2, 1)
     add_pc(fig, "Phillips curve", GREEN, nu, row=2, col=2)
-    add_point(fig, 0.0, 0.0, "A", -8, -4, 2, 2)
-    add_point(fig, Y_true, dpi, "B", -8, -4, 2, 2)
+    add_point(fig, 0.0, 0.0, "A", -8, -4, 2, 2, where="top left")
+    add_point(fig, Y_true, dpi, "B", -8, -4, 2, 2, where="top left")
     set_axes(fig, X_OUTPUT, Y_RATE, 2, 1)
     set_axes(fig, X_OUTPUT, Y_DPI, 2, 2)
     fig.update_layout(height=820, title=f"Believed ā′ = {a_perc:.1f}  →  R′ = {R_new:.1f}%  →  true Ỹ = {Y_true:+.1f}%"
@@ -1872,7 +1889,7 @@ interact(great_inflation,
 ```{python}
 #| kind: website
 # @title Website version: Figure 21 with a precomputed slider for the believed demand shock
-slider_figure(great_inflation, "a_perc", [-3.0, -2.5, -2.0, -1.5, -1.0, -0.5], start=-2.0,
+slider_figure(great_inflation, "a_perc", [-3.0, -2.5, -2.0, -1.5], start=-2.0,
               label="demand shock policymakers believe in ā′")
 ```
 

@@ -180,6 +180,19 @@ def okun_law(Y_tilde, slope=-0.5):
     return slope * Y_tilde
 ```
 
+The textbook writes the name of each curve next to it, so our model figures do the same instead of using a
+legend. `side` says whether the name sits above (`"bottom"`), beside (`"middle"`) or below (`"top"`) the end point.
+
+> **Python note.** `a if condition else b` is a one-line choice: it gives `a` when the condition is true and `b`
+> otherwise. Here it moves the name 4 pixels away from the point, to the right or to the left.
+
+```{python}
+def add_end_label(fig, x, y, text, color, side="middle", row=None, col=None, xanchor="left"):
+    """Write a curve's name next to its end point (x, y), in the curve's color."""
+    fig.add_annotation(x=x, y=y, text=text, showarrow=False, xanchor=xanchor, yanchor=side,
+                       xshift=4 if xanchor == "left" else -4, font=dict(color=color, size=15), row=row, col=col)
+```
+
 Let us try the functions on the textbook's own examples.
 
 > **Python note.** An *f-string* such as `f"Y~ = {value:+.2f}%"` inserts the value of a variable
@@ -198,6 +211,34 @@ $-20/1{,}000 = -2$ percent. With a slope of $0.33$, output 3 percent above poten
 by about 1 percentage point, and Okun's law turns a 6 percent shortfall of output into unemployment
 3 points above its natural rate.
 
+<!-- cell -->
+
+### Shading recessions
+
+Several data figures shade the U.S. recessions, so we write the shading once, here. A small file lists the
+start (peak) and end (trough) month of every U.S. recession since 1960, as dated by the National Bureau of
+Economic Research (NBER).
+
+> **Python note.** `pd.read_csv` reads a data file into a *DataFrame*, a table with named columns, and
+> `parse_dates=[...]` turns text such as `"2020-02-01"` into real dates. A `for` loop repeats the indented
+> lines once for each recession: `zip(recessions.peak, recessions.trough)` hands over one (peak, trough) pair
+> at a time. The `if` skips recessions that ended before the chart starts, and `fig.add_vrect` shades the
+> band between two dates.
+
+```{python}
+recessions = pd.read_csv(DATA_URL + "recessions.csv", parse_dates=["peak", "trough"])
+
+
+def shade_recessions(fig, start="1960-01-01"):
+    """Figures 9.3 and 9.5: shade every NBER recession (peak to trough) that ends after the date start."""
+    for peak, trough in zip(recessions.peak, recessions.trough):
+        if trough >= pd.Timestamp(start):
+            fig.add_vrect(x0=peak, x1=trough, fillcolor=BLUE, opacity=0.15, line_width=0)
+
+
+recessions.tail(3)
+```
+
 ## Figure 1: Economic fluctuations and short-run output
 
 **Goal.** See how removing the trend from actual output leaves the ups and downs of the business cycle.
@@ -208,34 +249,34 @@ are the gaps $Y - \bar{Y}$ at the top of the boom and at the bottom of the slump
 
 > **Python note.** `np.linspace(0, 8, 200)` creates 200 evenly spaced numbers from 0 to 8: the
 > years at which we draw the curves. `make_subplots(rows=1, cols=2)` makes a figure with two panels,
-> and `row=..., col=...` tells `add_trace` where to draw. We fix the axis ranges so that you can
-> *see* the curves move when a parameter changes.
+> and `row=..., col=...` tells `add_trace` where to draw. `fig.add_hline` draws a horizontal line. We fix
+> the axis ranges so that you can *see* the curves move when a parameter changes.
 
 ```{python}
 def fluctuations(A=2.0, g=2.0):
     """Figure 9.1: actual and potential output (a) and short-run output (b), over one 8-year cycle."""
-    t = np.linspace(0, 8, 200)                          # time, in years
+    t = np.linspace(0, 8, 201)                          # time, in years: t[50] = 2 and t[150] = 6
     Y, Ybar = actual_output(t, A, g), potential_output(t, g)
-    t_gap = np.array([2.0, 6.0])                        # the top of the boom and the bottom of the slump
-    Y_gap, Ybar_gap = actual_output(t_gap, A, g), potential_output(t_gap, g)
     fig = make_subplots(rows=1, cols=2, subplot_titles=("(a) Actual and potential output",
                                                         "(b) Short-run output, Ỹ (percent)"))
     fig.add_trace(go.Scatter(x=t, y=Y, name="Actual output, Y", line=dict(color=BLUE, width=3)), row=1, col=1)
     fig.add_trace(go.Scatter(x=t, y=Ybar, name="Potential output, Ȳ", line=dict(color=GREEN, width=3, dash="dash")),
                   row=1, col=1)
-    fig.add_trace(go.Scatter(x=[2, 2, None, 6, 6], y=[Ybar_gap[0], Y_gap[0], None, Ybar_gap[1], Y_gap[1]],
+    fig.add_trace(go.Scatter(x=[2, 2, None, 6, 6], y=[Ybar[50], Y[50], None, Ybar[150], Y[150]],   # boom and slump
                              name="Gap, Y − Ȳ", mode="lines", line=dict(color=GRAY, width=4)), row=1, col=1)
     fig.add_trace(go.Scatter(x=t, y=short_run_output(Y, Ybar), name="Short-run output, Ỹ",
                              line=dict(color=TEAL, width=3)), row=1, col=2)
-    fig.add_trace(go.Scatter(x=[0, 8], y=[0, 0], name="Ỹ = 0: output at potential", mode="lines",
-                             line=dict(color=GREEN, width=2, dash="dash")), row=1, col=2)
+    fig.add_hline(y=0, line=dict(color=GREEN, width=2, dash="dash"), row=1, col=2)      # Ỹ = 0: output at potential
+    add_end_label(fig, 8, Y[-1], "Y", BLUE, "bottom", 1, 1)          # Y and Ȳ meet at t = 8: one above,
+    add_end_label(fig, 8, Ybar[-1], "Ȳ", GREEN, "top", 1, 1)         # one below
+    add_end_label(fig, 8, 0, "Ỹ", TEAL, "bottom", 1, 2)
     fig.add_annotation(x=2, y=A, xref="x2", yref="y2", text="Boom: Ỹ > 0", showarrow=False, yshift=14)
     fig.add_annotation(x=6, y=-A, xref="x2", yref="y2", text="Slump: Ỹ < 0", showarrow=False, yshift=-14)
     fig.update_xaxes(title_text="Time (years)", range=[0, 8])
     fig.update_yaxes(title_text="Output", range=[94, 145], row=1, col=1)
     fig.update_yaxes(range=[-5.2, 5.2], row=1, col=2)
     fig.update_layout(title=f"Boom: Ỹ = +{A:.1f}%   Slump: Ỹ = −{A:.1f}%   |   potential grows {g:.1f}% a year",
-                      legend=dict(orientation="h", y=-0.2, yanchor="top"))
+                      showlegend=False)
     return fig
 ```
 
@@ -255,10 +296,7 @@ interact(fluctuations,
 ```{python}
 #| kind: website
 # @title Website version: Figure 1 with a precomputed slider for the growth of potential output
-fig = slider_figure(fluctuations, "g", [0.0, 0.5, 1.0, 2.0, 3.0, 4.0], start=2.0, label="growth of potential g (% a year)")
-fig.update_layout(height=600)
-fig.layout.sliders[0].pad.t = 140                              # put the slider below the legend
-fig
+slider_figure(fluctuations, "g", [0.0, 0.5, 1.0, 2.0, 3.0, 4.0], start=2.0, label="growth of potential g (% a year)")
 ```
 
 **What to notice.**
@@ -293,8 +331,8 @@ Pass the same arguments to both functions, for example `actual_output(6, A=2.0, 
 The Congressional Budget Office (CBO) estimates U.S. potential output from 1949 on, with a version of the
 Solow model. Our data file adds an estimate for 1929–1948, a very smooth trend through actual GDP.
 
-> **Python note.** `pd.read_csv` reads a data file into a *DataFrame*, a table with named
-> columns. `.head()` shows its first five rows, which is always a good first look at new data.
+> **Python note.** `.head()` shows the first five rows of a DataFrame, which is always a good first look at
+> new data.
 
 ```{python}
 gdp = pd.read_csv(DATA_URL + "fig9-2.csv")
@@ -419,16 +457,14 @@ Use `by_year.gap.loc[1950:]` as above, with `.max()` and `.idxmax()` instead of 
 **Goal.** Make the fluctuations visible by plotting short-run output $\tilde{Y}_t$, quarter by quarter, with the
 recessions shaded.
 
-The data file has quarterly real GDP and CBO potential GDP since 1970. A second small file lists the start
-(peak) and end (trough) month of every U.S. recession since 1960, as dated by the National Bureau of Economic
-Research (NBER).
+The data file has quarterly real GDP and CBO potential GDP since 1970. The recessions are shaded with
+`shade_recessions` from "The model in code".
 
 > **Python note.** `parse_dates=["date"]` turns text such as `"2020-04-01"` into real dates, so that
 > Plotly and pandas can work with them. `.tail()` shows the last five rows.
 
 ```{python}
 gap = pd.read_csv(DATA_URL + "fig9-3.csv", parse_dates=["date"])
-recessions = pd.read_csv(DATA_URL + "recessions.csv", parse_dates=["peak", "trough"])
 gap.tail()
 ```
 
@@ -446,10 +482,8 @@ number", pandas' mark for a missing value). Since then, the statistical agencies
 the Bureau of Economic Analysis (BEA) revised real GDP and the CBO re-estimated potential output. Plotting both
 vintages shows how much revisions matter.
 
-> **Python note.** The shaded bands are the recessions. A `for` loop repeats the indented lines once for
-> each recession: `zip(recessions.peak, recessions.trough)` hands over one (peak, trough) pair at a time. The
-> `if` skips recessions that ended before the chart starts, and `fig.add_vrect` shades the band between two dates.
-> `fig.add_hline` draws a horizontal line, here at $\tilde{Y} = 0$.
+> **Python note.** The shaded bands are the recessions. `fig.add_hline` draws a horizontal line, here at
+> $\tilde{Y} = 0$.
 
 ```{python}
 named = gap.rename(columns={"short_run_output": "Data as of 2026",
@@ -461,9 +495,7 @@ fig = px.line(named, x="date", y=["Data as of 2026", "Data as published in 2023"
 fig.update_traces(selector=dict(name="Data as of 2026"), line_width=3)
 fig.update_traces(selector=dict(name="Data as published in 2023"), line_dash="dot")
 fig.add_hline(y=0, line_dash="dash", line_color="black", line_width=1)
-for peak, trough in zip(recessions.peak, recessions.trough):
-    if trough >= pd.Timestamp("1970-01-01"):
-        fig.add_vrect(x0=peak, x1=trough, fillcolor=BLUE, opacity=0.15, line_width=0)
+shade_recessions(fig, "1970-01-01")
 fig.update_xaxes(range=["1970-01-01", "2026-07-01"])
 fig.update_yaxes(range=[-11, 5], tickvals=[-10, -8, -6, -4, -2, 0, 2, 4])   # no tick in the bottom-left corner
 fig.update_layout(legend=dict(x=0.99, y=0.99, xanchor="right", yanchor="top", bgcolor="rgba(255,255,255,0.8)"))
@@ -602,7 +634,7 @@ def employment_chart(view="full range"):
                            showarrow=True, arrowhead=2, ax=-110, ay=0)
         fig.update_yaxes(range=[-15, 4.5], tickvals=[-14, -12, -10, -8, -6, -4, -2, 0, 2, 4])
     else:
-        fig.update_yaxes(range=[-1, 1.5])
+        fig.update_yaxes(range=[-1, 2], tickvals=[-0.5, 0, 0.5, 1, 1.5])   # no label in the bottom-left corner
     return fig
 ```
 
@@ -618,9 +650,11 @@ interact(employment_chart, view=Dropdown(options=["full range", "zoom on normal 
 fig = employment_chart()
 fig.update_layout(updatemenus=[dict(type="buttons", direction="right", x=0.01, y=0.98, xanchor="left", yanchor="top",
                                     buttons=[
-    dict(label="full range", method="relayout", args=[{"yaxis.range": [-15, 4.5], "annotations[0].visible": True}]),
+    dict(label="full range", method="relayout",
+         args=[{"yaxis.range": [-15, 4.5], "yaxis.tickvals": [-14, -12, -10, -8, -6, -4, -2, 0, 2, 4],
+                "annotations[0].visible": True}]),
     dict(label="zoom on normal months", method="relayout",
-         args=[{"yaxis.range": [-1, 1.5], "annotations[0].visible": False}])])])
+         args=[{"yaxis.range": [-1, 2], "yaxis.tickvals": [-0.5, 0, 0.5, 1, 1.5], "annotations[0].visible": False}])])])
 fig
 ```
 
@@ -630,7 +664,7 @@ fig
   rebound came quickly, with gains of 2.0 and 3.5 percent in May and June 2020.
 - Zoom in. Now you see small negative bars in the recessions of the early 1980s, 1990–91 and 2001, and a long
   run of negative months in 2008–09.
-- Since 2023 the monthly gains have been small: on average 0.14 percent a month in 2023 and close to zero in 2025,
+- Since 2023 the monthly gains have been small: on average 0.13 percent a month in 2023 and close to zero in 2025,
   with a few negative months in 2025–26.
 
 <!-- cell -->
@@ -699,8 +733,7 @@ recent = monthly[monthly.date >= "1960-01-01"]
 fig.add_trace(go.Scatter(x=recent.date, y=recent.inflation_12m, name="12-month rate, monthly",
                          line=dict(color=TEAL, width=1)))
 fig.add_hline(y=0, line_color="black", line_width=1)
-for peak, trough in zip(recessions.peak, recessions.trough):
-    fig.add_vrect(x0=peak, x1=trough, fillcolor=BLUE, opacity=0.15, line_width=0)
+shade_recessions(fig)
 fig.update_yaxes(range=[-2.5, 15.5])
 fig.update_layout(legend=dict(x=0.99, y=0.99, xanchor="right", yanchor="top", bgcolor="rgba(255,255,255,0.8)"))
 fig.show()
@@ -774,7 +807,8 @@ in code" draws the line. The black dot is the economy, at the short-run output y
 ```{python}
 def phillips_diagram(nu=0.33, Y_tilde=0.0):
     """Figure 9.6: the Phillips curve delta pi = nu * Y_tilde, with the economy at Y_tilde."""
-    Y = np.linspace(-6, 6, 100)
+    Y_end = min(6.0, 2.6 / nu)                          # stop the line where its name still fits below the top
+    Y = np.linspace(-Y_end, Y_end, 100)
     dpi = phillips_curve(Y_tilde, nu)
     if dpi > 0:
         verdict = "inflation rises"
@@ -784,6 +818,7 @@ def phillips_diagram(nu=0.33, Y_tilde=0.0):
         verdict = "inflation is steady"
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=Y, y=phillips_curve(Y, nu), name="Phillips curve", line=dict(color=TEAL, width=4)))
+    add_end_label(fig, Y_end, phillips_curve(Y_end, nu), "Phillips curve", TEAL, "bottom", xanchor="right")
     fig.add_trace(go.Scatter(x=[Y_tilde], y=[dpi], name="The economy", mode="markers",
                              marker=dict(color="black", size=13)))
     fig.add_shape(type="line", x0=Y_tilde, y0=-3.2, x1=Y_tilde, y1=dpi, line=dict(color=GRAY, dash="dash"))
@@ -791,8 +826,9 @@ def phillips_diagram(nu=0.33, Y_tilde=0.0):
     fig.add_annotation(x=-3.2, y=2.8, text="← Slumping economy (Ỹ < 0)", showarrow=False)
     fig.add_annotation(x=3.2, y=-2.8, text="Booming economy (Ỹ > 0) →", showarrow=False)
     fig.update_layout(title=f"Ỹ = {Y_tilde:+.2f}%  →  Δπ = {nu:.2f} × ({Y_tilde:+.2f}) = {dpi:+.2f} points: {verdict}",
-                      xaxis=dict(title="Short-run output, Ỹ (percent)", range=[-6.5, 6.5], zeroline=True),
-                      yaxis=dict(title="Change in inflation, Δπ (points)", range=[-3.2, 3.2], zeroline=True))
+                      xaxis=dict(title="Short-run output, Ỹ (percent)", range=[-6.5, 6.5], tickvals=[-4, -2, 0, 2, 4, 6]),
+                      yaxis=dict(title="Change in inflation, Δπ (points)", range=[-3.2, 3.2], tickvals=[-2, -1, 0, 1, 2, 3]),
+                      showlegend=False)                  # tick values: no labels in the bottom-left corner
     return fig
 ```
 
@@ -1087,8 +1123,8 @@ years, pi_path = simulate_inflation()
 print("Inflation, years 0 to 5:", pi_path)
 ```
 
-The figure has two panels: (a) the Phillips curve with the economy at potential and in the boom, and (b) the
-inflation path that the boom produces.
+The figure has two panels: (a) the Phillips curve with the economy at potential and in the boom (the two black
+dots), and (b) the inflation path $\pi$ that the boom produces, against long-run inflation $\bar{\pi}$ (dashed).
 
 ```{python}
 def booming_economy(pi_bar=2.0, nu=1.0, Y_tilde=3.0):
@@ -1105,13 +1141,16 @@ def booming_economy(pi_bar=2.0, nu=1.0, Y_tilde=3.0):
                              line=dict(color=BLUE, width=3), marker=dict(size=9)), row=1, col=2)
     fig.add_trace(go.Scatter(x=[0, 5], y=[pi_bar, pi_bar], name="Long-run inflation, π̄", mode="lines",
                              line=dict(color=GRAY, dash="dash")), row=1, col=2)
-    fig.update_xaxes(title_text="Short-run output, Ỹ (percent)", range=[-6.5, 6.5], row=1, col=1)
-    fig.update_yaxes(title_text="Change in inflation, Δπ", range=[-6.5, 6.5], row=1, col=1)
+    up = pi_path[-1] >= pi_bar                            # does inflation end above its long-run rate?
+    add_end_label(fig, 5, pi_path[-1], "π", BLUE, "bottom" if up else "top", 1, 2)
+    add_end_label(fig, 5, pi_bar, "π̄", GRAY, "top" if up else "bottom", 1, 2)
+    fig.update_xaxes(title_text="Short-run output, Ỹ (percent)", range=[-6.5, 6.5], tickvals=[-4, -2, 0, 2, 4, 6], row=1, col=1)
+    fig.update_yaxes(title_text="Change in inflation, Δπ", range=[-6.5, 6.5], tickvals=[-4, -2, 0, 2, 4, 6], row=1, col=1)
     fig.update_xaxes(title_text="Years of the boom", range=[-0.3, 5.3], row=1, col=2)
-    fig.update_yaxes(title_text="Inflation (percent)", range=[-25, 35], row=1, col=2)
+    fig.update_yaxes(title_text="Inflation (percent)", range=[-25, 35], tickvals=[-10, 0, 10, 20, 30], row=1, col=2)
     fig.update_layout(title=f"Δπ = {nu:.2f} × ({Y_tilde:+.2f}) = {dpi:+.2f} a year: "
                             f"π = {pi_path[0]:.2f} → {pi_path[1]:.2f} → {pi_path[2]:.2f} → {pi_path[3]:.2f}%",
-                      legend=dict(orientation="h", y=-0.2, yanchor="top"))
+                      showlegend=False)
     return fig
 ```
 
@@ -1130,10 +1169,7 @@ run_economy(booming_economy,
 ```{python}
 #| kind: website
 # @title Website version: Figure 9 with a precomputed slider for the slope of the Phillips curve
-fig = slider_figure(booming_economy, "nu", [0.25, 0.33, 0.5, 0.75, 1.0, 1.5], start=1.0, label="slope of the Phillips curve ν")
-fig.update_layout(height=600)
-fig.layout.sliders[0].pad.t = 140                              # put the slider below the legend
-fig
+slider_figure(booming_economy, "nu", [0.25, 0.33, 0.5, 0.75, 1.0, 1.5], start=1.0, label="slope of the Phillips curve ν")
 ```
 
 **What to notice.**

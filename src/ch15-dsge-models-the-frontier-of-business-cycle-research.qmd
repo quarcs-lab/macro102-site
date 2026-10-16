@@ -229,35 +229,37 @@ All the labor-market diagrams below use the same axes and the same few drawing s
 > **Python note.** `np.linspace(0.02, 1.8, 179)` creates 179 evenly spaced numbers from 0.02 to 1.8. Because
 > our model functions work on a whole array at once, one call gives a whole curve. `go.Figure()` starts an
 > empty chart, and `fig.add_trace(go.Scatter(...))` adds one line or set of points to it. `w <= 1.2` is true
-> where the wage fits in the chart, `L[inside]` keeps those values, and `[-1]` takes the last one. Labels such
-> as `"L<sup>d</sup>"` use HTML to write Lᵈ.
+> where the wage fits in the chart, `L[inside]` keeps those values, and `[-1]` takes the last one (`[0]` the
+> first). `if condition:` runs the indented lines below it only when the condition holds. Labels such as
+> `"L<sup>d</sup>"` use HTML to write Lᵈ.
 
 ```{python}
 L_GRID = np.linspace(0.02, 1.8, 179)        # employment levels at which we draw the curves
 L_RANGE, W_RANGE = [0, 1.8], [0, 1.2]       # fixed axes, so that you can see the curves move
 
 
-def add_curve(fig, L, w, label, color, dash="solid", avoid=None):
-    """Draw a curve inside the axes and label its last point, unless that point is close to `avoid`."""
+def add_curve(fig, L, w, label, color, dash="solid", avoid=None, start=False):
+    """Draw a curve inside the axes and label its last point (its first, top-left point if start),
+    unless that point is close to `avoid`."""
     inside = w <= W_RANGE[1]
     L, w = L[inside], w[inside]
     fig.add_trace(go.Scatter(x=L, y=w, mode="lines", name="", showlegend=False,
                              hovertemplate="L = %{x:.2f}, w = %{y:.2f}<extra></extra>",
                              line=dict(color=color, width=3, dash=dash)))
-    end = (L[-1], w[-1])
+    end = (L[0], w[0]) if start else (L[-1], w[-1])
     if avoid is None or abs(end[0] - avoid[0]) + abs(end[1] - avoid[1]) > 0.1:
-        fig.add_annotation(x=end[0], y=end[1], text=label, showarrow=False, xanchor="left",
-                           yanchor="middle", font=dict(color=color, size=15))
+        fig.add_annotation(x=end[0], y=end[1], text=label, showarrow=False, yanchor="middle",
+                           xanchor="right" if start else "left", font=dict(color=color, size=15))
     return end
 ```
 
 ```{python}
-def add_point(fig, L, w, label, guides=True):
-    """Mark the point (L, w) with a dot and a letter, and (if guides) dotted lines to both axes."""
+def add_point(fig, L, w, label, guides=True, where="top right"):
+    """Mark the point (L, w) with a dot and a letter (placed `where`), and (if guides) dotted lines to both axes."""
     if guides:
         fig.add_trace(go.Scatter(x=[0, L, L], y=[w, w, 0], mode="lines", showlegend=False, hoverinfo="skip",
                                  line=dict(color="black", width=1, dash="dot")))
-    fig.add_trace(go.Scatter(x=[L], y=[w], mode="markers+text", text=[label], textposition="top right",
+    fig.add_trace(go.Scatter(x=[L], y=[w], mode="markers+text", text=[label], textposition=where,
                              name="", showlegend=False, textfont=dict(size=16), marker=dict(color="black", size=10),
                              hovertemplate="L = %{x:.2f}, w = %{y:.2f}<extra></extra>"))
 
@@ -318,6 +320,10 @@ def shade_recessions(fig):
 recessions.tail(3)
 ```
 
+> **Python note.** `px.line(tfp, x="year", y="tfp_growth")` draws a line chart from two columns of the table, and
+> `labels={...}` gives the columns readable names on the axes. `tfp.tfp_growth.min()` is the smallest value of the
+> column. `fig.update_traces(...)` restyles the line, and `fig.add_hline(y=0)` adds a horizontal line at zero.
+
 ```{python}
 low, high = tfp.tfp_growth.min(), tfp.tfp_growth.max()
 fig = px.line(tfp, x="year", y="tfp_growth", markers=True,
@@ -376,7 +382,7 @@ long.head()
 > **Python note.** `facet_col="measure"` draws one panel per measure. `trendline="ols"` adds a least-squares
 > regression line, and `trendline_scope="overall"` fits one line per panel through all the points. `.corr()`
 > computes the correlation of two columns, between −1 and 1. The loop at the end shortens the panel titles,
-> which Plotly writes as "measure=...".
+> which Plotly writes as "measure=...", and `legend_title_text=""` removes the legend's title.
 
 ```{python}
 r_raw = annual.gdp_growth.corr(annual.tfp_solow)
@@ -384,11 +390,14 @@ r_util = annual.gdp_growth.corr(annual.tfp_util)
 fig = px.scatter(long, x="gdp_growth", y="tfp_growth", facet_col="measure", color="GDP", hover_name="year",
                  trendline="ols", trendline_scope="overall", trendline_color_override=GRAY,
                  color_discrete_map={"GDP grew": BLUE, "GDP fell": GREEN},
-                 labels={"gdp_growth": "GDP growth (%)", "tfp_growth": "TFP growth (%)", "GDP": ""},
+                 labels={"gdp_growth": "GDP growth (%)", "tfp_growth": "TFP growth (%)"},
                  range_x=[-4.5, 10], range_y=[-5, 7.5],
                  title=f"Raw TFP moves with GDP (r = {r_raw:.2f}); adjusted TFP does not (r = {r_util:.2f})")
 for annotation in fig.layout.annotations:
     annotation.text = annotation.text.split("=")[-1]
+fig.update_xaxes(tickvals=[-2, 0, 2, 4, 6, 8])          # no tick labels in the bottom-left corner
+fig.update_yaxes(tickvals=[-4, -2, 0, 2, 4, 6])
+fig.update_layout(legend_title_text="")
 fig.show()
 ```
 
@@ -453,8 +462,8 @@ def labor_market(A=A_BAR, c=C_BAR, ell=ELL_BAR):
     """Figure 15.2: labor demand and labor supply cross at employment L0 and the real wage w0."""
     L0, w0 = equilibrium(A, 0.0, c, ell)
     fig = go.Figure()
-    add_curve(fig, L_GRID, demand_wage(L_GRID, A), "L<sup>d</sup>", BLUE)
-    add_curve(fig, L_GRID, supply_wage(L_GRID, c, ell), "L<sup>s</sup>", TEAL)
+    d_end = add_curve(fig, L_GRID, demand_wage(L_GRID, A), "L<sup>d</sup>", BLUE)
+    add_curve(fig, L_GRID, supply_wage(L_GRID, c, ell), "L<sup>s</sup>", TEAL, avoid=d_end)
     add_point(fig, L0, w0, "")
     title = f"Equilibrium: employment L₀ = {L0:.2f}, real wage w₀ = {w0:.2f}, output Y = {output(L0, A):.2f}"
     return labor_axes(fig, title)
@@ -529,7 +538,7 @@ def labor_shock(A_new=A_BAR, tau=0.0, c_new=C_BAR):
     s_label = "L<sup>s</sup>′" if supply_moves else "L<sup>s</sup>"
     fig = go.Figure()
     d_end = add_curve(fig, L_GRID, demand_wage(L_GRID, A_new, tau), d_label, BLUE)
-    s_end = add_curve(fig, L_GRID, supply_wage(L_GRID, c_new), s_label, TEAL)
+    s_end = add_curve(fig, L_GRID, supply_wage(L_GRID, c_new), s_label, TEAL, avoid=d_end)
     if demand_moves:
         add_curve(fig, L_GRID, demand_wage(L_GRID), "L<sup>d</sup>", GRAY, "dash", avoid=d_end)
         add_arrow(fig, 1.45, demand_wage(1.45), 1.45, demand_wage(1.45, A_new, tau))
@@ -748,17 +757,19 @@ This figure function covers one event in three periods, and Figure 7 reuses it:
   figures; it is what happens once wages are flexible).
 
 > **Python note.** `real_wages[t]` takes element number `t` of a list, counting from 0, and `"ABC"[t]` the
-> letter number `t` of a text. `min(a, b)` is the smaller of two numbers and `max(a, b)` the larger.
+> letter number `t` of a text. `min(a, b)` is the smaller of two numbers and `max(a, b)` the larger. An
+> `IntSlider` is a slider for whole numbers, here the period. A function may have several `return` lines: it stops
+> at the first one it reaches.
 
 ```{python}
 P0 = 1.0          # the price level before the monetary expansion
 
 
 def add_wage_line(fig, w, label, color, dash="solid", above=False):
-    """A horizontal line at the real wage w, labelled at its right end (above or below the line)."""
-    fig.add_trace(go.Scatter(x=[0.02, 1.7], y=[w, w], mode="lines", showlegend=False, hoverinfo="skip",
+    """A horizontal line at the real wage w, labelled just right of the axes (above or below the line)."""
+    fig.add_trace(go.Scatter(x=[0.02, L_RANGE[1]], y=[w, w], mode="lines", showlegend=False, hoverinfo="skip",
                              line=dict(color=color, width=3, dash=dash)))
-    fig.add_annotation(x=1.7, y=w, text=label, showarrow=False, xanchor="left",
+    fig.add_annotation(x=L_RANGE[1], y=w, text=label, showarrow=False, xanchor="left",
                        yanchor="bottom" if above else "top", font=dict(color=color, size=15))
 
 
@@ -771,6 +782,16 @@ def add_gap(fig, L_from, L_to, w, text):
 ```
 
 ```{python}
+def letter_side(w, w_old, w_star):
+    """Where to write a point's letter, so that it stays clear of the old wage line w_old above it."""
+    if w > w_old - 0.01:
+        return "top right"             # no old line just above the point
+    if w > w_star + 0.01:
+        return "bottom left"           # the point lies on labor demand
+    return "bottom right"              # the point lies on labor supply
+```
+
+```{python}
 def sticky_wages(t=0, P_new=1.05, W_bar=0.75):
     """Figures 15.6-15.7: period 0 sticky wage W_bar; period 1 prices rise to P_new; period 2 W has adjusted."""
     L_star, w_star = equilibrium()
@@ -780,18 +801,18 @@ def sticky_wages(t=0, P_new=1.05, W_bar=0.75):
     employed = min(labor_demand(w), labor_supply(w))          # the short side of the market decides
     gap = max(labor_supply(w) - labor_demand(w), 0.0)
     fig = go.Figure()
-    add_curve(fig, L_GRID, demand_wage(L_GRID), "L<sup>d</sup>", BLUE)
+    add_curve(fig, L_GRID, demand_wage(L_GRID), "L<sup>d</sup>", BLUE, start=True)   # top label, clear of W/P
     add_curve(fig, L_GRID, supply_wage(L_GRID), "L<sup>s</sup>", TEAL)
     add_point(fig, L_star, w_star, "", guides=False)          # where the market would clear
     if t > 0:
         w_A = real_wages[0]
         L_A = min(labor_demand(w_A), labor_supply(w_A))
-        add_wage_line(fig, w_A, labels[0], GRAY, "dash", above=True)
+        add_wage_line(fig, w_A, labels[0], GRAY, "dash", above=w_A >= w)    # labels on the outer sides
         add_point(fig, L_A, w_A, "A")
         add_arrow(fig, 0.05, w_A, 0.05, w)
         add_arrow(fig, L_A, 0.05, employed, 0.05)
-    add_wage_line(fig, w, labels[t], GREEN)
-    add_point(fig, employed, w, "ABC"[t])
+    add_wage_line(fig, w, labels[t], GREEN, above=t > 0 and real_wages[0] < w)
+    add_point(fig, employed, w, "ABC"[t], where=letter_side(w, real_wages[0], w_star))
     if gap > 0.02:
         add_gap(fig, labor_demand(w), labor_supply(w), w, "Unemployment")
     return labor_axes(fig, f"Period {t}: real wage W/P = {w:.2f}, employment {employed:.2f}, "
@@ -862,7 +883,7 @@ slider_figure(sticky_wages, "t", [0, 1, 2], start=1, label="period t")
 
 - A 5 percent rise in prices lowers the real wage from 0.75 to 0.71 and raises employment from 0.70 to 0.81;
   unemployment falls from 0.42 to 0.26.
-- The real wage and employment move in **opposite** directions. In real business cycles, booms do not usually
+- The real wage and employment move in **opposite** directions. In actual business cycles, booms do not usually
   come with low real wages, so sticky wages alone cannot be the whole story of how monetary policy works.
 - In period 2 the nominal wage has caught up with prices, the real wage is back at 0.67 and the market clears:
   in the long run, money does not change employment (the classical dichotomy).
@@ -903,10 +924,11 @@ Y0 = 1.0          # output demanded before the shock: the flexible-price output 
 
 
 def add_vertical(fig, L, label, color, dash="solid"):
-    """A vertical labor demand curve at L (sticky prices), labelled at its top."""
-    fig.add_trace(go.Scatter(x=[L, L], y=[0.02, 1.1], mode="lines", showlegend=False, hoverinfo="skip",
+    """A vertical labor demand curve at L (sticky prices), labelled just above the top of the axes."""
+    fig.add_trace(go.Scatter(x=[L, L], y=[0.02, W_RANGE[1]], mode="lines", showlegend=False, hoverinfo="skip",
                              line=dict(color=color, width=3, dash=dash)))
-    fig.add_annotation(x=L, y=1.1, text=label, showarrow=False, yanchor="bottom", font=dict(color=color, size=15))
+    fig.add_annotation(x=L, y=W_RANGE[1], text=label, showarrow=False, yanchor="bottom",
+                       font=dict(color=color, size=15))
 ```
 
 ```{python}
@@ -926,7 +948,7 @@ def sticky_prices(Y_new=1.15, c_new=C_BAR):
         add_curve(fig, L_GRID, supply_wage(L_GRID), "L<sup>s</sup>", GRAY, "dash", avoid=end)
     add_point(fig, L0, w0, "A")
     if demand_moves or supply_moves:
-        add_point(fig, L1, w1, "B")
+        add_point(fig, L1, w1, "B", where="bottom right")     # below-right of B no curve passes
         add_arrow(fig, L0, 0.05, L1, 0.05)
         add_arrow(fig, 0.05, w0, 0.05, w1)
     title = f"Output {Y0:.2f} → {Y_new:.2f}: employment {L0:.2f} → {L1:.2f}, real wage {w0:.2f} → {w1:.2f}"

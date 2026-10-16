@@ -146,7 +146,18 @@ def peak_to_trough(series, start, end):
     peak = window.idxmax()                      # date of the highest value
     trough = window[peak:].idxmin()             # date of the lowest value after the peak
     return peak, trough, percent_change(window[trough], window[peak])
+
+
+def low_to_high(series, start, end):
+    """The opposite measure: the highest point between start and end, the lowest point before it, and the rise."""
+    window = series[start:end]
+    high = window.idxmax()                      # date of the highest value
+    low = window[:high].idxmin()                # date of the lowest value before it
+    return low, high, window[high] - window[low]
 ```
+
+For a series that *rises* in a recession, such as the unemployment rate, `low_to_high` measures the rise from the
+lowest point to the highest one, in the units of the series (percentage points for a rate).
 
 **Recessions.** Five figures shade the U.S. recessions, as dated by the National Bureau of Economic Research
 (NBER). The file `recessions.csv` lists, for each recession since 1953, the **peak** (the last month before
@@ -190,7 +201,9 @@ $$\text{net worth} = \text{assets} - \text{liabilities}, \qquad \text{leverage} 
 The textbook's hypothetical bank (Table 10.3, billions of dollars) is a small table.
 
 > **Python note.** `pd.Series({...})` builds a list of numbers with labels from a *dictionary*, a set of
-> `key: value` pairs in curly braces. `.sum()` adds up all the values.
+> `key: value` pairs in curly braces. `.sum()` adds up all the values. In an *f-string*, `f"..."`, Python fills in
+> the value of each expression in curly braces: `{x:,}` adds thousands separators and `{x:.0f}` rounds to
+> 0 decimals.
 
 ```{python}
 def net_worth(assets, liabilities):
@@ -269,7 +282,9 @@ The index has one value per month from January 1953 to July 2026. Each boom and 
 and `peak_to_trough` finds the peak and trough inside it.
 
 > **Python note.** `BUSTS` is a dictionary: each name (the key) gives a pair of dates (the value), and
-> `BUSTS[bust]` looks one up. `start, end = ...` unpacks the pair into two variables. In an f-string,
+> `BUSTS[bust]` looks one up. `start, end = ...` unpacks the pair into two variables. `px.line` draws the index
+> as a line, and `log_y=True` gives the ratio scale. `fig.add_vrect` shades the bust, and
+> `fig.add_trace(go.Scatter(...))` adds the two black dots for the peak and the trough. In an f-string,
 > `{peak:%b %Y}` prints a date as "Dec 2005". On a ratio (log) axis, Plotly wants the vertical position of a
 > label as a power of ten, so we pass `np.log10(...)`.
 
@@ -297,6 +312,10 @@ def housing_chart(bust="2000s boom and bust"):
     fig.update_yaxes(tickvals=[100, 120, 140, 160, 180, 200], range=[np.log10(84), np.log10(250)])
     return fig
 ```
+
+> **Python note.** `interact` calls `housing_chart` and shows the figure it returns. `bust=Dropdown(...)` turns
+> the argument `bust` into a menu (`list(BUSTS)` gives the names in the dictionary), and the figure is drawn
+> again each time you pick an episode. The `;` at the end only hides an extra line of text.
 
 ```{python}
 #| kind: widget
@@ -394,7 +413,7 @@ def fed_chart(period="2000–2026"):
     fig.update_traces(line=dict(color=BLUE, width=3), fillcolor="rgba(138, 150, 163, 0.3)")
     shade_recessions(fig)
     fig.update_xaxes(range=[pd.Timestamp(start) - pd.DateOffset(months=6), pd.Timestamp(end) + pd.DateOffset(months=3)])
-    fig.update_yaxes(range=[0, 8], tickvals=[0, 1, 2, 3, 4, 5, 6, 7])
+    fig.update_yaxes(range=[0, 8], tickvals=[1, 2, 3, 4, 5, 6, 7])   # no 0 label: it would crowd the first year
     return fig
 ```
 
@@ -473,7 +492,8 @@ spread = spreads.set_index("date")
 spreads[spreads.isna().any(axis=1)].head(3)
 ```
 
-`NaN` ("not a number") marks a missing value. The TED spread stops in January 2022, and the commercial-paper
+`NaN` ("not a number") marks a missing value, and `spreads.isna().any(axis=1)` is true for the rows with at least one
+missing value, so the cell shows the first three of them. The TED spread stops in January 2022, and the commercial-paper
 spread has one gap, April 2020, when the Federal Reserve published no commercial-paper rate. Plotly simply
 leaves a small gap in the line.
 
@@ -560,7 +580,7 @@ stocks.tail(3)
 ```{python}
 CRASHES = {"Dot-com bust, 2000–03": ("1999-01-01", "2003-12-01"),
            "Financial crisis, 2007–09": ("2007-01-01", "2009-12-01"),
-           "Covid-19, 2020": ("2020-01-01", "2020-12-01"),
+           "Covid-19, 2020": ("2020-01-01", "2020-06-01"),     # ends before prices pass the January peak
            "Rate hikes, 2022": ("2021-06-01", "2022-12-01")}
 
 
@@ -654,14 +674,16 @@ covid.head()
 > value where the condition is true and puts `""` elsewhere, so only some countries get a label (hover shows
 > them all). `.map(SIDES)` looks up each country in the dictionary `SIDES` to choose where its label goes, and
 > `.fillna("middle right")` gives every other country the usual place: labels are moved only where they would be
-> cut off at the edge or overlap a neighbor.
+> cut off at the edge or overlap a neighbor. In the widget cell, `ToggleButtons` shows the two dates as a row of
+> buttons.
 
 ```{python}
 LABELED = ["United States", "Spain", "United Kingdom", "Iceland", "Portugal", "Mexico", "Italy", "India",
            "Saudi Arabia", "China", "Japan", "S. Korea", "Norway", "Ireland", "Brazil", "Sweden", "Bulgaria",
            "Hungary", "Slovenia", "Germany"]
 covid["label"] = covid.country.where(covid.country.isin(LABELED), "")
-SIDES = {"Bulgaria": "middle left", "Hungary": "middle left", "Norway": "top right", "Japan": "top right"}   # avoid overlaps
+SIDES = {"Bulgaria": "middle left", "Hungary": "middle left", "Norway": "top right", "Japan": "top right",
+         "United States": "bottom left"}                # avoid overlaps
 covid["side"] = covid.country.map(SIDES).fillna("middle right")
 
 
@@ -778,7 +800,7 @@ country and quarter, so that `color="country"` can draw one line per country.
 
 > **Python note.** `melt(id_vars="date", ...)` stacks the country columns into two columns, `country` (the old
 > column name) and `index` (its value). `.map({...})` then replaces each code by a readable name, using a
-> dictionary.
+> dictionary. In the chart, `fig.add_hline` and `fig.add_vline` draw a horizontal and a vertical reference line.
 
 ```{python}
 NAMES = {"gdp_index_usa": "U.S.", "gdp_index_kor": "S. Korea", "gdp_index_swe": "Sweden",
@@ -886,7 +908,8 @@ fig.show()
 
 - In the Great Recession, employment fell for two years, from the end of 2007 to early 2010, and kept falling
   after the recession had officially ended in June 2009.
-- In 2020 the fall was much larger, and it came in two months. So did most of the recovery.
+- In 2020 the fall was much larger, and it came in two months. The recovery was fast too: more than half of the
+  lost jobs were back by the end of 2020.
 - Drag the range slider to zoom in on 2007–2015 and then on 2020–2023, and compare how long each recovery took.
 
 <!-- cell -->
@@ -1016,6 +1039,12 @@ use `.max()` and `.idxmax()`.
 
 **Goal.** Measure how much unemployment rose in each recession since 2000, and recompute Table 10.1.
 
+The **unemployment rate** is the share of the labor force (the people who have a job or are looking for one) who
+have no job but are looking for one. The data are monthly and seasonally adjusted.
+
+> **Python note.** `unemployment.date.between(a, b)` is true for the dates from `a` to `b`, so the first cell shows
+> the months from August to December 2025.
+
 ```{python}
 unemployment = pd.read_csv(DATA_URL + "fig10-9.csv", parse_dates=["date"])
 unemp = unemployment.set_index("date").unemp_rate
@@ -1025,18 +1054,10 @@ unemployment[unemployment.date.between("2025-08-01", "2025-12-01")]
 **Data hygiene.** October 2025 is missing: the Bureau of Labor Statistics could not run its household survey
 during the federal government shutdown. The chart simply joins September and November.
 
-To measure the rise in unemployment we need the opposite of `peak_to_trough`: the highest unemployment rate in a
-window and the lowest rate *before* it.
+To measure the rise in unemployment we use `low_to_high` from "The model in code", the opposite of
+`peak_to_trough`: the highest unemployment rate in a window and the lowest rate *before* it.
 
 ```{python}
-def low_to_high(series, start, end):
-    """The highest point between start and end, the lowest point before it, and the rise in points."""
-    window = series[start:end]
-    high = window.idxmax()
-    low = window[:high].idxmin()
-    return low, high, window[high] - window[low]
-
-
 RISES = {"2001 recession": ("2000-01-01", "2003-12-01"),
          "Great Recession": ("2007-01-01", "2010-12-01"),
          "Covid-19 recession": ("2019-01-01", "2020-12-01")}
@@ -1178,6 +1199,8 @@ shutdown), and the U.K. figure for September 2026 was not yet published.
 
 > **Python note.** If $L = 100 \ln(P_t/P_{t-12})$, then $P_t/P_{t-12} = e^{L/100}$, and the percent change is
 > $100\,(e^{L/100} - 1)$. `np.exp` is the exponential function $e^x$, and it works on a whole column at once.
+> In the chart function, `data.date.dt.year == 2022` is true for the months of 2022, so `data[...].max()` gives the
+> highest value of each column in 2022.
 
 ```{python}
 def percent_from_log(log_change):

@@ -422,7 +422,7 @@ def high_inflation_share(threshold=25):
                   labels={"year": "Year", "share": "Fraction of countries (percent)"},
                   title=f"Inflation above {threshold}%: the share of countries peaked at {peak.share:.1f}% in {peak.year:.0f}")
     fig.update_traces(line=dict(color=TEAL, width=2))
-    fig.update_yaxes(range=[0, 90])
+    fig.update_yaxes(range=[0, 90], tickvals=[20, 40, 60, 80])         # no label in the bottom-left corner
     return fig
 ```
 
@@ -558,8 +558,7 @@ def money_and_prices(years=10):
     labels = table.period.where(table.period.isin(KEY_DECADES) | (years == 20), "")   # hover shows the rest
     fig = px.scatter(table, x="money_growth", y="inflation", symbol="kind", text=labels, hover_name="period",
                      symbol_map={"full period": "circle", "unfinished period": "circle-open"},
-                     labels={"money_growth": "Money growth (percent per year)", "inflation": "Inflation rate (percent per year)",
-                             "kind": ""},
+                     labels={"money_growth": "Money growth (percent per year)", "inflation": "Inflation rate (percent per year)"},
                      title=f"{years}-year periods: correlation {r:.2f}, average gap g_M − π = {gap:.1f} points")
     fig.update_traces(marker=dict(color=TEAL, size=11), textposition="top center", textfont=dict(color=BLUE, size=11))
     g_M = np.array([-3, 18])
@@ -570,7 +569,7 @@ def money_and_prices(years=10):
     fig.add_hline(y=0, line_dash="dash", line_color=GRAY, line_width=1)
     fig.update_xaxes(range=[-3, 18])
     fig.update_yaxes(range=[-5, 17])
-    fig.update_layout(legend=dict(orientation="h", y=-0.15, yanchor="top"))
+    fig.update_layout(legend=dict(orientation="h", y=-0.15, yanchor="top"), legend_title_text="")
     return fig
 ```
 
@@ -583,7 +582,10 @@ interact(money_and_prices,
 ```{python}
 #| kind: website
 # @title Website version: Figure 3 with a precomputed slider for the length of the periods
-slider_figure(money_and_prices, "years", [5, 10, 20], start=10, label="years per period")
+fig = slider_figure(money_and_prices, "years", [5, 10, 20], start=10, label="years per period")
+fig.update_layout(height=600)                   # room for the legend below the plot ...
+fig.layout.sliders[0].pad.t = 140               # ... and for the slider below the legend
+fig
 ```
 
 **What to notice.**
@@ -643,7 +645,7 @@ fig = px.line(yearly.reset_index(), x="year", y="velocity", hover_name="year",
               labels={"year": "Year", "velocity": "Velocity of M2 (nominal GDP / M2)"},
               title="M2 velocity stayed near 1.8 until about 1990, then rose and fell")
 fig.update_traces(line=dict(color=BLUE, width=3))
-fig.update_yaxes(range=[0, 2.5])
+fig.update_yaxes(range=[0, 2.5], tickvals=[0.5, 1, 1.5, 2, 2.5])   # no label in the bottom-left corner
 fig.show()
 print(yearly.velocity.loc[[1960, 1970, 1980, 1990, 1997, 2007, 2021, 2025]].round(2).to_dict())
 ```
@@ -829,13 +831,13 @@ named = rates.rename(columns={"nominal_tbill_3m": "Nominal rate, i", "real_rate"
 negative = (rates.real_rate < 0).sum()
 fig = px.line(named, x="year", y=["Nominal rate, i", "Real rate, R = i − π", "Inflation, π"], hover_name="year",
               color_discrete_sequence=[BLUE, GREEN, ORANGE],
-              labels={"year": "Year", "value": "Percent", "variable": ""},
+              labels={"year": "Year", "value": "Percent"},
               title=f"The real rate is the nominal rate minus inflation: negative in {negative} of {len(rates)} years")
 fig.update_traces(line=dict(width=3))
 fig.update_traces(selector=dict(name="Inflation, π"), visible="legendonly", line=dict(dash="dot"))
 fig.add_hline(y=0, line_dash="dash", line_color=GRAY)
 fig.update_yaxes(range=[-10, 16], tickvals=[-5, 0, 5, 10, 15])   # no label in the bottom-left corner
-fig.update_layout(hovermode="x unified", legend=dict(orientation="h", y=-0.15, yanchor="top"))
+fig.update_layout(hovermode="x unified", legend=dict(orientation="h", y=-0.15, yanchor="top"), legend_title_text="")
 fig.show()
 ```
 
@@ -903,6 +905,7 @@ at once, but it cannot show zero or negative rates: Argentina's deflation of 200
 
 ```{python}
 RATE_TICKS = [0.3, 1, 3, 10, 30, 100, 300, 1000, 3000]   # no label in the bottom-left corner
+LINEAR_TICKS = [500, 1000, 1500, 2000, 2500, 3000]       # no label in the bottom-left corner either
 
 
 def hyperinflations(scale="linear"):
@@ -918,7 +921,7 @@ def hyperinflations(scale="linear"):
     if scale == "ratio":
         fig.update_yaxes(tickvals=RATE_TICKS, range=[np.log10(0.1), np.log10(5000)])
     else:
-        fig.update_yaxes(range=[-100, 3500])
+        fig.update_yaxes(tickvals=LINEAR_TICKS, range=[-100, 3500])
     fig.update_layout(hovermode="x unified")
     return fig
 ```
@@ -934,7 +937,7 @@ interact(hyperinflations, scale=ToggleButtons(options=["linear", "ratio"], descr
 fig = hyperinflations()
 fig.update_layout(updatemenus=[dict(type="buttons", direction="right", x=0.01, y=0.98, xanchor="left", yanchor="top", buttons=[
     dict(label="linear scale", method="relayout", args=[{"yaxis.type": "linear", "yaxis.range": [-100, 3500],
-                                                         "yaxis.tickvals": None}]),
+                                                         "yaxis.tickvals": LINEAR_TICKS}]),
     dict(label="ratio scale", method="relayout", args=[{"yaxis.type": "log",
                                                         "yaxis.range": [np.log10(0.1), np.log10(5000)],
                                                         "yaxis.tickvals": RATE_TICKS}])])])
@@ -984,8 +987,8 @@ print(f"Largest: {yearly.new_currency.max():.2f}% of GDP in {yearly.new_currency
 ```
 
 Even in the Great Inflation, new currency brought in about 0.4 percent of GDP, and the largest value since 1960 is
-under 1 percent of GDP, in 2020. The textbook reports that countries with high inflation often raise about 5 percent
-of GDP this way, and Argentina more than 10 percent in the late 1970s and early 1980s. That is why Thomas Sargent
+under 1 percent of GDP, in 2020. The textbook reports that countries with high inflation typically raise about 5 percent
+of GDP or less this way, and Argentina more than 10 percent in the late 1970s and early 1980s. That is why Thomas Sargent
 calls persistent high inflation "a fiscal phenomenon".
 
 **Your turn.** A government spends 30 percent of GDP and collects 22 percent in taxes. How much must it borrow to
