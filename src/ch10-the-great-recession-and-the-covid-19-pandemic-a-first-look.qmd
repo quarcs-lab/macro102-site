@@ -1,0 +1,1414 @@
+# Chapter 10: The Great Recession and the Covid-19 Pandemic: A First Look
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/ch10-the-great-recession-and-the-covid-19-pandemic-a-first-look.ipynb)
+
+*Data Science and Macroeconomic Models: A Python Companion to Intermediate Macroeconomics* · Carlos Mendez
+
+> **How to use this notebook.** Every figure in this chapter is drawn from data. Hover over a line to
+> read its values, and click a name in a legend to hide or show that series. In Colab, click
+> *Runtime → Run all*: some figures then get a menu or buttons, and the figure is drawn again when you
+> change them. On the book website the same figures come with a precomputed slider or a few buttons.
+> Each section ends with a short **Your turn** task, and you can try it in the empty code cell below it.
+
+<!-- cell -->
+
+## Learning goals
+
+Two shocks hit the world economy in less than 15 years: the global financial crisis of 2008–09 and the
+Covid-19 pandemic of 2020. This chapter looks at both in the data. By the end of it you will be able to:
+
+- tell the story of the financial crisis with data: the housing bubble, the Fed's interest rate, the
+  spreads between interest rates and the fall of the stock market;
+- compare the Covid-19 recession across countries, in lives lost and in GDP lost;
+- measure how deep the two recessions were (employment, short-run output, unemployment, Table 10.1)
+  and describe the inflation that followed the pandemic;
+- use a **balance sheet** to compute net worth and **leverage**, and explain why leverage turns small falls
+  in asset prices into bankruptcies;
+- in Python: find peaks and troughs with `idxmax` and `idxmin`, shade recessions with one small function,
+  reshape a table with `melt`, compare two vintages of the same data, and turn log changes into percent changes.
+
+<!-- cell -->
+
+## Figures in this chapter
+
+The figures follow the order of the textbook chapter. The second column shows which textbook
+figure each notebook figure replicates.
+
+| Figure | Textbook figure | Type | What you can change |
+|---|---|---|---|
+| Figure 1 | 10.1 A bursting bubble in U.S. housing prices? | data | the boom and bust that is measured (menu) |
+| Figure 2 | 10.2 The Fed funds rate | data | the period shown: four episodes of Fed policy (menu) |
+| Figure 3 | 10.3 Liquidity and risk shocks from interest rate spreads | data | — (click a spread in the legend to hide it) |
+| Figure 4 | 10.4 The S&P 500 stock price index (real) | data | the stock market crash that is measured (menu) |
+| Figure 5 | 10.5 International Covid-19 deaths and lost GDP | data | the date of the death count: March 2023 or August 2026 (buttons) |
+| Figure 6 | 10.6 GDP in select OECD countries | data | — (click a country in the legend; double-click to show it alone) |
+| Figure 7 | 10.7 Nonfarm employment in the U.S. economy | data | — (drag the range slider under the chart to zoom) |
+| Figure 8 | 10.8 U.S. short-run output, Ỹ | data | — (click a data vintage in the legend to hide it) |
+| Figure 9 | 10.9 The U.S. unemployment rate | data | the recession that is measured (menu); Table 10.1 recomputed |
+| Figure 10 | 10.10 Consumer price index inflation in the U.S., U.K., and euro area | data | log change or percent change (buttons) |
+| Figure 11 | 10.11 Core inflation in the U.S., U.K., and euro area | data | all three countries, or headline and core inflation of one (menu) |
+
+<!-- cell -->
+
+## Setup
+
+We first load the Python libraries we need. You only have to run this cell once.
+
+> **Python note.** `import` loads a *library*, a toolbox written by other people. We give each
+> library a short nickname, for example `np` for NumPy, so that the code stays short. Text after
+> a `#` is a *comment*: Python ignores it, and it is there for human readers. The `try ... except`
+> block runs one Colab-only line and simply skips it anywhere else.
+
+```{python}
+# Libraries used in this chapter
+import numpy as np                    # numbers and arrays
+import pandas as pd                   # data tables
+import plotly.express as px           # quick charts from data tables
+import plotly.graph_objects as go     # charts built piece by piece
+import plotly.io as pio
+from ipywidgets import interact, Dropdown, ToggleButtons
+
+# One light blue/green look for every chart
+BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
+ORANGE = "#e0a33b"                              # an extra color for the six-country comparison
+pio.templates.default = "plotly_white"
+pio.templates["plotly_white"].layout.update(width=860, height=480)   # same size in Colab and on the website
+px.defaults.color_discrete_sequence = [BLUE, TEAL, GREEN, "#5aa0d8", "#0b4f47"]
+WIDE = {"description_width": "initial"}         # show the full widget labels
+
+# Colab only: let Plotly charts appear inside the interactive widgets
+try:
+    import google.colab
+    google.colab.output.enable_custom_widget_manager()
+except ImportError:
+    pass                                        # not running in Colab: nothing to do
+
+# The data files of this chapter live in the book's GitHub repository
+DATA_URL = "https://raw.githubusercontent.com/quarcs-lab/macro102-site/main/data/ch10/"
+```
+
+The next cell defines a helper that only the book website needs. Run it and move on.
+
+```{python}
+#| kind: helper
+# @title Helper for the website versions (run this cell; you do not need to read it)
+def slider_figure(make_figure, name, values, start, label=None):
+    """Precompute make_figure(name=value) for every value and join the results with one slider.
+
+    The website cannot run Python, so each interactive figure also gets this precomputed version.
+    """
+    figures = [make_figure(**{name: v}) for v in values]
+    first = values.index(start)
+    fig = go.Figure(layout=figures[first].layout)
+    owner = []                                  # which precomputed figure each trace comes from
+    for i, f in enumerate(figures):
+        for trace in f.data:
+            trace.visible = (i == first)
+            fig.add_trace(trace)
+            owner.append(i)
+    steps = []
+    for i, f in enumerate(figures):
+        layout = {"title": f.layout.title.to_plotly_json(),
+                  "annotations": [a.to_plotly_json() for a in f.layout.annotations],
+                  "shapes": [s.to_plotly_json() for s in f.layout.shapes]}
+        visible = [o == i for o in owner]
+        steps.append(dict(method="update", label=str(values[i]), args=[{"visible": visible}, layout]))
+    fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
+                                    currentvalue=dict(prefix=(label or name) + " = "))])
+    return fig
+```
+
+## The model in code
+
+This chapter has no new economic model. It describes two recessions with data, and it adds a few tools
+from **financial economics** that later chapters use. We put the tools here once and reuse them.
+
+**Measuring a crash.** Most figures ask the same question: how far did a series fall from its peak to its
+trough? The answer is a **percent change**,
+
+$$\%\Delta = 100 \times \left(\frac{X_{\text{trough}}}{X_{\text{peak}}} - 1\right).$$
+
+> **Python note.** `def` creates a *function*: a named recipe that takes inputs (the *arguments*) and
+> gives back a result with `return`. The text in triple quotes is a short description. For a pandas
+> *Series* with dates as row labels, `series[start:end]` keeps the rows between two dates,
+> `.idxmax()` gives the **date** of the largest value and `.idxmin()` the date of the smallest. A function
+> can `return` several results at once, separated by commas.
+
+```{python}
+def percent_change(new, old):
+    """Percent change from old to new: 100 (new / old - 1)."""
+    return 100 * (new / old - 1)
+
+
+def peak_to_trough(series, start, end):
+    """The highest point between start and end, the lowest point after it, and the fall in percent."""
+    window = series[start:end]
+    peak = window.idxmax()                      # date of the highest value
+    trough = window[peak:].idxmin()             # date of the lowest value after the peak
+    return peak, trough, percent_change(window[trough], window[peak])
+```
+
+**Recessions.** Five figures shade the U.S. recessions, as dated by the National Bureau of Economic Research
+(NBER). The file `recessions.csv` lists, for each recession since 1953, the **peak** (the last month before
+the recession) and the **trough** (its last month), and the same dates in quarters. One small function adds
+the shaded bands to any figure.
+
+> **Python note.** `parse_dates=[...]` turns text such as `"2007-12-01"` into real dates. A `for` loop
+> repeats the indented lines once for each recession: `zip(recessions.peak, recessions.trough)` hands over one
+> (peak, trough) pair at a time. The `if` skips recessions that ended before the chart starts, and
+> `fig.add_vrect` shades the band between two dates.
+
+```{python}
+recessions = pd.read_csv(DATA_URL + "recessions.csv",
+                         parse_dates=["peak", "trough", "peak_quarter", "trough_quarter"])
+
+
+def shade_recessions(fig, start="2000-01-01"):
+    """Shade every NBER recession that ends after `start` (Figures 2, 3, 7, 8 and 9)."""
+    for peak, trough in zip(recessions.peak, recessions.trough):
+        if trough >= pd.Timestamp(start):
+            fig.add_vrect(x0=peak, x1=trough, fillcolor=BLUE, opacity=0.15, line_width=0)
+    return fig
+
+
+recessions.tail(3)
+```
+
+The Great Recession runs from the peak in December 2007 to the trough in June 2009, and the Covid-19
+recession from February to April 2020, only two months.
+
+<!-- cell -->
+
+### Balance sheets and leverage (Table 10.3)
+
+A **balance sheet** lists what an institution owns, its **assets**, and what it owes, its **liabilities**.
+The difference is its **equity**, or **net worth**: the value that belongs to its owners. **Leverage** is the
+ratio of liabilities to net worth:
+
+$$\text{net worth} = \text{assets} - \text{liabilities}, \qquad \text{leverage} = \frac{\text{liabilities}}{\text{net worth}}.$$
+
+The textbook's hypothetical bank (Table 10.3, billions of dollars) is a small table.
+
+> **Python note.** `pd.Series({...})` builds a list of numbers with labels from a *dictionary*, a set of
+> `key: value` pairs in curly braces. `.sum()` adds up all the values.
+
+```{python}
+def net_worth(assets, liabilities):
+    """Equity (net worth) = total assets - total liabilities (Table 10.3)."""
+    return assets - liabilities
+
+
+def leverage(liabilities, equity):
+    """Leverage ratio = total liabilities / net worth."""
+    return liabilities / equity
+
+
+assets = pd.Series({"Loans": 1000, "Investments": 900, "Cash and reserves": 100})
+liabilities = pd.Series({"Deposits": 1000, "Short-term debt": 400, "Long-term debt": 400})
+equity = net_worth(assets.sum(), liabilities.sum())
+print(f"Total assets {assets.sum():,}, total liabilities {liabilities.sum():,}, net worth {equity:,}")
+print(f"Leverage = {liabilities.sum():,} / {equity} = {leverage(liabilities.sum(), equity):.0f}")
+print(f"Capital ratio = {100 * equity / assets.sum():.0f}% of assets; reserves = "
+      f"{100 * assets['Cash and reserves'] / liabilities['Deposits']:.0f}% of deposits")
+```
+
+With a leverage of 9, each 10 dollars of assets is financed by 9 dollars of debt and only 1 dollar of the
+owners' money. Now let the investments gain or lose value. The liabilities do not change, so all of the gain
+or loss lands on net worth:
+
+```{python}
+for new_investments in [1000, 600]:
+    new_equity = net_worth(assets.sum() - assets["Investments"] + new_investments, liabilities.sum())
+    print(f"Investments {assets['Investments']} -> {new_investments}: return "
+          f"{percent_change(new_investments, assets['Investments']):+.1f}%, net worth {equity} -> {new_equity}, "
+          f"return to the owners {percent_change(new_equity, equity):+.1f}%")
+```
+
+A gain of 11 percent on the investments is a gain of 50 percent for the owners. A loss of a third of the
+investments, only 15 percent of all assets, turns net worth negative: the bank is **insolvent**. The same
+arithmetic works for a house bought for 500,000 dollars with 20 percent down:
+
+```{python}
+house, mortgage = 500_000, 400_000
+for price_change in [10, -10, -20]:
+    new_equity = net_worth(house * (1 + price_change / 100), mortgage)
+    print(f"House price {price_change:+d}%: equity {house - mortgage:,} -> {new_equity:,.0f} "
+          f"({percent_change(new_equity, house - mortgage):+.0f}%)")
+```
+
+**How small a fall wipes out the owners?** Net worth is the share $1/(1+\text{leverage})$ of assets, so a fall in
+asset values of that size leaves nothing. Bear Stearns had a leverage of about 35 when it collapsed in 2008:
+
+```{python}
+for L in [9, 35]:
+    print(f"Leverage {L}: assets need to fall by only {100 / (1 + L):.1f}% to wipe out net worth")
+```
+
+With a leverage of 35, a fall of less than 3 percent in the value of its assets was enough. The rest of
+the chapter shows how far house and stock prices actually fell.
+
+<!-- cell -->
+
+## Figure 1: A bursting bubble in U.S. housing prices?
+
+**Goal.** Measure the boom and bust in U.S. house prices that started the financial crisis.
+
+Robert Shiller's index measures the price of a typical U.S. house, divided by the consumer price index so that
+it is in **real** terms, with 1953 = 100. We read it with dates as row labels, as a Series called `house`.
+
+> **Python note.** `set_index("date")` makes the dates the row labels, and `.real_home_price_index` then picks
+> one column as a Series. `.tail()` shows the last five rows.
+
+```{python}
+housing = pd.read_csv(DATA_URL + "fig10-1.csv", parse_dates=["date"])
+house = housing.set_index("date").real_home_price_index
+housing.tail()
+```
+
+The index has one value per month from January 1953 to July 2026. Each boom and bust gets a search window,
+and `peak_to_trough` finds the peak and trough inside it.
+
+> **Python note.** `BUSTS` is a dictionary: each name (the key) gives a pair of dates (the value), and
+> `BUSTS[bust]` looks one up. `start, end = ...` unpacks the pair into two variables. In an f-string,
+> `{peak:%b %Y}` prints a date as "Dec 2005". On a ratio (log) axis, Plotly wants the vertical position of a
+> label as a power of ten, so we pass `np.log10(...)`.
+
+```{python}
+BUSTS = {"1970s boom and bust": ("1977-01-01", "1985-12-01"),
+         "1980s boom and bust": ("1986-01-01", "1997-12-01"),
+         "2000s boom and bust": ("2000-01-01", "2015-12-01"),
+         "2020s so far": ("2021-01-01", "2026-07-01")}
+
+
+def housing_chart(bust="2000s boom and bust"):
+    """Figure 10.1: the real home price index (ratio scale), with one boom and bust shaded."""
+    start, end = BUSTS[bust]
+    peak, trough, change = peak_to_trough(house, start, end)
+    fig = px.line(housing, x="date", y="real_home_price_index", log_y=True,
+                  labels={"date": "Year", "real_home_price_index": "Real home prices (1953 = 100)"},
+                  title=f"{bust}: real home prices fell {-change:.1f}% from {peak:%b %Y} to {trough:%b %Y}")
+    fig.update_traces(line=dict(color=BLUE, width=3))
+    fig.add_vrect(x0=peak, x1=trough, fillcolor=GRAY, opacity=0.3, line_width=0)
+    fig.add_trace(go.Scatter(x=[peak, trough], y=[house[peak], house[trough]], mode="markers",
+                             marker=dict(color="black", size=11), showlegend=False, name="Peak and trough"))
+    fig.add_annotation(x=peak, y=np.log10(house[peak]), text=f"Decline of {-change:.1f}%<br>peak to trough",
+                       showarrow=False, xanchor="right", xshift=-6, yshift=24, font=dict(size=13))
+    fig.update_xaxes(range=["1952-01-01", "2027-06-01"])
+    fig.update_yaxes(tickvals=[100, 120, 140, 160, 180, 200], range=[np.log10(84), np.log10(250)])
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(housing_chart, bust=Dropdown(options=list(BUSTS), value="2000s boom and bust",
+                                      description="boom and bust", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 1 with a precomputed slider for the boom and bust
+slider_figure(housing_chart, "bust", ["1970s boom and bust", "1980s boom and bust", "2000s boom and bust",
+                                      "2020s so far"], start="2000s boom and bust", label="episode")
+```
+
+**What to notice.**
+
+- Real house prices hardly changed for 45 years: the index was still near 100 in the late 1990s. Then it rose
+  steeply to a peak of 171 in December 2005 and fell by 35.7 percent to February 2012.
+- Choose the 1970s and 1980s episodes: those busts were 12.2 and 14.4 percent, less than half of the
+  2006–2012 bust. That is why the textbook calls the decline after 2006 "by far the largest" since 1953.
+- On a ratio scale, equal distances are equal percentage changes, so the busts of different decades can be
+  compared by eye. Since 2022 the index has stayed close to its new record (choose "2020s so far").
+
+<!-- cell -->
+
+### Key numbers: the bubble in numbers
+
+The textbook gives three numbers: a decline of 36 percent from the middle of 2006 to the first quarter of
+2012, a next-largest decline of 14 percent, and a rise "by a factor of nearly 3 between 1996 and 2006".
+`house.cummax()` is the highest value reached so far, so `house / house.cummax() - 1` is the fall from the
+latest record, called the **drawdown**.
+
+```{python}
+drawdown = 100 * (house / house.cummax() - 1)
+print(f"Largest drawdown since 1953: {drawdown.min():.1f}% in {drawdown.idxmin():%b %Y}")
+mid_2006, early_2012 = house["2006-04-01":"2006-06-01"].mean(), house["2012-01-01":"2012-03-01"].mean()
+print(f"2006Q2 to 2012Q1 (quarterly averages): {percent_change(early_2012, mid_2006):.1f}%")
+factor = house["2006"].mean() / house["1996"].mean()
+print(f"1996 to 2006 (annual averages): prices x {factor:.2f}, or {100 * (factor ** (1 / 10) - 1):.1f}% a year")
+```
+
+The first two numbers match the textbook. The third does not: in this real index, prices rose by a factor of
+1.72 between 1996 and 2006, or 5.6 percent a year, not "nearly 3" and "about 10 percent per year". The
+textbook's prose probably uses another index (for example nominal prices, or a 20-city index with the booming
+coastal markets). **Always check which series a number comes from.**
+
+**Your turn.** How many months did it take, after the trough of February 2012, for real house prices to climb
+back above their December 2005 peak?
+
+<details><summary>Hint</summary>
+
+Keep the months after the trough that are above the peak: `house["2012-02-01":][house["2012-02-01":] > house["2005-12-01"]]`.
+The first date of the result (`.index[0]`) is the answer.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 2: The Fed funds rate
+
+**Goal.** Follow the Federal Reserve's main interest rate through the boom, the crisis and the pandemic.
+
+The **Fed funds rate** is the interest rate banks charge one another for overnight loans. The Federal Reserve
+sets a target for it, and the data show the **effective** rate, the monthly average of what banks actually paid.
+
+```{python}
+fed = pd.read_csv(DATA_URL + "fig10-2.csv", parse_dates=["date"])
+fed_rate = fed.set_index("date").fed_funds
+fed.head()
+```
+
+Four periods tell the story. The menu zooms in on one of them, and the title reports the lowest and highest
+rate in that window.
+
+> **Python note.** `px.area` draws a line with the area below it filled in. `fig.update_xaxes(range=[a, b])`
+> sets the dates shown. `shade_recessions(fig)` is our function from "The model in code".
+
+```{python}
+PERIODS = {"2000–2026": ("2000-01-01", "2026-09-01"),
+           "2004–06 hikes": ("2003-06-01", "2007-06-01"),
+           "2007–08 cuts": ("2007-06-01", "2009-06-01"),
+           "2022–23 hikes": ("2021-06-01", "2024-06-01")}
+
+
+def fed_chart(period="2000–2026"):
+    """Figure 10.2: the effective Fed funds rate, with recessions shaded, over one period."""
+    start, end = PERIODS[period]
+    window = fed_rate[start:end]
+    low, high = window.idxmin(), window.idxmax()
+    fig = px.area(fed, x="date", y="fed_funds", labels={"date": "Year", "fed_funds": "Percent"},
+                  title=f"{period}: lowest {window[low]:.2f}% ({low:%b %Y}), highest {window[high]:.2f}% ({high:%b %Y})")
+    fig.update_traces(line=dict(color=BLUE, width=3), fillcolor="rgba(138, 150, 163, 0.3)")
+    shade_recessions(fig)
+    fig.update_xaxes(range=[pd.Timestamp(start) - pd.DateOffset(months=6), pd.Timestamp(end) + pd.DateOffset(months=3)])
+    fig.update_yaxes(range=[0, 8], tickvals=[0, 1, 2, 3, 4, 5, 6, 7])
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(fed_chart, period=Dropdown(options=list(PERIODS), value="2000–2026", description="period", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 2 with buttons for the four periods
+fig = fed_chart()
+buttons = []
+for name in PERIODS:
+    zoomed = fed_chart(name)
+    buttons.append(dict(label=name, method="relayout",
+                        args=[{"xaxis.range": list(zoomed.layout.xaxis.range), "title.text": zoomed.layout.title.text}]))
+fig.update_layout(updatemenus=[dict(type="buttons", direction="right", x=0.99, y=0.98, xanchor="right",
+                                    yanchor="top", buttons=buttons)])
+fig
+```
+
+**What to notice.**
+
+- After the 2001 recession, the Fed kept the rate at about 1 percent until mid-2004, then raised it step by step
+  to above 5 percent by mid-2006. Higher rates made mortgages more expensive just as house prices peaked.
+- From August 2007 the Fed cut, and by December 2008 the rate was close to zero. It stayed there for seven
+  years: zero is a floor for interest rates, the *zero lower bound* of Chapters 11 and 14.
+- In 2020 the rate went back to zero. In 2022 the Fed raised it again, quickly, to fight inflation
+  (Figure 10), to 5.33 percent by August 2023.
+
+<!-- cell -->
+
+### Key numbers: target rates and effective rates
+
+The textbook says that between May 2004 and May 2006 the Fed raised its rate "from 1.25 percent to 5.25 percent".
+
+```{python}
+for month in ["2004-05-01", "2004-07-01", "2006-05-01", "2006-07-01"]:
+    print(f"{pd.Timestamp(month):%b %Y}: {fed_rate[month]:.2f}%")
+print(f"Highest rate from Jan 2009 to Nov 2015: {fed_rate['2009-01-01':'2015-11-01'].max():.2f}%")
+print(f"Dec 2015: {fed_rate['2015-12-01']:.2f}%   Latest ({fed_rate.index[-1]:%b %Y}): {fed_rate.iloc[-1]:.2f}%")
+```
+
+The textbook's numbers are the Fed's **targets**. The effective rate follows the target with a short delay:
+1.00 percent in May 2004 and 4.94 percent in May 2006, and 1.26 and 5.24 percent two months later. From
+January 2009 to November 2015 the rate never rose above 0.22 percent, and it first moved up in December 2015.
+
+**Your turn.** By how many percentage points did the Fed raise the rate from March 2022 to August 2023, and
+by how many from May 2004 to July 2006? Which tightening was larger, and which was faster?
+
+<details><summary>Hint</summary>
+
+Subtract two values of `fed_rate`, for example `fed_rate["2023-08-01"] - fed_rate["2022-03-01"]`. Then count
+the months between the two dates.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 3: Liquidity and risk shocks from interest rate spreads
+
+**Goal.** See the financial crisis in the price banks paid to borrow from one another.
+
+The **TED spread** is the 3-month LIBOR rate (what banks charged one another) minus the 3-month Treasury bill
+rate (what the U.S. government pays). Lending to the government is safe, so the spread is a **risk premium**:
+it rises when banks fear that other banks might not repay. LIBOR was discontinued in 2022, so the data file
+adds a second, similar spread that continues: AA-rated financial commercial paper minus the Treasury bill.
+
+```{python}
+spreads = pd.read_csv(DATA_URL + "fig10-3.csv", parse_dates=["date"])
+spread = spreads.set_index("date")
+spreads[spreads.isna().any(axis=1)].head(3)
+```
+
+`NaN` ("not a number") marks a missing value. The TED spread stops in January 2022, and the commercial-paper
+spread has one gap, April 2020, when the Federal Reserve published no commercial-paper rate. Plotly simply
+leaves a small gap in the line.
+
+> **Python note.** `rename(columns={...})` gives the columns readable names, which then appear in the legend.
+> `px.line` with a list `y=[...]` draws one line per column. `fig.add_annotation` writes a label with an arrow
+> that points at a data point; `ax` and `ay` set where the label sits, in pixels from that point.
+
+```{python}
+named = spreads.rename(columns={"ted_spread": "TED spread: LIBOR minus T-bill",
+                                "cp_tbill_spread": "Commercial paper minus T-bill"})
+peak_date = spread.ted_spread.idxmax()
+fig = px.line(named, x="date", y=["TED spread: LIBOR minus T-bill", "Commercial paper minus T-bill"],
+              color_discrete_sequence=[BLUE, TEAL],
+              labels={"date": "Year", "value": "Percentage points", "variable": "Spread"},
+              title=f"Banks stopped trusting each other: the TED spread reached {spread.ted_spread.max():.2f} points")
+fig.update_traces(selector=dict(name="TED spread: LIBOR minus T-bill"), line_width=3)
+fig.update_traces(selector=dict(name="Commercial paper minus T-bill"), line_width=1.5)
+fig.add_annotation(x=peak_date, y=spread.ted_spread.max(), text=f"Lehman Brothers fails:<br>{peak_date:%B %Y}",
+                   showarrow=True, arrowhead=2, ax=90, ay=10, font=dict(size=13))
+shade_recessions(fig)
+fig.update_xaxes(range=["1999-07-01", "2026-12-01"])
+fig.update_yaxes(range=[0, 3.6], tickvals=[0.5, 1, 1.5, 2, 2.5, 3, 3.5])
+fig.update_layout(legend=dict(x=0.99, y=0.99, xanchor="right", yanchor="top", bgcolor="rgba(255,255,255,0.8)"))
+fig.show()
+```
+
+**What to notice.**
+
+- Before the crisis the spread was small and calm. It jumped in August 2007, when banks first doubted one
+  another, and exploded in the autumn of 2008, after Lehman Brothers failed in September.
+- The two spreads move closely together, so the commercial-paper spread is a good stand-in after 2022. Click a
+  spread in the legend to hide it.
+- Covid-19 also caused a spike in March 2020, but a short one: the Federal Reserve quickly lent to the markets.
+  Since 2022 there has been no stress episode like 2007–08.
+
+<!-- cell -->
+
+### Key numbers: three phases of the crisis
+
+```{python}
+ted = spread.ted_spread
+calm, stress = ted["2002-01-01":"2007-07-01"], ted["2007-08-01":"2008-08-01"]
+print(f"Jan 2002 - Jul 2007: average {calm.mean():.2f}, range {calm.min():.2f} to {calm.max():.2f} points")
+print(f"Aug 2007 - Aug 2008: average {stress.mean():.2f}, range {stress.min():.2f} to {stress.max():.2f} points")
+print(f"Peak: {ted.max():.2f} points in {ted.idxmax():%b %Y}")
+print(f"Correlation of the two spreads, 2000-2022: {spread.ted_spread.corr(spread.cp_tbill_spread):.2f}")
+recent = spread.cp_tbill_spread["2022-02-01":]
+print(f"Commercial-paper spread since Feb 2022: highest {recent.max():.2f} points ({recent.idxmax():%b %Y})")
+```
+
+The textbook's "modest premium of 0.2 to 0.4 percentage points" is the calm phase, on average 0.33 points.
+From August 2007 the spread averaged 1.31 points, close to the textbook's "between 1.0 and 1.5". The textbook's
+"more than 4.5 percentage points" refers to single days in October 2008: monthly averages, as in our file,
+smooth the spike to 3.35 points.
+
+**Your turn.** Compare the two spreads in March 2020. Which one rose more, and how does the March 2020 spike
+compare with October 2008?
+
+<details><summary>Hint</summary>
+
+`spread.loc["2020-03-01"]` gives both spreads in March 2020, and `spread.loc["2008-10-01"]` both in October 2008.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 4: The S&P 500 stock price index (real)
+
+**Goal.** Measure how far the stock market fell in the financial crisis, and compare it with other crashes.
+
+The S&P 500 is an index of the stock prices of 500 large U.S. companies. Divided by the consumer price index, it
+is in **real** terms. Our file uses September 2026 dollars, so its levels are about 11 percent higher than the
+textbook's, which uses 2023 dollars. Percent changes are the same.
+
+```{python}
+stocks = pd.read_csv(DATA_URL + "fig10-4.csv", parse_dates=["date"])
+sp500 = stocks.set_index("date").sp500_real
+stocks.tail(3)
+```
+
+```{python}
+CRASHES = {"Dot-com bust, 2000–03": ("1999-01-01", "2003-12-01"),
+           "Financial crisis, 2007–09": ("2007-01-01", "2009-12-01"),
+           "Covid-19, 2020": ("2020-01-01", "2020-12-01"),
+           "Rate hikes, 2022": ("2021-06-01", "2022-12-01")}
+
+
+def stock_chart(crash="Financial crisis, 2007–09"):
+    """Figure 10.4: the real S&P 500 (ratio scale), with one crash shaded and measured."""
+    start, end = CRASHES[crash]
+    peak, trough, change = peak_to_trough(sp500, start, end)
+    fig = px.area(stocks, x="date", y="sp500_real", log_y=True,
+                  labels={"date": "Year", "sp500_real": "Real stock price index (ratio scale)"},
+                  title=f"{crash}: real stock prices fell {-change:.1f}% from {peak:%b %Y} to {trough:%b %Y}")
+    fig.update_traces(line=dict(color=BLUE, width=3), fillcolor="rgba(138, 150, 163, 0.3)")
+    fig.add_vrect(x0=peak, x1=trough, fillcolor=BLUE, opacity=0.15, line_width=0)
+    fig.add_trace(go.Scatter(x=[peak, trough], y=[sp500[peak], sp500[trough]], mode="markers",
+                             marker=dict(color="black", size=10), showlegend=False, name="Peak and trough"))
+    fig.update_xaxes(range=["1989-07-01", "2027-06-01"])
+    fig.update_yaxes(tickvals=[640, 1280, 2560, 5120, 10240], range=[np.log10(700), np.log10(9500)])
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(stock_chart, crash=Dropdown(options=list(CRASHES), value="Financial crisis, 2007–09",
+                                     description="crash", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 4 with a precomputed slider for the crash
+slider_figure(stock_chart, "crash", ["Dot-com bust, 2000–03", "Financial crisis, 2007–09", "Covid-19, 2020",
+                                     "Rate hikes, 2022"], start="Financial crisis, 2007–09", label="crash")
+```
+
+**What to notice.**
+
+- Each tick on the vertical axis doubles the one below it. From its 2007 peak to March 2009, the real index lost
+  about half of its value.
+- The dot-com bust of 2000–03 was almost as deep, but it did not cause a financial crisis: its losses were
+  spread over millions of shareholders, not concentrated in a few highly leveraged banks.
+- The Covid-19 crash was sharp but short: real prices fell 19.1 percent from January to March 2020 and were
+  back above January's level by August. Since 2009 the real index has risen to new records, the latest in 2026.
+
+<!-- cell -->
+
+### Key numbers: the textbook's crash and the long recovery
+
+```{python}
+print(f"Nov 2007 to Mar 2009: {percent_change(sp500['2009-03-01'], sp500['2007-11-01']):.1f}%")
+peak, trough, change = peak_to_trough(sp500, "2007-01-01", "2009-12-01")
+print(f"Monthly peak {peak:%b %Y} to trough {trough:%b %Y}: {change:.1f}%")
+print(f"March 2009 level {sp500[trough]:,.0f}; lowest month of 1997-1999 {sp500['1997':'1999'].min():,.0f}")
+after = sp500[trough:]
+print(f"Back above the {peak:%b %Y} level in {after[after > sp500[peak]].index[0]:%b %Y}")
+print(f"Fall from the Aug 2000 record to Mar 2009: {percent_change(sp500[trough], sp500['2000-08-01']):.1f}%")
+```
+
+From November 2007 to March 2009, the textbook's dates, the real index fell 48.9 percent; from the monthly peak
+in October 2007 it fell 51.7 percent. By March 2009 it was below every month of 1997–1999, "below levels from a
+decade earlier". It took until November 2013 to get back to the 2007 peak, and in March 2009 the index was
+58.6 percent below its record of August 2000.
+
+**Your turn.** Real stock prices also fell in 1990. Measure that fall with `peak_to_trough`, using the window
+January to December 1990.
+
+<details><summary>Hint</summary>
+
+`peak_to_trough(sp500, "1990-01-01", "1990-12-01")` returns three things: the peak date, the trough date and the
+change in percent.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 5: International Covid-19 deaths and lost GDP
+
+**Goal.** Compare countries in the two costs of the pandemic: lives and output.
+
+The file has one row per country. The death counts are cumulative confirmed Covid-19 deaths per million people,
+on the textbook's date (22 March 2023) and on the latest date (30 August 2026). The **GDP loss** adds up, quarter
+by quarter from 2020Q1, how far real GDP was below its level of 2019Q4, in percent of one year's GDP. A value of 6
+means the country lost as much output as 6 percent of one year's GDP.
+
+```{python}
+covid = pd.read_csv(DATA_URL + "fig10-5.csv")
+covid.head()
+```
+
+> **Python note.** `.isin([...])` is true for the rows whose value is in a list. `.where(condition, "")` keeps a
+> value where the condition is true and puts `""` elsewhere, so only some countries get a label (hover shows
+> them all). `.map(SIDES)` looks up each country in the dictionary `SIDES` to choose where its label goes, and
+> `.fillna("middle right")` gives every other country the usual place: labels are moved only where they would be
+> cut off at the edge or overlap a neighbor.
+
+```{python}
+LABELED = ["United States", "Spain", "United Kingdom", "Iceland", "Portugal", "Mexico", "Italy", "India",
+           "Saudi Arabia", "China", "Japan", "S. Korea", "Norway", "Ireland", "Brazil", "Sweden", "Bulgaria",
+           "Hungary", "Slovenia", "Germany"]
+covid["label"] = covid.country.where(covid.country.isin(LABELED), "")
+SIDES = {"Bulgaria": "middle left", "Hungary": "middle left", "Norway": "top right", "Japan": "top right"}   # avoid overlaps
+covid["side"] = covid.country.map(SIDES).fillna("middle right")
+
+
+def covid_chart(date="March 2023"):
+    """Figure 10.5: Covid-19 deaths per million and GDP loss, with deaths counted to `date`."""
+    if date == "March 2023":
+        x, y = "deaths_pm_2023_03_22", "gdp_loss_2022q3"
+    else:
+        x, y = "deaths_pm_2026_08_30", "gdp_loss_2026q2"
+    r = covid[x].corr(covid[y])
+    fig = px.scatter(covid, x=x, y=y, text="label", hover_name="country", color_discrete_sequence=[TEAL],
+                     labels={x: "Covid-19 deaths per million people", y: "GDP loss (percent of a year's GDP)"},
+                     title=f"Deaths to {date}: more deaths did not mean more lost GDP (correlation {r:.2f})")
+    fig.update_traces(marker_size=10, textposition=covid.side, textfont=dict(size=11, color=TEAL))
+    fig.update_xaxes(range=[0, 6300], tickvals=[1000, 2000, 3000, 4000, 5000, 6000])
+    fig.update_yaxes(range=[0, 19.5], tickvals=[0, 2, 4, 6, 8, 10, 12, 14, 16, 18])
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(covid_chart, date=ToggleButtons(options=["March 2023", "August 2026"], value="March 2023",
+                                         description="deaths counted to"));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 5 with a precomputed slider for the date of the death count
+slider_figure(covid_chart, "date", ["March 2023", "August 2026"], start="March 2023", label="deaths counted to")
+```
+
+**What to notice.**
+
+- The cloud has almost no slope. Spain lost the most output, but Bulgaria and Hungary had the most deaths per
+  person; China, Japan and South Korea were low on both.
+- Several countries with few deaths, such as India and Iceland, still lost a lot of output, while the United
+  States had many deaths and a fairly small GDP loss.
+- Switch to August 2026. The dots move right, because deaths kept rising after the textbook was written (by
+  more than 500 per million in Sweden), but the ranking of countries hardly changes.
+
+<!-- cell -->
+
+### Key numbers: 1 out of every 300 people
+
+The textbook says that around 3,300 per million Americans had died by March 2023, "1 out of every 300
+people". One out of every $X$ people means $X = 1{,}000{,}000 / \text{deaths per million}$.
+
+> **Python note.** `set_index("country")` labels the rows by country, so `.loc[["Spain", "Japan"]]` picks rows
+> by name. A new column computed from another one, here `1e6 / deaths`, is calculated row by row.
+
+```{python}
+deaths = covid.set_index("country")
+deaths["one_in"] = 1e6 / deaths.deaths_pm_2023_03_22
+deaths["us_times_more"] = deaths.loc["United States", "deaths_pm_2023_03_22"] / deaths.deaths_pm_2023_03_22
+deaths.loc[["United States", "Brazil", "United Kingdom", "Spain", "Italy", "Norway", "Japan", "S. Korea"],
+           ["deaths_pm_2023_03_22", "one_in", "us_times_more", "gdp_loss_2022q3"]].round(1)
+```
+
+The United States lost 1 in 306 people and Brazil 1 in 300. U.S. death rates were 3.4 times Norway's, 5.5 times
+Japan's and 4.9 times South Korea's, the textbook's "lower by a factor of 3 or 5". The U.S. GDP loss is 3.3
+percent of a year's GDP with today's data; the textbook's 3.7 percent used GDP as published in early 2023.
+
+**What is a lost year of life worth?** The textbook values the life of a middle-aged American at about 10 million
+dollars, with 40 more years to live:
+
+```{python}
+value_of_life, years_left, years_lost = 10e6, 40, 3
+per_year = value_of_life / years_left
+print(f"Value of one year of life: {per_year:,.0f} dollars")
+print(f"Three years of life expectancy lost: {years_lost * per_year:,.0f} dollars per person")
+```
+
+At 250,000 dollars per year of life, the 3 years of life expectancy the pandemic took are worth about 750,000
+dollars per person: far more than the lost GDP, which is about 3 percent of one year's income.
+
+**Data hygiene.** Cumulative deaths can only rise, yet one country's count falls between the two dates:
+
+```{python}
+covid["rise"] = covid.deaths_pm_2026_08_30 - covid.deaths_pm_2023_03_22
+covid[covid.rise < 0][["country", "deaths_pm_2023_03_22", "deaths_pm_2026_08_30", "rise"]]
+```
+
+Chile's count fell by 78 deaths per million, because Chile later revised its earlier reports and the WHO
+dashboard took over the revision. Data on a crisis are often revised long after the crisis.
+
+**Your turn.** Which countries had a GDP loss of more than 8 percent of a year's GDP (to 2022Q3)? Check the
+textbook's list: India, Italy, Argentina, Mexico, the U.K. and Spain.
+
+<details><summary>Hint</summary>
+
+`covid[covid.gdp_loss_2022q3 > 8]` keeps those rows. Add `.country.tolist()` to see just the names.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 6: GDP in select OECD countries
+
+**Goal.** Follow real GDP quarter by quarter in six countries, from the end of 2019 to today.
+
+Each column is real GDP of one country, as an index with 2019Q4 = 100. A value of 90 means GDP was 10 percent
+below its pre-pandemic level.
+
+```{python}
+oecd = pd.read_csv(DATA_URL + "fig10-6.csv", parse_dates=["date"])
+oecd.head(3)
+```
+
+The file is **wide**: one column per country. Plotly Express prefers a **long** (tidy) table, with one row per
+country and quarter, so that `color="country"` can draw one line per country.
+
+> **Python note.** `melt(id_vars="date", ...)` stacks the country columns into two columns, `country` (the old
+> column name) and `index` (its value). `.map({...})` then replaces each code by a readable name, using a
+> dictionary.
+
+```{python}
+NAMES = {"gdp_index_usa": "U.S.", "gdp_index_kor": "S. Korea", "gdp_index_swe": "Sweden",
+         "gdp_index_deu": "Germany", "gdp_index_gbr": "U.K.", "gdp_index_esp": "Spain"}
+COLORS = {"U.S.": BLUE, "S. Korea": "#5aa0d8", "Sweden": ORANGE, "Germany": "#0b4f47", "U.K.": GREEN,
+          "Spain": TEAL}
+long = oecd.melt(id_vars="date", var_name="country", value_name="index")
+long["country"] = long.country.map(NAMES)
+long.tail(3)
+```
+
+```{python}
+fig = px.line(long, x="date", y="index", color="country", hover_name="country", color_discrete_map=COLORS,
+              labels={"date": "Quarter", "index": "Real GDP (index, 2019Q4 = 100)", "country": "Country"},
+              title="The U.K. and Spain fell furthest in 2020; South Korea and Sweden least")
+fig.update_traces(line_width=3)
+fig.add_hline(y=100, line_dash="dash", line_color="black", line_width=1)
+fig.add_vline(x="2022-10-01", line_dash="dot", line_color=GRAY)
+fig.add_annotation(x="2022-10-01", y=80, text="The textbook's data end here", showarrow=False, xshift=95,
+                   font=dict(size=12, color=GRAY))
+fig.update_xaxes(range=["2019-09-01", "2026-06-01"])
+fig.update_yaxes(range=[75, 119], tickvals=[80, 85, 90, 95, 100, 105, 110, 115])
+fig.show()
+```
+
+**What to notice.**
+
+- In the second quarter of 2020, GDP fell by about 22 percent in the U.K. and Spain, by about 9–11 percent in the
+  U.S., Germany and Sweden, and by only 4 percent in South Korea.
+- The U.K. had a second dip in early 2021, during a new lockdown. Spain took the longest to get back to its
+  2019 level.
+- After the textbook's data end, the paths spread out: the U.S. kept growing fast, while German GDP has been
+  close to its 2019 level for four years. Click a country in the legend to hide it; double-click to show it alone.
+
+<!-- cell -->
+
+### Key numbers: the trough, the recovery and the GDP loss of Figure 5
+
+We can now compute the **GDP loss** of Figure 5 ourselves. In each quarter from 2020Q1 to 2022Q3, the shortfall is
+$100 - \text{index}$ when the index is below 100, and zero otherwise. Each quarter is a quarter of a year, so the
+loss in percent of a year's GDP is the sum of the shortfalls divided by 4.
+
+> **Python note.** `(100 - level).clip(lower=0)` replaces negative numbers by 0, so quarters above the 2019 level
+> count as no loss. `level[level >= 100]` keeps the quarters at or above the 2019 level, and `.index[0]` is the
+> first of them.
+
+```{python}
+wide = oecd.set_index("date")
+rows = []
+for code, name in NAMES.items():
+    level = wide[code]
+    after = level["2020-07-01":]
+    back = after[after >= 100].index[0]
+    loss = (100 - level["2020-01-01":"2022-07-01"]).clip(lower=0).sum() / 4
+    rows.append([name, level.min(), back.strftime("%Y-%m"), loss, level.iloc[-1]])
+table = pd.DataFrame(rows, columns=["Country", "Lowest index", "Back at 100", "GDP loss to 2022Q3", "Index 2026Q2"])
+table.round(1)
+```
+
+Our GDP losses are close to the values in Figure 5: for the U.S. we get 3.3 percent of a year's GDP, the
+`gdp_loss_2022q3` of Figure 5. South Korea, Sweden and the U.S. were back at their 2019 level in 2021Q1, Germany
+and the U.K. in 2021Q4, and Spain only in 2022Q2.
+
+**Your turn.** Compare the GDP loss of Spain in this table with the value for Spain in Figure 5's data
+(`covid`). Are they the same? Then compute Germany's index in 2026Q2 minus its index in 2022Q4. What does
+that say about German growth since the textbook?
+
+<details><summary>Hint</summary>
+
+`covid[covid.country == "Spain"]` shows Spain's row of Figure 5. For Germany use `wide.gdp_index_deu["2026-04-01"]`
+and `wide.gdp_index_deu["2022-10-01"]`.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 7: Nonfarm employment in the U.S. economy
+
+**Goal.** Count the jobs lost in the two recessions and compare how fast they came back.
+
+The data are total nonfarm payroll employment in millions of jobs, monthly, seasonally adjusted.
+
+> **Python note.** `fig.update_xaxes(rangeslider_visible=True)` adds a small copy of the chart below it. Drag its
+> handles to zoom in on a period; this works on the website too.
+
+```{python}
+jobs = pd.read_csv(DATA_URL + "fig10-7.csv", parse_dates=["date"])
+emp = jobs.set_index("date").nonfarm_emp
+gr_peak, gr_trough, gr_change = peak_to_trough(emp, "2007-01-01", "2011-12-01")
+cv_peak, cv_trough, cv_change = peak_to_trough(emp, "2020-01-01", "2020-12-01")
+fig = px.area(jobs, x="date", y="nonfarm_emp", labels={"date": "Year", "nonfarm_emp": "Millions of jobs"},
+              title=f"Jobs lost: {emp[gr_peak] - emp[gr_trough]:.1f} million in 2008–10, "
+                    f"{emp[cv_peak] - emp[cv_trough]:.1f} million in two months of 2020")
+fig.update_traces(line=dict(color=BLUE, width=3), fillcolor="rgba(138, 150, 163, 0.3)")
+shade_recessions(fig)
+fig.update_xaxes(range=["1999-07-01", "2026-12-01"], rangeslider_visible=True)
+fig.update_yaxes(range=[125, 162], tickvals=[130, 135, 140, 145, 150, 155, 160])
+fig.show()
+```
+
+**What to notice.**
+
+- In the Great Recession, employment fell for two years, from the end of 2007 to early 2010, and kept falling
+  after the recession had officially ended in June 2009.
+- In 2020 the fall was much larger, and it came in two months. So did most of the recovery.
+- Drag the range slider to zoom in on 2007–2015 and then on 2020–2023, and compare how long each recovery took.
+
+<!-- cell -->
+
+### Key numbers: jobs lost and months to recover
+
+> **Python note.** The list `[(gr_peak, gr_trough), (cv_peak, cv_trough)]` holds two pairs of dates, and the loop
+> visits one pair at a time. The number of months between two dates is
+> 12 × (difference in years) + (difference in months).
+
+```{python}
+rows = []
+for peak, trough in [(gr_peak, gr_trough), (cv_peak, cv_trough)]:
+    after = emp[trough:]
+    back = after[after >= emp[peak]].index[0]           # first month at or above the old peak
+    months = 12 * (back.year - peak.year) + back.month - peak.month
+    rows.append([peak.strftime("%Y-%m"), trough.strftime("%Y-%m"), emp[peak] - emp[trough],
+                 percent_change(emp[trough], emp[peak]), back.strftime("%Y-%m"), months])
+pd.DataFrame(rows, columns=["Peak", "Trough", "Jobs lost (millions)", "Change (%)", "Back at peak",
+                            "Months from peak"]).round(2)
+```
+
+The Great Recession cost 8.7 million jobs, 6.3 percent of employment, and it took 77 months, more than six years,
+to get them back. The Covid-19 recession cost 21.9 million jobs, 14.4 percent, more than twice as much, but
+employment was back at its old peak after 28 months.
+
+**Your turn.** How many jobs did the U.S. economy add over the last 12 months of the data? Compare it with the
+average yearly gain from 2015 to 2019.
+
+<details><summary>Hint</summary>
+
+`emp.iloc[-1] - emp.iloc[-13]` is the change over the last 12 months. For 2015–2019 use
+`(emp["2019-12-01"] - emp["2014-12-01"]) / 5`.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 8: U.S. short-run output, Ỹ
+
+**Goal.** Compare the depth and the length of the two slumps with short-run output.
+
+Recall from Chapter 9 that **short-run output** is the percent gap between actual GDP $Y_t$ and potential GDP
+$\bar{Y}_t$:
+
+$$\tilde{Y}_t = \frac{Y_t - \bar{Y}_t}{\bar{Y}_t}.$$
+
+The file has two **vintages**: $\tilde{Y}$ with today's data, and $\tilde{Y}$ computed with the data as published in
+February 2023, when the textbook was written. Since then the BEA has revised GDP and the Congressional Budget
+Office (CBO) has re-estimated potential output.
+
+```{python}
+gap = pd.read_csv(DATA_URL + "fig10-8.csv", parse_dates=["date"])
+srun = gap.set_index("date")
+gap.tail(3)
+```
+
+The older vintage stops in 2022Q4, so its last rows are `NaN`.
+
+```{python}
+named = gap.rename(columns={"short_run_output": "Data as of 2026",
+                            "short_run_output_vintage2023": "Data as published in 2023"})
+fig = px.line(named, x="date", y=["Data as of 2026", "Data as published in 2023"],
+              color_discrete_sequence=[BLUE, GRAY],
+              labels={"date": "Year", "value": "Short-run output, Ỹ (percent)", "variable": "Data vintage"},
+              title="Both slumps were deep, but output recovered much faster after 2020")
+fig.update_traces(selector=dict(name="Data as of 2026"), line_width=3)
+fig.update_traces(selector=dict(name="Data as published in 2023"), line_dash="dash", line_width=2)
+fig.add_hline(y=0, line_dash="dash", line_color="black", line_width=1)
+shade_recessions(fig)
+fig.update_xaxes(range=["1999-07-01", "2026-12-01"])
+fig.update_yaxes(range=[-12, 4.5], tickvals=[-10, -8, -6, -4, -2, 0, 2, 4])
+fig.update_layout(legend=dict(x=0.01, y=0.02, xanchor="left", yanchor="bottom", bgcolor="rgba(255,255,255,0.8)"))
+fig.show()
+```
+
+**What to notice.**
+
+- In the Great Recession, $\tilde{Y}$ fell by about 5 percent and stayed below zero for years: output was below
+  potential for most of the 2010s.
+- In 2020, $\tilde{Y}$ fell twice as far in one quarter, then came back to zero within about a year.
+- The two vintages have the same shape, but today's data put output higher: the 2020 trough is $-8.8$ instead
+  of $-10.4$, and since 2021 output has been above potential. Click a vintage in the legend to hide it.
+
+<!-- cell -->
+
+### Key numbers: depth and length in two vintages
+
+> **Python note.** `series[series > 0]` keeps the quarters with positive short-run output, and `.index[0]` gives the
+> first one.
+
+```{python}
+for column in ["short_run_output", "short_run_output_vintage2023"]:
+    y = srun[column]
+    after_2009, after_2020 = y["2009-07-01":], y["2020-07-01":]
+    print(f"{column}:")
+    print(f"  lowest 2008-09: {y['2008':'2009'].min():.2f}%   lowest 2020: {y['2020'].min():.2f}%")
+    print(f"  mean 2010-2019: {y['2010':'2019'].mean():.2f}%")
+    print(f"  first quarter above zero after 2009: {after_2009[after_2009 > 0].index[0]:%Y-%m}; "
+          f"after 2020: {after_2020[after_2020 > 0].index[0]:%Y-%m}")
+```
+
+With the 2023 data, $\tilde{Y}$ fell to $-5.48$ percent in 2009 and to $-10.42$ percent in 2020, the textbook's
+"more than 5 percent" and "$-10$ percent". In that vintage output stayed below potential through 2019 and came
+back above it in 2021Q4. With today's data the 2009 slump is a bit shallower, $-4.98$ percent, $\tilde{Y}$ turned
+positive in 2018Q1, and after 2020 it was back above zero by 2021Q2. Either way, the recovery from 2020 took
+about a year, against almost a decade after 2009.
+
+**Your turn.** Find the quarter in which the two vintages differ the most, and by how much.
+
+<details><summary>Hint</summary>
+
+`difference = (srun.short_run_output - srun.short_run_output_vintage2023).abs()` is the gap in each quarter. Then
+use `.max()` and `.idxmax()`.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 9: The U.S. unemployment rate
+
+**Goal.** Measure how much unemployment rose in each recession since 2000, and recompute Table 10.1.
+
+```{python}
+unemployment = pd.read_csv(DATA_URL + "fig10-9.csv", parse_dates=["date"])
+unemp = unemployment.set_index("date").unemp_rate
+unemployment[unemployment.date.between("2025-08-01", "2025-12-01")]
+```
+
+**Data hygiene.** October 2025 is missing: the Bureau of Labor Statistics could not run its household survey
+during the federal government shutdown. The chart simply joins September and November.
+
+To measure the rise in unemployment we need the opposite of `peak_to_trough`: the highest unemployment rate in a
+window and the lowest rate *before* it.
+
+```{python}
+def low_to_high(series, start, end):
+    """The highest point between start and end, the lowest point before it, and the rise in points."""
+    window = series[start:end]
+    high = window.idxmax()
+    low = window[:high].idxmin()
+    return low, high, window[high] - window[low]
+
+
+RISES = {"2001 recession": ("2000-01-01", "2003-12-01"),
+         "Great Recession": ("2007-01-01", "2010-12-01"),
+         "Covid-19 recession": ("2019-01-01", "2020-12-01")}
+```
+
+```{python}
+def unemployment_chart(recession="Great Recession"):
+    """Figure 10.9: the U.S. unemployment rate, with the rise in one recession marked."""
+    start, end = RISES[recession]
+    low, high, rise = low_to_high(unemp, start, end)
+    fig = px.area(unemployment, x="date", y="unemp_rate", labels={"date": "Year", "unemp_rate": "Percent"},
+                  title=f"{recession}: unemployment rose from {unemp[low]:.1f}% ({low:%b %Y}) "
+                        f"to {unemp[high]:.1f}% ({high:%b %Y})")
+    fig.update_traces(line=dict(color=BLUE, width=3), fillcolor="rgba(138, 150, 163, 0.3)")
+    shade_recessions(fig)
+    fig.add_trace(go.Scatter(x=[low, high], y=[unemp[low], unemp[high]], mode="markers", showlegend=False,
+                             marker=dict(color="black", size=10), name="Low and high"))
+    fig.add_annotation(x=high, y=unemp[high], text=f"+{rise:.1f} points", showarrow=True, arrowhead=2, ax=60,
+                       ay=-10, font=dict(size=13))
+    fig.update_xaxes(range=["1999-07-01", "2026-12-01"])
+    fig.update_yaxes(range=[3, 16], tickvals=[4, 6, 8, 10, 12, 14, 16])
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(unemployment_chart, recession=Dropdown(options=list(RISES), value="Great Recession",
+                                                description="recession", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 9 with a precomputed slider for the recession
+slider_figure(unemployment_chart, "recession", ["2001 recession", "Great Recession", "Covid-19 recession"],
+              start="Great Recession", label="recession")
+```
+
+**What to notice.**
+
+- In the Great Recession, unemployment rose from 4.4 percent in March 2007 to 10.0 percent in October 2009, the
+  textbook's numbers. It then took six years to fall back to 5 percent.
+- In 2020 it jumped from 3.5 to 14.8 percent in two months, and was
+  back below 4 percent by the end of 2021.
+- The 2001 recession raised unemployment by 2.5 points, and its peak came only in mid-2003, long after the
+  recession had ended.
+
+<!-- cell -->
+
+### Table 10.1: changes in key macroeconomic variables in recessions
+
+Table 10.1 compares the two recent recessions with the average of the earlier ones since 1950. Each number is the
+change from the NBER peak quarter to the trough quarter: a percent change for GDP, its components and employment,
+and a change in percentage points for the unemployment rate. The wider file `us_quarterly.csv` holds the quarterly
+data, and `recessions.csv` the quarterly peaks and troughs.
+
+```{python}
+quarterly = pd.read_csv(DATA_URL + "us_quarterly.csv", parse_dates=["date"]).set_index("date")
+quarterly.head(3)
+```
+
+The columns are real GDP and its components (billions of 2017 dollars), employment (millions) and the unemployment
+rate (percent), as quarterly averages.
+
+> **Python note.** `quarterly.loc[peak]` is a whole row. `percent_change(after, before)` then works on all the
+> columns at once. Each pass of the loop stores one recession's changes in the dictionary `changes`, under the year
+> of its peak, and `pd.DataFrame(changes)` makes one column per recession.
+
+```{python}
+changes = {}
+for peak, trough in zip(recessions.peak_quarter, recessions.trough_quarter):
+    before, after = quarterly.loc[peak], quarterly.loc[trough]
+    change = percent_change(after, before)
+    change["unemployment"] = after.unemployment - before.unemployment     # points, not percent
+    changes[peak.year] = change
+changes = pd.DataFrame(changes)
+changes.round(1)
+```
+
+The first nine columns are the recessions from 1953 to 2001. Their average, next to the Great Recession (peak
+2007Q4) and the Covid-19 recession (peak 2019Q4), is the table. We put the textbook's numbers next to ours.
+
+> **Python note.** `changes.iloc[:, :9]` keeps all rows and the first nine columns, and `.mean(axis=1)` averages
+> across each row. `pd.concat([a, b], axis=1)` puts two tables side by side.
+
+```{python}
+ROWS = {"gdp": "GDP", "employment": "Nonfarm employment", "unemployment": "Unemployment rate (points)",
+        "consumption": "Consumption", "investment": "Investment", "government": "Government purchases",
+        "exports": "Exports", "imports": "Imports"}
+table = pd.DataFrame({"Previous (average)": changes.iloc[:, :9].mean(axis=1),
+                      "Great Recession": changes[2007], "Covid-19": changes[2019]})
+table = table.loc[list(ROWS)].rename(index=ROWS)
+book = pd.DataFrame({"Previous, textbook": [-1.7, -2.5, 2.5, 0.4, -14.4, 1.2, -1.5, -4.2],
+                     "Great Recession, textbook": [-4.7, -6.3, 4.5, -3.4, -34.0, 5.5, -10.3, -18.7],
+                     "Covid-19, textbook": [-9.6, -11.9, 9.4, -10.6, -16.5, 2.6, -24.1, -20.2]},
+                    index=table.index)
+pd.concat([table.round(1), book], axis=1)
+```
+
+With today's data, every pattern of the textbook's table holds. Both recent recessions were much deeper than the
+average one. In a typical recession consumption barely changes (+0.4 percent), but it fell in the Great Recession
+and fell by 10 percent in 2020. Investment, exports and imports fell sharply, and government purchases rose.
+
+Some numbers differ from the textbook's, for two reasons. First, **data revisions**: today's data make the Great
+Recession milder (GDP $-3.8$ instead of $-4.7$ percent, investment $-29.3$ instead of $-34.0$). The data notes
+of this chapter show that the same calculation with the data as published in 2012 gives the textbook's values. Second, **dates**: the textbook's employment
+fall of 6.3 percent is the monthly peak-to-trough fall of Figure 7, from December 2007 to February 2010, not the
+change between the NBER quarters (5.0 percent).
+
+**Your turn.** Which of the nine earlier recessions had the largest fall in GDP? And in which of them did
+consumption fall?
+
+<details><summary>Hint</summary>
+
+`changes.loc["gdp"]` is the GDP row, with one value per recession; `.idxmin()` gives the year of the largest fall.
+`changes.loc["consumption"] < 0` is true where consumption fell.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 10: Consumer price index inflation in the U.S., U.K., and euro area
+
+**Goal.** See the return of inflation in 2021–22, after decades of low inflation.
+
+The inflation rate is the change in the consumer price index over the previous 12 months. The data file follows the
+textbook's figure, which uses the **log change** $100 \times \ln(P_t / P_{t-12})$. For small changes the log change is
+almost the same as the percent change $100 \times (P_t / P_{t-12} - 1)$, but for large ones it is a bit smaller.
+
+```{python}
+cpi = pd.read_csv(DATA_URL + "fig10-10.csv", parse_dates=["date"])
+cpi[cpi.isna().any(axis=1)]
+```
+
+Two months have a gap: the U.S. has no CPI for October 2025 (prices were not collected during the government
+shutdown), and the U.K. figure for September 2026 was not yet published.
+
+> **Python note.** If $L = 100 \ln(P_t/P_{t-12})$, then $P_t/P_{t-12} = e^{L/100}$, and the percent change is
+> $100\,(e^{L/100} - 1)$. `np.exp` is the exponential function $e^x$, and it works on a whole column at once.
+
+```{python}
+def percent_from_log(log_change):
+    """Turn a log change 100 ln(P_t / P_t-12) into a percent change 100 (P_t / P_t-12 - 1)."""
+    return 100 * (np.exp(log_change / 100) - 1)
+
+
+AREAS = {"inflation_us": "U.S.", "inflation_uk": "U.K.", "inflation_euro_area": "Euro area"}
+AREA_COLORS = {"U.S.": BLUE, "U.K.": GREEN, "Euro area": TEAL}
+print(f"Log change 2.00 -> percent change {percent_from_log(2.0):.2f};  log change 10.00 -> {percent_from_log(10.0):.2f}")
+```
+
+```{python}
+def inflation_chart(measure="log change"):
+    """Figure 10.10: 12-month CPI inflation in the U.S., the U.K. and the euro area, 2015-2026."""
+    data = cpi.rename(columns=AREAS)
+    if measure == "percent change":
+        for area in AREAS.values():
+            data[area] = percent_from_log(data[area])
+    peaks = data[data.date.dt.year == 2022].max()
+    fig = px.line(data, x="date", y=list(AREAS.values()), color_discrete_map=AREA_COLORS,
+                  labels={"date": "Year", "value": "Percent", "variable": "Economy"},
+                  title=f"{measure.capitalize()}: 2022 peaks U.S. {peaks['U.S.']:.1f}%, "
+                        f"U.K. {peaks['U.K.']:.1f}%, euro area {peaks['Euro area']:.1f}%")
+    fig.update_traces(line_width=3)
+    fig.add_hline(y=0, line_dash="dash", line_color="black", line_width=1)
+    fig.update_xaxes(range=["2014-10-01", "2026-12-01"])
+    fig.update_yaxes(range=[-1.5, 12], tickvals=[0, 2, 4, 6, 8, 10, 12])
+    fig.update_layout(legend=dict(x=0.01, y=0.99, xanchor="left", yanchor="top", bgcolor="rgba(255,255,255,0.8)"))
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(inflation_chart, measure=ToggleButtons(options=["log change", "percent change"], value="log change",
+                                                description="measure"));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 10 with a precomputed slider for the measure of inflation
+slider_figure(inflation_chart, "measure", ["log change", "percent change"], start="log change", label="measure")
+```
+
+**What to notice.**
+
+- From 2015 to 2019 inflation stayed between about $-0.5$ and 3 percent in all three economies, and in 2020 it fell, in
+  the euro area even below zero.
+- U.S. inflation took off first, in spring 2021; the U.K. and the euro area followed later in 2021 and then went
+  higher, above 9 and 10 percent in October 2022.
+- Switch to the percent change: the peaks rise by about half a point (the U.S. from 8.7 to 9.1 percent). By 2026
+  inflation was back to about 3–4 percent, still above the 2 percent the central banks aim for.
+
+<!-- cell -->
+
+### Key numbers: when inflation returned
+
+```{python}
+by_date = cpi.set_index("date")
+for column, area in AREAS.items():
+    rate = by_date[column]
+    above = rate["2020-01-01":][rate["2020-01-01":] > 3]
+    print(f"{area:9} peak {rate.max():5.2f}% ({rate.idxmax():%b %Y}), percent change "
+          f"{percent_from_log(rate.max()):5.2f}%; first above 3%: {above.index[0]:%b %Y}; "
+          f"latest {rate.dropna().iloc[-1]:.2f}% ({rate.dropna().index[-1]:%b %Y})")
+```
+
+The textbook says inflation "peaked at more than 8 percent in the United States and at more than 10 percent in the
+euro area during 2022": 8.67 percent in June 2022 and 10.09 percent in October 2022. Inflation first passed 3 percent
+in April 2021 in the U.S., in September 2021 in the euro area and in October 2021 in the U.K. That is a year after
+the pandemic began, so the pandemic did not raise inflation at once.
+
+**Your turn.** In which months of 2020 was euro-area inflation negative (falling prices)?
+
+<details><summary>Hint</summary>
+
+Keep the rows of 2020 with `cpi[(cpi.date.dt.year == 2020) & (cpi.inflation_euro_area < 0)]`.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 11: Core inflation in the U.S., U.K., and euro area
+
+**Goal.** Separate the volatile food and energy prices from the rest of inflation.
+
+**Core inflation** leaves out food and energy, whose prices jump around with harvests and oil markets. We join the
+core rates to the headline rates of Figure 10, so we can compare the two in each economy.
+
+> **Python note.** `merge(other, on="date")` joins two tables row by row, matching the dates.
+
+```{python}
+core = pd.read_csv(DATA_URL + "fig10-11.csv", parse_dates=["date"])
+both = cpi.merge(core, on="date")
+both.tail(3)
+```
+
+The menu shows the core rates of all three economies, as in the textbook, or the headline and core rates of one
+economy.
+
+```{python}
+CORE = {"U.S.": "core_inflation_us", "U.K.": "core_inflation_uk", "Euro area": "core_inflation_euro_area"}
+HEADLINE = {"U.S.": "inflation_us", "U.K.": "inflation_uk", "Euro area": "inflation_euro_area"}
+
+
+def core_chart(view="core, all three"):
+    """Figure 10.11: core inflation in three economies, or headline and core inflation in one."""
+    if view == "core, all three":
+        data = both.rename(columns={CORE["U.S."]: "U.S.", CORE["U.K."]: "U.K.", CORE["Euro area"]: "Euro area"})
+        series, colors = ["U.S.", "U.K.", "Euro area"], AREA_COLORS
+        title = f"Core inflation peaked at {both[CORE['U.S.']].max():.1f}% in the U.S., the highest of the three"
+    else:
+        data = both.rename(columns={HEADLINE[view]: "Headline", CORE[view]: "Core"})
+        series, colors = ["Headline", "Core"], {"Headline": GRAY, "Core": AREA_COLORS[view]}
+        gap = (data.Headline - data.Core)[data.date.dt.year == 2022].max()
+        title = f"{view}: in 2022, food and energy added up to {gap:.1f} points to inflation"
+    fig = px.line(data, x="date", y=series, color_discrete_map=colors, title=title,
+                  labels={"date": "Year", "value": "Percent", "variable": "Inflation"})
+    fig.update_traces(line_width=3)
+    fig.add_hline(y=0, line_dash="dash", line_color="black", line_width=1)
+    fig.update_xaxes(range=["2014-10-01", "2026-12-01"])
+    fig.update_yaxes(range=[-1.5, 12], tickvals=[0, 2, 4, 6, 8, 10, 12])
+    fig.update_layout(legend=dict(x=0.01, y=0.99, xanchor="left", yanchor="top", bgcolor="rgba(255,255,255,0.8)"))
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(core_chart, view=Dropdown(options=["core, all three", "U.S.", "U.K.", "Euro area"], value="core, all three",
+                                   description="show", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 11 with a precomputed slider for the view
+slider_figure(core_chart, "view", ["core, all three", "U.S.", "U.K.", "Euro area"], start="core, all three",
+              label="show")
+```
+
+**What to notice.**
+
+- Core inflation peaked lower than headline inflation: in the U.S. at 6.4 percent in September 2022, against 8.7
+  percent for headline inflation.
+- In 2022, core inflation rose less in the U.K. and the euro area than in the U.S., the opposite of headline
+  inflation. Choose the euro area: the gap between headline and core is largest there, because energy prices
+  soared after Russia invaded Ukraine.
+- After 2022 core inflation in the U.K. and the euro area kept rising for a while: it peaked only in 2023.
+
+<!-- cell -->
+
+### Key numbers: food and energy
+
+```{python}
+by_date = both.set_index("date")
+for area in ["U.S.", "U.K.", "Euro area"]:
+    c, h = by_date[CORE[area]], by_date[HEADLINE[area]]
+    gap = (h - c)["2022"]
+    print(f"{area:9} core peak {c.max():.2f}% ({c.idxmax():%b %Y}); highest 2022 core {c['2022'].max():.2f}%; "
+          f"largest 2022 gap headline - core {gap.max():.2f} points ({gap.idxmax():%b %Y})")
+```
+
+U.S. core inflation peaked at 6.42 percent in September 2022, "just over 6 percent". In 2022 core inflation reached
+5.66 percent in the U.K. and 5.05 percent in the euro area, below the U.S. peak, while food and energy added up to
+5.2 points to euro-area inflation. Core inflation in the U.K. and the euro area peaked only in 2023 (6.29 percent in
+May and 5.51 percent in March), after the textbook was written.
+
+**Your turn.** Find the latest month in which U.S. core inflation was above U.S. headline inflation. What does a
+positive gap "core minus headline" tell you about food and energy prices in that month?
+
+<details><summary>Hint</summary>
+
+`above = by_date[by_date.core_inflation_us > by_date.inflation_us]` keeps those months; `above.index[-1]` is the
+latest one.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Key numbers
+
+The first table collects the chapter's main numbers, each computed above. The second compares the U.S. Great
+Recession with the **average financial crisis** of the twentieth century, from the case study (Table 10.2, by
+Carmen Reinhart and Kenneth Rogoff). We do not have their data, so we copy their averages.
+
+```{python}
+rows = [
+    ["Real house prices, Dec 2005 to Feb 2012 (%)", peak_to_trough(house, "2000-01-01", "2015-12-01")[2]],
+    ["Real S&P 500, Oct 2007 to Mar 2009 (%)", peak_to_trough(sp500, "2007-01-01", "2009-12-01")[2]],
+    ["TED spread, Oct 2008 (points)", ted.max()],
+    ["Jobs lost, Great Recession (millions)", emp[gr_peak] - emp[gr_trough]],
+    ["Jobs lost, Covid-19 (millions)", emp[cv_peak] - emp[cv_trough]],
+    ["Short-run output, 2020Q2, data of 2026 (%)", srun.short_run_output["2020-04-01"]],
+    ["Short-run output, 2020Q2, data of 2023 (%)", srun.short_run_output_vintage2023["2020-04-01"]],
+    ["U.S. Covid-19 deaths per million, March 2023", deaths.loc["United States", "deaths_pm_2023_03_22"]],
+    ["U.S. inflation peak, June 2022 (%)", by_date.inflation_us.max()],
+    ["Leverage of the textbook's bank", leverage(liabilities.sum(), equity)],
+]
+pd.DataFrame(rows, columns=["Quantity", "Value"]).round(2)
+```
+
+```{python}
+gr_low, gr_high, gr_rise = low_to_high(unemp, "2007-01-01", "2010-12-01")
+crisis = pd.DataFrame({
+    "U.S. 2007-09": [peak_to_trough(house, "2000-01-01", "2015-12-01")[2],
+                     peak_to_trough(sp500, "2007-01-01", "2009-12-01")[2], gr_rise, table.loc["GDP", "Great Recession"]],
+    "Average crisis (Table 10.2)": [-35, -56, 7, -9.3]},
+    index=["Real house prices (%)", "Real stock prices (%)", "Unemployment (points)", "Real GDP (%)"])
+crisis.round(1)
+```
+
+The U.S. house and stock prices fell about as much as in the typical financial crisis. Unemployment rose a little
+less, and real GDP fell much less: by our NBER-quarter measure 3.8 percent, against 9.3 percent in the average
+crisis. A deep recession, then, but milder than the crises Reinhart and Rogoff studied.
+
+<!-- cell -->
+
+## Summary
+
+- The global financial crisis began with a housing bubble: real U.S. house prices rose for a decade and then fell
+  by more than a third, the largest decline since 1953.
+- Banks held many of the mortgage-backed securities, with high **leverage**. Falling asset values threatened their
+  **net worth**, interest rate spreads exploded in 2007–08, and stock prices lost about half their value.
+- The Great Recession was deep and long: 8.7 million jobs lost, and output below potential for most of the 2010s. The
+  Covid-19 recession was even deeper but very short, with a fast recovery in most countries.
+- Inflation returned in 2021–22, above 8 percent in the U.S. and 10 percent in the euro area. Core inflation shows
+  that food and energy prices drove much of it, above all in Europe.
+- The next chapters build the short-run model that explains these booms, slumps and inflation, starting with the IS
+  curve in Chapter 11.
