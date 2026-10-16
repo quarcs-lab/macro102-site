@@ -1,0 +1,873 @@
+# Chapter 16: Consumption
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/ch16-consumption.ipynb)
+
+*Data Science and Macroeconomic Models: A Python Companion to Intermediate Macroeconomics* · Carlos Mendez
+
+> **How to use this notebook.** In Colab, click *Runtime → Run all*. After that, every model
+> figure has live sliders: move one and the model is solved again on the spot. On the book
+> website the same figures come with one precomputed slider or a row of buttons. Each section
+> ends with a short **Your turn** task, and you can try it in the empty code cell below the task.
+
+<!-- cell -->
+
+## Learning goals
+
+Consumption is more than two-thirds of GDP. Earlier chapters treated it simply, as a fixed share of income.
+This chapter asks how a household *chooses* to spend over its lifetime. By the end of it you will be able to:
+
+- write down the **intertemporal budget constraint** and split total wealth into financial wealth and
+  **human wealth**;
+- explain **diminishing marginal utility**, and why it makes people want to **smooth** consumption;
+- solve the two-period **neoclassical consumption model** with log utility, and check the **Euler equation**;
+- compute the **marginal propensity to consume** with and without **borrowing constraints**, and see why
+  **Ricardian equivalence** can fail;
+- read U.S. data on household debt, the personal saving rate and household wealth;
+- in Python: write functions with text options, find a maximum on a grid with `np.argmax`, turn monthly
+  data into quarterly data with `resample`, join two tables with `merge`, and fit a line through a scatter.
+
+<!-- cell -->
+
+## Figures in this chapter
+
+The figures follow the order of the textbook chapter. The second column shows which textbook
+figure each notebook figure replicates.
+
+| Figure | Textbook figure | Type | What you can change |
+|---|---|---|---|
+| Figure 1 | 16.1 Flow utility u(c) | model | consumption level c, log or square-root utility |
+| Figure 2 | 16.2 The desire to smooth consumption | model | consumption today c₁ and in the future c₂, log or square-root utility |
+| Figure 3 | 16.3 Household debt as a percentage of GDP | data | hover; current data and the 2023 vintage on/off |
+| Figure 4 | 16.4 The personal saving rate | data | quarterly or monthly data |
+| Figure 5 | 16.5 Household wealth (as a ratio to income) | data | hover; decades on/off in a wealth–saving scatter |
+
+<!-- cell -->
+
+## Setup
+
+We first load the Python libraries we need. You only have to run this cell once.
+
+> **Python note.** `import` loads a *library*, a toolbox written by other people. We give each
+> library a short nickname, for example `np` for NumPy, so that the code stays short. Text after
+> a `#` is a *comment*: Python ignores it, and it is there for human readers. The `try ... except`
+> block runs one Colab-only line and simply skips it anywhere else.
+
+```{python}
+# Libraries used in this chapter
+import numpy as np                    # numbers and arrays
+import pandas as pd                   # data tables
+import plotly.express as px           # quick charts from data tables
+import plotly.graph_objects as go     # charts built piece by piece (model figures)
+import plotly.io as pio
+from ipywidgets import interact, FloatSlider, ToggleButtons
+
+# One light blue/green look for every chart
+BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
+pio.templates.default = "plotly_white"
+pio.templates["plotly_white"].layout.update(width=860, height=480)   # same size in Colab and on the website
+px.defaults.color_discrete_sequence = [BLUE, TEAL, GREEN, "#5aa0d8", "#0b4f47"]
+WIDE = {"description_width": "initial"}         # show the full slider labels
+
+# Colab only: let Plotly charts appear inside the interactive widgets
+try:
+    import google.colab
+    google.colab.output.enable_custom_widget_manager()
+except ImportError:
+    pass                                        # not running in Colab: nothing to do
+
+# The data files of this chapter live in the book's GitHub repository
+DATA_URL = "https://raw.githubusercontent.com/quarcs-lab/macro102-site/main/data/ch16/"
+```
+
+The next cell defines a helper that only the book website needs. Run it and move on.
+
+```{python}
+#| kind: helper
+# @title Helper for the website versions (run this cell; you do not need to read it)
+def slider_figure(make_figure, name, values, start, label=None):
+    """Precompute make_figure(name=value) for every value and join the results with one slider.
+
+    The website cannot run Python, so each model figure gets this precomputed version.
+    """
+    figures = [make_figure(**{name: v}) for v in values]
+    first = values.index(start)
+    fig = go.Figure(layout=figures[first].layout)
+    owner = []                                  # which figure each trace comes from
+    for i, f in enumerate(figures):
+        for trace in f.data:
+            trace.visible = (i == first)
+            fig.add_trace(trace)
+            owner.append(i)
+    steps = []
+    for i, f in enumerate(figures):
+        layout = {"title": f.layout.title.to_plotly_json(),
+                  "annotations": [a.to_plotly_json() for a in f.layout.annotations],
+                  "shapes": [s.to_plotly_json() for s in f.layout.shapes]}
+        visible = [o == i for o in owner]
+        steps.append(dict(method="update", label=str(values[i]), args=[{"visible": visible}, layout]))
+    fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
+                                    currentvalue=dict(prefix=(label or name) + " = "))])
+    return fig
+```
+
+## The model in code
+
+The **neoclassical consumption model** follows one consumer, called Irving after the economist Irving Fisher,
+over just two periods: *today* and *the future*. It has two building blocks.
+
+**1. The budget.** Irving starts with financial wealth $f_{\text{today}}$ (savings, stocks, bonds) and earns labor
+income $y_{\text{today}}$ today and $y_{\text{future}}$ in the future. What he saves today earns the real interest
+rate $R$. Putting the budgets of the two periods together gives the **intertemporal budget constraint**:
+
+$$c_{\text{today}}+\frac{c_{\text{future}}}{1+R} \;=\; \underbrace{f_{\text{today}}}_{\text{financial wealth}}+\underbrace{y_{\text{today}}+\frac{y_{\text{future}}}{1+R}}_{\text{human wealth}} \;\equiv\; \bar{X} \qquad (16.3)$$
+
+The left side is the present value of consumption. The right side is **total wealth** $\bar{X}$. Future amounts are
+divided by $1+R$, because 1 dollar saved today turns into $1+R$ dollars in the future.
+
+**2. Utility.** Each period, consumption $c$ gives a flow of utility $u(c)$, and lifetime utility adds the two
+periods, with a weight $\beta$ on the future (a measure of patience):
+
+$$U = u(c_{\text{today}}) + \beta\,u(c_{\text{future}}). \qquad (16.4)$$
+
+The textbook's utility function is the logarithm, $u(c)=\log c$. Its **marginal utility**, the extra utility from
+one more unit of consumption, is simply $u'(c)=1/c$. We also allow a second shape, the square root
+$u(c)=\sqrt{c}$, whose marginal utility is $1/(2\sqrt{c})$.
+
+> **Python note.** `def` creates a *function*: a named recipe that takes inputs (the *arguments*) and gives back a
+> result with `return`. Writing `form="log"` gives the argument a *default value*, used whenever we do not pass
+> one. `if ... :` runs the indented line only when the condition is true; otherwise Python moves on.
+> `np.log` and `np.sqrt` work on a single number and on a whole array of numbers.
+
+```{python}
+def utility(c, form="log"):
+    """Flow utility u(c) (Figure 16.1): log c, or the square root of c."""
+    if form == "log":
+        return np.log(c)
+    return np.sqrt(c)
+
+
+def marginal_utility(c, form="log"):
+    """Marginal utility u'(c): 1/c for log utility, 1/(2 sqrt c) for the square root."""
+    if form == "log":
+        return 1 / c
+    return 1 / (2 * np.sqrt(c))
+
+
+def lifetime_utility(c_today, c_future, beta=1.0, form="log"):
+    """Lifetime utility U = u(c_today) + beta u(c_future)   (equation 16.4)."""
+    return utility(c_today, form) + beta * utility(c_future, form)
+```
+
+**Irving's choice.** Irving picks $c_{\text{today}}$ and $c_{\text{future}}$ to make $U$ as large as possible while
+respecting his budget (16.3). At the best choice he cannot gain by moving one unit of consumption between the
+periods. One unit consumed today gives $u'(c_{\text{today}})$. Saved instead, it becomes $1+R$ units in the future,
+each worth $\beta u'(c_{\text{future}})$ today. The two must be equal, which is the **Euler equation**:
+
+$$u'(c_{\text{today}})=\beta(1+R)\,u'(c_{\text{future}}) \quad (16.6) \qquad\Longrightarrow\qquad \frac{c_{\text{future}}}{c_{\text{today}}}=\beta(1+R) \;\;\text{with log utility.} \quad (16.8)$$
+
+With $\beta=1$, the Euler equation says $c_{\text{future}}/(1+R) = c_{\text{today}}$. Put this into the budget and Irving
+spends exactly half of his total wealth today:
+
+$$c_{\text{today}}=\tfrac{1}{2}\,\bar{X} \quad (16.9) \qquad\qquad c_{\text{future}}=\tfrac{1}{2}\,(1+R)\,\bar{X}. \quad (16.10)$$
+
+A function can `return` two results at once, separated by a comma.
+
+```{python}
+def total_wealth(f_today, y_today, y_future, R):
+    """Total wealth X = f_today + y_today + y_future / (1 + R)   (equation 16.3)."""
+    return f_today + y_today + y_future / (1 + R)
+
+
+def consumption_plan(f_today, y_today, y_future, R):
+    """Irving's choice with log utility and beta = 1: c_today = X/2, c_future = (1 + R) X/2   (16.9, 16.10)."""
+    X = total_wealth(f_today, y_today, y_future, R)
+    return X / 2, (1 + R) * X / 2
+```
+
+**The shared baseline.** The textbook gives no numbers for its diagrams, so every figure of this notebook starts
+from one illustrative Irving: no financial wealth, $f_{\text{today}}=0$; a low income today, $y_{\text{today}}=1$;
+a high income in the future, $y_{\text{future}}=5$; and $\beta=1$, $R=0$, as in the caption of Figure 16.2. Think
+of one unit as 10,000 dollars, so Irving looks like a student who expects to earn much more later.
+
+> **Python note.** An *f-string* such as `f"X = {X:.2f}"` inserts the value of a variable into a piece of text;
+> `:.2f` means "show two decimals". Writing `c_today, c_future = ...` unpacks the two results of the function.
+
+```{python}
+f_today, y_today, y_future = 0.0, 1.0, 5.0      # the shared baseline
+X = total_wealth(f_today, y_today, y_future, R=0.0)
+c_today, c_future = consumption_plan(f_today, y_today, y_future, R=0.0)
+print(f"Total wealth X = {X:.2f}  (financial {f_today:.2f} + human {X - f_today:.2f})")
+print(f"Consumption today {c_today:.2f}, in the future {c_future:.2f}")
+print(f"Saving today = y_today - c_today = {y_today - c_today:+.2f}  (negative: Irving borrows)")
+print(f"Lifetime utility U = {lifetime_utility(c_today, c_future):.3f}")
+```
+
+Irving earns 1 today but consumes 3: he borrows 2 against his future income and repays it from the 5 he earns later.
+
+<!-- cell -->
+
+### Checking the solution without calculus
+
+The formula $c_{\text{today}}=\bar{X}/2$ comes from the Euler equation. We can also let the computer *search* for the
+best choice. Every $c_{\text{today}}$ on a fine grid leaves $c_{\text{future}}=(1+R)(\bar{X}-c_{\text{today}})$ for the
+future; we compute lifetime utility for each one and pick the largest. We use $R=0.05$, so that the future is not a
+copy of today.
+
+> **Python note.** `np.linspace(a, b, n)` creates `n` evenly spaced numbers from `a` to `b`. Arithmetic on an array
+> works element by element, so `lifetime_utility` returns one value per grid point. `np.argmax` gives the
+> *position* of the largest value, and `grid[best]` picks the matching number.
+
+```{python}
+R = 0.05
+X = total_wealth(f_today, y_today, y_future, R)
+grid = np.linspace(0.01, X - 0.01, 100001)          # candidate values of c_today
+U = lifetime_utility(grid, (1 + R) * (X - grid))    # lifetime utility of each candidate
+best = np.argmax(U)
+
+c_today, c_future = consumption_plan(f_today, y_today, y_future, R)
+print(f"Grid search: c_today = {grid[best]:.4f}    formula (16.9): X/2 = {c_today:.4f}")
+print(f"Euler check: c_future / c_today = {c_future / c_today:.4f} = beta (1 + R) = {1.0 * (1 + R):.4f}")
+print(f"Marginal utilities: u'(c_today) = {marginal_utility(c_today):.4f}, "
+      f"beta (1 + R) u'(c_future) = {(1 + R) * marginal_utility(c_future):.4f}")
+```
+
+The search and the formula agree, and the two sides of the Euler equation are equal. With $R=0.05$ consumption
+grows by 5 percent from today to the future, exactly $\beta(1+R)=1.05$.
+
+## Figure 1: Flow utility
+
+**Goal.** See **diminishing marginal utility**: each extra unit of consumption adds less utility than the one before.
+
+The curve is the textbook's $u(c)=\log c$. Its slope at any point is the marginal utility $u'(c)=1/c$. The figure
+marks one consumption level and draws the tangent line there, whose slope *is* $u'(c)$. As $c$ grows, the curve,
+and the tangent with it, becomes flatter and flatter.
+
+> **Python note.** `go.Figure()` starts an empty chart, and each `add_trace` adds one curve or set of points.
+> `fig.add_annotation` writes a text label at a point; we use it to name the curve at its right end, as the
+> textbook does. We fix the axis ranges so that you can *see* what changes when you move a slider.
+
+```{python}
+def flow_utility(c=2.0, form="log"):
+    """Figure 16.1: flow utility u(c), with the tangent at c, whose slope is the marginal utility."""
+    grid = np.linspace(0.01, 10, 1000)
+    u, mu = utility(c, form), marginal_utility(c, form)
+    gain = utility(c + 1, form) - u                         # utility added by one more unit
+    near = np.linspace(max(c - 2, 0.01), c + 2, 50)         # a short stretch around c for the tangent
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=grid, y=utility(grid, form), name="u(c)", line=dict(color=BLUE, width=4)))
+    fig.add_trace(go.Scatter(x=near, y=u + mu * (near - c), name="tangent", mode="lines",
+                             line=dict(color=GREEN, width=2, dash="dash")))
+    fig.add_trace(go.Scatter(x=[c], y=[u], name="chosen c", mode="markers", marker=dict(color="black", size=11)))
+    name = {"log": "u(c) = log c", "square root": "u(c) = √c"}[form]
+    fig.add_annotation(x=10, y=utility(10, form), text=name, showarrow=False, xanchor="right", yshift=16)
+    fig.add_annotation(x=c, y=u, text=f"slope u′(c) = {mu:.2f}", showarrow=False, xanchor="left",
+                       xshift=10, yshift=-22, font=dict(size=13, color=GREEN))
+    fig.update_layout(title=f"c = {c:.1f}:  u(c) = {u:.2f},  marginal utility u′(c) = {mu:.2f},  "
+                            f"one more unit adds {gain:.2f}",
+                      showlegend=False,
+                      xaxis=dict(title="Consumption, c", range=[0, 10.5]),
+                      yaxis=dict(title="Utility", range=[-2.5, 3.5]))
+    return fig
+```
+
+Now the interactive version. Move the consumption slider and watch the tangent flatten.
+
+> **Python note.** `interact` turns each argument of a function into a widget and calls the function again every
+> time you move one. `ToggleButtons` is a row of buttons for a choice between a few options. The `;` at the end
+> only hides an extra line of text.
+
+```{python}
+#| kind: widget
+interact(flow_utility,
+         c=FloatSlider(value=2.0, min=0.5, max=9.5, step=0.5, description="consumption c", style=WIDE),
+         form=ToggleButtons(options=["log", "square root"], value="log", description="utility"));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 1 with a precomputed slider for consumption
+slider_figure(flow_utility, "c", [0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 5.0, 6.0, 8.0, 9.5], start=2.0,
+              label="consumption c")
+```
+
+**What to notice.**
+
+- Utility always rises with consumption, but by less and less. At $c=1$ the slope is $1/1=1$; at $c=2$ it is
+  $0.50$; at $c=8$ it is only $0.125$.
+- The title compares the slope with the utility of one *whole* extra unit. Going from 2 to 3 adds
+  $\log 3-\log 2 = 0.41$, a little less than the slope at 2, because the curve keeps flattening along the way.
+- The log curve has no floor: as $c$ approaches zero, $\log c$ falls without limit. Very low consumption is very
+  painful, which is a strong reason to avoid it in any period.
+- The square-root curve has the same basic shape, rising and flattening. Any such *concave* curve shows diminishing
+  marginal utility.
+
+**Your turn.** With log utility, find the consumption level at which marginal utility is exactly $0.25$. Then
+check it in the empty cell with `marginal_utility`.
+
+<details><summary>Hint</summary>
+
+With log utility $u'(c)=1/c$, so solve $1/c = 0.25$. Then call `marginal_utility(...)` with your answer.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 2: The desire to smooth consumption
+
+**Goal.** See why diminishing marginal utility makes Irving prefer the *same* consumption in both periods to an
+uneven path with the same total.
+
+Suppose Irving simply spent his income each period: $c_1=y_{\text{today}}=1$ and $c_2=y_{\text{future}}=5$. Or he
+could consume the average $\bar{c}=(c_1+c_2)/2=3$ in both periods. With $\beta=1$ and $R=0$ both paths cost the same,
+and $\bar{c}=3$ is exactly the solution $\bar{X}/2$ of equation (16.9). Which path gives more utility?
+
+- The uneven path gives the **average utility** $\tfrac{1}{2}[u(c_1)+u(c_2)]$, the midpoint of the dashed line
+  between the two points on the curve (the open circle).
+- The smooth path gives $u(\bar{c})$ in each period, the point on the curve above $\bar{c}$ (the filled dot in the middle).
+
+Because the curve bends, the point on the curve lies above the dashed line, so smoothing wins. Lifetime utility,
+twice these numbers, is higher with the smooth path.
+
+The diagram draws dotted guides from each point down to the consumption axis. A small function adds one guide with
+its label, so that the figure function stays short.
+
+```{python}
+def add_guide(fig, x, top, label):
+    """A dotted line from the consumption axis up to the point (x, top), with a label at the axis."""
+    fig.add_shape(type="line", x0=x, x1=x, y0=-2.5, y1=top, line=dict(color=GRAY, width=1, dash="dot"))
+    if label:
+        fig.add_annotation(x=x, y=-2.5, text=label, showarrow=False, yanchor="bottom", xshift=10,
+                           font=dict(size=15))
+    return fig
+```
+
+```{python}
+def smoothing_diagram(c1=1.0, c2=5.0, form="log"):
+    """Figure 16.2: utility from smoothing, u(c-bar), against the average of u(c1) and u(c2)."""
+    grid = np.linspace(0.01, 10, 1000)
+    c_bar = (c1 + c2) / 2                                    # the same consumption in both periods
+    u1, u2, u_bar = utility(c1, form), utility(c2, form), utility(c_bar, form)
+    average = (u1 + u2) / 2                                  # average utility of the uneven path
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=grid, y=utility(grid, form), line=dict(color=BLUE, width=4)))
+    fig.add_trace(go.Scatter(x=[c1, c2], y=[u1, u2], mode="lines", line=dict(color=GREEN, width=3, dash="dash")))
+    fig.add_trace(go.Scatter(x=[c1, c_bar, c2], y=[u1, u_bar, u2], mode="markers+text", text=["", "u(c̄)", ""],
+                             textposition="top left", marker=dict(color="black", size=11)))
+    fig.add_trace(go.Scatter(x=[c_bar], y=[average], mode="markers+text", text=["average utility"],
+                             textposition="bottom right",
+                             marker=dict(color="white", size=11, line=dict(color="black", width=1.5))))
+    for x, top, label in [(c1, u1, "c₁"), (c_bar, u_bar, "c̄"), (c2, u2, "c₂")]:
+        add_guide(fig, x, top, label if label == "c̄" or abs(c2 - c1) >= 1.2 else "")   # no overlapping labels
+    fig.add_annotation(x=10, y=utility(10, form), text="u(c)", showarrow=False, xanchor="right", yshift=16)
+    fig.update_layout(title=f"c̄ = {c_bar:.1f}:  u(c̄) = {u_bar:.2f}  vs  average utility = {average:.2f}"
+                            f"   (gain from smoothing {u_bar - average:.2f})",
+                      showlegend=False,
+                      xaxis=dict(title="Consumption, c", range=[0, 10.5]),
+                      yaxis=dict(title="Utility", range=[-2.5, 3.5]))
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(smoothing_diagram,
+         c1=FloatSlider(value=1.0, min=0.5, max=9.5, step=0.5, description="consumption today c₁", style=WIDE),
+         c2=FloatSlider(value=5.0, min=0.5, max=9.5, step=0.5, description="consumption in the future c₂", style=WIDE),
+         form=ToggleButtons(options=["log", "square root"], value="log", description="utility"));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 2 with a precomputed slider for future consumption
+slider_figure(smoothing_diagram, "c2", [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0], start=5.0,
+              label="consumption in the future c₂")
+```
+
+**What to notice.**
+
+- In the baseline, $u(\bar{c}) = \log 3 = 1.10$ while the average utility is $\tfrac{1}{2}(\log 1 + \log 5) = 0.80$.
+  Smoothing raises utility by 0.29 in each period.
+- The more uneven the path, the larger the gain. Move $c_2$ toward $c_1$: the dashed line shrinks toward the curve and
+  the gain falls to zero when $c_1=c_2$.
+- With square-root utility the gain is smaller (0.11 in the baseline), because that curve bends less. The desire to
+  smooth comes from the **curvature** of $u(c)$.
+- This is the idea behind the **permanent-income hypothesis**: consumption follows total wealth, an average of
+  lifetime resources, rather than this period's income.
+
+<!-- cell -->
+
+### Key numbers: the marginal propensity to consume
+
+How much does consumption today rise when Irving gets a little more? The ratio of the rise in consumption to the
+rise in resources is the **marginal propensity to consume** (MPC). The textbook finds that 100 extra dollars today
+raise consumption by 50 dollars, an MPC of 1/2.
+
+A **borrowing constraint** changes the answer. If Irving has no financial wealth and cannot borrow, his consumption
+today can be no more than what he has today (equation 16.11 with $f_{\text{today}}=0$):
+
+$$c_{\text{today}} \le f_{\text{today}} + y_{\text{today}}.$$
+
+Our baseline Irving *wants* to consume 3 but has only 1, so the constraint binds: he consumes his whole income, and
+saves nothing for the future. The function below picks the smaller of the two numbers with Python's `min`.
+
+```{python}
+def constrained_today(f_today, y_today, y_future, R):
+    """c_today when Irving cannot borrow: the plan of (16.9), but no more than f_today + y_today (16.11)."""
+    wanted, later = consumption_plan(f_today, y_today, y_future, R)
+    return min(wanted, f_today + y_today)
+```
+
+We now give both versions of Irving 0.01 more (100 dollars, if one unit is 10,000 dollars) in three ways, and
+divide the change in consumption today by 0.01. The last row is a **tax cut today** of 0.01, paid for by a tax
+increase of $0.01(1+R)$ in the future, which leaves total wealth unchanged.
+
+> **Python note.** `shocks` is a *dictionary*: each entry pairs a name with three changes (to $f_{\text{today}}$,
+> $y_{\text{today}}$ and $y_{\text{future}}$). `.items()` hands the entries to the `for` loop one at a time.
+> `consumption_plan(...)[0]` keeps only the first of its two results, $c_{\text{today}}$. `rows.append(...)` adds one
+> row to a list, and `pd.DataFrame(rows, columns=[...])` turns the list of rows into a table with named columns.
+
+```{python}
+R, extra = 0.05, 0.01
+shocks = {"income today +0.01": (0, extra, 0),
+          "income in the future +0.01": (0, 0, extra),
+          "financial wealth +0.01": (extra, 0, 0),
+          "tax cut today, paid by a tax rise later": (0, extra, -extra * (1 + R))}
+rows = []
+for shock, (d_f, d_today, d_future) in shocks.items():
+    free_before = consumption_plan(f_today, y_today, y_future, R)[0]
+    free_after = consumption_plan(f_today + d_f, y_today + d_today, y_future + d_future, R)[0]
+    tied_before = constrained_today(f_today, y_today, y_future, R)
+    tied_after = constrained_today(f_today + d_f, y_today + d_today, y_future + d_future, R)
+    free = round((free_after - free_before) / extra, 3) + 0.0     # + 0.0 turns a rounded -0.0 into 0.0
+    tied = round((tied_after - tied_before) / extra, 3) + 0.0
+    rows.append([shock, free, tied])
+mpc = pd.DataFrame(rows, columns=["Irving receives ...", "MPC, can borrow", "MPC, cannot borrow"])
+mpc
+```
+
+- When Irving can borrow, an extra 100 dollars today raises consumption by 50 dollars (MPC 0.5), the textbook's
+  number. Future income counts for a little less, $0.5/1.05 = 0.476$, because it is discounted.
+- The tax cut paid by later taxes leaves total wealth, and so consumption, unchanged: this is **Ricardian
+  equivalence**.
+- The constrained Irving spends every extra dollar he gets today (MPC 1), including the tax cut. Ricardian equivalence
+  fails for him. Extra *future* income does not help him today at all.
+
+With more periods of life the MPC shrinks. With $R=0$ and $\beta=1$, a consumer who will live $T$ more periods spreads
+an extra dollar evenly over them, so the MPC is $1/T$:
+
+```{python}
+for T in [2, 3, 50, 80]:
+    print(f"{T:>2} periods left: MPC = 1/{T} = {1 / T:.3f}")
+```
+
+**Your turn.** Give the baseline Irving 1 unit of financial wealth ($f_{\text{today}}=1$). Is he still
+borrowing-constrained? Compare `consumption_plan` and `constrained_today` with $R=0$.
+
+<details><summary>Hint</summary>
+
+The constraint binds only when the planned $c_{\text{today}} = \bar{X}/2$ is larger than $f_{\text{today}}+y_{\text{today}}$.
+Compute both numbers for $f_{\text{today}}=1$, $y_{\text{today}}=1$, $y_{\text{future}}=5$.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 3: Household debt as a percentage of GDP
+
+**Goal.** See how much U.S. households have borrowed, relative to the size of the economy, since 1970.
+
+The data are the debt of U.S. households and nonprofit organizations (mostly mortgages, plus consumer credit), from
+the Federal Reserve's *Financial Accounts of the United States*, divided by nominal GDP. One row is one quarter; the
+date is the first day of the quarter.
+
+> **Python note.** `pd.read_csv` reads a data file into a *DataFrame*, a table with named columns, and
+> `parse_dates=["date"]` turns the text in the `date` column into real dates. `.head()` shows the first five rows.
+
+```{python}
+debt = pd.read_csv(DATA_URL + "fig16-3.csv", parse_dates=["date"])
+ratio = debt.set_index("date").debt_gdp_pct          # the same numbers, with dates as row labels
+debt.head()
+```
+
+> **Python note.** `px.area` draws a line and fills the area below it, like the textbook's figure.
+> `ratio.idxmax()` gives the **date** of the largest value, and `peak.quarter` its quarter (1 to 4).
+
+```{python}
+peak = ratio.idxmax()
+fig = px.area(debt, x="date", y="debt_gdp_pct", labels={"date": "Year", "debt_gdp_pct": "Percent of GDP"},
+              title="Household debt doubled from 1970 to 2008, then households deleveraged")
+fig.update_traces(line=dict(color=BLUE, width=3), fillcolor="rgba(138, 150, 163, 0.3)")
+fig.add_annotation(x=peak, y=ratio[peak], text=f"peak {ratio[peak]:.1f}% in {peak.year}Q{peak.quarter}",
+                   ax=-90, ay=-10, font=dict(size=13))
+fig.update_xaxes(range=["1969-07-01", "2027-01-01"])
+fig.update_yaxes(range=[40, 105], tickvals=[50, 60, 70, 80, 90, 100])
+fig.show()
+```
+
+**What to notice.**
+
+- Through the 1970s and early 1980s debt stayed below 50 percent of GDP. From the mid-1980s it climbed steadily,
+  and then fast in the 2000s housing boom, to a peak of 98 percent in early 2008.
+- After the financial crisis households paid down debt, or defaulted on it. By 2019 the ratio was back near 73
+  percent. The jump in 2020 is a GDP effect: output collapsed in the pandemic while debt did not.
+- The ratio has kept falling since, to 65.7 percent in the second quarter of 2026, the level of the late 1990s.
+
+<!-- cell -->
+
+### Key numbers: the textbook's debt facts
+
+```{python}
+print(f"Highest value 1970-1984: {ratio['1970':'1984'].max():.1f}%   (textbook: typically less than 50)")
+print(f"Average of 2000: {ratio['2000'].mean():.1f}%                (textbook: about 67)")
+print(f"Peak: {ratio.max():.1f}% in {peak.year}Q{peak.quarter}             (textbook: nearly 100 by 2009)")
+print(f"2008 average / 1970 average: {ratio['2008'].mean() / ratio['1970'].mean():.2f}  (textbook: doubled)")
+for year in ["2009", "2014", "2019"]:
+    print(f"Average of {year}: {ratio[year].mean():.1f}%")
+```
+
+<!-- cell -->
+
+### Data hygiene: units and revisions
+
+Let us rebuild the ratio from its two ingredients. The file `debt_levels.csv` holds household debt and GDP in
+dollars, as published today and as published on 30 March 2023, when the textbook was written.
+
+```{python}
+levels = pd.read_csv(DATA_URL + "debt_levels.csv", parse_dates=["date"])
+levels.head(3)
+```
+
+Dividing debt by GDP straight away gives nonsense:
+
+```{python}
+naive = 100 * levels.debt_millions / levels.gdp_billions
+print(f"Debt / GDP in 1970Q1: {naive[0]:,.0f} percent?")
+```
+
+Debt cannot be 43,000 percent of GDP. The column names give the reason: FRED now reports this debt series in
+**millions** of dollars, but GDP in **billions**. The 2023 vintage reported the *same* debt series in billions.
+A program written in 2023 would silently give wrong answers today, so **always check the units** of every series.
+Dividing debt by 1,000 fixes the units:
+
+```{python}
+levels["Data as of 2026"] = 100 * (levels.debt_millions / 1000) / levels.gdp_billions
+levels["Data as published in March 2023"] = 100 * levels.debt_billions_2023 / levels.gdp_billions_2023
+gap = levels["Data as of 2026"] - levels["Data as published in March 2023"]
+print(f"Largest gap from fig16-3.csv: {(levels['Data as of 2026'] - debt.debt_gdp_pct).abs().max():.4f}")
+print(f"Revision, today minus 2023: largest {gap.min():.1f} points, in {levels.date[gap.idxmin()]:%Y-%m}")
+```
+
+The two vintages agree before 2000 but not after. In 2023 the statistical agency revised nominal GDP up, and a
+larger denominator means a smaller ratio. Click a legend entry to hide or show one line.
+
+```{python}
+fig = px.line(levels, x="date", y=["Data as of 2026", "Data as published in March 2023"],
+              color_discrete_sequence=[BLUE, GREEN],
+              labels={"date": "Year", "value": "Percent of GDP", "variable": "Vintage"},
+              title="Revisions to GDP lowered the debt ratio after 2000 by up to 3.2 points")
+fig.update_xaxes(range=["1969-07-01", "2027-01-01"])
+fig.update_yaxes(range=[40, 105], tickvals=[50, 60, 70, 80, 90, 100])
+fig.show()
+```
+
+**Your turn.** The textbook says that in 2007 debt was "just under 100 percent" of GDP. Compute the 2007 average of
+the ratio in both vintages.
+
+<details><summary>Hint</summary>
+
+Keep the rows of 2007 with `levels[levels.date.dt.year == 2007]`, then take the `.mean()` of each of the two new
+columns.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 4: The personal saving rate
+
+**Goal.** Follow how much of their disposable income U.S. households save, and learn how monthly data become
+quarterly data.
+
+The **personal saving rate** is personal saving divided by disposable income (income after taxes). The Bureau of
+Economic Analysis publishes it every month. The textbook plots quarterly values, so we load both versions.
+
+```{python}
+saving = pd.read_csv(DATA_URL + "fig16-4.csv", parse_dates=["date"])
+monthly = pd.read_csv(DATA_URL + "saving_rate_monthly.csv", parse_dates=["date"])
+rate_q = saving.set_index("date").saving_rate
+rate_m = monthly.set_index("date").saving_rate
+monthly.tail(3)
+```
+
+<!-- cell -->
+
+### From months to quarters
+
+A quarterly value is the average of the three monthly values in that quarter. pandas does this in one step.
+
+> **Python note.** `.resample("QS")` groups a series with dates into quarters (`"QS"` labels each quarter by its
+> first day). `.mean()` then averages each group and `.count()` counts how many months each group has.
+> `quarterly[months == 3]` keeps only the quarters with all three months.
+
+```{python}
+by_quarter = rate_m.resample("QS")
+quarterly = by_quarter.mean()
+months = by_quarter.count()
+print(months.tail(2))
+complete = quarterly[months == 3]
+print(f"Largest gap from fig16-4.csv: {(complete - rate_q).abs().max():.4f}")
+```
+
+The last quarter has only two months, July and August 2026, so its average would not be comparable with the
+others. We drop it, and our quarterly series is then identical to the textbook-style file.
+
+The chart can show either version. The title reports the highest and lowest values.
+
+```{python}
+def when(date, frequency):
+    """A date as '2020Q2' for quarterly data, or as 'Apr 2020' for monthly data."""
+    if frequency == "quarterly":
+        return f"{date.year}Q{date.quarter}"
+    return f"{date:%b %Y}"
+
+
+def saving_chart(frequency="quarterly"):
+    """Figure 16.4: the personal saving rate, as quarterly averages or as monthly values."""
+    if frequency == "quarterly":
+        data, rate = saving, rate_q
+    else:
+        data, rate = monthly, rate_m
+    high, low = rate.idxmax(), rate.idxmin()
+    fig = px.area(data, x="date", y="saving_rate", labels={"date": "Year", "saving_rate": "Percent of disposable income"},
+                  title=f"{frequency.capitalize()} data: highest {rate[high]:.1f}% ({when(high, frequency)}), "
+                        f"lowest {rate[low]:.1f}% ({when(low, frequency)})")
+    fig.update_traces(line=dict(color=BLUE, width=2.5), fillcolor="rgba(138, 150, 163, 0.3)")
+    fig.update_xaxes(range=["1969-07-01", "2027-01-01"])
+    fig.update_yaxes(range=[0, 35], tickvals=[5, 10, 15, 20, 25, 30, 35])     # no 0 next to the first year
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(saving_chart, frequency=ToggleButtons(options=["quarterly", "monthly"], value="quarterly",
+                                               description="data"));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 4 with buttons for quarterly and monthly data
+fig = saving_chart("quarterly")
+by_month = saving_chart("monthly")
+fig.add_trace(by_month.data[0])
+fig.data[1].visible = False
+buttons = [dict(label="quarterly", method="update",
+                args=[{"visible": [True, False]}, {"title.text": fig.layout.title.text}]),
+           dict(label="monthly", method="update",
+                args=[{"visible": [False, True]}, {"title.text": by_month.layout.title.text}])]
+fig.update_layout(updatemenus=[dict(type="buttons", direction="right", x=0.01, y=0.98, xanchor="left",
+                                    yanchor="top", buttons=buttons)])
+fig
+```
+
+**What to notice.**
+
+- Households saved 10 to 15 percent of disposable income in the 1970s and early 1980s. The rate then drifted down
+  for two decades, to about 2 to 3 percent in 2005–2007, the years of the housing boom.
+- Saving rose after the financial crisis, as households rebuilt their balance sheets: this is the **precautionary
+  saving** of the chapter at work.
+- In the pandemic saving shot up, because many purchases were impossible and government transfers raised income.
+  It fell to 2.6 percent in mid-2022, recovered to about 6 percent in 2023–2024, and has drifted down to 4.4 since.
+- Switch to monthly data: the peak is 31.8 percent in April 2020, far above the quarterly 24.2. Monthly data are
+  noisier, and averaging over a quarter smooths out the extremes.
+
+<!-- cell -->
+
+### Key numbers: the textbook's saving facts
+
+```{python}
+print(f"1970-1979 average: {rate_q['1970':'1979'].mean():.1f}%   1980-1984: {rate_q['1980':'1984'].mean():.1f}%"
+      "   (textbook: more than 10)")
+print(f"2005-2007 average: {rate_q['2005':'2007'].mean():.1f}%                   (textbook: around 3)")
+print(f"2007 average of the months: {rate_m['2007'].mean():.1f}%            (textbook exercise: 2.5)")
+print(f"Latest quarter ({when(rate_q.index[-1], 'quarterly')}): {rate_q.iloc[-1]:.1f}%;   "
+      f"latest month ({when(rate_m.index[-1], 'monthly')}): {rate_m.iloc[-1]:.1f}%")
+```
+
+The values after 2000 are up to about 2 points lower than in the textbook's figure, because the 2023 revision of
+the national accounts lowered measured saving. The low of "around 3 percent" in the mid-2000s is now closer to 2.5.
+
+**Your turn.** Find the *monthly* low point of the saving rate in 2022, and compare it with the lowest quarterly value
+in 2022.
+
+<details><summary>Hint</summary>
+
+`rate_m['2022']` keeps the months of 2022. Use `.min()` for the value and `.idxmin()` for the date, then do the same
+with `rate_q`.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 5: Household wealth as a ratio to income
+
+**Goal.** Check one explanation for the fall in saving: households felt richer because their wealth rose.
+
+Household **net worth** is everything households own (houses, stocks, bonds, deposits) minus everything they owe.
+Dividing it by a year of disposable income gives a ratio: a value of 5 means that households own five years of income.
+
+```{python}
+wealth = pd.read_csv(DATA_URL + "fig16-5.csv", parse_dates=["date"])
+net_worth = wealth.set_index("date").networth_dpi_ratio
+wealth.head()
+```
+
+The chart marks three turning points. The loop adds one labelled arrow for each.
+
+> **Python note.** In the dictionary `EVENTS`, each key is a label and each value holds a date and the length of the
+> arrow (negative: the label sits above the line). `pd.Timestamp(...)` turns text into a date.
+
+```{python}
+EVENTS = {"dot-com peak": ("1999-10-01", -40),
+          "housing peak": ("2006-10-01", -40),
+          "financial crisis": ("2009-04-01", 40)}
+fig = px.area(wealth, x="date", y="networth_dpi_ratio",
+              labels={"date": "Year", "networth_dpi_ratio": "Net worth / disposable income"},
+              title=f"Household wealth rose from {net_worth.iloc[0]:.1f} to {net_worth.iloc[-1]:.1f} "
+                    "times disposable income")
+fig.update_traces(line=dict(color=BLUE, width=3), fillcolor="rgba(138, 150, 163, 0.3)")
+for label, (date, offset) in EVENTS.items():
+    day = pd.Timestamp(date)
+    fig.add_annotation(x=day, y=net_worth[day], text=f"{label}: {net_worth[day]:.2f}", ax=0, ay=offset,
+                       font=dict(size=12))
+fig.update_xaxes(range=["1969-07-01", "2027-01-01"])
+fig.update_yaxes(range=[3, 9], tickvals=[4, 5, 6, 7, 8, 9])
+fig.show()
+```
+
+**What to notice.**
+
+- Wealth rose from about 5 years of income in 1970 to about 6 at the end of the 1990s, when stock prices soared, even
+  while households saved less and borrowed more.
+- The ratio fell after the dot-com crash, rose in the housing boom to 6.76, and fell to 5.45 in the financial crisis.
+- Since 2012 it has climbed, with dips in 2020 and 2022, to a new high of 8.28 in the second quarter of 2026.
+
+<!-- cell -->
+
+### Wealth and saving together
+
+If households save less when they feel wealthy, quarters with a high wealth ratio should have a low saving rate. To
+check, we put the two series side by side, one row per quarter.
+
+> **Python note.** `merge` joins two tables on a common column, here `date`, like matching rows by ID in a
+> spreadsheet. `.dt.year` takes the year out of a date, and `//` divides and drops the remainder, so
+> `1987 // 10 * 10` is 1980. `.astype(str)` turns numbers into text.
+
+```{python}
+both = saving.merge(wealth, on="date")
+both["decade"] = (both.date.dt.year // 10 * 10).astype(str) + "s"
+both["quarter"] = both.date.dt.year.astype(str) + "Q" + both.date.dt.quarter.astype(str)
+corr = both.saving_rate.corr(both.networth_dpi_ratio)
+print(f"{len(both)} quarters; correlation between saving and wealth: {corr:.2f}")
+both.head(3)
+```
+
+A **correlation** runs from −1 to 1. A negative value means the two series tend to move in opposite directions.
+The option `trendline="ols"` adds the best-fitting straight line, and `trendline_scope="overall"` fits one line to
+all decades together. Hover over a point to see its quarter, and click a decade in the legend to hide it.
+
+```{python}
+fig = px.scatter(both, x="networth_dpi_ratio", y="saving_rate", color="decade", hover_name="quarter",
+                 trendline="ols", trendline_scope="overall",
+                 color_discrete_sequence=["#9ecae1", "#5aa0d8", BLUE, GREEN, TEAL, "#0b4f47"],
+                 range_x=[4, 9], range_y=[-1, 27],
+                 labels={"networth_dpi_ratio": "Net worth / disposable income",
+                         "saving_rate": "Personal saving rate (percent)", "decade": "Decade"},
+                 title=f"Households saved less when they were wealthier (correlation {corr:.2f})")
+fig.show()
+```
+
+**What to notice.**
+
+- The cloud slopes down: the decades with more wealth relative to income, the 2000s and 2010s, had lower saving rates
+  than the 1970s and 1980s.
+- The 2020s points sit high on both axes: in the pandemic saving jumped for reasons that had little to do with
+  wealth. A correlation is a summary, not proof of cause and effect.
+- The permanent-income hypothesis offers a second explanation: households borrow against a higher *expected*
+  future income. But it predicts low saving in fast-growing China, whose saving rate has in fact been rising.
+
+**Your turn.** Compute the correlation again without the pandemic years 2020 and 2021. Does the relation become
+stronger or weaker?
+
+<details><summary>Hint</summary>
+
+Keep the rows with `both[(both.date.dt.year < 2020) | (both.date.dt.year > 2021)]` and apply `.corr` to its two
+columns, as above.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Key numbers
+
+This table collects the chapter's main numbers. The model numbers use the shared baseline ($f_{\text{today}}=0$,
+$y_{\text{today}}=1$, $y_{\text{future}}=5$, $\beta=1$); the data numbers use the latest data.
+
+The last two model rows use the Euler equation (16.8) the other way round. If long-run growth fixes consumption
+growth at $g = 2$ percent a year, then $1+g = \beta(1+R)$, so the interest rate must be $R = (1+g)/\beta - 1$.
+
+```{python}
+def euler_interest_rate(g, beta=1.0):
+    """The real interest rate that makes consumption grow at rate g: R = (1 + g) / beta - 1   (from 16.8)."""
+    return (1 + g) / beta - 1
+```
+
+```{python}
+smooth = utility(3.0) - (utility(1.0) + utility(5.0)) / 2
+rows = [
+    ["Total wealth X, R = 0", total_wealth(0, 1, 5, 0.0), "—"],
+    ["c_today = X/2, R = 0", consumption_plan(0, 1, 5, 0.0)[0], "half of total wealth"],
+    ["c_today = X/2, R = 0.05 (wealth effect)", consumption_plan(0, 1, 5, 0.05)[0], "a higher R lowers X"],
+    ["Utility gain from smoothing, log utility", smooth, "u(c̄) above average utility"],
+    ["MPC out of income today, can borrow", mpc.iloc[0, 1], "1/2 (50 of 100 dollars)"],
+    ["MPC out of income today, cannot borrow", mpc.iloc[0, 2], "1"],
+    ["MPC with 50 periods left", 1 / 50, "about 1/50"],
+    ["R for 2% growth, beta = 1 (percent)", 100 * euler_interest_rate(0.02), "2"],
+    ["R for 2% growth, beta = 0.98 (percent)", 100 * euler_interest_rate(0.02, 0.98), "a little above 2"],
+    ["Debt / GDP, peak (percent)", ratio.max(), "nearly 100"],
+    ["Debt / GDP, 2008 average / 1970 average", ratio["2008"].mean() / ratio["1970"].mean(), "doubled"],
+    ["Debt / GDP, latest quarter (percent)", ratio.iloc[-1], "—"],
+    ["Saving rate, 1970s average (percent)", rate_q["1970":"1979"].mean(), "more than 10"],
+    ["Saving rate, 2005–2007 average (percent)", rate_q["2005":"2007"].mean(), "around 3"],
+    ["Net worth / income, 1970Q1", net_worth.iloc[0], "about 5"],
+    ["Net worth / income, latest quarter", net_worth.iloc[-1], "—"],
+]
+pd.DataFrame(rows, columns=["Quantity", "Value", "Textbook"]).round(3)
+```
+
+## Summary
+
+- In the **neoclassical consumption model**, a consumer chooses consumption today and in the future to maximize
+  lifetime utility, subject to the **intertemporal budget constraint**: the present value of consumption equals total
+  wealth, financial plus human wealth.
+- **Diminishing marginal utility** makes people want to **smooth** consumption. With log utility and $\beta=1$,
+  Irving consumes half of his total wealth today, and the **Euler equation** links consumption growth to
+  $\beta(1+R)$, which is why interest rates and growth rates are similar numbers.
+- So consumption follows **permanent income**: the **marginal propensity to consume** out of a temporary windfall is
+  small, and the timing of taxes does not matter (**Ricardian equivalence**). **Borrowing constraints** and
+  **precautionary saving** raise the MPC toward 1 for many low-wealth households.
+- U.S. data show household debt doubling relative to GDP before 2008 and the saving rate falling to about 2.5
+  percent, while household wealth rose relative to income.
+- The next chapter turns to the other big private spending decision, **investment** by firms.
