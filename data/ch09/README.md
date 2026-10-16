@@ -42,3 +42,46 @@ All three files are made by `build_data.py` from raw files saved by macro102's `
   - Known gap: October 2025 is missing (prices were not collected during the federal government shutdown), so `cpi` and `inflation_12m` are empty for that month. It is left missing here.
   - Validation: with October 2025 interpolated, the calendar-year means reproduce the annual inflation of `fig9-5.csv` (largest difference 0.0005 points).
   - Used for the monthly inflation line of Figure 5 and the check of the Covid-19 recession (12-month inflation 2.34 percent in February 2020, 0.31 percent in April 2020).
+
+## Multi-country files (conventions.md §6b)
+
+Made by `build_data.py`, which downloads from the public sources (requests' default User-Agent; the OECD API answers
+429 "Too Many Requests" after a few calls, so the script waits and retries) and caches the raw responses in
+macro102's `.work/ch09/notebook-raw/`. The figures use the textbook's U.S. data (CBO, BEA, BLS); the OECD's U.S. rows
+are kept for comparison.
+
+- `short_run_panel.csv`: `iso3, country, year, gdp_real, gdp_potential, output_gap, inflation, inflation_source,
+  unemployment, unemployment_trend`. Annual, 51 economies (the 38 OECD members and Argentina, Brazil, Bulgaria, China,
+  Croatia, India, Indonesia, Peru, Romania, Russia, Saudi Arabia, South Africa, Thailand), 1960–2025, 3,121 rows.
+  - Source: OECD *Economic Outlook* 119 (June 2026), annual
+    (<https://sdmx.oecd.org/public/rest/data/OECD.ECO.MAD,DSD_EO@DF_EO,/.GDPV+GDPVTR+GDPVD+GAP+UNR+CPI_YTYPCT+CPIH_YTYPCT.A>);
+    the EO's 2026–2027 projections are dropped.
+  - `gdp_real`: real GDP, trillions of 2021 US dollars at purchasing power parity (`GDPVD`). `gdp_potential`: potential
+    output in the same units, `gdp_real × GDPVTR / GDPV` (potential and actual GDP in national currency). Norway's
+    `gdp_potential` is left empty, because its EO potential output and gap refer to mainland Norway (without oil and
+    shipping) while its GDP is total GDP.
+  - `output_gap`: short-run output, percent of potential (`GAP`), 39 economies, from 1985 at the earliest. It equals
+    100 × (`GDPV`/`GDPVTR` − 1) for every economy except Norway (mainland gap).
+  - `inflation`: annual CPI inflation, percent, from `../ch08/inflation_panel.csv` (World Bank WDI `FP.CPI.TOTL.ZG`,
+    gaps filled from the World Bank's Global Inflation Database; `inflation_source` = `WDI` or `GID`), and where both
+    are missing the EO's headline or harmonised CPI inflation (`OECD EO`, 11 rows).
+  - `unemployment`: unemployment rate, percent (`UNR`). `unemployment_trend`: its Hodrick–Prescott trend (λ = 100),
+    computed here for each economy over all its years. EO 119 no longer publishes NAIRU estimates, so the notebook
+    measures cyclical unemployment as `unemployment − unemployment_trend` for the other countries (Figure 8).
+  - Validation (U.S. rows vs the textbook-figure files): the OECD output gap correlates 0.80 with the CBO gap of
+    `fig9-3.csv` (annual means, 1985–2025; mean difference +0.22 points, largest 2.0 points in 1986); unemployment
+    matches `fig9-8.csv` within 0.045 points; inflation matches `fig9-5.csv` within 0.087 points. Okun's slope with
+    HP-trend unemployment is −0.47 (CBO gap, 1970–2025) or −0.38 (1960–2025) against −0.62 with the CBO natural rate:
+    the trend absorbs part of long slumps.
+  - Used for Figures 2, 3, 5, 7 and 8 (other countries).
+- `employment_quarterly.csv`: `iso3, country, date, employment, emp_change_pct`. Total employment (labour force survey
+  basis), millions, and its percent change from the previous quarter, quarterly (date = first day of the quarter),
+  37 economies, 1960-Q2 to 2025-Q4, 7,317 rows.
+  - Source: OECD *Economic Outlook* 119, `ET`, quarterly
+    (<https://sdmx.oecd.org/public/rest/data/OECD.ECO.MAD,DSD_EO@DF_EO,/.ET.Q>); 2026–2027 projections dropped.
+  - Validation: the U.S. rows (household survey) correlate 0.96 with the quarterly change of payroll jobs
+    (`payroll_employment.csv`, quarterly means); 2020-Q2: −12.7 percent against −11.9 percent.
+  - Known quirk: for some economies the early quarters are interpolated by the OECD from annual data (e.g. Turkey
+    before the 2000s changes smoothly from quarter to quarter). This is a different concept from the monthly payroll
+    jobs of `fig9-4.csv`.
+  - Used for Figure 4 (other countries).

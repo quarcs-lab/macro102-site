@@ -72,4 +72,43 @@ All five files are made by `build_data.py` from raw files saved by macro102's `/
     filled panel reproduces `fig8-6.csv` and `fig8-7.csv` within 0.03 points in every year they share.
   - Known quirk: Zimbabwe's GID values for 2001–2008 are not credible (for example −72.7 percent in 2007, during the
     hyperinflation); the notebook drops them (Figure 7).
-  - Used for other thresholds of "high inflation" (Figure 2) and the country menu of Figure 7.
+  - Used for the country lists of Figures 1, 6 and 7, and for other thresholds and regions of "high inflation" (Figure 2).
+
+## Multi-country files (conventions.md §6b)
+
+Made by `build_data.py`, which downloads from the public sources (requests' default User-Agent) and caches the raw
+responses in macro102's `.work/ch08/notebook-raw/`. The U.S. rows of each file are the textbook-figure series.
+
+- `countries.csv`: `iso3, country, region, income, oecd`. The World Bank's 217 economies (aggregates removed), with
+  their region, income group and OECD membership (38 members in 2026), 217 rows.
+  - Source: World Bank API country list (<https://api.worldbank.org/v2/country?format=json&per_page=400>), saved by
+    collect-data as `fig8-2/raw/wdi_country_list.json`; OECD membership typed in from <https://www.oecd.org/en/about/members-partners.html>.
+  - Names are those of `inflation_panel.csv`. The WDI region "Middle East, North Africa, Afghanistan & Pakistan" is
+    shortened to "Middle East & North Africa" (it still includes Afghanistan and Pakistan).
+  - Used for the country colors and the region/OECD groups of Figure 2.
+- `money_prices_panel.csv`: `iso3, country, year, money, cpi, source`. Broad money and the CPI (indexes in each
+  country's own units, 6 significant digits), annual, 18 economies, 1870–2025, 2,521 rows.
+  - Sources: Jordà-Schularick-Taylor Macrohistory Database R6, variables `money` and `cpi`
+    (<https://www.macrohistory.net/database/>), 17 economies to 2020 (`source = JST`); the U.S. rows are
+    `us_money_prices.csv` (JST to 1958, FRED `M2NS` after, MeasuringWorth CPI; `source = JST+FRED`), to 2025.
+  - Validation: the U.S. decade growth rates reproduce `fig8-3.csv` exactly (largest difference 0.000).
+  - Known gaps and quirks: Germany has no money data for 1923–1924 and 1939–1947, and its 1920s decade averages are
+    1,139 percent (money) and 1,210 percent (CPI) a year; Belgium's money starts in 1979, Ireland's in 1922.
+  - Used for Figure 3 (any of the 18 countries, any period length).
+- `interest_rates_panel.csv`: `iso3, country, year, short_rate, inflation, real_rate, rate_source`. Annual 3-month
+  nominal interest rate, CPI inflation and the ex-post real rate `short_rate − inflation`, percent, 50 economies
+  (the OECD members and Argentina, Brazil, Bulgaria, China, Croatia, India, Indonesia, Peru, Romania, Russia,
+  South Africa, Thailand), 1960–2025, 2,054 rows.
+  - Sources: OECD Economic Outlook 119, short-term interest rate `IRS`
+    (<https://sdmx.oecd.org/public/rest/data/OECD.ECO.MAD,DSD_EO@DF_EO,/.IRS.A>, `rate_source = OECD EO`); earlier years
+    the EO lacks are added from the OECD's financial-market statistics, 3-month interbank rate `IR3TIB` (the series FRED
+    shows as `IR3TIB01{CC}M156N`; <https://sdmx.oecd.org/public/rest/data/OECD.SDD.STES,DSD_STES@DF_FINMARK,/.A.IR3TIB......>,
+    `rate_source = OECD MEI`), but only when the two agree within 0.5 points where they overlap (e.g. Germany 1960–1990).
+    Inflation is the CPI inflation of `inflation_panel.csv`. The U.S. rows are `fig8-5.csv` (Treasury-bill rate `TB3MS`,
+    `rate_source = FRED TB3MS`).
+  - Validation: the U.S. real rate reproduces `fig8-5.csv` (largest difference 0.001). The OECD's own U.S. 3-month rate
+    is on average 0.59 points above the Treasury-bill rate: the other countries' rates are money-market rates, a slightly
+    different concept from the textbook's Treasury bill.
+  - Known quirks: Argentina 2025 has no inflation (one row with an empty real rate); Russia's rate stops in 2021. With
+    inflation in the hundreds of percent, `i − π` is a poor approximation of the real rate (Argentina 2024: −164).
+  - Used for Figure 5 (a menu of the 50 economies).
