@@ -16,3 +16,7 @@ Full definitions and the validation against the textbook are in macro102's
 ## Wider files built for the notebook widgets
 
 None. The chapter's only data figure uses `fig11-6.csv` as copied, and the model figures need no data.
+
+The figure stays U.S.-only (conventions §6b): its subject is the CBO's February 2009 forecasts of the U.S.
+unemployment rate with and without the ARRA stimulus, a series that exists only for the U.S. Cross-country
+unemployment rates (OECD, 40 economies) are in `data/ch10/unemployment_panel.csv`, used by the Chapter 10 notebook.
