@@ -1,0 +1,1196 @@
+# Chapter 9: An Introduction to the Short Run
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/ch09-an-introduction-to-the-short-run.ipynb)
+
+*Data Science and Macroeconomic Models: A Python Companion to Intermediate Macroeconomics* · Carlos Mendez
+
+> **How to use this notebook.** In Colab, click *Runtime → Run all*. After that, every model
+> figure has live sliders: move one and the model is solved again on the spot. On the book
+> website the same figures come with one precomputed slider. Each section ends with a short
+> **Your turn** task, and you can try it in the empty code cell below the task.
+
+<!-- cell -->
+
+## Learning goals
+
+The long-run model of Chapters 3–8 tells us where the economy is heading on average. This chapter
+looks at the ups and downs around that path. By the end of it you will be able to:
+
+- split actual output into **potential output** $\bar{Y}_t$ and **short-run output** $\tilde{Y}_t$, and
+  compute $\tilde{Y}_t$ from data;
+- describe U.S. recessions with data on output, employment and inflation, and measure what they cost;
+- explain the **Phillips curve**: a booming economy raises inflation, a slump lowers it;
+- use **Okun's law** to move between short-run output and unemployment;
+- in Python: shade recessions on a chart, fit a straight line with `np.polyfit`, compare two vintages
+  of the same data, and simulate inflation year by year with a loop.
+
+<!-- cell -->
+
+## Figures in this chapter
+
+The figures follow the order of the textbook chapter. The second column shows which textbook
+figure each notebook figure replicates.
+
+| Figure | Textbook figure | Type | What you can change |
+|---|---|---|---|
+| Figure 1 | 9.1 Economic fluctuations and short-run output | model | size of the fluctuations, growth of potential output |
+| Figure 2 | 9.2 U.S. real GDP, actual and potential | data | ratio or linear scale |
+| Figure 3 | 9.3 U.S. economic fluctuations | data | show or hide the 2023 data vintage (legend) |
+| Figure 4 | 9.4 Changes in U.S. employment | data | full range or zoom on normal months |
+| Figure 5 | 9.5 Inflation in the United States | data | show or hide the monthly series (legend) |
+| Figure 6 | 9.6 The Phillips curve | model | slope of the Phillips curve, short-run output |
+| Figure 7 | 9.7 Measuring the Phillips curve | data | slope of the model line (fit it by eye) |
+| Figure 8 | 9.8 Okun's law for the U.S. economy | data | slope of the model line (fit it by eye) |
+| Figure 9 | 9.9 The Phillips curve and the booming economy | model | long-run inflation, slope, short-run output, "Run the economy" button |
+
+<!-- cell -->
+
+## Setup
+
+We first load the Python libraries we need. You only have to run this cell once.
+
+> **Python note.** `import` loads a *library*, a toolbox written by other people. We give each
+> library a short nickname, for example `np` for NumPy, so that the code stays short. Text after
+> a `#` is a *comment*: Python ignores it, and it is there for human readers. The `try ... except`
+> block runs one Colab-only line and simply skips it anywhere else.
+
+```{python}
+# Libraries used in this chapter
+import numpy as np                              # numbers and arrays
+import pandas as pd                             # data tables
+import plotly.express as px                     # quick charts from data tables
+import plotly.graph_objects as go               # charts built piece by piece (model figures)
+import plotly.io as pio
+from plotly.subplots import make_subplots       # several panels in one figure
+from ipywidgets import interact, interact_manual, FloatSlider, ToggleButtons, Dropdown
+
+# One light blue/green look for every chart
+BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
+pio.templates.default = "plotly_white"
+pio.templates["plotly_white"].layout.update(width=860, height=480)   # same size in Colab and on the website
+px.defaults.color_discrete_sequence = [BLUE, TEAL, GREEN, "#5aa0d8", "#0b4f47"]
+WIDE = {"description_width": "initial"}         # show the full slider labels
+
+# Colab only: let Plotly charts appear inside the interactive widgets
+try:
+    import google.colab
+    google.colab.output.enable_custom_widget_manager()
+except ImportError:
+    pass                                        # not running in Colab: nothing to do
+
+# The data files of this chapter live in the book's GitHub repository
+DATA_URL = "https://raw.githubusercontent.com/quarcs-lab/macro102-site/main/data/ch09/"
+```
+
+The next cell defines a helper that only the book website needs. Run it and move on.
+
+```{python}
+#| kind: helper
+# @title Helper for the website versions (run this cell; you do not need to read it)
+def slider_figure(make_figure, name, values, start, label=None):
+    """Precompute make_figure(name=value) for every value and join the results with one slider.
+
+    The website cannot run Python, so each interactive figure also gets this precomputed version.
+    """
+    figures = [make_figure(**{name: v}) for v in values]
+    first = values.index(start)
+    fig = go.Figure(layout=figures[first].layout)
+    owner = []                                  # which precomputed figure each trace comes from
+    for i, f in enumerate(figures):
+        for trace in f.data:
+            trace.visible = (i == first)
+            fig.add_trace(trace)
+            owner.append(i)
+    steps = []
+    for i, f in enumerate(figures):
+        layout = {"title": f.layout.title.to_plotly_json(),
+                  "annotations": [a.to_plotly_json() for a in f.layout.annotations],
+                  "shapes": [s.to_plotly_json() for s in f.layout.shapes]}
+        visible = [o == i for o in owner]
+        steps.append(dict(method="update", label=str(values[i]), args=[{"visible": visible}, layout]))
+    fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
+                                    currentvalue=dict(prefix=(label or name) + " = "))])
+    return fig
+```
+
+## The model in code
+
+The short-run model takes the long run as given. **Potential output** $\bar{Y}_t$ and the long-run
+inflation rate $\bar{\pi}$ come from the long-run model, so they carry bars: they are exogenous here.
+The model explains how **actual output** $Y_t$ and **inflation** $\pi_t$ move around them.
+
+Actual output is the long-run trend plus short-run fluctuations (equation 9.1). We measure the
+fluctuations in percent of potential output and call them **short-run output**:
+
+$$\tilde{Y}_t \equiv \frac{Y_t - \bar{Y}_t}{\bar{Y}_t} \qquad (9.2)$$
+
+When the economy booms, $Y_t > \bar{Y}_t$ and $\tilde{Y}_t > 0$. In a recession, $\tilde{Y}_t < 0$.
+Two more relationships complete this first look at the short run:
+
+- the **Phillips curve**: inflation rises when output is above potential and falls when it is below,
+  $\Delta\pi_t = \bar{\nu}\,\tilde{Y}_t$. Chapter 12 calls the slope $\bar{\nu}$ (the Greek letter *nu*);
+- **Okun's law**: unemployment is above its natural rate $\bar{u}$ when output is below potential,
+  $u_t - \bar{u} = -\tfrac{1}{2}\,\tilde{Y}_t$ (equation 9.3).
+
+In the code, $\tilde{Y}$, $\Delta\pi$ and $u-\bar{u}$ are all measured in percent (or percentage points),
+as in the textbook's figures.
+
+**One baseline for every diagram.** The textbook's diagrams 9.1 and 9.6 print no numbers, so all the
+model figures of this notebook share one illustrative baseline:
+
+- potential output starts at $\bar{Y}_0 = 100$ and grows by $\bar{g} = 2$ percent a year;
+- short-run output swings between $+2$ and $-2$ percent (the $\pm 2\%$ marked in Figure 9.1), in a
+  cycle that repeats every 8 years;
+- the slope of the Phillips curve is $\bar{\nu} = 0.33$, the textbook's "about 1/3" for the United States;
+- long-run inflation is $\bar{\pi} = 2$ percent, and Okun's slope is $-1/2$.
+
+Figure 9 is the worked answer to a textbook exercise, which gives its own numbers ($\bar{\nu} = 1$,
+$\tilde{Y} = +3\%$), and we use those there.
+
+> **Python note.** `def` creates a *function*: a named recipe that takes inputs (the
+> *arguments*) and gives back a result with `return`. Writing `g=2.0` gives the argument a
+> *default value*, used whenever we do not pass one. The text in triple quotes is a short
+> description of what the function does. `**` means "to the power of", and `np.sin` is the sine
+> function, which draws a smooth wave (`np.pi` is the number π).
+
+```{python}
+def potential_output(t, g=2.0, Y0=100.0):
+    """Potential output Ybar_t: a smooth trend that grows g percent a year, from Y0 in year 0."""
+    return Y0 * (1 + g / 100) ** t
+
+
+def actual_output(t, A=2.0, g=2.0, cycle=8):
+    """Actual output Y_t: potential output times (1 + a wave of +-A percent that repeats every `cycle` years)."""
+    return potential_output(t, g) * (1 + A / 100 * np.sin(2 * np.pi * t / cycle))
+
+
+def short_run_output(Y, Ybar):
+    """Short-run output in percent: 100 (Y - Ybar) / Ybar   (equation 9.2)."""
+    return 100 * (Y - Ybar) / Ybar
+```
+
+```{python}
+def phillips_curve(Y_tilde, nu=0.33):
+    """Change in inflation, percentage points: delta pi = nu * Y_tilde   (the Phillips curve, Figure 9.6)."""
+    return nu * Y_tilde
+
+
+def okun_law(Y_tilde, slope=-0.5):
+    """Cyclical unemployment u - u_bar, percentage points: slope * Y_tilde   (Okun's law, equation 9.3)."""
+    return slope * Y_tilde
+```
+
+Let us try the functions on the textbook's own examples.
+
+> **Python note.** An *f-string* such as `f"Y~ = {value:+.2f}%"` inserts the value of a variable
+> into a piece of text; `:.2f` means "show two decimals" and the `+` adds a sign.
+
+```{python}
+print(f"Actual 980, potential 1,000:  Y~ = {short_run_output(980, 1000):+.2f}%")
+print(f"Output 3% above potential:    delta pi = {phillips_curve(3.0):+.2f} points (slope 0.33)")
+print(f"Output 6% below potential:    u - u_bar = {okun_law(-6.0):+.2f} points (Okun's law)")
+print(f"Baseline in year 2: potential {potential_output(2):.2f}, actual {actual_output(2):.2f}, "
+      f"Y~ = {short_run_output(actual_output(2), potential_output(2)):+.2f}%")
+```
+
+The first line is the textbook's example: output of 980 against a potential of 1,000 is
+$-20/1{,}000 = -2$ percent. With a slope of $0.33$, output 3 percent above potential raises inflation
+by about 1 percentage point, and Okun's law turns a 6 percent shortfall of output into unemployment
+3 points above its natural rate.
+
+## Figure 1: Economic fluctuations and short-run output
+
+**Goal.** See how removing the trend from actual output leaves the ups and downs of the business cycle.
+
+Panel (a) draws actual output $Y_t$ around a smooth potential output $\bar{Y}_t$. Panel (b) draws short-run
+output $\tilde{Y}_t$ from equation (9.2): the same wiggle, with the trend taken out. The gray bars in panel (a)
+are the gaps $Y - \bar{Y}$ at the top of the boom and at the bottom of the slump.
+
+> **Python note.** `np.linspace(0, 8, 200)` creates 200 evenly spaced numbers from 0 to 8: the
+> years at which we draw the curves. `make_subplots(rows=1, cols=2)` makes a figure with two panels,
+> and `row=..., col=...` tells `add_trace` where to draw. We fix the axis ranges so that you can
+> *see* the curves move when a parameter changes.
+
+```{python}
+def fluctuations(A=2.0, g=2.0):
+    """Figure 9.1: actual and potential output (a) and short-run output (b), over one 8-year cycle."""
+    t = np.linspace(0, 8, 200)                          # time, in years
+    Y, Ybar = actual_output(t, A, g), potential_output(t, g)
+    t_gap = np.array([2.0, 6.0])                        # the top of the boom and the bottom of the slump
+    Y_gap, Ybar_gap = actual_output(t_gap, A, g), potential_output(t_gap, g)
+    fig = make_subplots(rows=1, cols=2, subplot_titles=("(a) Actual and potential output",
+                                                        "(b) Short-run output, Ỹ (percent)"))
+    fig.add_trace(go.Scatter(x=t, y=Y, name="Actual output, Y", line=dict(color=BLUE, width=3)), row=1, col=1)
+    fig.add_trace(go.Scatter(x=t, y=Ybar, name="Potential output, Ȳ", line=dict(color=GREEN, width=3, dash="dash")),
+                  row=1, col=1)
+    fig.add_trace(go.Scatter(x=[2, 2, None, 6, 6], y=[Ybar_gap[0], Y_gap[0], None, Ybar_gap[1], Y_gap[1]],
+                             name="Gap, Y − Ȳ", mode="lines", line=dict(color=GRAY, width=4)), row=1, col=1)
+    fig.add_trace(go.Scatter(x=t, y=short_run_output(Y, Ybar), name="Short-run output, Ỹ",
+                             line=dict(color=TEAL, width=3)), row=1, col=2)
+    fig.add_trace(go.Scatter(x=[0, 8], y=[0, 0], name="Ỹ = 0: output at potential", mode="lines",
+                             line=dict(color=GREEN, width=2, dash="dash")), row=1, col=2)
+    fig.add_annotation(x=2, y=A, xref="x2", yref="y2", text="Boom: Ỹ > 0", showarrow=False, yshift=14)
+    fig.add_annotation(x=6, y=-A, xref="x2", yref="y2", text="Slump: Ỹ < 0", showarrow=False, yshift=-14)
+    fig.update_xaxes(title_text="Time (years)", range=[0, 8])
+    fig.update_yaxes(title_text="Output", range=[94, 145], row=1, col=1)
+    fig.update_yaxes(range=[-5.2, 5.2], row=1, col=2)
+    fig.update_layout(title=f"Boom: Ỹ = +{A:.1f}%   Slump: Ỹ = −{A:.1f}%   |   potential grows {g:.1f}% a year",
+                      legend=dict(orientation="h", y=-0.2, yanchor="top"))
+    return fig
+```
+
+Now the interactive version. Move the sliders and compare the two panels.
+
+> **Python note.** `interact` turns each argument of a function into a slider and calls the
+> function again every time you move one. The `;` at the end only hides an extra line of text.
+
+```{python}
+#| kind: widget
+interact(fluctuations,
+         A=FloatSlider(value=2.0, min=0.5, max=4.0, step=0.5, description="size of the swings A (%)", style=WIDE),
+         g=FloatSlider(value=2.0, min=0.0, max=4.0, step=0.5, description="growth of potential g (% a year)",
+                       style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 1 with a precomputed slider for the growth of potential output
+fig = slider_figure(fluctuations, "g", [0.0, 0.5, 1.0, 2.0, 3.0, 4.0], start=2.0, label="growth of potential g (% a year)")
+fig.update_layout(height=600)
+fig.layout.sliders[0].pad.t = 140                              # put the slider below the legend
+fig
+```
+
+**What to notice.**
+
+- Panel (b) looks just like actual output in panel (a), without the upward trend. That is why
+  economists also call $\tilde{Y}$ *detrended output*.
+- Raise the growth of potential output to 4 percent. In panel (a) the slump almost disappears: actual output
+  keeps rising and only grows more slowly. In panel (b) nothing changes. Strong growth hides the cycle, which
+  is exactly what happens with real GDP in Figure 2.
+- Set $\bar{g} = 0$ and the two panels look the same: potential output is then a constant 100, so $Y - \bar{Y}$ and
+  $\tilde{Y}$ are the same numbers.
+
+**Your turn.** With the baseline ($A = 2$, $\bar{g} = 2$), compute short-run output in year 6 with
+`short_run_output`, `actual_output` and `potential_output`. Then repeat with `g=4.0`. Does the answer change?
+
+<details><summary>Hint</summary>
+
+Pass the same arguments to both functions, for example `actual_output(6, A=2.0, g=4.0)` and
+`potential_output(6, g=4.0)`. Look at equation (9.2): the trend cancels out.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 2: U.S. real GDP, actual and potential
+
+**Goal.** Look at actual and potential GDP in the United States since 1929.
+
+The Congressional Budget Office (CBO) estimates U.S. potential output from 1949 on, with a version of the
+Solow model. Our data file adds an estimate for 1929–1948, a very smooth trend through actual GDP.
+
+> **Python note.** `pd.read_csv` reads a data file into a *DataFrame*, a table with named
+> columns. `.head()` shows its first five rows, which is always a good first look at new data.
+
+```{python}
+gdp = pd.read_csv(DATA_URL + "fig9-2.csv")
+gdp.head()
+```
+
+Each row is a year. `gdp_actual` and `gdp_potential` are real GDP in trillions of 2022 dollars. We first
+compute short-run output with our function `short_run_output`, which works on whole columns at once.
+
+> **Python note.** `gdp["gap"] = ...` adds a new column, computed row by row from two other columns.
+> `gdp[gdp.year <= 1946]` keeps only the rows where the condition is true.
+
+```{python}
+gdp["gap"] = short_run_output(gdp.gdp_actual, gdp.gdp_potential)
+gdp[gdp.year <= 1946].round(2)
+```
+
+The Great Depression shows up clearly: output was 23 percent below potential in 1933. During World War II
+it was 35 percent above potential in 1944. But look at the first row: output 25 percent *above* potential in 1929.
+That is not a real boom. Nobody published potential output for those years, so the early values are only an
+estimate. The trend has to start somewhere, and at the edge of the sample it is least reliable. **Always ask
+where a number comes from**, and treat the 1929–1948 gaps with care.
+
+Now the chart. On a **ratio scale** (a logarithmic axis), equal distances mean equal percentage changes.
+
+> **Python note.** `rename(columns={...})` gives the columns readable names for the legend. `px.line`
+> with a list `y=[...]` draws one line per column. `log_y=True` gives a ratio scale, `tickvals` sets the
+> numbers printed on the axis, and on a ratio scale the axis `range` is given in powers of ten: `np.log10(0.9)`.
+
+```{python}
+named = gdp.rename(columns={"gdp_actual": "Actual GDP", "gdp_potential": "Potential GDP"})
+TICKS = [1, 2, 4, 8, 16, 32]
+
+
+def gdp_chart(scale="ratio"):
+    """Figure 9.2: U.S. real GDP, actual and potential, 1929-2025 (trillions of 2022 dollars)."""
+    fig = px.line(named, x="year", y=["Actual GDP", "Potential GDP"], log_y=(scale == "ratio"),
+                  color_discrete_sequence=[BLUE, GREEN],
+                  labels={"year": "Year", "value": "Trillions of 2022 dollars", "variable": "Series"},
+                  title="Actual and potential GDP move together, except in the 1930s and 1940s")
+    fig.update_traces(selector=dict(name="Potential GDP"), line_dash="dash")
+    fig.update_traces(selector=dict(name="Actual GDP"), line_width=3)
+    if scale == "ratio":
+        fig.update_yaxes(tickvals=TICKS, range=[np.log10(0.9), np.log10(32)])
+    else:
+        fig.update_yaxes(range=[0, 30])
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(gdp_chart, scale=ToggleButtons(options=["ratio", "linear"], value="ratio", description="vertical scale"));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 2 with buttons for the vertical scale
+fig = gdp_chart()
+fig.update_layout(updatemenus=[dict(type="buttons", direction="right", x=0.01, y=0.98, xanchor="left", yanchor="top",
+                                    buttons=[
+    dict(label="ratio scale", method="relayout",
+         args=[{"yaxis.type": "log", "yaxis.range": [np.log10(0.9), np.log10(32)], "yaxis.tickvals": TICKS}]),
+    dict(label="linear scale", method="relayout",
+         args=[{"yaxis.type": "linear", "yaxis.range": [0, 30], "yaxis.tickvals": None}])])])
+fig
+```
+
+**What to notice.**
+
+- Since about 1950 the two lines are hard to tell apart. Growth is so large that the fluctuations become
+  hard to see, an illusion of scale that Figure 3 removes.
+- On the linear scale, everything before 1960 is squeezed near the bottom.
+- Potential output grows more slowly after the Great Recession of 2007–09 (see the key numbers below). The
+  CBO builds potential output with a Solow-type model, so weak investment after 2008 meant less capital
+  and slower potential growth.
+
+<!-- cell -->
+
+### Key numbers: the Depression, the war and slower potential growth
+
+> **Python note.** `set_index("year")` labels the rows by year, so `potential[2007]` is the value for 2007.
+> `.loc[1930:1939]` keeps the rows from 1930 to 1939, and `.mean()` averages them.
+
+```{python}
+by_year = gdp.set_index("year")
+potential = by_year.gdp_potential
+
+
+def potential_growth(start, end):
+    """Average annual growth of potential output from year start to year end, in percent."""
+    return 100 * ((potential[end] / potential[start]) ** (1 / (end - start)) - 1)
+
+
+print(f"Average gap in the 1930s:           {by_year.gap.loc[1930:1939].mean():+.1f}%")
+print(f"Gap in 1944 (World War II):         {by_year.gap[1944]:+.1f}%")
+print(f"Largest gap since 1950:             {by_year.gap.loc[1950:].min():+.1f}% in {by_year.gap.loc[1950:].idxmin()}")
+print(f"Potential growth 1990-2007:         {potential_growth(1990, 2007):.1f}% a year")
+print(f"Potential growth 2007-2019:         {potential_growth(2007, 2019):.1f}% a year")
+print(f"Real GDP in 2022:                   {by_year.gdp_actual[2022]:.2f} trillion dollars")
+```
+
+Output was on average 11 percent below potential in the 1930s. Since 1950 no gap has been as large as
+the 1982 one, 6.2 percent below potential. Potential output grew by about 3.0 percent a year from 1990
+to 2007 and by only 1.8 percent a year from 2007 to 2019. And real GDP in 2022 was 26 trillion
+dollars, so the textbook's "more than 25 trillion dollars" still holds after the data revisions of 2023.
+
+**Your turn.** Find the year after 1950 in which actual output was furthest *above* potential, and how far.
+
+<details><summary>Hint</summary>
+
+Use `by_year.gap.loc[1950:]` as above, with `.max()` and `.idxmax()` instead of `.min()` and `.idxmin()`.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 3: U.S. economic fluctuations
+
+**Goal.** Make the fluctuations visible by plotting short-run output $\tilde{Y}_t$, quarter by quarter, with the
+recessions shaded.
+
+The data file has quarterly real GDP and CBO potential GDP since 1970. A second small file lists the start
+(peak) and end (trough) month of every U.S. recession since 1960, as dated by the National Bureau of Economic
+Research (NBER).
+
+> **Python note.** `parse_dates=["date"]` turns text such as `"2020-04-01"` into real dates, so that
+> Plotly and pandas can work with them. `.tail()` shows the last five rows.
+
+```{python}
+gap = pd.read_csv(DATA_URL + "fig9-3.csv", parse_dates=["date"])
+recessions = pd.read_csv(DATA_URL + "recessions.csv", parse_dates=["peak", "trough"])
+gap.tail()
+```
+
+`short_run_output` is $\tilde{Y}_t$ in percent, computed from the two levels `gdp_real` and `gdp_potential`.
+Let us check that with our own function:
+
+```{python}
+check = short_run_output(gap.gdp_real, gap.gdp_potential) - gap.short_run_output
+print(f"Largest difference from our own calculation: {check.abs().max():.4f} percentage points")
+```
+
+The column `short_run_output_book_vintage` is the *same* calculation with the data **as they were published in
+2023**, when the textbook was written. It stops in 2023, which is why the last rows show `NaN` ("not a
+number", pandas' mark for a missing value). Since then, the statistical agencies have revised their numbers:
+the Bureau of Economic Analysis (BEA) revised real GDP and the CBO re-estimated potential output. Plotting both
+vintages shows how much revisions matter.
+
+> **Python note.** The shaded bands are the recessions. A `for` loop repeats the indented lines once for
+> each recession: `zip(recessions.peak, recessions.trough)` hands over one (peak, trough) pair at a time. The
+> `if` skips recessions that ended before the chart starts, and `fig.add_vrect` shades the band between two dates.
+> `fig.add_hline` draws a horizontal line, here at $\tilde{Y} = 0$.
+
+```{python}
+named = gap.rename(columns={"short_run_output": "Data as of 2026",
+                            "short_run_output_book_vintage": "Data as published in 2023"})
+fig = px.line(named, x="date", y=["Data as of 2026", "Data as published in 2023"],
+              color_discrete_sequence=[BLUE, GRAY],
+              labels={"date": "Year", "value": "Short-run output, Ỹ (percent)", "variable": "Data vintage"},
+              title="Short-run output falls sharply in every recession (shaded)")
+fig.update_traces(selector=dict(name="Data as of 2026"), line_width=3)
+fig.update_traces(selector=dict(name="Data as published in 2023"), line_dash="dot")
+fig.add_hline(y=0, line_dash="dash", line_color="black", line_width=1)
+for peak, trough in zip(recessions.peak, recessions.trough):
+    if trough >= pd.Timestamp("1970-01-01"):
+        fig.add_vrect(x0=peak, x1=trough, fillcolor=BLUE, opacity=0.15, line_width=0)
+fig.update_xaxes(range=["1970-01-01", "2026-07-01"])
+fig.update_yaxes(range=[-11, 5], tickvals=[-10, -8, -6, -4, -2, 0, 2, 4])   # no tick in the bottom-left corner
+fig.update_layout(legend=dict(x=0.99, y=0.99, xanchor="right", yanchor="top", bgcolor="rgba(255,255,255,0.8)"))
+fig.show()
+```
+
+**What to notice.**
+
+- Every recession begins near a peak of $\tilde{Y}$ and ends close to its trough. The deepest dips are 1982,
+  2009 and above all the second quarter of 2020, when Covid-19 closed much of the economy.
+- Most of the time $\tilde{Y}$ stays between $-4$ and $+4$ percent (see the key numbers).
+- The two vintages tell the same story with different numbers. With today's data the 2020 collapse is
+  8.8 percent below potential instead of the 10.4 percent in the textbook, and $\tilde{Y}$ has been positive
+  since the second quarter of 2021. Click a name in the legend to hide or show that line.
+
+<!-- cell -->
+
+### Key numbers: the troughs in two data vintages
+
+The textbook says output fell "nearly 8 percent below potential" in 1982, "more than 5 percent" in 2009,
+and "more than 10 percent" in 2020. We look for the lowest $\tilde{Y}$ from the start of each recession to one
+year after its end, in both vintages.
+
+> **Python note.** With dates as row labels, `series[peak:end]` keeps the rows between two dates.
+> `pd.DateOffset(years=1)` adds one year to a date. Each pass of the loop adds one row to the list `rows`,
+> which becomes a DataFrame at the end.
+
+```{python}
+series = gap.set_index("date")
+rows = []
+for peak, trough in zip(recessions.peak, recessions.trough):
+    if peak.year >= 1970:
+        window = series[peak:trough + pd.DateOffset(years=1)]
+        rows.append([peak.strftime("%Y-%m"), window.short_run_output.min(),
+                     window.short_run_output_book_vintage.min()])
+pd.DataFrame(rows, columns=["Recession starts", "Lowest Ỹ, data of 2026", "Lowest Ỹ, data of 2023"]).round(2)
+```
+
+The 2023 vintage reproduces the textbook's numbers: $-7.88$ in 1982, $-5.48$ in 2009 and $-10.42$ in 2020.
+Today's data put each trough higher, at $-7.29$, $-4.98$ and $-8.83$. Nothing about 2020 has changed: we just
+know more now. Potential output is never observed, only estimated, and every new estimate moves the gap.
+**When you quote a number, say which vintage of the data it comes from.**
+
+```{python}
+inside = gap.short_run_output.between(-4, 4)
+print(f"Quarters with Y~ between -4% and +4%: {100 * inside.mean():.1f}% of {len(gap)} quarters since 1970")
+```
+
+<!-- cell -->
+
+### Key numbers: what does a recession cost?
+
+The textbook adds up the output lost in a slump: about 6 percent of a year's GDP in a typical recession. We can
+measure it. We walk through the quarters, and each time $\tilde{Y}$ turns negative we start adding up the shortfall
+until output is back at potential. A quarter is a quarter of a year, so each quarter adds $-\tilde{Y}/4$ percent of
+a year's GDP.
+
+> **Python note.** `series.short_run_output.items()` hands over one (date, value) pair at a time. `None` means
+> "no value yet": `start is None` is true while we are not inside a slump. `total += x` is short for
+> `total = total + x`.
+
+```{python}
+slumps = []
+start, total = None, 0.0
+for date, value in series.short_run_output.items():
+    if value < 0:
+        if start is None:                      # a new slump begins
+            start, total = date, 0.0
+        total += -value / 4                    # lost output, percent of a year's GDP
+    elif start is not None:                    # output is back at potential: the slump is over
+        years = (date - start).days / 365.25
+        slumps.append([start.strftime("%Y-%m"), date.strftime("%Y-%m"), years, total])
+        start = None
+slumps = pd.DataFrame(slumps, columns=["Slump starts", "Back at potential", "Years", "Lost output (% of GDP)"])
+slumps[slumps.Years >= 1].round(1)
+```
+
+The milder slumps, around the recessions of 1970, 1990–91, 2001 and 2020, cost between about 1.5 and 5 percent of a
+year's GDP, and the 1974–75 slump about 8 percent. Two slumps were far more costly, because output stayed
+below potential for many years: the early 1980s and the years after the Great Recession of 2007–09.
+
+In dollars, 6 percent of 2022 GDP is a lot of money. With the textbook's U.S. population of 330 million:
+
+```{python}
+loss = 0.06 * by_year.gdp_actual[2022] * 1e12          # 6 percent of 2022 GDP, in dollars
+print(f"6% of 2022 GDP: {loss / 1e12:.2f} trillion dollars")
+print(f"Per person:     {loss / 330e6:,.0f} dollars")
+print(f"Per family of four: {4 * loss / 330e6:,.0f} dollars")
+```
+
+The textbook rounds these to 1.5 trillion, 4,500 and 18,000 dollars. Our numbers are a little higher because
+the revised 2022 GDP is a little higher.
+
+**Your turn.** Compute the average of $\tilde{Y}$ over 2010–2019 in both vintages. Which vintage says the 2010s
+were a weaker decade?
+
+<details><summary>Hint</summary>
+
+`series.loc["2010":"2019"]` keeps the quarters of 2010–2019. Then take `.mean()` of each of the two columns.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 4: Changes in U.S. employment
+
+**Goal.** See recessions in the labor market: the monthly percent change in the number of jobs since 1980.
+
+```{python}
+jobs = pd.read_csv(DATA_URL + "fig9-4.csv", parse_dates=["date"])
+april_2020 = jobs.set_index("date").emp_change_pct["2020-04-01"]
+print(f"{len(jobs)} months; change in April 2020: {april_2020:.2f}%")
+jobs.head()
+```
+
+`emp_change_pct` is the percent change of nonfarm payroll employment from the month before. In a normal month
+it is a small positive number. In April 2020 it was $-13.6$ percent, so we need a second view to see the normal
+months.
+
+> **Python note.** `px.bar` draws one bar per row. `fig.add_annotation` writes a label with an arrow
+> that points at a data point; `ax` and `ay` set where the label sits, in pixels from that point.
+
+```{python}
+def employment_chart(view="full range"):
+    """Figure 9.4: the monthly percent change in U.S. payroll employment, 1980-2026."""
+    fig = px.bar(jobs, x="date", y="emp_change_pct",
+                 labels={"date": "Year", "emp_change_pct": "Monthly change in employment (percent)"},
+                 title="Employment grows in most months; 2008–09 and April 2020 stand out")
+    fig.update_traces(marker_color=BLUE, marker_line_width=0)
+    fig.add_hline(y=0, line_dash="dash", line_color="black", line_width=1)
+    if view == "full range":
+        fig.add_annotation(x="2020-04-01", y=april_2020, text=f"April 2020: {april_2020:.1f}%",
+                           showarrow=True, arrowhead=2, ax=-110, ay=0)
+        fig.update_yaxes(range=[-15, 4.5], tickvals=[-14, -12, -10, -8, -6, -4, -2, 0, 2, 4])
+    else:
+        fig.update_yaxes(range=[-1, 1.5])
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(employment_chart, view=Dropdown(options=["full range", "zoom on normal months"], value="full range",
+                                         description="view", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 4 with buttons for the full range and the zoom
+fig = employment_chart()
+fig.update_layout(updatemenus=[dict(type="buttons", direction="right", x=0.01, y=0.98, xanchor="left", yanchor="top",
+                                    buttons=[
+    dict(label="full range", method="relayout", args=[{"yaxis.range": [-15, 4.5], "annotations[0].visible": True}]),
+    dict(label="zoom on normal months", method="relayout",
+         args=[{"yaxis.range": [-1, 1.5], "annotations[0].visible": False}])])])
+fig
+```
+
+**What to notice.**
+
+- In the full view, April 2020 dwarfs everything else: one month wiped out 13.6 percent of all jobs. The
+  rebound came quickly, with gains of 2.0 and 3.5 percent in May and June 2020.
+- Zoom in. Now you see small negative bars in the recessions of the early 1980s, 1990–91 and 2001, and a long
+  run of negative months in 2008–09.
+- Since 2023 the monthly gains have been small: on average 0.14 percent a month in 2023 and close to zero in 2025,
+  with a few negative months in 2025–26.
+
+<!-- cell -->
+
+### Key numbers: jobs lost in recessions
+
+The textbook reasons that a typical recession raises the unemployment rate by 1 or 2 percentage points. With a
+labor force of about 160 million people, that is a loss of 1.6 to 3.2 million jobs. Let us count the jobs actually
+lost, from the peak month to the lowest employment up to two years later. A wider data file has the number of jobs.
+
+```{python}
+payroll = pd.read_csv(DATA_URL + "payroll_employment.csv", parse_dates=["date"]).set_index("date").payroll_millions
+print(f"1 to 2 points of a 160 million labor force: {0.01 * 160:.1f} to {0.02 * 160:.1f} million jobs")
+rows = []
+for peak, trough in zip(recessions.peak, recessions.trough):
+    if peak.year >= 1980:
+        lowest = payroll[peak:trough + pd.DateOffset(years=2)].min()
+        rows.append([peak.strftime("%Y-%m"), payroll[peak], lowest, payroll[peak] - lowest])
+pd.DataFrame(rows, columns=["Recession starts", "Jobs at peak (millions)", "Lowest after", "Jobs lost"]).round(2)
+```
+
+The four recessions from 1980 to 2001 cost between 1.3 and 2.8 million jobs, just as the textbook's rule of thumb
+says. The Great Recession cost 8.7 million jobs and the Covid-19 recession 21.9 million.
+
+**Your turn.** How many months since 1980 had an employment *fall* larger than 0.5 percent, and in which years?
+
+<details><summary>Hint</summary>
+
+`jobs[jobs.emp_change_pct < -0.5]` keeps those months. `len(...)` counts them, and `.date.dt.year` gives their years.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 5: Inflation in the United States
+
+**Goal.** Check a key fact of the short run: inflation usually falls during a recession.
+
+The textbook uses the annual inflation rate of the consumer price index (CPI). We also load the monthly
+12-month inflation rate from a wider data file.
+
+> **Python note.** `pd.to_datetime(inflation.year, format="%Y")` turns a year such as 1980 into the date
+> 1 January 1980, so that the annual points line up with the shaded recession months.
+
+```{python}
+inflation = pd.read_csv(DATA_URL + "fig9-5.csv")
+inflation["date"] = pd.to_datetime(inflation.year, format="%Y")
+monthly = pd.read_csv(DATA_URL + "cpi_monthly.csv", parse_dates=["date"])
+monthly[monthly.cpi.isna()]
+```
+
+One month has no CPI: October 2025. The Bureau of Labor Statistics could not collect prices during the federal
+government shutdown of that autumn. The 12-month inflation rate is therefore also missing for that month,
+and the chart leaves a small gap. The annual average for 2025 in `fig9-5.csv` fills the month by
+interpolation, as the data notes explain.
+
+```{python}
+fig = px.line(inflation, x="date", y="inflation_cpi", markers=True,
+              labels={"date": "Year", "inflation_cpi": "Inflation rate (percent)"},
+              title="Inflation usually peaks near the start of a recession and then falls")
+fig.update_traces(line=dict(color=BLUE, width=3), name="Annual average", showlegend=True)
+recent = monthly[monthly.date >= "1960-01-01"]
+fig.add_trace(go.Scatter(x=recent.date, y=recent.inflation_12m, name="12-month rate, monthly",
+                         line=dict(color=TEAL, width=1)))
+fig.add_hline(y=0, line_color="black", line_width=1)
+for peak, trough in zip(recessions.peak, recessions.trough):
+    fig.add_vrect(x0=peak, x1=trough, fillcolor=BLUE, opacity=0.15, line_width=0)
+fig.update_yaxes(range=[-2.5, 15.5])
+fig.update_layout(legend=dict(x=0.99, y=0.99, xanchor="right", yanchor="top", bgcolor="rgba(255,255,255,0.8)"))
+fig.show()
+```
+
+**What to notice.**
+
+- The peaks of inflation in 1970, 1974, 1980 and 1990 sit at or just before a shaded recession, and inflation
+  falls during and after it.
+- The highest annual rate is 13.5 percent in 1980, and the lowest $-0.3$ percent in 2009, in the Great Recession.
+- The 2020 recession lasted only two months, so the annual points barely notice it. The monthly line does
+  dip in spring 2020. Then came the surge of 2021–22.
+
+<!-- cell -->
+
+### Key numbers: inflation before and after each recession
+
+```{python}
+pi = inflation.set_index("year").inflation_cpi
+rows = []
+for peak, trough in zip(recessions.peak, recessions.trough):
+    rows.append([peak.year, pi[peak.year], pi.loc[peak.year:trough.year].max(), pi[trough.year + 1]])
+pd.DataFrame(rows, columns=["Recession starts", "Inflation that year", "Highest in the recession",
+                            "Year after it ends"]).round(2)
+```
+
+In every recession before 2020, inflation in the year after the recession ended was lower than at its start.
+The Covid-19 recession is the exception in annual data: 1.25 percent in 2020, 4.68 percent in 2021. The monthly
+data tell a different story:
+
+```{python}
+rate = monthly.set_index("date").inflation_12m
+print(f"12-month inflation, February 2020: {rate['2020-02-01']:.2f}%   April 2020: {rate['2020-04-01']:.2f}%")
+print(f"Inflation 1979: {pi[1979]:.2f}%   1980: {pi[1980]:.2f}%   1983: {pi[1983]:.2f}%")
+```
+
+From February to April 2020, the two months of the Covid-19 recession, 12-month inflation fell from 2.34 to
+0.31 percent, so the rule holds even there. The second line is the Volcker disinflation that the textbook uses
+as its main example (Figure 6): inflation of 11 to 13 percent in 1979–80 fell to about 3 percent by 1983.
+
+**Your turn.** Find the highest monthly 12-month inflation rate since 2000, and the month it happened.
+
+<details><summary>Hint</summary>
+
+Use `rate.loc["2000":]` and then `.max()` and `.idxmax()`.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 6: The Phillips curve
+
+**Goal.** Draw the Phillips curve and see how short-run output moves inflation.
+
+Think of a hot holiday toy. When demand is high, the firm that makes it runs overtime and pays its workers
+more, and the toy is scarce. So its price rises faster than usual. In a booming economy, it is as if *every* firm
+made the hot toy: all of them raise prices faster than the current inflation rate, so inflation goes up. In a
+slump the opposite happens. The Phillips curve puts this in one line:
+
+$$\Delta\pi_t = \bar{\nu}\,\tilde{Y}_t$$
+
+When output is at potential ($\tilde{Y} = 0$), inflation is steady. Our function `phillips_curve` from "The model
+in code" draws the line. The black dot is the economy, at the short-run output you choose.
+
+> **Python note.** `fig.add_shape(type="line", ...)` draws a straight segment, here the dashed guides from the
+> dot to the axes. An `if ... elif ... else` block picks one of three cases.
+
+```{python}
+def phillips_diagram(nu=0.33, Y_tilde=0.0):
+    """Figure 9.6: the Phillips curve delta pi = nu * Y_tilde, with the economy at Y_tilde."""
+    Y = np.linspace(-6, 6, 100)
+    dpi = phillips_curve(Y_tilde, nu)
+    if dpi > 0:
+        verdict = "inflation rises"
+    elif dpi < 0:
+        verdict = "inflation falls"
+    else:
+        verdict = "inflation is steady"
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=Y, y=phillips_curve(Y, nu), name="Phillips curve", line=dict(color=TEAL, width=4)))
+    fig.add_trace(go.Scatter(x=[Y_tilde], y=[dpi], name="The economy", mode="markers",
+                             marker=dict(color="black", size=13)))
+    fig.add_shape(type="line", x0=Y_tilde, y0=-3.2, x1=Y_tilde, y1=dpi, line=dict(color=GRAY, dash="dash"))
+    fig.add_shape(type="line", x0=-6.5, y0=dpi, x1=Y_tilde, y1=dpi, line=dict(color=GRAY, dash="dash"))
+    fig.add_annotation(x=-3.2, y=2.8, text="← Slumping economy (Ỹ < 0)", showarrow=False)
+    fig.add_annotation(x=3.2, y=-2.8, text="Booming economy (Ỹ > 0) →", showarrow=False)
+    fig.update_layout(title=f"Ỹ = {Y_tilde:+.2f}%  →  Δπ = {nu:.2f} × ({Y_tilde:+.2f}) = {dpi:+.2f} points: {verdict}",
+                      xaxis=dict(title="Short-run output, Ỹ (percent)", range=[-6.5, 6.5], zeroline=True),
+                      yaxis=dict(title="Change in inflation, Δπ (points)", range=[-3.2, 3.2], zeroline=True))
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(phillips_diagram,
+         nu=FloatSlider(value=0.33, min=0.05, max=1.0, step=0.01, description="slope ν", style=WIDE),
+         Y_tilde=FloatSlider(value=0.0, min=-5.0, max=5.0, step=0.5, description="short-run output Ỹ (%)", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 6 with a precomputed slider for short-run output
+slider_figure(phillips_diagram, "Y_tilde", [-4.0, -3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0, 4.0], start=0.0,
+              label="short-run output Ỹ (percent)")
+```
+
+**What to notice.**
+
+- To the right of zero (a boom), $\Delta\pi > 0$: inflation rises. To the left (a slump), $\Delta\pi < 0$: inflation falls.
+- The line always goes through the origin: only output at potential keeps inflation steady.
+- A steeper curve (a larger $\bar{\nu}$) means a boom raises inflation faster, but also that a slump brings it
+  down faster.
+
+<!-- cell -->
+
+### How the short-run model works: the Volcker disinflation
+
+In 1979 U.S. inflation was above 11 percent (Figure 5), and the Federal Reserve under Paul Volcker set out to
+bring it down. The Phillips curve says that the only way to lower inflation is to push output below potential.
+Tight monetary policy did exactly that: short-run output averaged about $-6$ percent in 1982 (Figure 3 shows the
+quarters). The
+model then predicts falling inflation, and inflation did fall to about 3 percent by 1983.
+
+Let us check the model's prediction for 1981–1983 with the annual short-run output of Figure 7 below.
+
+```{python}
+phillips = pd.read_csv(DATA_URL + "fig9-7.csv")
+volcker = phillips[(phillips.year >= 1981) & (phillips.year <= 1983)].copy()
+volcker["predicted_change"] = phillips_curve(volcker.short_run_output)
+volcker[["year", "short_run_output", "d_inflation", "predicted_change"]].round(2)
+```
+
+> **Python note.** `.copy()` makes a separate small table, so that adding a column to `volcker` does not touch
+> `phillips`.
+
+The model gets the direction right in all three years. It predicts a smaller fall than actually happened, a
+sign that the Phillips curve is not the whole story (Figure 7).
+
+**Your turn.** With the baseline slope $\bar{\nu} = 0.33$, how far below potential must output be to lower
+inflation by 2 percentage points in one year? Find it with the sliders, then check it with `phillips_curve`.
+
+<details><summary>Hint</summary>
+
+Solve $-2 = 0.33 \times \tilde{Y}$ for $\tilde{Y}$. The slider for $\tilde{Y}$ stops at $-5$, so the exact answer
+needs the code cell.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 7: Measuring the Phillips curve
+
+**Goal.** Test the Phillips curve with U.S. data: each point is one year, with that year's short-run output and
+change in inflation.
+
+We loaded `fig9-7.csv` above as `phillips`. Its columns are `short_run_output` ($\tilde{Y}$, the average of the four
+quarters), `inflation_cpi` ($\pi$), `d_inflation` ($\Delta\pi_t = \pi_t - \pi_{t-1}$) and `d_inflation_fitted`.
+
+```{python}
+phillips.head()
+```
+
+> **Python note.** `np.polyfit(x, y, 1)` fits the best straight line $y = a + bx$ through the points (by least
+> squares, also called OLS) and returns the slope $b$ first and the intercept $a$ second.
+
+```{python}
+slope, intercept = np.polyfit(phillips.short_run_output, phillips.d_inflation, 1)
+print(f"OLS line: delta pi = {intercept:.2f} + {slope:.2f} x Y~   ({phillips.year.min()}-{phillips.year.max()})")
+```
+
+The fitted slope is about 0.35, close to the textbook's "about 1/3". Now we draw the data with our *model* line
+$\Delta\pi = \bar{\nu}\tilde{Y}$, and you choose $\bar{\nu}$. The title adds up the **squared misses**, the squared vertical
+distances between the points and the line. The smaller that number, the better the line fits.
+
+> **Python note.** `.where(condition, "")` keeps a value where the condition is true and puts `""` elsewhere, so
+> only a few years get a text label (hover over any point to see its year). `np.where(condition, a, b)` picks `a`
+> or `b` row by row.
+
+```{python}
+LABELS = [1966, 1974, 1975, 1979, 1982, 1983, 2009, 2020, 2021, 2022, 2023, 2024, 2025]
+phillips["label"] = phillips.year.astype(str).where(phillips.year.isin(LABELS), "")
+phillips["period"] = np.where(phillips.year <= 2022, "1961–2022 (in the textbook)", "2023–2025 (new data)")
+
+
+def phillips_fit(nu=0.33):
+    """Figure 9.7: the data with the model line delta pi = nu * Y_tilde; the title measures the fit."""
+    misses = phillips.d_inflation - phillips_curve(phillips.short_run_output, nu)
+    fig = px.scatter(phillips, x="short_run_output", y="d_inflation", color="period", text="label",
+                     hover_name="year", color_discrete_map={"1961–2022 (in the textbook)": GREEN,
+                                                            "2023–2025 (new data)": "#0b4f47"},
+                     labels={"short_run_output": "Short-run output, Ỹ (percent)",
+                             "d_inflation": "Change in inflation, Δπ (points)", "period": "Years"})
+    fig.update_traces(textposition="middle right", textfont_size=11, marker_size=9)
+    Y = np.linspace(-7.5, 6, 50)
+    fig.add_trace(go.Scatter(x=Y, y=phillips_curve(Y, nu), name=f"Model: Δπ = {nu:.2f} × Ỹ", mode="lines",
+                             line=dict(color=BLUE, width=3)))
+    fig.update_layout(title=f"Slope ν = {nu:.2f}: squared misses {(misses ** 2).sum():.2f}  |  OLS slope {slope:.2f}",
+                      xaxis_range=[-8.5, 6.5], yaxis_range=[-5.5, 5.5])
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(phillips_fit, nu=FloatSlider(value=0.33, min=0.0, max=1.0, step=0.01, description="model slope ν", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 7 with a precomputed slider for the model slope
+slider_figure(phillips_fit, "nu", [0.0, 0.1, 0.2, 0.25, 0.33, 0.4, 0.5, 0.75, 1.0], start=0.33, label="model slope ν")
+```
+
+**What to notice.**
+
+- The cloud slopes upward: years with output above potential tend to have rising inflation.
+- Move the slider. The squared misses are smallest for a slope of about 0.35, close to the OLS slope.
+- Many points lie far from any line. The oil shocks of 1974 and 1979 and the inflation surge of 2021–22 raised
+  inflation by much more than output alone predicts. In 2023–2025 inflation *fell* while output was above potential.
+  Shocks move inflation too, and later chapters add them to the model.
+
+<!-- cell -->
+
+### Key numbers: the textbook's points in today's data
+
+The textbook says that in 2020 output was about 5 percent below potential and inflation fell by about 1 point.
+In today's data the 2020 point sits much further right. The quarterly file of Figure 3 has both vintages, so we
+can compute the annual average of $\tilde{Y}$ for each.
+
+> **Python note.** `groupby(gap.date.dt.year)` puts the quarters of each year in one group, and `.mean()` averages
+> each group. `merge` joins two tables on a common column, here `year`.
+
+```{python}
+annual = gap.groupby(gap.date.dt.year)[["short_run_output", "short_run_output_book_vintage"]].mean()
+annual = annual.rename_axis("year").reset_index()
+compare = phillips[["year", "d_inflation"]].merge(annual, on="year")
+compare[compare.year.isin([2019, 2020, 2021, 2022])].round(2)
+```
+
+In the 2023 data, 2020 sits at $\tilde{Y} = -4.78$ with $\Delta\pi = -0.56$, as in the textbook's figure. With
+today's data the same year sits at $-3.28$, and 2021–22 have moved from slightly below potential to about
+1 percent above it. Data revisions can move a point across the vertical axis.
+
+**Your turn.** Fit the OLS line again with the textbook's years only (1961–2022). Does the slope change much?
+
+<details><summary>Hint</summary>
+
+Make `old = phillips[phillips.year <= 2022]` and call `np.polyfit(old.short_run_output, old.d_inflation, 1)`.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 8: Okun's law for the U.S. economy
+
+**Goal.** Link short-run output to unemployment with Okun's law, $u - \bar{u} = -\tfrac{1}{2}\tilde{Y}$.
+
+**Cyclical unemployment** $u - \bar{u}$ is the unemployment rate minus the natural rate, the rate that prevails
+in the long run (Chapter 7). Here $\bar{u}$ is the CBO's estimate.
+
+```{python}
+okun = pd.read_csv(DATA_URL + "fig9-8.csv")
+gap_check = (okun.unrate - okun.nrou_short_term - okun.cyclical_unemployment).abs().max()
+print(f"cyclical_unemployment = unrate - nrou_short_term (largest difference {gap_check:.3f})")
+okun.head()
+```
+
+```{python}
+slope_okun, intercept_okun = np.polyfit(okun.short_run_output, okun.cyclical_unemployment, 1)
+print(f"OLS line: u - u_bar = {intercept_okun:.2f} + ({slope_okun:.2f}) x Y~   ({okun.year.min()}-{okun.year.max()})")
+```
+
+As with the Phillips curve, choose the slope of the model line `okun_law` and watch the squared misses.
+
+```{python}
+okun["label"] = okun.year.astype(str).where(okun.year.isin([1966, 1969, 1982, 2009, 2010, 2020, 2021]), "")
+
+
+def okun_fit(slope=-0.5):
+    """Figure 9.8: the data with the model line u - u_bar = slope * Y_tilde; the title measures the fit."""
+    misses = okun.cyclical_unemployment - okun_law(okun.short_run_output, slope)
+    fig = px.scatter(okun, x="short_run_output", y="cyclical_unemployment", text="label", hover_name="year",
+                     color_discrete_sequence=[GREEN],
+                     labels={"short_run_output": "Short-run output, Ỹ (percent)",
+                             "cyclical_unemployment": "Cyclical unemployment, u − ū (points)"})
+    fig.update_traces(textposition="middle right", textfont_size=11, marker_size=9, name="U.S. data, 1960–2025",
+                      showlegend=True)
+    Y = np.linspace(-7.5, 6, 50)
+    fig.add_trace(go.Scatter(x=Y, y=okun_law(Y, slope), name=f"Model: u − ū = {slope:.2f} × Ỹ", mode="lines",
+                             line=dict(color=BLUE, width=3)))
+    fig.update_layout(title=f"Slope = {slope:.2f}: squared misses {(misses ** 2).sum():.2f}  |  OLS slope {slope_okun:.2f}",
+                      xaxis_range=[-8.5, 6.5], yaxis_range=[-3.5, 4.5])
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(okun_fit, slope=FloatSlider(value=-0.5, min=-1.0, max=0.0, step=0.01, description="model slope", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 8 with a precomputed slider for the model slope
+slider_figure(okun_fit, "slope", [-1.0, -0.8, -0.7, -0.6, -0.5, -0.4, -0.3, -0.2, 0.0], start=-0.5, label="model slope")
+```
+
+**What to notice.**
+
+- This cloud is much tighter than the Phillips curve's: output and unemployment move together closely.
+- The textbook's rule of thumb is a slope of $-1/2$. The best line through the origin is a bit steeper: try
+  $-0.6$ and compare the squared misses. The OLS slope is about $-0.62$.
+- 2020 lies far above the line: unemployment jumped much more than the fall in output alone predicts, as
+  businesses closed and laid off workers during the pandemic.
+
+<!-- cell -->
+
+### Key numbers: Okun's law in 2009 and 2020
+
+```{python}
+for year in [2009, 2020]:
+    row = okun[okun.year == year].iloc[0]
+    print(f"{year}: Y~ = {row.short_run_output:+.2f}%, Okun predicts u - u_bar = "
+          f"{okun_law(row.short_run_output):+.2f}, actual {row.cyclical_unemployment:+.2f}")
+```
+
+> **Python note.** `okun[okun.year == year].iloc[0]` picks the one row of that year, and `row.short_run_output`
+> reads one value from it.
+
+In both years the rule of thumb falls short. In 2009 it predicts unemployment 2.3 points above the natural rate,
+against 3.9 in the data, and in 2020 it predicts 1.6 points against 3.6. Part of the reason is the data revisions of
+Figure 7, which moved both years to the right. The textbook's example, output about 6 percent below potential
+with unemployment just over 3 points above normal, fits the rule exactly: $-\tfrac{1}{2} \times (-6) = 3$.
+
+**Your turn.** Okun's law also works backward. In which year since 1960 was cyclical unemployment lowest, and what
+short-run output does Okun's law imply for it? Compare with the data.
+
+<details><summary>Hint</summary>
+
+Find the row with `okun.cyclical_unemployment.idxmin()`. Solving $u - \bar{u} = -\tfrac{1}{2}\tilde{Y}$ gives
+$\tilde{Y} = -2\,(u - \bar{u})$.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 9: The Phillips curve and the booming economy
+
+**Goal.** Answer the textbook's exercise "Overstimulating the economy": what happens if policymakers keep output
+3 percent above potential every year?
+
+The economy starts at potential with inflation at its long-run rate, $\bar{\pi} = 2\%$. Then output is held at
+$\tilde{Y} = +3\%$. The Phillips curve says inflation rises by $\Delta\pi = \bar{\nu}\tilde{Y}$ **every** year:
+
+$$\pi_t = \pi_{t-1} + \bar{\nu}\,\tilde{Y}_t$$
+
+With the textbook's slope $\bar{\nu} = 1$, inflation goes from 2 to 5, 8 and 11 percent in three years. A computer can
+apply this equation year after year: a **simulation**.
+
+> **Python note.** A `for` loop repeats the indented lines once for each year. `pi_path[-1]` is the last
+> number in the list, last year's inflation, and `pi_path.append(...)` adds this year's at the end.
+> `range(1, years + 1)` counts 1, 2, ..., years.
+
+```{python}
+def simulate_inflation(pi_bar=2.0, nu=1.0, Y_tilde=3.0, years=5):
+    """Inflation year by year when output is held at Y_tilde: pi_t = pi_(t-1) + nu * Y_tilde."""
+    pi_path = [pi_bar]                                    # year 0: inflation at its long-run rate
+    for year in range(1, years + 1):
+        pi_path.append(pi_path[-1] + phillips_curve(Y_tilde, nu))
+    return np.arange(years + 1), np.array(pi_path)
+
+
+years, pi_path = simulate_inflation()
+print("Inflation, years 0 to 5:", pi_path)
+```
+
+The figure has two panels: (a) the Phillips curve with the economy at potential and in the boom, and (b) the
+inflation path that the boom produces.
+
+```{python}
+def booming_economy(pi_bar=2.0, nu=1.0, Y_tilde=3.0):
+    """Figure 9.9: the economy held at Y_tilde on the Phillips curve (a) and the inflation path (b)."""
+    years, pi_path = simulate_inflation(pi_bar, nu, Y_tilde)
+    dpi = phillips_curve(Y_tilde, nu)
+    Y = np.linspace(-6.5, 6.5, 100)
+    fig = make_subplots(rows=1, cols=2, subplot_titles=("(a) The Phillips curve", "(b) Inflation, year by year"))
+    fig.add_trace(go.Scatter(x=Y, y=phillips_curve(Y, nu), name="Phillips curve", line=dict(color=TEAL, width=4)),
+                  row=1, col=1)
+    fig.add_trace(go.Scatter(x=[0, Y_tilde], y=[0, dpi], name="At potential and in the boom", mode="markers",
+                             marker=dict(color="black", size=12)), row=1, col=1)
+    fig.add_trace(go.Scatter(x=years, y=pi_path, name="Inflation, π", mode="lines+markers",
+                             line=dict(color=BLUE, width=3), marker=dict(size=9)), row=1, col=2)
+    fig.add_trace(go.Scatter(x=[0, 5], y=[pi_bar, pi_bar], name="Long-run inflation, π̄", mode="lines",
+                             line=dict(color=GRAY, dash="dash")), row=1, col=2)
+    fig.update_xaxes(title_text="Short-run output, Ỹ (percent)", range=[-6.5, 6.5], row=1, col=1)
+    fig.update_yaxes(title_text="Change in inflation, Δπ", range=[-6.5, 6.5], row=1, col=1)
+    fig.update_xaxes(title_text="Years of the boom", range=[-0.3, 5.3], row=1, col=2)
+    fig.update_yaxes(title_text="Inflation (percent)", range=[-25, 35], row=1, col=2)
+    fig.update_layout(title=f"Δπ = {nu:.2f} × ({Y_tilde:+.2f}) = {dpi:+.2f} a year: "
+                            f"π = {pi_path[0]:.2f} → {pi_path[1]:.2f} → {pi_path[2]:.2f} → {pi_path[3]:.2f}%",
+                      legend=dict(orientation="h", y=-0.2, yanchor="top"))
+    return fig
+```
+
+This time we use `interact_manual`. It adds a button, so nothing happens until you press it. Set the three
+sliders, then press **Run the economy**.
+
+```{python}
+#| kind: widget
+run_economy = interact_manual.options(manual_name="Run the economy")
+run_economy(booming_economy,
+            pi_bar=FloatSlider(value=2.0, min=0.0, max=6.0, step=0.5, description="long-run inflation π̄ (%)", style=WIDE),
+            nu=FloatSlider(value=1.0, min=0.1, max=1.5, step=0.01, description="slope ν", style=WIDE),
+            Y_tilde=FloatSlider(value=3.0, min=-4.0, max=4.0, step=0.5, description="short-run output Ỹ (%)", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 9 with a precomputed slider for the slope of the Phillips curve
+fig = slider_figure(booming_economy, "nu", [0.25, 0.33, 0.5, 0.75, 1.0, 1.5], start=1.0, label="slope of the Phillips curve ν")
+fig.update_layout(height=600)
+fig.layout.sliders[0].pad.t = 140                              # put the slider below the legend
+fig
+```
+
+**What to notice.**
+
+- Holding output above potential does not raise inflation once: it raises it **every year**. The cost of a
+  permanent boom is ever-rising inflation.
+- The steeper the Phillips curve, the faster inflation climbs. With the U.S. slope of about 0.33, inflation rises by
+  about 1 point a year instead of 3, slower but without end.
+- Set $\tilde{Y}$ below zero and the same mechanism brings inflation *down*: that is how a recession fights inflation.
+
+**Your turn.** The textbook's oil-shock exercise starts with inflation at 6 percent. With a slope of $\bar{\nu} = 0.5$,
+what constant short-run output brings inflation down to 3 percent in exactly 3 years? Find it with the sliders,
+then check it with `simulate_inflation`.
+
+<details><summary>Hint</summary>
+
+Inflation must fall by 3 points in 3 years, so by 1 point a year. Solve $-1 = 0.5 \times \tilde{Y}$, then call
+`simulate_inflation(pi_bar=6.0, nu=0.5, Y_tilde=...)`.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Key numbers
+
+This table collects the main numbers of the chapter. Each one is computed with the functions and data above.
+
+```{python}
+book = series.short_run_output_book_vintage
+rows = [
+    ["Y~ when output is 980 and potential 1,000 (%)", short_run_output(980, 1000)],
+    ["Change in inflation when Y~ = +3% (slope 0.33)", phillips_curve(3.0)],
+    ["u - u_bar when Y~ = -6% (Okun's law)", okun_law(-6.0)],
+    ["Inflation after 3 years at Y~ = +3%, slope 1, from 2%", simulate_inflation()[1][3]],
+    ["Y~ in 2020Q2, data of 2026 (%)", series.short_run_output["2020-04-01"]],
+    ["Y~ in 2020Q2, data of 2023 (%)", book["2020-04-01"]],
+    ["Employment change, April 2020 (%)", april_2020],
+    ["Jobs lost in the Covid-19 recession (millions)", payroll["2020-02-01"] - payroll["2020-04-01"]],
+    ["OLS slope of the Phillips curve, 1961-2025", slope],
+    ["OLS slope of Okun's law, 1960-2025", slope_okun],
+    ["Potential growth 2007-2019 (% a year)", potential_growth(2007, 2019)],
+    ["Lost output in 6% of 2022 GDP, per person (dollars)", loss / 330e6],
+]
+pd.DataFrame(rows, columns=["Quantity", "Value"]).round(2)
+```
+
+## Summary
+
+- Actual output is potential output plus short-run fluctuations. **Short-run output** $\tilde{Y}_t = (Y_t - \bar{Y}_t)/\bar{Y}_t$
+  is positive in a boom and negative in a recession.
+- U.S. recessions push output a few percent below potential, cost millions of jobs and, in total, several percent
+  of a year's GDP. Potential output is only estimated, so the measured gaps change when the data are revised.
+- Inflation usually falls during a recession. The **Phillips curve** $\Delta\pi = \bar{\nu}\tilde{Y}$ captures this, with a
+  U.S. slope of about 1/3; oil and other shocks move inflation too.
+- **Okun's law** links output and unemployment: each point of output below potential adds about half a point
+  of unemployment.
+- The next chapter uses this short-run lens on the Great Recession and the Covid-19 pandemic.

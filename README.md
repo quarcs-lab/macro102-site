@@ -17,6 +17,8 @@
 | 5 | [The Solow Growth Model](notebooks/ch05-the-solow-growth-model.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/ch05-the-solow-growth-model.ipynb) |
 | 6 | [Growth and Ideas](notebooks/ch06-growth-and-ideas.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/ch06-growth-and-ideas.ipynb) |
 | 7 | [The Labor Market, Wages, and Unemployment](notebooks/ch07-the-labor-market-wages-and-unemployment.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/ch07-the-labor-market-wages-and-unemployment.ipynb) |
+| 8 | [Inflation](notebooks/ch08-inflation.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/ch08-inflation.ipynb) |
+| 9 | [An Introduction to the Short Run](notebooks/ch09-an-introduction-to-the-short-run.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/ch09-an-introduction-to-the-short-run.ipynb) |
 <!-- END chapter-list -->
 
 ## Repository layout
