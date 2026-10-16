@@ -19,6 +19,8 @@
 | 7 | [The Labor Market, Wages, and Unemployment](notebooks/ch07-the-labor-market-wages-and-unemployment.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/ch07-the-labor-market-wages-and-unemployment.ipynb) |
 | 8 | [Inflation](notebooks/ch08-inflation.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/ch08-inflation.ipynb) |
 | 9 | [An Introduction to the Short Run](notebooks/ch09-an-introduction-to-the-short-run.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/ch09-an-introduction-to-the-short-run.ipynb) |
+| 10 | [The Great Recession and the Covid-19 Pandemic: A First Look](notebooks/ch10-the-great-recession-and-the-covid-19-pandemic-a-first-look.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/ch10-the-great-recession-and-the-covid-19-pandemic-a-first-look.ipynb) |
+| 11 | [The IS Curve](notebooks/ch11-the-is-curve.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/ch11-the-is-curve.ipynb) |
 <!-- END chapter-list -->
 
 ## Repository layout

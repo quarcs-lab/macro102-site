@@ -1,0 +1,1021 @@
+# Chapter 11: The IS Curve
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/ch11-the-is-curve.ipynb)
+
+*Data Science and Macroeconomic Models: A Python Companion to Intermediate Macroeconomics* · Carlos Mendez
+
+> **How to use this notebook.** In Colab, click *Runtime → Run all*. After that, every model
+> figure has live sliders: move one and the model is solved again on the spot. On the book
+> website the same figures come with one precomputed slider. Each section ends with a short
+> **Your turn** task, and you can try it in the empty code cell below the task.
+
+<!-- cell -->
+
+## Learning goals
+
+Chapter 9 measured the ups and downs of the economy. This chapter builds the first piece of the
+model that explains them: the **IS curve**, which links the real interest rate to short-run output.
+By the end of it you will be able to:
+
+- derive the IS curve $\tilde{Y}_t = \bar{a} - \bar{b}(R_t - \bar{r})$ from the national income identity
+  and explain why it slopes down;
+- tell a **movement along** the IS curve (a change in the real interest rate) from a **shift** of the curve
+  (an aggregate demand shock or a change in the marginal product of capital);
+- explain the **life-cycle / permanent-income** theory of consumption and the **multiplier**;
+- compare the Congressional Budget Office's 2009 forecasts of unemployment with what actually happened;
+- in Python: reuse one model function in many figures, shade areas between two curves, and summarize
+  monthly data by quarter and year with `groupby`.
+
+<!-- cell -->
+
+## Figures in this chapter
+
+The figures follow the order of the textbook chapter. The second column shows which textbook
+figure each notebook figure replicates. Figures 11.7–11.9 are the textbook's worked answers to
+Exercise 2.
+
+| Figure | Textbook figure | Type | What you can change |
+|---|---|---|---|
+| Figure 1 | 11.1 Introducing the IS curve | model | the real interest rate |
+| Figure 2 | 11.2 The IS curve | model | demand shock ā, slope b̄, marginal product of capital r̄ |
+| Figure 3 | 11.3 An increase in the real interest rate to R′ | model | new interest rate R′ (and ā′, r̄′, b̄) |
+| Figure 4 | 11.4 An aggregate demand shock | model | new demand shock ā′ (and R′, r̄′, b̄) |
+| Figure 5 | 11.5 The life-cycle model of consumption | model | income when young/old and at its peak, retirement age, length of life |
+| Figure 6 | 11.6 Unemployment forecasts from the CBO | data | the textbook's window or all data to 2026 |
+| Figure 7 | 11.7 A reduction in the real interest rate | model | new interest rate R′ (and ā′, r̄′, b̄) |
+| Figure 8 | 11.8 Pessimistic consumers | model | new demand shock ā′ (and R′, r̄′, b̄) |
+| Figure 9 | 11.9 Improvements in information technology | model | new marginal product of capital r̄′ (and R′, ā′, b̄) |
+
+<!-- cell -->
+
+## Setup
+
+We first load the Python libraries we need. You only have to run this cell once.
+
+> **Python note.** `import` loads a *library*, a toolbox written by other people. We give each
+> library a short nickname, for example `np` for NumPy, so that the code stays short. Text after
+> a `#` is a *comment*: Python ignores it, and it is there for human readers. The `try ... except`
+> block runs one Colab-only line and simply skips it anywhere else.
+
+```{python}
+# Libraries used in this chapter
+import numpy as np                              # numbers and arrays
+import pandas as pd                             # data tables
+import plotly.express as px                     # quick charts from data tables
+import plotly.graph_objects as go               # charts built piece by piece (model figures)
+import plotly.io as pio
+from ipywidgets import interact, FloatSlider, IntSlider, ToggleButtons
+
+# One light blue/green look for every chart
+BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
+pio.templates.default = "plotly_white"
+pio.templates["plotly_white"].layout.update(width=860, height=480)   # same size in Colab and on the website
+px.defaults.color_discrete_sequence = [BLUE, TEAL, GREEN, "#5aa0d8", "#0b4f47"]
+WIDE = {"description_width": "initial"}         # show the full slider labels
+
+# Colab only: let Plotly charts appear inside the interactive widgets
+try:
+    import google.colab
+    google.colab.output.enable_custom_widget_manager()
+except ImportError:
+    pass                                        # not running in Colab: nothing to do
+
+# The data files of this chapter live in the book's GitHub repository
+DATA_URL = "https://raw.githubusercontent.com/quarcs-lab/macro102-site/main/data/ch11/"
+```
+
+The next cell defines a helper that only the book website needs. Run it and move on.
+
+```{python}
+#| kind: helper
+# @title Helper for the website versions (run this cell; you do not need to read it)
+def slider_figure(make_figure, name, values, start, label=None):
+    """Precompute make_figure(name=value) for every value and join the results with one slider.
+
+    The website cannot run Python, so each interactive figure also gets this precomputed version.
+    """
+    figures = [make_figure(**{name: v}) for v in values]
+    first = values.index(start)
+    fig = go.Figure(layout=figures[first].layout)
+    owner = []                                  # which precomputed figure each trace comes from
+    for i, f in enumerate(figures):
+        for trace in f.data:
+            trace.visible = (i == first)
+            fig.add_trace(trace)
+            owner.append(i)
+    steps = []
+    for i, f in enumerate(figures):
+        layout = {"title": f.layout.title.to_plotly_json(),
+                  "annotations": [a.to_plotly_json() for a in f.layout.annotations],
+                  "shapes": [s.to_plotly_json() for s in f.layout.shapes]}
+        visible = [o == i for o in owner]
+        steps.append(dict(method="update", label=str(values[i]), args=[{"visible": visible}, layout]))
+    fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
+                                    currentvalue=dict(prefix=(label or name) + " = "))])
+    return fig
+```
+
+## The model in code
+
+The IS curve starts from the **national income identity** of Chapter 2: output is used for consumption,
+investment, government purchases and net exports,
+
+$$Y_t = C_t + I_t + G_t + EX_t - IM_t. \qquad (11.2)$$
+
+The short-run model takes **potential output** $\bar{Y}_t$ from the long-run model, and each use of output is
+a share of it:
+
+- consumption, government purchases, exports and imports are constant shares,
+  $C_t = \bar{a}_c\bar{Y}_t$, $G_t = \bar{a}_g\bar{Y}_t$, $EX_t = \bar{a}_{ex}\bar{Y}_t$ and $IM_t = \bar{a}_{im}\bar{Y}_t$
+  (equations 11.3–11.6);
+- investment is different. It depends on the gap between the **real interest rate** $R_t$, the cost of
+  borrowing, and the **marginal product of capital** $\bar{r}$, the return on a new machine:
+
+$$\frac{I_t}{\bar{Y}_t} = \bar{a}_i - \bar{b}\,(R_t - \bar{r}). \qquad (11.7)$$
+
+Divide the identity by $\bar{Y}_t$, substitute the five shares, and subtract 1 from both sides. Short-run
+output $\tilde{Y}_t = (Y_t - \bar{Y}_t)/\bar{Y}_t$ is on the left, and we get the **IS curve**:
+
+$$\tilde{Y}_t = \bar{a} - \bar{b}\,(R_t - \bar{r}), \qquad \bar{a} \equiv \bar{a}_c + \bar{a}_i + \bar{a}_g + \bar{a}_{ex} - \bar{a}_{im} - 1. \qquad (11.12)$$
+
+$\bar{a}$ is the **aggregate demand shock**. In the long run the shares add up to 1, so $\bar{a} = 0$: when the
+real interest rate equals the marginal product of capital, output is at potential ($\tilde{Y} = 0$). For now
+$R_t$ is exogenous; Chapter 12 explains how the central bank sets it.
+
+**One baseline for every diagram.** The textbook's numerical example (after equation 11.14) gives the
+baseline that all the IS figures of this notebook start from:
+
+- no aggregate demand shock, $\bar{a} = 0$;
+- the sensitivity of investment to the interest rate, $\bar{b} = 2$;
+- the marginal product of capital, $\bar{r} = 5$ percent.
+
+We measure $\tilde{Y}$, $R$, $\bar{r}$ and $\bar{a}$ in percent (or percentage points). For the demand shares we use
+illustrative values that add up to 100 percent of potential output: consumption 65 (the textbook's "about
+2/3"), investment 17, government purchases 20 (the textbook's "about 20 percent"), exports 12 and imports 14.
+
+> **Python note.** `def` creates a *function*: a named recipe that takes inputs (the *arguments*) and gives
+> back a result with `return`. Writing `b=B_BAR` gives the argument a *default value*, used whenever we do
+> not pass one; here the default is a constant we defined just before. The text in triple quotes is a short
+> description of what the function does.
+
+```{python}
+A_BAR, B_BAR, R_BAR = 0.0, 2.0, 5.0     # the baseline: no demand shock, b = 2, r_bar = 5 percent
+
+
+def is_curve(R, a=A_BAR, b=B_BAR, r_bar=R_BAR):
+    """Equation 11.12, the IS curve: short-run output Y~ = a - b (R - r_bar), in percent."""
+    return a - b * (R - r_bar)
+
+
+def investment_share(R, a_i=17.0, b=B_BAR, r_bar=R_BAR):
+    """Equation 11.7: investment in percent of potential output, I/Ybar = a_i - b (R - r_bar)."""
+    return a_i - b * (R - r_bar)
+
+
+def demand_shock(a_c=65.0, a_i=17.0, a_g=20.0, a_ex=12.0, a_im=14.0):
+    """Equation 11.12: the aggregate demand shock a = a_c + a_i + a_g + a_ex - a_im - 100 (shares in percent)."""
+    return a_c + a_i + a_g + a_ex - a_im - 100
+```
+
+Let us try the functions on the textbook's numbers.
+
+> **Python note.** An *f-string* such as `f"Y~ = {value:.1f}%"` inserts the value of a variable into a piece
+> of text; `:.1f` means "show one decimal".
+
+```{python}
+print(f"Demand shock with the baseline shares:  a = {demand_shock():.1f}")
+print(f"R = r_bar = 5%:  Y~ = {is_curve(5.0):.1f}%,  investment = {investment_share(5.0):.1f}% of potential")
+print(f"R' = 6%:         Y~ = {is_curve(6.0):.1f}%,  investment = {investment_share(6.0):.1f}% of potential")
+```
+
+With the baseline shares the demand shock is zero, so output is at potential when $R = \bar{r}$. The second and
+third lines are the textbook's example: when the real interest rate rises from 5 to 6 percent, investment
+falls by 2 percentage points of potential output, and output falls to 2 percent below potential.
+
+Every IS diagram below uses the same axes and the same few drawing steps, so we write them once.
+`add_is` draws an IS curve, `add_point` marks a point with dashed guides to the axes, `add_arrow` draws an
+arrow, and `is_axes` sets the fixed axes and the title.
+
+> **Python note.** `np.linspace(0, 10, 101)` creates 101 evenly spaced numbers from 0 to 10: the interest
+> rates at which we draw each curve. Because `is_curve` works on a whole array at once, one call gives the
+> output for every rate. `go.Figure()` starts an empty chart and `add_trace` adds a line or a set of points.
+> `add_annotation` with `axref="x"` and `ayref="y"` draws an arrow from (`ax`, `ay`) to (`x`, `y`), both in
+> axis units. `!=` means "is not equal to", and `list(range(-8, 11, 2))` is the list -8, -6, ..., 10.
+
+```{python}
+R_GRID = np.linspace(0, 10, 101)          # interest rates at which we draw every IS curve
+Y_RANGE, R_RANGE = [-10, 10], [0, 10]     # fixed axes, so that you can see the curves move
+
+
+def add_is(fig, name, color, a=A_BAR, b=B_BAR, r_bar=R_BAR, dash="solid"):
+    """Draw an IS curve: output Y~ on the horizontal axis, the real interest rate R on the vertical axis."""
+    fig.add_trace(go.Scatter(x=is_curve(R_GRID, a, b, r_bar), y=R_GRID, name=name, mode="lines",
+                             line=dict(color=color, width=4, dash=dash)))
+
+
+def add_point(fig, Y, R, label):
+    """Mark the point (Y, R) with a dot, a label and dashed guides to both axes."""
+    fig.add_trace(go.Scatter(x=[Y_RANGE[0], Y, Y], y=[R, R, R_RANGE[0]], mode="lines", showlegend=False,
+                             line=dict(color="black", width=1, dash="dash")))
+    fig.add_trace(go.Scatter(x=[Y], y=[R], mode="markers+text", text=[label], textposition="top right",
+                             textfont=dict(size=16), showlegend=False, marker=dict(color="black", size=12)))
+
+
+def add_arrow(fig, x0, y0, x1, y1):
+    """Draw an arrow from (x0, y0) to (x1, y1) in axis units; nothing if the two points are the same."""
+    if (x0, y0) != (x1, y1):
+        fig.add_annotation(x=x1, y=y1, ax=x0, ay=y0, xref="x", yref="y", axref="x", ayref="y", text="",
+                           showarrow=True, arrowhead=3, arrowwidth=2, arrowcolor="black")
+```
+
+```{python}
+def is_axes(fig, title):
+    """Fixed axes for every IS diagram (no tick in the bottom-left corner), with a readout in the title."""
+    fig.update_layout(title=title,
+                      xaxis=dict(title="Short-run output, Ỹ (percent)", range=Y_RANGE,
+                                 tickvals=list(range(-8, 11, 2)), zeroline=False),
+                      yaxis=dict(title="Real interest rate, R (percent)", range=R_RANGE,
+                                 tickvals=list(range(1, 11)), zeroline=False),
+                      legend=dict(x=0.99, y=0.99, xanchor="right", yanchor="top", bgcolor="rgba(255,255,255,0.8)"))
+```
+
+## Figure 1: Introducing the IS curve
+
+**Goal.** See the basic story of the chapter: a higher real interest rate means less investment and so
+less output in the short run.
+
+$$\uparrow \text{interest rate} \;\Rightarrow\; \downarrow \text{investment} \;\Rightarrow\; \downarrow \text{output} \qquad (11.1)$$
+
+A higher interest rate makes borrowing more expensive. Firms buy fewer machines and build fewer factories,
+and households buy fewer new houses, which also count as investment. Less demand for goods means that
+firms produce less. The IS curve is the line that collects all these (output, interest rate) pairs. Choose
+an interest rate with the slider and read off investment and output in the title.
+
+```{python}
+def introducing_is(R=5.0):
+    """Figure 11.1: the IS curve, with the economy at the real interest rate R."""
+    Y = is_curve(R)
+    fig = go.Figure()
+    add_is(fig, "The IS curve", BLUE)
+    add_point(fig, Y, R, "")
+    is_axes(fig, f"R = {R:.1f}%  →  investment = {investment_share(R):.1f}% of Ȳ  →  Ỹ = {Y:.1f}%")
+    return fig
+```
+
+> **Python note.** `interact` turns each argument of a function into a slider and calls the function again
+> every time you move one. The `;` at the end only hides an extra line of text.
+
+```{python}
+#| kind: widget
+interact(introducing_is,
+         R=FloatSlider(value=5.0, min=1.0, max=9.0, step=0.5, description="real interest rate R (%)", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 1 with a precomputed slider for the real interest rate
+slider_figure(introducing_is, "R", [2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0], start=5.0, label="real interest rate R (%)")
+```
+
+**What to notice.**
+
+- The curve slopes **down**: every higher interest rate goes with lower investment and lower output.
+- Each extra percentage point on $R$ lowers investment by $\bar{b} = 2$ points of potential output, and output
+  by the same 2 points.
+- At $R = 5$ percent, the marginal product of capital, investment is at its normal share of 17 percent and output
+  is at potential.
+
+**Your turn.** At what real interest rate would output be 4 percent *above* potential? Find it with the
+slider, then check it with `is_curve`.
+
+<details><summary>Hint</summary>
+
+Output rises by 2 points for every point that $R$ falls below 5 percent. Try `is_curve(3.0)`.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 2: The IS curve
+
+**Goal.** Read the IS equation off the graph, and see what each of its three parameters does.
+
+$$\tilde{Y}_t = \bar{a} - \bar{b}\,(R_t - \bar{r})$$
+
+The equation makes output a function of the interest rate, yet the graph puts output on the horizontal axis.
+The textbook keeps this convention for two reasons: in Chapter 12 the interest rate becomes an endogenous
+variable, and economists put the price (here the interest rate, the price of borrowing) on the vertical axis,
+as in supply and demand.
+
+The black dot is the point where $R = \bar{r}$. There the IS equation gives $\tilde{Y} = \bar{a}$: with no demand
+shock, output is at potential. When you change a parameter, the baseline curve stays behind as a dashed gray line.
+
+> **Python note.** `if ... :` runs the indented lines only when the condition is true. Here it compares three
+> numbers at once: `(a, b, r_bar) != (A_BAR, B_BAR, R_BAR)` is true as soon as one of them differs from
+> the baseline.
+
+```{python}
+def is_diagram(a=A_BAR, b=B_BAR, r_bar=R_BAR):
+    """Figure 11.2: the IS curve Y~ = a - b (R - r_bar), with the point where R = r_bar (there Y~ = a)."""
+    fig = go.Figure()
+    if (a, b, r_bar) != (A_BAR, B_BAR, R_BAR):
+        add_is(fig, "Baseline IS (ā = 0, b̄ = 2, r̄ = 5)", GRAY, dash="dash")
+    add_is(fig, "IS", BLUE, a, b, r_bar)
+    add_point(fig, a, r_bar, "R = r̄")
+    is_axes(fig, f"IS: Ỹ = {a:.1f} − {b:.2f} × (R − {r_bar:.1f});   at R = r̄ = {r_bar:.1f}%, Ỹ = {a:.1f}%")
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(is_diagram,
+         a=FloatSlider(value=0.0, min=-4.0, max=4.0, step=0.5, description="demand shock ā", style=WIDE),
+         b=FloatSlider(value=2.0, min=0.5, max=4.0, step=0.25, description="sensitivity of investment b̄", style=WIDE),
+         r_bar=FloatSlider(value=5.0, min=2.0, max=8.0, step=0.5, description="marginal product of capital r̄ (%)",
+                           style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 2 with a precomputed slider for the slope parameter b
+slider_figure(is_diagram, "b", [0.5, 1.0, 1.5, 2.0, 3.0, 4.0], start=2.0, label="sensitivity of investment b̄")
+```
+
+**What to notice.**
+
+- $\bar{b}$ turns the curve around the dot. A **higher** $\bar{b}$ makes the IS curve **flatter**: investment reacts
+  more to the interest rate, so the same change in $R$ moves output more.
+- $\bar{a}$ moves the whole curve left or right, one for one: the dot moves to $\tilde{Y} = \bar{a}$.
+- $\bar{r}$ moves the whole curve up or down: the dot is always at the height $R = \bar{r}$.
+
+**Your turn.** With $\bar{b} = 4$, how much does output fall when $R$ rises from 5 to 6 percent? Compare with the
+baseline $\bar{b} = 2$.
+
+<details><summary>Hint</summary>
+
+Pass the slope as an argument: `is_curve(6.0, b=4.0)`.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 3: An increase in the real interest rate to R′
+
+**Goal.** See that a change in the real interest rate is a **movement along** the IS curve.
+
+The economy starts at its long-run values, point $A$: $R = \bar{r} = 5$ percent and $\tilde{Y} = 0$. Suppose the real
+interest rate rises to $R' = 6$ percent. The IS curve is a graph of output against the interest rate, so nothing
+shifts: we simply read the new output off the same curve, at point $B$.
+
+The textbook uses the same diagram for many experiments: a new interest rate (Figures 11.3 and 11.7), a new
+demand shock (Figures 11.4 and 11.8) and a new marginal product of capital (Figure 11.9). So we write **one**
+function, `is_experiment`, for all five figures. Its arguments are the new values after the change: `R_new`
+($R'$), `a_new` ($\bar{a}'$), `r_new` ($\bar{r}'$) and the slope `b`. Their defaults are the baseline, so with no
+arguments nothing changes. Whenever the curve moves, the old one stays behind as a dashed gray line.
+
+```{python}
+def is_experiment(R_new=R_BAR, a_new=A_BAR, r_new=R_BAR, b=B_BAR):
+    """Figures 11.3, 11.4, 11.7-11.9: the economy moves from A (baseline, R = r_bar) to B on the new IS curve."""
+    Y_B = is_curve(R_new, a_new, b, r_new)
+    shifted = (a_new, r_new, b) != (A_BAR, R_BAR, B_BAR)
+    fig = go.Figure()
+    if shifted:
+        add_is(fig, "IS before", GRAY, dash="dash")
+        add_is(fig, "IS after, IS′", BLUE, a_new, b, r_new)
+        add_arrow(fig, is_curve(7.5), 7.5, is_curve(7.5, a_new, b, r_new), 7.5)   # the shift of the curve
+    else:
+        add_is(fig, "IS", BLUE)
+    if r_new != R_BAR:                       # the new curve crosses Y~ = 0 at the new r_bar'
+        fig.add_shape(type="line", x0=Y_RANGE[0], y0=r_new, x1=0, y1=r_new, line=dict(color=GRAY, dash="dot"))
+    add_point(fig, 0.0, R_BAR, "A")
+    if (Y_B, R_new) != (0.0, R_BAR):
+        add_point(fig, Y_B, R_new, "B")
+    add_arrow(fig, -9.3, R_BAR, -9.3, R_new)            # the change in the interest rate
+    add_arrow(fig, 0.0, 0.6, Y_B, 0.6)                  # the change in output
+    is_axes(fig, f"R′ = {R_new:.1f}%, ā′ = {a_new:.1f}, r̄′ = {r_new:.1f}%:   Ỹ = 0.0% → {Y_B:.1f}%   (A → B)")
+    return fig
+```
+
+Each of the five figures gets the same four sliders; only the starting values differ. Here the new interest rate
+starts at the textbook's $R' = 6$ percent.
+
+```{python}
+#| kind: widget
+interact(is_experiment,
+         R_new=FloatSlider(value=6.0, min=2.0, max=8.0, step=0.5, description="new interest rate R′ (%)", style=WIDE),
+         a_new=FloatSlider(value=0.0, min=-4.0, max=4.0, step=0.5, description="new demand shock ā′", style=WIDE),
+         r_new=FloatSlider(value=5.0, min=3.0, max=7.0, step=0.25, description="new marginal product r̄′ (%)", style=WIDE),
+         b=FloatSlider(value=2.0, min=1.0, max=3.0, step=0.25, description="sensitivity of investment b̄", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 3 with a precomputed slider for the new interest rate
+slider_figure(is_experiment, "R_new", [5.0, 5.5, 6.0, 6.5, 7.0, 7.5, 8.0], start=6.0, label="new interest rate R′ (%)")
+```
+
+**What to notice.**
+
+- With $R' = 6$ the economy moves up the curve from $A$ to $B$, and output falls to $-2$ percent: 2 percent below
+  potential. Only the point moves; the curve stays where it is.
+- Each extra percentage point on the interest rate costs another 2 points of output, because $\bar{b} = 2$.
+- Raise $\bar{b}$ to 3 with $R' = 6$: the curve becomes flatter and output falls to $-3$ percent. When investment is
+  more sensitive to the interest rate, the same rate increase hurts more.
+
+<!-- cell -->
+
+### Key numbers: the textbook's example
+
+The textbook plugs $\bar{a} = 0$, $\bar{b} = 2$, $R = \bar{r} = 5\%$ and $R' = 6\%$ into the IS curve (equation 11.14).
+A *loop* repeats the same line for several interest rates.
+
+> **Python note.** `for R in [5.0, 6.0, 7.0]:` runs the indented line once for each number in the list, with
+> `R` set to that number.
+
+```{python}
+for R in [5.0, 6.0, 7.0]:
+    print(f"R = {R:.1f}%:  Y~ = {is_curve(R):.1f}%   (with b = 3: {is_curve(R, b=3.0):.1f}%)")
+```
+
+Output falls from 0 to $-2$ percent, as in the textbook: each percentage point on the interest rate lowers output
+by $\bar{b} = 2$ points. With $\bar{b} = 3$ it falls by 3 points per point.
+
+**Your turn.** The Fed would like to keep output at least 1 percent above potential. What is the highest real
+interest rate that does that in the baseline? Check it with `is_curve`, and then move the slider to it.
+
+<details><summary>Hint</summary>
+
+Solve $1 = 0 - 2\,(R - 5)$ for $R$. The answer is below 5 percent.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 4: An aggregate demand shock
+
+**Goal.** See that an aggregate demand shock **shifts** the IS curve.
+
+Suppose better information technology makes businesses optimistic, and they invest more at every interest
+rate: the investment share $\bar{a}_i$ rises. Then $\bar{a}$ rises above 0, and output is higher at **every** interest rate.
+The IS curve shifts out. With the interest rate still at $\bar{r}$, the economy moves from $A$ to $B$, and output rises
+one for one with the shock: $\tilde{Y} = \bar{a}'$.
+
+The textbook's figure has no number for $\bar{a}'$. We start at $\bar{a}' = 2$, the shock of the textbook's multiplier
+example below. It is the same `is_experiment` function as in Figure 3, with a different slider moved.
+
+```{python}
+#| kind: widget
+interact(is_experiment,
+         R_new=FloatSlider(value=5.0, min=2.0, max=8.0, step=0.5, description="new interest rate R′ (%)", style=WIDE),
+         a_new=FloatSlider(value=2.0, min=-4.0, max=4.0, step=0.5, description="new demand shock ā′", style=WIDE),
+         r_new=FloatSlider(value=5.0, min=3.0, max=7.0, step=0.25, description="new marginal product r̄′ (%)", style=WIDE),
+         b=FloatSlider(value=2.0, min=1.0, max=3.0, step=0.25, description="sensitivity of investment b̄", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 4 with a precomputed slider for the new demand shock
+slider_figure(is_experiment, "a_new", [-2.0, -1.0, 0.0, 1.0, 2.0, 3.0, 4.0], start=2.0, label="new demand shock ā′")
+```
+
+**What to notice.**
+
+- The new curve IS′ lies 2 points to the right of the old one at every interest rate. At $R = \bar{r}$, output rises
+  from 0 to 2 percent: one for one with the shock.
+- Move $\bar{b}$: the new curve turns around point $B$, which stays at $\tilde{Y} = 2$. At $R = \bar{r}$ the interest-rate
+  term is zero, so only $\bar{a}$ matters there.
+- A negative $\bar{a}'$ shifts the curve in, as when a recession in Europe or Japan lowers the demand for U.S.
+  exports ($\bar{a}_{ex}$ falls). That is how a recession travels from one country to another.
+
+<!-- cell -->
+
+### Move along or shift? A guide to the IS curve
+
+The textbook sums up Figures 3 and 4 in one rule:
+
+| What changes | What happens to the IS curve | Example |
+|---|---|---|
+| the real interest rate $R$ | a **movement along** the curve | the Fed raises $R$ (Figures 3 and 7) |
+| any demand share ($\bar{a}_c$, $\bar{a}_i$, $\bar{a}_g$, $\bar{a}_{ex}$, $\bar{a}_{im}$), so $\bar{a}$ | a **shift**: out when $\bar{a}$ rises, in when it falls | an investment boom, pessimistic consumers (Figures 4 and 8) |
+| the marginal product of capital $\bar{r}$ | a **shift**: out (up) when $\bar{r}$ rises | better technology, or an earthquake (Figure 9) |
+| potential output $\bar{Y}_t$ | **nothing**: $\bar{Y}_t$ is not in the equation | a new technology raises actual and potential output alike |
+
+In `is_experiment`, the first row is the slider $R'$; all the other sliders shift the curve.
+
+<!-- cell -->
+
+### Key numbers: the multiplier
+
+So far consumption depends only on potential output. Suppose it also rises a little when the economy booms,
+$C_t/\bar{Y}_t = \bar{a}_c + \bar{x}\,\tilde{Y}_t$ with $0 < \bar{x} < 1$ (equation 11.15). Then a first fall in investment
+costs some jobs, the people who lose them spend less, other firms sell less, and so on. Solving the model again
+gives the IS curve times a **multiplier**:
+
+$$\tilde{Y}_t = \frac{1}{1 - \bar{x}} \times \left[\bar{a} - \bar{b}\,(R_t - \bar{r})\right]. \qquad (11.16)$$
+
+```{python}
+def multiplier(x):
+    """Equation 11.16: the multiplier 1 / (1 - x), when consumption rises by x for each point of Y~."""
+    return 1 / (1 - x)
+
+
+x = 1 / 3                                          # the textbook's example
+Y_shock, Y_rate = is_curve(R_BAR, a=2.0), is_curve(5.5)   # a +2 demand shock; R up by half a point
+print(f"x = 1/3:  multiplier = {multiplier(x):.2f}")
+print(f"Demand shock a = +2:  Y~ = {Y_shock:.1f}% without, {multiplier(x) * Y_shock:.1f}% with the multiplier")
+print(f"R up by 0.5 point:   Y~ = {Y_rate:.1f}% without, {multiplier(x) * Y_rate:.1f}% with the multiplier")
+```
+
+These are the textbook's numbers: a multiplier of 1.5, a shock of 2 percent that raises output by 3 percent, and
+an interest-rate increase that lowers output by 1.5 percent instead of 1 percent. The multiplier does not change
+the form of the IS curve, only the size of its intercept and slope. That is why the textbook keeps writing
+$\tilde{Y}_t = \bar{a} - \bar{b}(R_t - \bar{r})$, with $\bar{a}$ and $\bar{b}$ already including any multiplier.
+
+**Your turn.** With the multiplier, is the IS curve flatter or steeper? Compute the fall in output when $R$ rises from
+5 to 6 percent, with $\bar{x} = 0$, $\bar{x} = 1/3$ and $\bar{x} = 1/2$.
+
+<details><summary>Hint</summary>
+
+Multiply `is_curve(6.0)` by `multiplier(0.0)`, `multiplier(1 / 3)` and `multiplier(0.5)`. A curve along which output
+moves more for the same change in $R$ is flatter.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 5: The life-cycle model of consumption
+
+**Goal.** See why consumption is much smoother than income over a person's life.
+
+People prefer a smooth path for consumption: one bowl of ice cream every day rather than seven bowls on Monday
+and none for the rest of the week. The **life-cycle model** applies this idea to a whole life. Consumption is
+based on **average lifetime income**, not on the income of a given year:
+
+- young people in school consume more than they earn: they borrow or receive transfers from their parents;
+- in middle age income is high, and people save;
+- in retirement income falls, and people live off their savings (they *dissave*).
+
+Our stylized income profile is low until age 20, rises to a peak at age 50, stays there until five years before
+retirement, and falls back to its low level at the retirement age. The income levels are illustrative units, so
+only their relative size matters. With no interest, the budget only requires that lifetime consumption equals
+lifetime income, so the smooth consumption level is simply average income.
+
+> **Python note.** `np.interp(age, ages, incomes)` draws straight lines between the points (`ages`, `incomes`)
+> and reads off the income at every `age`. `np.arange(0, T) + 0.5` is 0.5, 1.5, ..., the middle of each year of
+> life, so `.mean()` gives the average income per year. A function can return two results at once, separated
+> by a comma.
+
+```{python}
+def income_profile(age, y_low=1.0, y_high=7.5, retire=65):
+    """Figure 11.5: stylized income at each age: low to 20, rising to a peak at 50, falling to retirement."""
+    ages = [0, 20, 50, retire - 5, retire, 200]
+    incomes = [y_low, y_low, y_high, y_high, y_low, y_low]
+    return np.interp(age, ages, incomes)
+
+
+def lifetime_consumption(y_low=1.0, y_high=7.5, retire=65, T=80):
+    """Life-cycle model: constant consumption equal to average income over a life of T years."""
+    age = np.arange(0, T) + 0.5                  # the middle of each year of life
+    income = income_profile(age, y_low, y_high, retire)
+    return income.mean(), income - income.mean()   # consumption, and saving (+) or dissaving (-) each year
+```
+
+```{python}
+c, saving = lifetime_consumption()
+print(f"Consumption every year: {c:.2f}")
+print(f"Saved over the working years:            {saving[saving > 0].sum():.2f}")
+print(f"Borrowed when young + dissaved when old: {-saving[saving < 0].sum():.2f}")
+```
+
+> **Python note.** `saving[saving > 0]` keeps only the years in which saving is positive, and `.sum()` adds them up.
+
+Everything saved in middle age is used up by the end of life: the two totals are equal. Now the figure. The
+shaded areas are the gaps between income and consumption: green for saving, blue for borrowing and dissaving.
+
+> **Python note.** `fill="tonexty"` colors the area between a line and the line drawn just before it.
+> `np.minimum(income, c)` takes the smaller of the two at every age, so the blue band covers only the ages
+> where income is below consumption, and `np.full(801, c)` is 801 copies of the number `c`. `ages[income >= c]`
+> keeps the ages at which income is at least consumption. `IntSlider` is a slider for whole numbers.
+
+```{python}
+def add_band(fig, lower, upper, ages, color):
+    """Shade the area between two lines, lower and upper (one value per age)."""
+    fig.add_trace(go.Scatter(x=ages, y=lower, mode="lines", line=dict(width=0), showlegend=False, hoverinfo="skip"))
+    fig.add_trace(go.Scatter(x=ages, y=upper, mode="lines", line=dict(width=0), showlegend=False, hoverinfo="skip",
+                             fill="tonexty", fillcolor=color))
+```
+
+```{python}
+def life_cycle(y_low=1.0, y_high=7.5, retire=65, T=80):
+    """Figure 11.5: income over a lifetime and the smooth consumption of the life-cycle model."""
+    c, saving = lifetime_consumption(y_low, y_high, retire, T)
+    ages = np.linspace(0, T, 801)
+    income, flat = income_profile(ages, y_low, y_high, retire), np.full(801, c)
+    saver = ages[income >= c]                            # the ages at which income is above consumption
+    fig = go.Figure()
+    add_band(fig, np.minimum(income, c), flat, ages, "rgba(90,160,216,0.35)")    # borrowing and dissaving
+    add_band(fig, flat, np.maximum(income, c), ages, "rgba(127,178,58,0.35)")    # saving
+    fig.add_trace(go.Scatter(x=ages, y=income, name="Income", line=dict(color=BLUE, width=4)))
+    fig.add_trace(go.Scatter(x=ages, y=flat, name="Consumption", line=dict(color=TEAL, width=4, dash="dash")))
+    fig.add_annotation(x=10, y=(y_low + c) / 2, text="Borrowing/<br>transfers", showarrow=False, font=dict(size=13))
+    fig.add_annotation(x=(50 + retire - 5) / 2, y=(c + y_high) / 2, text="Saving", showarrow=False, font=dict(size=13))
+    fig.add_annotation(x=(retire + T) / 2, y=(y_low + c) / 2, text="Dissaving", showarrow=False, font=dict(size=13))
+    title = f"Consumption = average income = {c:.2f} a year; saving from age {saver.min():.0f} to {saver.max():.0f}"
+    fig.update_layout(title=title,
+                      xaxis=dict(title="Age in years", range=[0, 96], tickvals=list(range(10, 100, 10))),
+                      yaxis=dict(title="Income and consumption", range=[0, 10.5], tickvals=[2, 4, 6, 8, 10]),
+                      legend=dict(x=0.01, y=0.99, xanchor="left", yanchor="top"))
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(life_cycle,
+         y_low=FloatSlider(value=1.0, min=0.5, max=3.0, step=0.5, description="income when young and old", style=WIDE),
+         y_high=FloatSlider(value=7.5, min=4.0, max=10.0, step=0.5, description="peak income (age 50)", style=WIDE),
+         retire=IntSlider(value=65, min=55, max=75, step=1, description="retirement age", style=WIDE),
+         T=IntSlider(value=80, min=76, max=95, step=1, description="length of life T (years)", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 5 with a precomputed slider for the length of life
+slider_figure(life_cycle, "T", [76, 80, 85, 90, 95], start=80, label="length of life T (years)")
+```
+
+**What to notice.**
+
+- Income rises and falls a lot over a lifetime, from 1 to 7.5 units; consumption stays at about 3.2 units every year.
+- Income is above consumption from about age 30 to about age 63 in the baseline: those are the saving years.
+- Live longer and consumption **falls**: the same lifetime income has to cover more years, so people save more in
+  middle age.
+- The model is the reason the IS curve's consumption equation, $C_t = \bar{a}_c\bar{Y}_t$, uses potential output and not
+  actual output: when actual output dips in a recession, people keep consuming and use their savings.
+
+**Your turn.** Raise the retirement age from 65 to 70. Does consumption rise or fall, and by how much? Explain why
+with the life-cycle idea.
+
+<details><summary>Hint</summary>
+
+Compare `lifetime_consumption(retire=70)[0]` with `lifetime_consumption()[0]`. The `[0]` picks the first of the
+two results. Working longer raises lifetime income.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 6: Unemployment forecasts from the Congressional Budget Office
+
+**Goal.** Compare the CBO's 2009 forecasts of unemployment, with and without the fiscal stimulus, with what
+actually happened.
+
+In February 2009 Congress passed the American Recovery and Reinvestment Act (ARRA), a fiscal stimulus of 797 billion
+dollars. In the model, more government purchases raise $\bar{a}_g$ and shift the IS curve out. How far out was hotly
+debated, so the Congressional Budget Office (CBO), Congress's nonpartisan budget office, published three forecasts
+of the unemployment rate: with no stimulus package, and with a "low" and a "high" estimate of its effect.
+
+> **Python note.** `pd.read_csv` reads a data file into a *DataFrame*, a table with named columns, and
+> `parse_dates=["date"]` turns text such as `"2009-10-01"` into real dates. `.head()` shows the first five rows.
+
+```{python}
+data = pd.read_csv(DATA_URL + "fig11-6.csv", parse_dates=["date"])
+data.head(12)
+```
+
+Each row is a month. `unemployment_rate` is the U.S. unemployment rate (Bureau of Labor Statistics), in percent.
+The three CBO columns are almost always empty, shown as `NaN` ("not a number"). The CBO gave one forecast per year,
+for the fourth quarter, so it sits only on the October rows. Is anything else missing?
+
+> **Python note.** `.isna()` is true where a value is missing, and `data[...]` keeps the rows where the condition
+> is true.
+
+```{python}
+data[data.unemployment_rate.isna()]
+```
+
+One month has no unemployment rate: October 2025. The Bureau of Labor Statistics did not run its household survey
+during the federal government shutdown that month, so there is a gap in the data. We leave it as a gap rather than
+invent a number. Now we keep the forecast rows and give the columns readable names for the legend.
+
+> **Python note.** `dropna(subset=[...])` drops the rows where that column is missing, and `rename(columns={...})`
+> gives columns new names.
+
+```{python}
+forecast = data.dropna(subset=["cbo_no_stimulus"]).rename(columns={
+    "cbo_no_stimulus": "No stimulus package", "cbo_low": "Low estimate", "cbo_high": "High estimate"})
+forecast
+```
+
+The chart draws the forecasts as dashed lines and the monthly data as open circles. The dotted line at 4.8 percent
+is the CBO's long-run unemployment rate, the level all three forecasts reach by 2015. You can switch between the
+textbook's window and all the data up to 2026.
+
+> **Python note.** `px.line` with a list `y=[...]` draws one line per column. `ToggleButtons` shows one button per
+> option, and the function receives the text of the chosen button.
+
+```{python}
+NAMES = ["No stimulus package", "Low estimate", "High estimate"]
+VIEWS = {"2009–2016, as in the textbook": (["2008-12-01", "2016-12-31"], [3.5, 10.5], [4, 5, 6, 7, 8, 9, 10]),
+         "2009–2026, all the data": (["2008-12-01", "2026-12-31"], [2.5, 15.5], [3, 6, 9, 12, 15])}
+
+
+def cbo_chart(view="2009–2016, as in the textbook"):
+    """Figure 11.6: the CBO's February 2009 forecasts and the actual monthly unemployment rate."""
+    x_range, y_range, ticks = VIEWS[view]
+    fig = px.line(forecast, x="date", y=NAMES, markers=True, color_discrete_sequence=[BLUE, TEAL, GREEN],
+                  labels={"date": "Year", "value": "Unemployment rate (percent)", "variable": "Series"},
+                  title="Actual unemployment stayed above even the no-stimulus forecast through 2015")
+    fig.update_traces(line_dash="dash", line_width=3)
+    fig.add_trace(go.Scatter(x=data.date, y=data.unemployment_rate, name="Unemployment rate (monthly data)",
+                             mode="markers", marker=dict(symbol="circle-open", color="black", size=6)))
+    fig.add_trace(go.Scatter(x=["2009-10-01", "2019-10-01"], y=[4.8, 4.8], name="CBO long-run rate, 4.8%",
+                             mode="lines", line=dict(color="black", width=1, dash="dot")))
+    fig.add_annotation(x="2020-04-01", y=14.8, text="April 2020: 14.8%", showarrow=True, arrowhead=2, ax=-90, ay=0,
+                       visible=(view != "2009–2016, as in the textbook"))   # only in the full window
+    fig.update_layout(xaxis_range=x_range, yaxis=dict(range=y_range, tickvals=ticks), height=540,
+                      legend=dict(orientation="h", y=-0.18, yanchor="top"))
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(cbo_chart, view=ToggleButtons(options=list(VIEWS), value="2009–2016, as in the textbook", description="window"));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 6 with buttons for the textbook's window and all the data
+fig = cbo_chart()
+book, full = VIEWS["2009–2016, as in the textbook"], VIEWS["2009–2026, all the data"]
+fig.update_layout(updatemenus=[dict(type="buttons", direction="right", x=0.01, y=0.02, xanchor="left", yanchor="bottom",
+                                    buttons=[
+    dict(label="2009–2016, as in the textbook", method="relayout",
+         args=[{"xaxis.range": book[0], "yaxis.range": book[1], "yaxis.tickvals": book[2], "annotations[0].visible": False}]),
+    dict(label="2009–2026, all the data", method="relayout",
+         args=[{"xaxis.range": full[0], "yaxis.range": full[1], "yaxis.tickvals": full[2], "annotations[0].visible": True}])])])
+fig
+```
+
+**What to notice.**
+
+- Without the stimulus, the CBO expected unemployment to peak at 9 percent in 2009 and then fall slowly. With the
+  stimulus it expected less: 8.5 percent (low estimate) or 7.7 percent (high estimate) at the end of 2009.
+- The actual rate rose much faster and higher, to 10.0 percent in October 2009, and stayed above even the
+  no-stimulus forecast for years. It reached the CBO's long-run rate of 4.8 percent only in January 2016.
+- Switch to all the data. After 2016 unemployment kept falling, below the CBO's 4.8 percent, until the Covid-19
+  shock of April 2020 pushed it to 14.8 percent, the highest value in the file.
+
+<!-- cell -->
+
+### Key numbers: forecasts against outcomes
+
+The textbook compares the averages for 2009: "about 9.3 percent" in the data against 9 percent with no stimulus.
+To compare like with like, we also average the three months of each fourth quarter (October to December), since
+the CBO's forecasts are fourth-quarter values.
+
+> **Python note.** `.set_index("date")` labels the rows by date, so `u.loc["2009"]` keeps the months of 2009.
+> `groupby(fourth.date.dt.year)` puts the months of each year in one group, and `.mean()` averages each group
+> (missing values are skipped, so each CBO column keeps its one October value).
+
+```{python}
+u = data.set_index("date").unemployment_rate
+print(f"Average unemployment rate in 2009: {u.loc['2009'].mean():.2f}%")
+print(f"CBO forecast for 2009 with no stimulus: {forecast['No stimulus package'].iloc[0]:.1f}%")
+print(f"Highest rate 2009-2012: {u.loc['2009':'2012'].max():.1f}% in {u.loc['2009':'2012'].idxmax():%B %Y}")
+print(f"First month at or below 4.8%: {u[u <= 4.8].index[0]:%B %Y}")
+fourth = data[data.date.dt.month >= 10]
+q4 = fourth.groupby(fourth.date.dt.year)[["unemployment_rate", "cbo_no_stimulus", "cbo_low", "cbo_high"]].mean()
+q4["actual minus no stimulus"] = q4.unemployment_rate - q4.cbo_no_stimulus
+q4.loc[2009:2019].round(2)
+```
+
+The 2009 average is 9.28 percent, the textbook's "about 9.3". In the fourth quarter of every year from 2009 to 2015
+the actual rate was above the no-stimulus forecast, by between 0.23 and 1.43 points. In 2016 the two were equal
+(a difference of $-0.03$), and from 2017 on the actual rate was lower.
+
+What does this tell us about the stimulus? The textbook gives two readings, and the data alone cannot pick one. Maybe
+the stimulus worked much less well than the CBO expected. Or maybe the forecast without the stimulus was too
+optimistic: the financial crisis was deeper than anyone knew in February 2009, and without the stimulus unemployment
+would have been higher still. Later research suggests that fiscal policy has larger effects when monetary policy is
+stuck at the "zero lower bound" (Chapter 14). One study, using differences in military spending across U.S. states,
+estimates a multiplier of 1.5: each dollar of federal spending raises GDP by 1.50 dollars in the short run.
+
+**Your turn.** Repeat the comparison with calendar-year averages instead of fourth quarters: average all twelve months
+of each year and compare with the CBO's no-stimulus value for that year. In which years is the actual rate higher?
+
+<details><summary>Hint</summary>
+
+Group the whole table: `data.groupby(data.date.dt.year)[["unemployment_rate", "cbo_no_stimulus"]].mean()`, then subtract
+the two columns as above.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 7: A reduction in the real interest rate
+
+**Goal.** Answer Exercise 2(a) of the textbook: what happens when the Federal Reserve lowers the real interest rate
+below the marginal product of capital?
+
+This is again a change in $R$, so it is a **movement along** the IS curve. Firms can now borrow at a rate below the return
+on new capital, so investment rises and the economy moves *down* the curve, from $A$ to $B$: output rises above potential.
+The textbook gives no number for $R'$; we start at $R' = 4$ percent. The function is `is_experiment` from Figure 3.
+
+```{python}
+#| kind: widget
+interact(is_experiment,
+         R_new=FloatSlider(value=4.0, min=2.0, max=8.0, step=0.5, description="new interest rate R′ (%)", style=WIDE),
+         a_new=FloatSlider(value=0.0, min=-4.0, max=4.0, step=0.5, description="new demand shock ā′", style=WIDE),
+         r_new=FloatSlider(value=5.0, min=3.0, max=7.0, step=0.25, description="new marginal product r̄′ (%)", style=WIDE),
+         b=FloatSlider(value=2.0, min=1.0, max=3.0, step=0.25, description="sensitivity of investment b̄", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 7 with a precomputed slider for the new interest rate
+slider_figure(is_experiment, "R_new", [2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0], start=4.0, label="new interest rate R′ (%)")
+```
+
+**What to notice.**
+
+- Cutting the real interest rate from 5 to 4 percent raises output to 2 percent above potential: the mirror image of
+  Figure 3.
+- The economy moves along the same curve; nothing shifts. This is how monetary policy fights a recession, which
+  Chapter 12 builds on.
+- Combine the cut with a negative demand shock (move $\bar{a}'$ to $-2$): a cut to $R' = 4$ then brings output back
+  exactly to potential. A rate cut can offset a fall in demand.
+
+**Your turn.** Exercise 1 of the textbook uses other parameters: $\bar{a} = 0$, $\bar{b} = 3/4$ and $\bar{r} = 2$ percent, with
+$R = 2$ percent at the start. What happens to short-run output if the real interest rate rises to 4 percent? If it falls to
+1 percent?
+
+<details><summary>Hint</summary>
+
+Pass all the parameters to the function: `is_curve(4.0, a=0.0, b=0.75, r_bar=2.0)`, and the same with `1.0`.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 8: Pessimistic consumers
+
+**Goal.** Answer Exercise 2(b): what happens when consumers become pessimistic about the economy?
+
+In the model, pessimistic consumers spend a smaller share of potential output: $\bar{a}_c$ falls. That lowers the aggregate
+demand shock $\bar{a}$, and the IS curve shifts **in**. At an unchanged interest rate $R = \bar{r}$, output falls from $A$ to $B$,
+one for one with the shock. The textbook's example is a fall in $\bar{a}_c$ of 2 percentage points. With our demand shares:
+
+```{python}
+a_pessimistic = demand_shock(a_c=63.0)                      # consumption share falls from 65 to 63 percent
+print(f"a = {a_pessimistic:.1f}:  at R = r_bar, Y~ = {is_curve(R_BAR, a=a_pessimistic):.1f}%")
+```
+
+A 2-point fall in the consumption share lowers $\bar{a}$ to $-2$ and output to 2 percent below potential.
+
+```{python}
+#| kind: widget
+interact(is_experiment,
+         R_new=FloatSlider(value=5.0, min=2.0, max=8.0, step=0.5, description="new interest rate R′ (%)", style=WIDE),
+         a_new=FloatSlider(value=-2.0, min=-4.0, max=4.0, step=0.5, description="new demand shock ā′", style=WIDE),
+         r_new=FloatSlider(value=5.0, min=3.0, max=7.0, step=0.25, description="new marginal product r̄′ (%)", style=WIDE),
+         b=FloatSlider(value=2.0, min=1.0, max=3.0, step=0.25, description="sensitivity of investment b̄", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 8 with a precomputed slider for the new demand shock
+slider_figure(is_experiment, "a_new", [-4.0, -3.0, -2.0, -1.0, 0.0], start=-2.0, label="new demand shock ā′")
+```
+
+**What to notice.**
+
+- The new curve IS′ lies to the left of the old one: at every interest rate, output is 2 points lower.
+- With the interest rate unchanged, the economy ends up at $B$, 2 percent below potential: a recession caused by
+  a fall in demand, not by a fall in what the economy can produce.
+- Any of the demand shares works the same way. A cut in government purchases ($\bar{a}_g$) or a rise in imports ($\bar{a}_{im}$)
+  also shifts the curve in.
+
+**Your turn.** Exercise 1(c)–(e) again uses $\bar{b} = 3/4$, $\bar{r} = 2$ and $R = 2$ percent. What is short-run output if
+(c) $\bar{a}_c$ rises by 1 point, (d) $\bar{a}_g$ falls by 2 points, or (e) $\bar{a}_{im}$ falls by 2 points? Use `demand_shock` to
+find $\bar{a}$ in each case.
+
+<details><summary>Hint</summary>
+
+For (d), `demand_shock(a_g=18.0)` gives the new $\bar{a}$; then `is_curve(2.0, a=..., b=0.75, r_bar=2.0)`. Imports enter
+$\bar{a}$ with a minus sign, so watch the direction in (e).
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 9: Improvements in information technology
+
+**Goal.** Answer Exercise 2(c): what happens when better information technology raises the marginal product of capital?
+
+Better technology makes new capital more productive, so $\bar{r}$ rises to $\bar{r}'$. The new IS curve crosses $\tilde{Y} = 0$ at the
+new, higher $\bar{r}'$ (the dotted line), so it lies **above** the old one: the curve shifts up. The real interest rate has not
+changed, so it is now below the marginal product of capital. Firms want to borrow and invest, and output rises from $A$ to $B$:
+
+$$\tilde{Y}' = \bar{a} - \bar{b}\,(R - \bar{r}') = \bar{b}\,(\bar{r}' - \bar{r}) \quad \text{when } \bar{a} = 0 \text{ and } R = \bar{r}.$$
+
+The textbook gives no number for $\bar{r}'$. We start at $\bar{r}' = 6$ percent, one point above the baseline.
+
+```{python}
+#| kind: widget
+interact(is_experiment,
+         R_new=FloatSlider(value=5.0, min=2.0, max=8.0, step=0.5, description="new interest rate R′ (%)", style=WIDE),
+         a_new=FloatSlider(value=0.0, min=-4.0, max=4.0, step=0.5, description="new demand shock ā′", style=WIDE),
+         r_new=FloatSlider(value=6.0, min=3.0, max=7.0, step=0.25, description="new marginal product r̄′ (%)", style=WIDE),
+         b=FloatSlider(value=2.0, min=1.0, max=3.0, step=0.25, description="sensitivity of investment b̄", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 9 with a precomputed slider for the new marginal product of capital
+slider_figure(is_experiment, "r_new", [4.0, 4.5, 5.0, 5.5, 6.0, 6.5, 7.0], start=6.0, label="new marginal product r̄′ (%)")
+```
+
+**What to notice.**
+
+- One more point on the marginal product of capital raises output by $\bar{b} = 2$ points: $\tilde{Y}' = 2 \times (6 - 5) = 2$ percent.
+- The shift looks like the demand shock of Figure 4, but its size depends on $\bar{b}$. Move the slope slider: with
+  $\bar{b} = 3$, the same rise in $\bar{r}$ raises output by 3 points.
+- The textbook notes that an earthquake can have the same effect. It destroys capital, which lowers actual and potential
+  output alike (no change in $\tilde{Y}$), but the capital that is left becomes more productive, so $\bar{r}$ rises and investment
+  rebuilds. In the short run, output can rise above potential.
+
+**Your turn.** Suppose $\bar{r}$ rises to 6 percent and, at the same time, consumers turn a little pessimistic, so that
+$\bar{a}' = -1$. What real interest rate keeps output at potential? Find it with the sliders, then check it with `is_curve`.
+
+<details><summary>Hint</summary>
+
+Solve $0 = \bar{a}' - \bar{b}\,(R' - \bar{r}')$ for $R'$. Then check with `is_curve(R, a=-1.0, r_bar=6.0)` for your $R$. The
+$R'$ slider moves in steps of 0.5.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Key numbers
+
+This table collects the main numbers of the chapter. Each one is computed with the functions and data above.
+
+```{python}
+rows = [
+    ["Demand shock a with the baseline shares", demand_shock()],
+    ["Y~ when R rises from 5% to 6% (b = 2), %", is_curve(6.0)],
+    ["Investment share at R = 6%, % of potential", investment_share(6.0)],
+    ["Y~ when the Fed cuts R to 4%, %", is_curve(4.0)],
+    ["Y~ after a 2-point fall in a_c, %", is_curve(R_BAR, a=demand_shock(a_c=63.0))],
+    ["Y~ when r_bar rises to 6%, %", is_curve(R_BAR, r_bar=6.0)],
+    ["Multiplier when x = 1/3", multiplier(1 / 3)],
+    ["Y~ after a +2 demand shock, with the multiplier, %", multiplier(1 / 3) * is_curve(R_BAR, a=2.0)],
+    ["Life-cycle consumption per year (baseline profile)", lifetime_consumption()[0]],
+    ["Average unemployment rate in 2009, %", u.loc["2009"].mean()],
+    ["CBO no-stimulus forecast for 2009Q4, %", q4.cbo_no_stimulus[2009]],
+    ["Peak unemployment rate, October 2009, %", u["2009-10-01"]],
+    ["Unemployment rate, April 2020, %", u["2020-04-01"]],
+]
+pd.DataFrame(rows, columns=["Quantity", "Value"]).round(2)
+```
+
+## Summary
+
+- The **IS curve** $\tilde{Y}_t = \bar{a} - \bar{b}(R_t - \bar{r})$ comes from the national income identity. It slopes down because a
+  higher real interest rate lowers investment, and lower investment lowers output.
+- A change in the real interest rate is a **movement along** the curve. A change in any demand share (the **aggregate demand
+  shock** $\bar{a}$) or in the marginal product of capital $\bar{r}$ **shifts** it. Potential output does not enter the curve at all.
+- The **life-cycle / permanent-income** hypothesis explains why consumption follows average income rather than current income.
+  When consumption also responds to current income, a **multiplier** $1/(1-\bar{x})$ makes every shock and every change in
+  the interest rate move output by more.
+- The CBO's 2009 forecasts show how uncertain the effects of fiscal policy are: unemployment stayed above even the no-stimulus
+  forecast through 2015.
+- The next chapter explains how the central bank sets the real interest rate, the **MP curve**, and joins it with the IS curve
+  and the Phillips curve to complete the short-run model.
