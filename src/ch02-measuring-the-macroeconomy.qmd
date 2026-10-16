@@ -1,0 +1,914 @@
+# Chapter 2: Measuring the Macroeconomy
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/ch02-measuring-the-macroeconomy.ipynb)
+
+*Data Science and Macroeconomic Models: A Python Companion to Intermediate Macroeconomics* · Carlos Mendez
+
+> **How to use this notebook.** In Colab, click *Runtime → Run all*. After that, every
+> interactive figure has live buttons or menus: change one and the figure is drawn again on the
+> spot. On the book website the same figures come with one precomputed slider or a few buttons.
+> Each section ends with a short **Your turn** task, and you can try it in the empty code cell
+> below the task.
+
+<!-- cell -->
+
+## Learning goals
+
+This chapter is about measurement: how economists turn millions of transactions into a few
+numbers that describe a whole economy. By the end of it you will be able to:
+
+- explain why **production = expenditure = income**, and split GDP with the national income
+  identity $Y = C + I + G + NX$;
+- describe how the composition of U.S. GDP and **labor's share** of income have changed since 1929;
+- separate **nominal** from **real** GDP with Laspeyres, Paasche and chain-weighted indexes, and
+  measure **inflation** with the GDP deflator;
+- compare GDP across countries with exchange rates and **purchasing power parity**;
+- read CSV files with pandas, compute new columns, work with dates, and draw area and line charts
+  with Plotly Express.
+
+<!-- cell -->
+
+## Figures in this chapter
+
+The figures follow the order of the textbook chapter. The second column shows which textbook
+figure each notebook figure replicates.
+
+| Figure | Textbook figure | Type | What you can change |
+|---|---|---|---|
+| Figure 1 | 2.1 Composition of U.S. GDP | data | stacked areas or separate lines |
+| Figure 2 | 2.2 Expenditure shares of U.S. GDP | data | the base year of the changes |
+| Figure 3 | 2.3 Labor's share of GDP | data | the first year of the trend line |
+| Figure 4 | 2.4 The level of the GDP deflator | data | linear or ratio scale |
+| Figure 5 | 2.5 The annual inflation rate using the GDP deflator | data | yearly or quarterly inflation |
+
+The textbook's tables are rebuilt where they belong: Table 2.4 (real GDP in a two-good economy)
+in "The model in code", Table 2.1 (the expenditure approach) in Figure 1, and Table 2.2 (the
+income approach) in Figure 3. Table 2.3 compares welfare across countries; it is not rebuilt,
+because the household-survey data behind it are not openly available (see the note in Figure 3).
+
+<!-- cell -->
+
+## Setup
+
+We first load the Python libraries we need. You only have to run this cell once.
+
+> **Python note.** `import` loads a *library*, a toolbox written by other people. We give each
+> library a short nickname, for example `pd` for pandas, so that the code stays short. Text after
+> a `#` is a *comment*: Python ignores it, and it is there for human readers. The `try ... except`
+> block runs one Colab-only line and simply skips it anywhere else.
+
+```{python}
+# Libraries used in this chapter
+import numpy as np                    # numbers and arrays
+import pandas as pd                   # data tables
+import plotly.express as px           # quick charts from data tables
+import plotly.graph_objects as go     # charts built piece by piece
+import plotly.io as pio
+from ipywidgets import interact, ToggleButtons, Dropdown
+
+# One light blue/green look for every chart
+BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
+pio.templates.default = "plotly_white"
+pio.templates["plotly_white"].layout.update(width=860, height=480)   # same size in Colab and on the website
+px.defaults.color_discrete_sequence = [BLUE, TEAL, GREEN, "#5aa0d8", "#0b4f47", "#e0a33b"]
+WIDE = {"description_width": "initial"}         # show the full widget labels
+
+# Colab only: let Plotly charts appear inside the interactive widgets
+try:
+    import google.colab
+    google.colab.output.enable_custom_widget_manager()
+except ImportError:
+    pass                                        # not running in Colab: nothing to do
+
+# The data files of this chapter live in the book's GitHub repository
+DATA_URL = "https://raw.githubusercontent.com/quarcs-lab/macro102-site/main/data/ch02/"
+```
+
+The next cell defines a helper that only the book website needs. Run it and move on.
+
+```{python}
+#| kind: helper
+# @title Helper for the website versions (run this cell; you do not need to read it)
+def slider_figure(make_figure, name, values, start, label=None):
+    """Precompute make_figure(name=value) for every value and join the results with one slider.
+
+    The website cannot run Python, so each interactive figure also gets this precomputed version.
+    """
+    figures = [make_figure(**{name: v}) for v in values]
+    first = values.index(start)
+    fig = go.Figure(layout=figures[first].layout)
+    owner = []                                  # which precomputed figure each trace comes from
+    for i, f in enumerate(figures):
+        for trace in f.data:
+            trace.visible = (i == first)
+            fig.add_trace(trace)
+            owner.append(i)
+    steps = []
+    for i, f in enumerate(figures):
+        layout = {"title": f.layout.title.to_plotly_json(),
+                  "annotations": [a.to_plotly_json() for a in f.layout.annotations],
+                  "shapes": [s.to_plotly_json() for s in f.layout.shapes]}
+        visible = [o == i for o in owner]
+        steps.append(dict(method="update", label=str(values[i]), args=[{"visible": visible}, layout]))
+    fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
+                                    currentvalue=dict(prefix=(label or name) + " = "))])
+    return fig
+```
+
+## The model in code
+
+This chapter has no economic model yet. Instead it has a few **accounting rules** that we will use
+in every later chapter.
+
+**Gross domestic product** (GDP) is the market value of the final goods and services produced in an
+economy in a given period. It can be measured in three ways that give the same number: as total
+production, as total spending, and as total income. On the spending side, the **national income
+identity** splits GDP by who buys the goods:
+
+$$Y = C + I + G + NX \qquad (2.1)$$
+
+where $Y$ is GDP, $C$ consumption, $I$ investment, $G$ government purchases, and $NX$ net exports
+(exports minus imports). To compare the parts, we divide each one by GDP and get its **share**.
+
+GDP measured at today's prices is **nominal** GDP. It can rise because prices rise or because the
+economy produces more. **Real** GDP values production at a fixed set of prices, so it only changes
+when quantities change:
+
+$$\text{nominal GDP} = \text{price level} \times \text{real GDP} \qquad (2.2)$$
+
+> **Python note.** `def` creates a *function*: a named recipe that takes inputs (the *arguments*)
+> and gives back a result with `return`. The text in triple quotes is a short description of what
+> the function does. `.sum()` adds up all the values of a column or a row.
+
+```{python}
+def share(part, total):
+    """Share of a part in a total, in percent (Tables 2.1 and 2.2)."""
+    return 100 * part / total
+
+
+def gdp_value(prices, quantities):
+    """Value of production: price times quantity, added over all goods (nominal or real GDP)."""
+    return (prices * quantities).sum()
+
+
+def chain_growth(g_laspeyres, g_paasche):
+    """Chain-weighted growth: the average of the Laspeyres and Paasche growth rates (Section 2.3)."""
+    return (g_laspeyres + g_paasche) / 2
+```
+
+### Table 2.4: real GDP in an economy with apples and computers
+
+The textbook's example economy produces only apples and computers. We store its prices and
+quantities in two small tables, one row per year.
+
+> **Python note.** `pd.DataFrame({...}, index=[...])` builds a table from a dictionary: each key
+> becomes a column and the `index` gives the row labels. `prices.loc[2026]` picks the row for 2026.
+> Multiplying two rows, `prices.loc[2026] * quantities.loc[2027]`, multiplies the matching columns.
+
+```{python}
+prices = pd.DataFrame({"apples": [1, 2, 3], "computers": [900, 1000, 1000]}, index=[2025, 2026, 2027])
+quantities = pd.DataFrame({"apples": [500, 500, 550], "computers": [5, 5, 6]}, index=[2025, 2026, 2027])
+prices
+```
+
+Nominal GDP uses each year's own prices. Real GDP holds the prices fixed. The **Laspeyres** index
+measures the change from 2026 to 2027 with the *initial* (2026) prices, and the **Paasche** index with
+the *final* (2027) prices. **Chain weighting** averages the two growth rates.
+
+> **Python note.** An *f-string* such as `f"{x:,.0f}"` inserts the value of a variable into a piece
+> of text: `,` adds thousands separators, `.0f` shows no decimals and `.1%` shows a share as a
+> percentage with one decimal.
+
+```{python}
+for year in [2025, 2026, 2027]:
+    print(f"Nominal GDP in {year}: ${gdp_value(prices.loc[year], quantities.loc[year]):,.0f}")
+
+g_nominal = gdp_value(prices.loc[2027], quantities.loc[2027]) / gdp_value(prices.loc[2026], quantities.loc[2026]) - 1
+g_laspeyres = gdp_value(prices.loc[2026], quantities.loc[2027]) / gdp_value(prices.loc[2026], quantities.loc[2026]) - 1
+g_paasche = gdp_value(prices.loc[2027], quantities.loc[2027]) / gdp_value(prices.loc[2027], quantities.loc[2026]) - 1
+g_chain = chain_growth(g_laspeyres, g_paasche)
+print(f"Real GDP in 2027 at 2026 prices: ${gdp_value(prices.loc[2026], quantities.loc[2027]):,.0f}")
+print(f"Real GDP in 2026 at 2027 prices: ${gdp_value(prices.loc[2027], quantities.loc[2026]):,.0f}")
+print(f"Growth 2026-2027: nominal {g_nominal:.1%}, Laspeyres {g_laspeyres:.1%}, "
+      f"Paasche {g_paasche:.1%}, chain-weighted {g_chain:.1%}")
+print(f"Chained real GDP in 2026, benchmarked to 2027: ${7650 / (1 + g_chain):,.0f}")
+print(f"Inflation (nominal growth minus real growth):  {g_nominal - g_chain:.1%}")
+```
+
+These are the numbers of Table 2.4: real growth is 18.3 percent at 2026 prices, 17.7 percent at
+2027 prices, and 18.0 percent chain-weighted. Nominal GDP grew 27.5 percent, so prices rose by
+about $27.5 - 18.0 = 9.5$ percent. (The textbook gets \$6,483 for chained real GDP in 2026, because it
+rounds the growth rate to 18.0 percent first; with the unrounded rate we get \$6,482.)
+
+### Comparing countries: exchange rates and purchasing power parity
+
+To compare GDP across countries we first convert it to a common currency with the **exchange rate**.
+But prices also differ across countries, so we then value production at common prices, which is
+called **purchasing power parity** (PPP):
+
+$$\text{real GDP}^{\text{U.S. prices}}_{\text{China}} = \frac{\text{price level}_{\text{U.S.}}}{\text{price level}_{\text{China}}}\times\text{nominal GDP}^{\text{dollars}}_{\text{China}} \qquad (2.6)$$
+
+```{python}
+def to_dollars(gdp_local, exchange_rate):
+    """Convert GDP in local currency into dollars at the market exchange rate (Section 2.4)."""
+    return gdp_local / exchange_rate
+
+
+def at_common_prices(gdp_dollars, relative_price_level):
+    """Real GDP at U.S. prices: dollar GDP divided by the price level relative to the U.S. (equation 2.6)."""
+    return gdp_dollars / relative_price_level
+
+
+china_dollars = to_dollars(95.1, 6.91)                  # 95.1 trillion yuan, 6.91 yuan per dollar (2019)
+china_ppp = at_common_prices(china_dollars, 0.684)      # goods in China cost 68.4% of U.S. prices
+print(f"China at the exchange rate: ${china_dollars:.1f} trillion, {china_dollars / 20.6:.0%} of U.S. GDP")
+print(f"China at common prices:     ${china_ppp:.1f} trillion, {china_ppp / 20.6:.0%} of U.S. GDP")
+```
+
+With the textbook's 2019 numbers, China's economy looks like two-thirds of the U.S. economy at the
+exchange rate, but almost exactly as large at common prices.
+
+## Figure 1: Composition of U.S. GDP
+
+**Goal.** See how the four spending shares of U.S. GDP have moved since 1929.
+
+The file has one row per year and one column per share of GDP, in percent.
+
+```{python}
+shares = pd.read_csv(DATA_URL + "fig2-1.csv")
+shares.tail()
+```
+
+The identity (2.1) says the four shares must add up to 100 percent in every year. Let us check.
+
+```{python}
+total = shares.consumption_share + shares.investment_share + shares.government_share + shares.net_exports_share
+print(f"C + I + G + NX, as a percent of GDP: between {total.min():.2f} and {total.max():.2f}")
+```
+
+The table is **wide**: one column per component. Plotly Express prefers **long** tables, with one row
+per component and year.
+
+> **Python note.** `.melt(id_vars="year")` turns the share columns into rows: the old column names go
+> into a new column (`var_name`) and the numbers into another (`value_name`). `.map(NAMES)` then replaces
+> each column name with a readable name, using the dictionary `NAMES`.
+
+```{python}
+NAMES = {"net_exports_share": "Net exports", "consumption_share": "Consumption",
+         "investment_share": "Investment", "government_share": "Government purchases"}
+long = shares.melt(id_vars="year", var_name="series", value_name="share")
+long["component"] = long.series.map(NAMES)
+long.head()
+```
+
+The textbook stacks the shares on top of each other: net exports at the bottom, then consumption,
+investment, and government purchases up to 100 percent. `px.area` stacks areas in the order of
+`category_orders`. Because net exports are negative in recent decades, consumption starts *below*
+zero in those years.
+
+```{python}
+ORDER = ["Net exports", "Consumption", "Investment", "Government purchases"]
+COLORS = {"Net exports": "#e0a33b", "Consumption": "#5aa0d8", "Investment": GREEN, "Government purchases": TEAL}
+LABELS = {"year": "Year", "share": "Percent of GDP", "component": "Component"}
+
+
+def composition_chart(style="stacked areas"):
+    """Figure 2.1: the expenditure shares of U.S. GDP, 1929-2025, stacked or as separate lines."""
+    if style == "stacked areas":
+        fig = px.area(long, x="year", y="share", color="component", color_discrete_map=COLORS,
+                      category_orders={"component": ORDER}, labels=LABELS)
+    else:
+        fig = px.line(long, x="year", y="share", color="component", color_discrete_map=COLORS,
+                      category_orders={"component": ORDER}, labels=LABELS)
+    fig.add_hline(y=0, line_dash="dash", line_color="black", line_width=1)
+    fig.update_xaxes(range=[1929, 2025])
+    fig.update_yaxes(range=[-10, 100])
+    fig.update_layout(title="Composition of U.S. GDP: stable shares, except during World War II")
+    return fig
+```
+
+> **Python note.** `interact` draws the figure again whenever you change a widget. `ToggleButtons`
+> is a row of buttons, one per option. The `;` at the end only hides an extra line of text.
+
+```{python}
+#| kind: widget
+interact(composition_chart,
+         style=ToggleButtons(options=["stacked areas", "separate lines"], description="chart", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 1 with a precomputed slider for the chart style
+slider_figure(composition_chart, "style", ["stacked areas", "separate lines"], start="stacked areas", label="chart")
+```
+
+**What to notice.**
+
+- From 1950 on, the shares hardly move: consumption averages about 64 percent, government purchases
+  about 20 percent and investment about 17 percent (see the numbers below).
+- World War II stands out. In 1943–1944 government purchases took 48 percent of GDP, and consumption
+  and investment were squeezed.
+- During the Great Depression, investment collapsed to 3 percent of GDP in 1932, while the
+  consumption share peaked at 82 percent.
+- Net exports were zero or slightly positive for most years before 1976, and negative in every year
+  since. The deficit was deepest in 2006. Hover over the lines to read the values, and click a
+  component in the legend to hide it.
+
+```{python}
+by_year = shares.set_index("year")
+print("Average shares, 1950-2025 (percent):")
+print(by_year.loc[1950:].mean().round(1))
+print(f"Government purchases peaked at {by_year.government_share.max():.1f}% in {by_year.government_share.idxmax()}")
+print(f"Investment fell to {by_year.investment_share.min():.1f}% in {by_year.investment_share.idxmin()}")
+print(f"Deepest trade deficit: {by_year.net_exports_share.min():.1f}% in {by_year.net_exports_share.idxmin()}")
+print(f"Last year with a trade surplus: {by_year[by_year.net_exports_share > 0].index.max()}")
+```
+
+> **Python note.** `.set_index("year")` uses the years as row labels, so `by_year.loc[1950:]` keeps the
+> rows from 1950 on. `.idxmax()` returns the row label (here the year) of the largest value, and
+> `.idxmin()` that of the smallest.
+
+### Key numbers: Table 2.1, the expenditure approach
+
+The textbook's Table 2.1 breaks down U.S. GDP in 2022 in more detail. A wider data file holds the
+national accounts lines behind it, in billions of current dollars, for every year since 1929.
+
+```{python}
+nipa = pd.read_csv(DATA_URL + "nipa_annual.csv").set_index("year")
+nipa.loc[2022]
+```
+
+The function below builds the table for any year. Population is in thousands, so GDP per person in
+dollars is billions × 1,000,000 / population.
+
+```{python}
+EXPENDITURE = {"gdp": "Gross domestic product", "consumption": "Personal consumption expenditures",
+               "motor_vehicles": "   Motor vehicles and parts", "food": "   Food", "housing": "   Housing",
+               "medical": "   Medical care", "investment": "Gross private domestic investment",
+               "structures": "   Structures (nonresidential)", "equipment": "   Equipment",
+               "ipp": "   Intellectual property products", "residential": "   Residential",
+               "government": "Government purchases", "defense": "   National defense",
+               "net_exports": "Net exports of goods and services", "exports": "   Exports", "imports": "   Imports"}
+
+
+def expenditure_table(year):
+    """Table 2.1: the expenditure approach to U.S. GDP in one year."""
+    row = nipa.loc[year, list(EXPENDITURE)]
+    table = pd.DataFrame({"Trillions of dollars": row / 1000,
+                          "Share of GDP (percent)": share(row, row["gdp"]),
+                          "Per person (dollars)": row * 1_000_000 / nipa.loc[year, "population"]})
+    table.index = list(EXPENDITURE.values())
+    return table.round(1)
+```
+
+We put the textbook's shares next to ours, to compare.
+
+```{python}
+table_2022 = expenditure_table(2022)
+table_2022["Textbook share"] = [100.0, 68.2, 2.7, 5.1, 11.8, 10.6, 18.0, 2.4, 5.1, 5.5, 4.3, 17.3, 3.5, -3.9, 11.8, 15.7]
+table_2022
+```
+
+```{python}
+gdp_2022 = nipa.loc[2022, "gdp"] / 1000
+print(f"GDP in 2022: ${gdp_2022:.2f} trillion in our data, $25.5 trillion in the textbook "
+      f"({gdp_2022 / 25.5 - 1:.1%} higher)")
+```
+
+Our numbers are close to the textbook's but not identical. This is a lesson about data: **national
+accounts are revised**. In 2023 the Bureau of Economic Analysis (BEA) did a comprehensive update
+that raised the level of U.S. GDP in 2022 by about 2 percent, after the textbook's numbers were
+collected. Shares change much less than levels: consumption is still about 68 percent of GDP,
+investment about 18–19 percent and government purchases about 17 percent.
+
+**Your turn.** Build Table 2.1 for 2025, the latest year, and for 1970. Which share of GDP changed
+the most between the two years?
+
+<details><summary>Hint</summary>
+
+Call `expenditure_table(1970)` and `expenditure_table(2025)`. To subtract the two share columns,
+pick each one with `["Share of GDP (percent)"]`.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 2: Expenditure shares of U.S. GDP
+
+**Goal.** Zoom in on the years since 1970, when the consumption share started to rise.
+
+```{python}
+recent = pd.read_csv(DATA_URL + "fig2-2.csv")
+recent = recent.rename(columns={"consumption_share": "Consumption", "investment_share": "Investment",
+                                "government_share": "Government purchases", "net_exports_share": "Net exports"})
+recent.head()
+```
+
+As in the textbook, consumption is measured on its own axis on the right, because it is much larger
+than the other three shares.
+
+> **Python note.** `px.line` with a list of columns as `y` draws one line per column. We then add the
+> consumption line with `fig.add_trace(go.Scatter(...))`, and `yaxis="y2"` attaches it to a second
+> vertical axis. In `update_layout`, `overlaying="y"` puts that axis on top of the first one, and
+> `side="right"` puts its labels on the right.
+
+```{python}
+fig = px.line(recent, x="year", y=["Government purchases", "Investment", "Net exports"],
+              color_discrete_sequence=[TEAL, GREEN, "#e0a33b"],
+              labels={"year": "Year", "value": "Share of GDP (percent)", "variable": "Component"},
+              title="Expenditure shares of U.S. GDP since 1970")
+fig.add_trace(go.Scatter(x=recent.year, y=recent.Consumption, name="Consumption (right axis)",
+                         line=dict(color=BLUE, width=3), yaxis="y2"))
+fig.add_hline(y=0, line_dash="dash", line_color="black", line_width=1)
+fig.update_layout(yaxis=dict(range=[-6, 46], tickvals=[-5, 0, 5, 10, 15, 20, 25]),
+                  yaxis2=dict(title="Consumption (percent of GDP)", overlaying="y", side="right",
+                              range=[36, 70], tickvals=[60, 64, 68], showgrid=False),
+                  legend=dict(x=1.1))                          # move the legend clear of the right axis
+fig.show()
+```
+
+```{python}
+wide = recent.set_index("year")
+pd.DataFrame({"1970": wide.loc[1970], "2025": wide.loc[2025], "change": wide.loc[2025] - wide.loc[1970]}).round(1)
+```
+
+The consumption share rose from 60.3 percent in 1970 to 67.6 percent in 2025, and since 2010 it has
+stayed between about 66.6 and 68.6 percent. The government share fell from 23.5 to 17.4 percent, and
+net exports went from a small surplus to a deficit of 3.0 percent. Because the four shares always add
+up to 100, **the four changes must add up to zero**: a rise in one share is always matched by falls in
+others. The chart below shows the changes directly.
+
+> **Python note.** `wide.loc[base_year:] - wide.loc[base_year]` subtracts one row from every row of the
+> table, column by column. The result is the change of each share since the base year, in percentage points.
+
+```{python}
+CHANGE_COLORS = {"Consumption": BLUE, "Investment": GREEN, "Government purchases": TEAL, "Net exports": "#e0a33b"}
+
+
+def changes_chart(base_year=1970):
+    """Figure 2.2, second view: change in each expenditure share since base_year (percentage points)."""
+    changes = (wide.loc[base_year:] - wide.loc[base_year]).reset_index()
+    long_changes = changes.melt(id_vars="year", var_name="component", value_name="change")
+    fig = px.line(long_changes, x="year", y="change", color="component", color_discrete_map=CHANGE_COLORS,
+                  range_x=[1970, 2025], range_y=[-8, 10],
+                  labels={"year": "Year", "change": f"Change since {base_year} (percentage points)",
+                          "component": "Component"})
+    fig.add_hline(y=0, line_dash="dash", line_color="black", line_width=1)
+    c = wide.loc[2025] - wide.loc[base_year]
+    fig.update_layout(title=f"{base_year}–2025: C {c['Consumption']:+.1f}, I {c['Investment']:+.1f}, "
+                            f"G {c['Government purchases']:+.1f}, NX {c['Net exports']:+.1f} points")
+    return fig
+```
+
+> **Python note.** A `Dropdown` is a menu of choices. Here it lists the possible base years.
+
+```{python}
+#| kind: widget
+interact(changes_chart,
+         base_year=Dropdown(options=[1970, 1980, 1990, 2000, 2010], value=1970, description="base year", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 2 (changes) with a precomputed slider for the base year
+slider_figure(changes_chart, "base_year", [1970, 1980, 1990, 2000, 2010], start=1970, label="base year")
+```
+
+**What to notice.**
+
+- Since 1970, the rise in the consumption share (+7.4 points) was matched mostly by the fall in
+  government purchases (−6.2 points) and in net exports (−3.4 points). Investment ended a little higher.
+- Investment is the most volatile share. It fell to 13.3 percent of GDP in 2009, during the Great
+  Recession.
+- Choose 2000 or 2010 as the base year: the big shifts happened before 2000, and since then the
+  shares have been fairly stable.
+
+**Your turn.** Check the accounting yourself: compute the change in each share between 1980 and 2025,
+and add the four changes. Why is the sum (almost exactly) zero?
+
+<details><summary>Hint</summary>
+
+`wide.loc[2025] - wide.loc[1980]` gives the four changes; add `.sum()` at the end. Think about what the
+four shares add up to in every year.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 3: Labor's share of GDP
+
+**Goal.** Check one of the classic "stylized facts" of macroeconomics: that labor earns about
+two-thirds of GDP, year after year.
+
+The income approach splits GDP into the income earned by workers (**compensation**: wages, salaries
+and benefits) and the income earned by the owners of capital. Two parts need care. Taxes on
+production (such as sales taxes) are income of neither, so they are left out. And the income of
+the self-employed (**proprietors' income**) mixes both, so it is split between labor and capital in
+the same proportion as in the rest of the economy. The result is
+
+$$\text{labor share} = \frac{\text{compensation}}{\text{GDI} - \text{taxes on production} - \text{proprietors' income}}$$
+
+where GDI is gross domestic income, the income-side measure of GDP.
+
+```{python}
+labor = pd.read_csv(DATA_URL + "fig2-3.csv")
+labor.tail()
+```
+
+We can rebuild this measure from the national accounts lines in `nipa`.
+
+```{python}
+rebuilt = nipa.compensation / (nipa.gdi - nipa.taxes_less_subsidies - nipa.proprietors_income)
+print(f"Labor share in 2022: {rebuilt[2022]:.4f} rebuilt from nipa, "
+      f"{labor[labor.year == 2022].labor_share.iloc[0]:.4f} in the figure file")
+```
+
+The textbook's figure shows a straight trend line fitted to the data. Pick the year where the line
+starts, and see how steep the decline is.
+
+> **Python note.** `np.polyfit(x, y, 1)` fits the best straight line $y = a + bx$ through the points
+> (by least squares) and returns the slope $b$ first and the intercept $a$ second.
+
+```{python}
+def labor_share_chart(start=1970):
+    """Figure 2.3: labor's share of GDP, 1950-2025, with a straight trend line fitted from `start`."""
+    after = labor[labor.year >= start]
+    slope, intercept = np.polyfit(after.year, after.labor_share, 1)
+    fig = px.line(labor, x="year", y="labor_share", labels={"year": "Year", "labor_share": "Labor share of GDP"})
+    fig.update_traces(line=dict(color=BLUE, width=3), fill="tozeroy", fillcolor="rgba(22, 82, 140, 0.12)",
+                      name="Labor share", showlegend=True)
+    fig.add_trace(go.Scatter(x=after.year, y=intercept + slope * after.year, name=f"Trend since {start}",
+                             line=dict(color=GREEN, width=3, dash="dash")))
+    fig.update_xaxes(range=[1950, 2025])
+    fig.update_yaxes(range=[0.55, 0.75])
+    # slope is per year, as a fraction: x 100 for percentage points, x 10 for a decade
+    fig.update_layout(title=f"Labor share: trend since {start} is {1000 * slope:+.1f} percentage points per decade")
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(labor_share_chart,
+         start=Dropdown(options=[1950, 1960, 1970, 1980, 1990, 2000], value=1970, description="trend from",
+                        style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 3 with a precomputed slider for the first year of the trend
+slider_figure(labor_share_chart, "start", [1950, 1960, 1970, 1980, 1990, 2000], start=1970, label="trend from")
+```
+
+```{python}
+share_by_year = labor.set_index("year").labor_share
+print(f"Average 1950-2025: {share_by_year.mean():.3f}")
+print(f"Highest: {share_by_year.max():.3f} in {share_by_year.idxmax()}; lowest: {share_by_year.min():.3f} in {share_by_year.idxmin()}")
+print(f"Average 1950-1969: {share_by_year.loc[1950:1969].mean():.3f}; average 2010-2025: {share_by_year.loc[2010:].mean():.3f}")
+print("Years below 0.60:", list(share_by_year[share_by_year < 0.60].index))
+```
+
+**What to notice.**
+
+- On average, labor earned 0.65 of income from 1950 to 2025, close to the two-thirds of the stylized
+  fact. Until 2021 the share stayed between 0.60 and 0.70.
+- But the share is not constant. It peaked at 0.69 in 1970 and has drifted down since: from 1970 the
+  trend falls by about 1.3 percentage points per decade. Move the starting year to 1990 or 2000 and
+  the decline looks even steeper.
+- Since 2022 the share has been below 0.60 for the first time in these data (0.586 in 2025). Our values
+  for the last years in the textbook are slightly lower than the book's, because of the 2023 data
+  revision. Part of the decline reflects how the national accounts treat software and R&D, which is
+  still debated by researchers.
+
+### Key numbers: Table 2.2, the income approach
+
+```{python}
+INCOME = {"gdp": "Gross domestic product", "compensation": "Compensation of employees",
+          "wages": "   Wages and salaries", "benefits": "   Benefits",
+          "taxes_less_subsidies": "Taxes less subsidies on businesses",
+          "net_operating_surplus": "Net operating surplus of businesses",
+          "depreciation": "Depreciation of fixed capital"}
+
+
+def income_table(year):
+    """Table 2.2: the income approach to U.S. GDP in one year."""
+    row = nipa.loc[year, list(INCOME)]
+    table = pd.DataFrame({"Trillions of dollars": row / 1000,
+                          "Share of GDP (percent)": share(row, row["gdp"]),
+                          "Per person (dollars)": row * 1_000_000 / nipa.loc[year, "population"]})
+    table.index = list(INCOME.values())
+    return table.round(1)
+
+
+income_2022 = income_table(2022)
+income_2022["Textbook share"] = [100.0, 53.2, 43.9, 9.3, 6.5, 23.5, 16.8]
+income_2022
+```
+
+Compensation, taxes, the operating surplus and depreciation should add up to total income. They do,
+but to **gross domestic income** (GDI) rather than to GDP. The two differ by a small *statistical
+discrepancy*, because the BEA measures spending and income from different sources.
+
+```{python}
+y = nipa.loc[2022]
+income_sum = y.compensation + y.taxes_less_subsidies + y.net_operating_surplus + y.depreciation
+print(f"Sum of the income lines: {income_sum:,.0f} billion")
+print(f"GDI: {y.gdi:,.0f} billion;  GDP: {y.gdp:,.0f} billion;  gap: {share(y.gdi - y.gdp, y.gdp):.2f}% of GDP")
+```
+
+In the current data, compensation is 51.6 percent of GDP in 2022, below the textbook's 53.2 percent:
+the 2023 revision raised the operating surplus of businesses by about half a trillion dollars.
+Depreciation, the wear and tear of capital, is about 16.5 percent of GDP.
+
+**A note on Table 2.3 (Beyond GDP).** The textbook reports Jones and Klenow's welfare measure, which
+adds life expectancy, leisure and consumption inequality to consumption per person. It shows that
+Western Europe is closer to the United States than GDP suggests, and most poor countries further
+away. The measure needs household-survey data on consumption inequality that are not openly
+available, so we do not rebuild it here.
+
+**Your turn.** A simpler measure of the labor share is compensation divided by GDP. Compute it for
+every year in `nipa`, and compare it in 2022 with the measure in Figure 3. Why is it lower?
+
+<details><summary>Hint</summary>
+
+`share(nipa.compensation, nipa.gdp)` gives the simple share for every year at once, in percent. Then
+think about who earns proprietors' income, and about taxes on production.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 4: The level of the GDP deflator
+
+**Goal.** Follow the U.S. price level since 1947, as measured by the **GDP deflator**.
+
+The GDP deflator is the price level in equation (2.2): nominal GDP divided by real GDP. It is an
+**index**: its value in a chosen base year is set to 100. The data are quarterly, with one row per
+quarter labeled by the first day of the quarter.
+
+> **Python note.** `parse_dates=["date"]` tells pandas that the `date` column holds dates, not plain
+> text. Plotly then draws a proper time axis, and we can pick rows by year.
+
+```{python}
+deflator = pd.read_csv(DATA_URL + "fig2-4.csv", parse_dates=["date"])
+recessions = pd.read_csv(DATA_URL + "recessions.csv")
+deflator.tail()
+```
+
+FRED shades the recessions in gray. The file `recessions.csv` lists the first and last month of each
+recession since 1947, as dated by the National Bureau of Economic Research (NBER).
+
+> **Python note.** `range(len(recessions))` gives the row numbers 0, 1, 2, …, so the `for` loop visits
+> every recession once. `fig.add_vrect` draws a vertical band between two dates.
+
+```{python}
+def shade_recessions(fig):
+    """Add a gray band for every NBER recession, as FRED does (Figures 2.4 and 2.5)."""
+    for i in range(len(recessions)):
+        fig.add_vrect(x0=recessions.start[i], x1=recessions.end[i], fillcolor=GRAY, opacity=0.25, line_width=0)
+    return fig
+
+
+def deflator_chart(scale="linear"):
+    """Figure 2.4: the GDP deflator (2012 = 100), quarterly since 1947, on a linear or ratio scale."""
+    fig = px.line(deflator, x="date", y="gdp_deflator_2012_100", log_y=(scale == "ratio"),
+                  labels={"date": "Quarter", "gdp_deflator_2012_100": "GDP deflator (index, 2012 = 100)"})
+    fig.update_traces(line=dict(color=BLUE, width=3))
+    shade_recessions(fig)
+    if scale == "ratio":
+        fig.update_yaxes(tickvals=[10, 20, 40, 80, 160], range=[np.log10(9), np.log10(170)])
+    else:
+        fig.update_yaxes(range=[0, 150])
+    factor = deflator.gdp_deflator_2012_100.iloc[-1] / deflator.gdp_deflator_2012_100.iloc[0]
+    fig.update_layout(title=f"The U.S. price level rose about {factor:.0f}-fold from 1947 to 2026")
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(deflator_chart,
+         scale=ToggleButtons(options=["linear", "ratio"], description="vertical scale", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 4 with buttons for the vertical scale
+fig = deflator_chart()
+fig.update_layout(updatemenus=[dict(type="buttons", direction="right", x=0.01, y=0.98, xanchor="left", yanchor="top", buttons=[
+    dict(label="linear scale", method="relayout", args=[{"yaxis.type": "linear", "yaxis.range": [0, 150],
+                                                         "yaxis.tickvals": None}]),
+    dict(label="ratio scale", method="relayout", args=[{"yaxis.type": "log",
+                                                        "yaxis.range": [np.log10(9), np.log10(170)],
+                                                        "yaxis.tickvals": [10, 20, 40, 80, 160]}])])])
+fig
+```
+
+**What to notice.**
+
+- Prices rose slowly until the mid-1960s, much faster in the 1970s and early 1980s, and then at a
+  steadier pace, until the jump of 2021–2022.
+- On the linear scale the line rises about as steeply in the 2000s as around 1980, because the same
+  percentage increase adds more index points when prices are already high. Switch to the ratio scale:
+  there the slope is the *percentage* rate of change, and the 1970s clearly stand out.
+
+```{python}
+level = deflator.set_index("date").gdp_deflator_2012_100
+for start, end in [(1947, 1965), (1965, 1983), (1983, 2019), (2019, 2025)]:
+    yearly = (level[str(end)].mean() / level[str(start)].mean()) ** (1 / (end - start)) - 1
+    print(f"{start}-{end}: prices rose {yearly:.1%} a year on average")
+```
+
+> **Python note.** With dates as row labels, `level["1965"]` picks the four quarters of 1965, and
+> `.mean()` averages them. The formula $(\text{end}/\text{start})^{1/\text{years}} - 1$ is the average
+> annual growth rate.
+
+### Key numbers: nominal GDP = price level × real GDP
+
+The textbook asks how much more real GDP the United States produced in 2022 than in 1995. Real GDP in
+our national accounts file is measured in chained 2017 dollars.
+
+```{python}
+nominal_ratio = nipa.loc[2022, "gdp"] / nipa.loc[1995, "gdp"]
+real_ratio = nipa.loc[2022, "real_gdp"] / nipa.loc[1995, "real_gdp"]
+print(f"Nominal GDP: ${nipa.loc[1995, 'gdp'] / 1000:.1f} trillion (1995), ${nipa.loc[2022, 'gdp'] / 1000:.1f} trillion (2022)")
+print(f"Nominal GDP grew by a factor of {nominal_ratio:.2f}")
+print(f"Real GDP grew by a factor of    {real_ratio:.2f}")
+print(f"So the price level grew by      {nominal_ratio / real_ratio:.2f}")
+```
+
+Nominal GDP more than tripled, but real GDP did not quite double: the rest of the rise came from a
+price level that went up by about three-quarters. (The textbook's \$7.4 trillion for 1995 is now \$7.6 trillion after
+revisions.)
+
+Taking growth rates of equation (2.2) gives a handy approximation: the growth of nominal GDP is about
+the growth of the price level plus the growth of real GDP.
+
+> **Python note.** `.pct_change()` computes the change from the previous row as a fraction, for every
+> row at once. The first row has no previous row, so it gets `NaN` ("not a number").
+
+```{python}
+growth = 100 * nipa[["gdp", "real_gdp"]].pct_change()
+growth["prices"] = 100 * (nipa.gdp / nipa.real_gdp).pct_change()
+growth["prices + real"] = growth.prices + growth.real_gdp
+growth.loc[2019:].round(2)
+```
+
+In 2022, for example, nominal GDP grew 9.7 percent: prices rose 7.1 percent and real GDP 2.4 percent.
+The sum, 9.6 percent, is very close. The rule is only approximate because the exact relation multiplies
+growth factors: $1.097 = 1.071 \times 1.024$.
+
+**Your turn.** FRED now publishes the GDP deflator with 2017 = 100 instead of 2012 = 100. Rebase our
+series so that the average of the four quarters of 2017 equals 100, and check its value in the latest
+quarter. Does rebasing change the growth rates?
+
+<details><summary>Hint</summary>
+
+Divide `level` by `level["2017"].mean()` and multiply by 100. Then compare
+`level.iloc[-1] / level.iloc[0]` for the old and the new series.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 5: The annual inflation rate using the GDP deflator
+
+**Goal.** Turn the price level into an **inflation rate**, the percentage change of the price level.
+
+FRED's "Percent Change from Year Ago" compares each quarter with the same quarter one year earlier:
+
+$$\pi_t = 100 \times \left(\frac{P_t}{P_{t-4}} - 1\right)$$
+
+where $P_t$ is the GDP deflator in quarter $t$. A second common measure compares each quarter with the
+quarter before and turns the change into an annual rate: $100 \times \left[(P_t/P_{t-1})^4 - 1\right]$.
+
+> **Python note.** `.shift(4)` moves a column down by four rows, so that each quarter sits next to the
+> value from one year earlier. The first four rows get `NaN`, because there is nothing to compare them with.
+
+```{python}
+year_ago = 100 * (level / level.shift(4) - 1)
+quarterly = 100 * ((level / level.shift(1)) ** 4 - 1)
+rates = pd.DataFrame({"change from a year ago": year_ago, "quarterly change, annual rate": quarterly})
+rates.tail()
+```
+
+The file `fig2-5.csv` holds FRED's year-ago inflation rate. Our own calculation should match it.
+
+```{python}
+inflation = pd.read_csv(DATA_URL + "fig2-5.csv", parse_dates=["date"]).set_index("date")
+gap = (year_ago.loc[inflation.index] - inflation.inflation_gdpdef).abs().max()
+print(f"Largest difference from FRED's numbers: {gap:.4f} percentage points")
+```
+
+```{python}
+def inflation_chart(measure="change from a year ago"):
+    """Figure 2.5: inflation of the GDP deflator since 1947, with recession bands."""
+    series = rates[measure].dropna().reset_index()
+    fig = px.line(series, x="date", y=measure, range_y=[-5, 16],
+                  labels={"date": "Quarter", measure: "Inflation (percent)"})
+    fig.update_traces(line=dict(color=BLUE, width=2))
+    fig.add_hline(y=0, line_color="black", line_width=1)
+    shade_recessions(fig)
+    last = series.iloc[-1]
+    fig.update_layout(title=f"Inflation, {measure}: {last[measure]:.1f}% in {last.date.year} Q{last.date.quarter}")
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(inflation_chart,
+         measure=ToggleButtons(options=["change from a year ago", "quarterly change, annual rate"],
+                               description="measure", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 5 with a precomputed slider for the inflation measure
+slider_figure(inflation_chart, "measure", ["change from a year ago", "quarterly change, annual rate"],
+              start="change from a year ago", label="measure")
+```
+
+**What to notice.**
+
+- Inflation has two big waves: the Great Inflation of the 1970s and early 1980s, and the surge of
+  2021–2022. In between, it mostly stayed between about 1 and 4 percent.
+- Prices actually *fell* in 1949–1950. Inflation also came close to zero in 2009, during the Great
+  Recession.
+- The quarterly measure is much noisier: a single unusual quarter moves it a lot. That is why FRED's
+  default for inflation compares with a year ago.
+
+### Key numbers: peaks and troughs
+
+```{python}
+yearly = year_ago.dropna()
+for start, end in [("1948", "1950"), ("1950", "1952"), ("1973", "1976"), ("1979", "1982"), ("2008", "2010"),
+                   ("2021", "2023")]:
+    part = yearly[start:end]
+    print(f"{start}-{end}: highest {part.max():5.1f}% ({part.idxmax():%Y-%m}), "
+          f"lowest {part.min():5.1f}% ({part.idxmin():%Y-%m})")
+```
+
+The peaks are 8.6 percent in 1951 (the Korean War), 10.9 percent in early 1975, 10.2 percent in early
+1981 and 7.8 percent in 2022; the troughs are −2.0 percent in late 1949 and 0.1 percent in mid-2009.
+These match the textbook's figure, except that the 2022 peak is a little higher after the data revisions.
+(Dates show the first month of each quarter.)
+
+**Your turn.** Compute the average year-ago inflation rate in each decade (the 1950s, the 1960s, …). Which
+decade had the highest average inflation, and which the lowest?
+
+<details><summary>Hint</summary>
+
+`yearly.index.year // 10 * 10` turns each date into its decade (1951 → 1950). Use it in
+`yearly.groupby(yearly.index.year // 10 * 10).mean()`.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Key numbers
+
+This table collects the main numbers of the chapter. Each one is computed with the data and the
+functions above.
+
+```{python}
+rows = [
+    ["U.S. GDP in 2022 (trillions of dollars; textbook 25.5)", gdp_2022],
+    ["GDP per person in 2022 (dollars; textbook 76,300)", nipa.loc[2022, "gdp"] * 1_000_000 / nipa.loc[2022, "population"]],
+    ["Consumption share of GDP, 2022 (%)", share(nipa.loc[2022, "consumption"], nipa.loc[2022, "gdp"])],
+    ["Deepest trade deficit, 2006 (% of GDP)", by_year.net_exports_share.min()],
+    ["Labor share, average 1950-2025", share_by_year.mean()],
+    ["Table 2.4: chain-weighted real growth 2026-2027 (%)", 100 * g_chain],
+    ["Table 2.4: inflation 2026-2027 (%)", 100 * (g_nominal - g_chain)],
+    ["China / U.S. GDP at the exchange rate, 2019", china_dollars / 20.6],
+    ["China / U.S. GDP at common prices, 2019", china_ppp / 20.6],
+    ["U.S. price level, 2026 Q2 / 1947 Q1", level.iloc[-1] / level.iloc[0]],
+    ["Highest year-ago inflation since 1948 (%)", yearly.max()],
+]
+pd.DataFrame(rows, columns=["Quantity", "Value"]).round(3)
+```
+
+## Summary
+
+- GDP is the market value of final goods and services. Production, expenditure and income are three
+  ways to measure it, and they give the same number (up to a small statistical discrepancy).
+- The national income identity $Y = C + I + G + NX$ splits spending. In the United States, consumption is
+  about two-thirds of GDP, and since the 1970s its rise has been matched by falling government purchases
+  and a trade deficit.
+- Labor earns roughly two-thirds of income, but its share has drifted down since 1970 and is now below 60 percent.
+- Real GDP values production at common prices. Chain weighting averages the Laspeyres and Paasche growth
+  rates; nominal growth is about inflation plus real growth. Comparing countries also needs common prices
+  (purchasing power parity), which shrinks the measured gap between rich and poor countries.
+- The next chapter uses real GDP per person to study long-run economic growth.
