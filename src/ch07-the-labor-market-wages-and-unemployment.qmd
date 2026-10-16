@@ -1,0 +1,1422 @@
+# Chapter 7: The Labor Market, Wages, and Unemployment
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/ch07-the-labor-market-wages-and-unemployment.ipynb)
+
+*Data Science and Macroeconomic Models: A Python Companion to Intermediate Macroeconomics* · Carlos Mendez
+
+> **How to use this notebook.** In Colab, click *Runtime → Run all*. After that, every model
+> figure has live sliders or buttons: change one and the model is solved again on the spot. On the
+> book website the same figures come with one precomputed slider. Each section ends with a short
+> **Your turn** task, and you can try it in the empty code cell below the task.
+
+<!-- cell -->
+
+## Learning goals
+
+The labor market sets the price of work (the wage) and the amount of work (employment). By the end
+of this chapter you will be able to:
+
+- read the main U.S. labor-market statistics: the **employment-population ratio** and the
+  **unemployment rate**, and how both move in recessions;
+- solve a supply-and-demand model of the labor market and use it for experiments: an income tax, a
+  fall in labor demand, and a wage that does not fall;
+- compute the **natural rate of unemployment** with the bathtub model;
+- compute **present discounted values**, and use them to value a working life and a college degree;
+- explain why the college wage premium rose while the supply of college graduates grew;
+- load monthly data with pandas, shade recessions, recompute textbook tables, and build interactive
+  Plotly figures with sliders, toggles, menus and buttons.
+
+<!-- cell -->
+
+## Figures in this chapter
+
+The figures follow the order of the textbook chapter. The second column shows which textbook
+figure each notebook figure replicates.
+
+| Figure | Textbook figure | Type | What you can change |
+|---|---|---|---|
+| Figure 1 | 7.1 The U.S. employment-population ratio | data | — (zoom with the range slider; men and women in a second chart) |
+| Figure 2 | 7.2 The U.S. unemployment rate | data | — (zoom with the range slider; Table 7.1 recomputed) |
+| Figure 3 | 7.3 The labor market | model | intercepts and slopes of labor demand and labor supply |
+| Figure 4 | 7.4 An income tax at rate τ | model | tax rate τ, slope of labor supply |
+| Figure 5 | 7.5 A reduction in labor demand | model | size of the fall in demand, slope of labor supply |
+| Figure 6 | 7.6 A reduction in labor demand with wage rigidity | model | size of the fall in demand, rigid or flexible wage; bathtub model with a "Run" button |
+| Figure 7 | 7.7 Unemployment in the U.S., Europe and Japan | data | the year shown in the title (Table 7.2 recomputed) |
+| Figure 8 | 7.8 College versus high school wages and employment | data | — (click a line in the legend to hide it; present values computed) |
+| Figure 9 | 7.9 Understanding the rising return to education | model | shifts of college labor demand and college labor supply |
+| Figure 10 | 7.10 U.S. employment in manufacturing | data | — (zoom with the range slider) |
+| Figure 11 | 7.11 Income inequality in the U.S. and France | data | — (hover to read values, click the legend) |
+| Figure 12 | 7.12 Economic growth by income percentile | data | — (click a period in the legend to hide it) |
+| Figure 13 | 7.13 The declining college wage premium of the 1970s | model | shifts of college labor demand and college labor supply |
+
+<!-- cell -->
+
+## Setup
+
+We first load the Python libraries we need. You only have to run this cell once.
+
+> **Python note.** `import` loads a *library*, a toolbox written by other people. We give each
+> library a short nickname, for example `np` for NumPy, so that the code stays short. Text after
+> a `#` is a *comment*: Python ignores it, and it is there for human readers. The `try ... except`
+> block runs one Colab-only line and simply skips it anywhere else.
+
+```{python}
+# Libraries used in this chapter
+import numpy as np                    # numbers and arrays
+import pandas as pd                   # data tables
+import plotly.express as px           # quick charts from data tables
+import plotly.graph_objects as go     # charts built piece by piece (model figures)
+import plotly.io as pio
+from plotly.subplots import make_subplots       # several panels in one figure
+from ipywidgets import interact, interact_manual, FloatSlider, ToggleButtons, Dropdown
+
+# One light blue/green look for every chart
+BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
+pio.templates.default = "plotly_white"
+pio.templates["plotly_white"].layout.update(width=860, height=480)   # same size in Colab and on the website
+px.defaults.color_discrete_sequence = [BLUE, TEAL, GREEN, "#5aa0d8", "#0b4f47", "#e0a33b"]
+WIDE = {"description_width": "initial"}         # show the full slider labels
+
+# Colab only: let Plotly charts appear inside the interactive widgets
+try:
+    import google.colab
+    google.colab.output.enable_custom_widget_manager()
+except ImportError:
+    pass                                        # not running in Colab: nothing to do
+
+# The data files of this chapter live in the book's GitHub repository
+DATA_URL = "https://raw.githubusercontent.com/quarcs-lab/macro102-site/main/data/ch07/"
+```
+
+The next cell defines a helper that only the book website needs. Run it and move on.
+
+```{python}
+#| kind: helper
+# @title Helper for the website versions (run this cell; you do not need to read it)
+def slider_figure(make_figure, name, values, start, label=None):
+    """Precompute make_figure(name=value) for every value and join the results with one slider.
+
+    The website cannot run Python, so each model figure gets this precomputed version.
+    """
+    figures = [make_figure(**{name: v}) for v in values]
+    first = values.index(start)
+    fig = go.Figure(layout=figures[first].layout)
+    owner = []                                  # which figure each trace comes from
+    for i, f in enumerate(figures):
+        for trace in f.data:
+            trace.visible = (i == first)
+            fig.add_trace(trace)
+            owner.append(i)
+    steps = []
+    for i, f in enumerate(figures):
+        layout = {"title": f.layout.title.to_plotly_json(),
+                  "annotations": [a.to_plotly_json() for a in f.layout.annotations],
+                  "shapes": [s.to_plotly_json() for s in f.layout.shapes]}
+        visible = [o == i for o in owner]
+        steps.append(dict(method="update", label=str(values[i]), args=[{"visible": visible}, layout]))
+    fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
+                                    currentvalue=dict(prefix=(label or name) + " = "))])
+    return fig
+```
+
+## The model in code
+
+The model of this chapter is **supply and demand in the labor market**. Employment $L$ goes on the
+horizontal axis and the wage $w$ on the vertical axis, so we write each curve as "the wage at each
+level of employment":
+
+$$\text{labor demand: } w = \bar{a}_d - \bar{b}_d\,L \qquad\qquad \text{labor supply: } w = \bar{a}_s + \bar{b}_s\,L$$
+
+- **Labor demand** slopes down. Firms hire until the extra output of the last worker (the marginal
+  product of labor, Chapter 4) equals the wage, and each extra worker adds less than the one before.
+- **Labor supply** slopes up. A higher wage makes an hour of leisure more expensive, so more people
+  choose to work.
+
+The textbook draws these curves without numbers. We use simple illustrative values: $\bar{a}_d = 100$,
+$\bar{b}_d = 1$, $\bar{a}_s = 10$, $\bar{b}_s = 1$. Setting demand equal to supply gives the equilibrium
+
+$$L^* = \frac{\bar{a}_d - \bar{a}_s}{\bar{b}_d + \bar{b}_s} \qquad\qquad w^* = \bar{a}_d - \bar{b}_d\,L^*$$
+
+so $L^* = 90/2 = 45$ and $w^* = 55$.
+
+Later we add an income tax at rate $\tau$: firms pay $w$, but workers keep only $(1-\tau)w$. Workers
+decide how much to work from the wage they keep, so supply becomes $(1-\tau)w = \bar{a}_s + \bar{b}_s L$.
+Solving with demand gives
+
+$$L^* = \frac{(1-\tau)\,\bar{a}_d - \bar{a}_s}{(1-\tau)\,\bar{b}_d + \bar{b}_s}$$
+
+which is the formula above when $\tau = 0$. One function, `equilibrium`, covers both cases.
+
+> **Python note.** `def` creates a *function*: a named recipe that takes inputs (the *arguments*)
+> and gives back a result with `return`. Writing `a_d=100.0` gives the argument a *default value*,
+> used whenever we do not pass one. A function can return two results at once, separated by a comma.
+
+```{python}
+def labor_demand(L, a_d=100.0, b_d=1.0):
+    """Figure 7.3: the wage firms are willing to pay when they employ L, w = a_d - b_d L."""
+    return a_d - b_d * L
+
+
+def labor_supply(L, a_s=10.0, b_s=1.0):
+    """Figure 7.3: the wage workers need to receive to supply L, w = a_s + b_s L."""
+    return a_s + b_s * L
+
+
+def equilibrium(a_d=100.0, b_d=1.0, a_s=10.0, b_s=1.0, tau=0.0):
+    """Figures 7.3-7.4: employment L* and the wage firms pay w*, when workers keep (1 - tau) w."""
+    L_star = ((1 - tau) * a_d - a_s) / ((1 - tau) * b_d + b_s)
+    w_star = labor_demand(L_star, a_d, b_d)
+    return L_star, w_star
+
+
+def demand_at_wage(w, a_d=100.0, b_d=1.0):
+    """Figure 7.6: the employment firms want at a given wage w (labor demand solved for L)."""
+    return (a_d - w) / b_d
+
+
+def supply_at_wage(w, a_s=10.0, b_s=1.0):
+    """Figure 7.6: the number of people who want to work at a given wage w (labor supply solved for L)."""
+    return (w - a_s) / b_s
+```
+
+A quick check of the functions against the numbers above.
+
+> **Python note.** `L_star, w_star = equilibrium()` stores the two results in two variables. An
+> *f-string* such as `f"L* = {L_star:.1f}"` inserts a value into a piece of text; `:.1f` means "one decimal".
+
+```{python}
+L_star, w_star = equilibrium()
+print(f"Equilibrium:            L* = {L_star:.1f}, w* = {w_star:.1f}")
+print(f"At L*, demand wage = {labor_demand(L_star):.1f} and supply wage = {labor_supply(L_star):.1f}: the market clears")
+L_tax, w_tax = equilibrium(tau=0.25)
+print(f"With a 25% income tax:  L' = {L_tax:.2f}, firms pay w' = {w_tax:.2f}, workers keep {0.75 * w_tax:.2f}")
+```
+
+Two small drawing helpers save us from repeating the same lines in every figure. `add_curve` draws
+one curve; `add_point` marks an equilibrium with a dot, a label and dotted lines down to the axes.
+
+> **Python note.** `np.linspace(0, 110, 111)` creates 111 evenly spaced numbers from 0 to 110: the
+> employment levels at which we compute each curve. `go.Figure()` starts an empty chart and
+> `add_trace` adds one line or set of points to it. `row` and `col` are only needed in figures with
+> several panels; `None` means "the only panel".
+
+```{python}
+L_grid = np.linspace(0, 110, 111)          # employment levels used to draw every curve
+
+
+def add_curve(fig, w, name, color, dash="solid", row=None, col=None):
+    """Draw one curve: the wage w at every employment level in L_grid (no legend entry if name is "")."""
+    fig.add_trace(go.Scatter(x=L_grid, y=w, name=name, showlegend=(name != ""),
+                             line=dict(color=color, width=3, dash=dash)), row=row, col=col)
+
+
+def add_point(fig, L_point, w_point, label, row=None, col=None):
+    """Mark an equilibrium with a dot, a short label and dotted lines down to the axes."""
+    fig.add_trace(go.Scatter(x=[0, L_point, L_point], y=[w_point, w_point, 0], mode="lines", showlegend=False,
+                             line=dict(color="black", width=1, dash="dot")), row=row, col=col)
+    fig.add_trace(go.Scatter(x=[L_point], y=[w_point], mode="markers+text", text=[label], showlegend=False,
+                             textposition="top center", textfont=dict(size=15),
+                             marker=dict(color="black", size=11)), row=row, col=col)
+```
+
+## Figure 1: The U.S. employment-population ratio
+
+**Goal.** See the long-run trend and the recessions in the share of adults who work.
+
+The **employment-population ratio** is the percentage of the population aged 16 and over that has a
+job. The data are monthly, from the Bureau of Labor Statistics. A second small file lists the start
+(peak) and end (trough) month of every U.S. recession since the 1950s, as dated by the NBER.
+
+> **Python note.** `pd.read_csv(...)` reads a data file into a *DataFrame*, a table with named
+> columns. `parse_dates=["date"]` turns text such as `"2020-04-01"` into real dates. `.tail()` shows
+> the last five rows.
+
+```{python}
+emp = pd.read_csv(DATA_URL + "fig7-1.csv", parse_dates=["date"])
+recessions = pd.read_csv(DATA_URL + "recessions.csv", parse_dates=["peak", "trough"])
+emp.tail()
+```
+
+September 2025 is followed by November 2025: October 2025 is missing because the survey was not
+carried out during that autumn's federal government shutdown. The chart simply joins the two months.
+
+We will shade recessions in three charts, so we write the shading once, as a function.
+
+> **Python note.** A `for` loop repeats the indented lines once for each recession:
+> `zip(recessions.peak, recessions.trough)` hands over one (peak, trough) pair at a time. The `if`
+> skips recessions that ended before the chart starts, and `fig.add_vrect` shades the band between two
+> dates. `px.area` draws a line and fills the area below it. `rangeslider_visible=True` adds a small
+> copy of the chart below the axis: drag its handles to zoom in on a period.
+
+```{python}
+def shade_recessions(fig, start):
+    """Shade every NBER recession (peak to trough) that ends after the date start."""
+    for peak, trough in zip(recessions.peak, recessions.trough):
+        if trough >= pd.Timestamp(start):
+            fig.add_vrect(x0=peak, x1=trough, fillcolor=BLUE, opacity=0.15, line_width=0)
+
+
+fig = px.area(emp, x="date", y="emp_pop_ratio", hover_name="date",
+              labels={"date": "Year", "emp_pop_ratio": "Employment-population ratio (percent)"},
+              title="More adults work than in 1960, but every recession cuts employment")
+fig.update_traces(line=dict(color=TEAL, width=2))
+shade_recessions(fig, "1960-01-01")
+fig.update_yaxes(range=[50, 66])
+fig.update_xaxes(rangeslider_visible=True)
+fig.show()
+```
+
+**What to notice.**
+
+- The trend rose from about 56 percent in 1960 to a peak of 64.7 percent in April 2000, and it has
+  stayed below that peak ever since.
+- The ratio falls in every recession (the shaded bands). The falls after 2007 and in spring 2020 are
+  by far the deepest.
+- The textbook's figure ends in early 2023; our data go to September 2026.
+
+<!-- cell -->
+
+### Key numbers: the trend and the Great Recession
+
+> **Python note.** `set_index("date")` uses the dates as row labels, so `ratio.loc["1960"]` keeps every
+> month of 1960 and `ratio.loc["2009":"2012"]` every month from 2009 to 2012. `.idxmax()` and
+> `.idxmin()` give the row label (here, the month) of the largest and smallest value, and `:%B %Y`
+> prints a date as "April 2000".
+
+```{python}
+ratio = emp.set_index("date").emp_pop_ratio
+crisis = ratio.loc["2009":"2012"]
+print(f"1960 average:            {ratio.loc['1960'].mean():.1f}%")
+print(f"Peak:                    {ratio.max():.1f}% in {ratio.idxmax():%B %Y}")
+print(f"December 2006:           {ratio.loc['2006-12-01']:.1f}%")
+print(f"January 2010:            {ratio.loc['2010-01-01']:.1f}%  (lowest 2009-2012: {crisis.min():.1f}% in {crisis.idxmin():%B %Y})")
+print(f"Fall, Dec. 2006 to Jan. 2010: {ratio.loc['2006-12-01'] - ratio.loc['2010-01-01']:.1f} points")
+print(f"Covid low:               {ratio.min():.1f}% in {ratio.idxmin():%B %Y};  latest: {ratio.iloc[-1]:.1f}%")
+```
+
+The textbook's numbers hold: 56 percent in 1960, 63.4 percent at the end of 2006, and a fall of about
+5 points by early 2010 (58.5 percent in January 2010 in today's data, against 58.4 in the textbook;
+the low point came later, in November 2010).
+
+<!-- cell -->
+
+### Key numbers: men and women
+
+The textbook says that the rise in the ratio came entirely from women. A second file splits the ratio
+by sex. We average the months of each year to compare years.
+
+> **Python note.** `groupby(emp_sex.date.dt.year).mean()` collects the rows of each calendar year and
+> averages them, and `.loc[[1960, 2000, 2025]]` picks three rows by their label.
+
+```{python}
+emp_sex = pd.read_csv(DATA_URL + "emp_pop_by_sex.csv", parse_dates=["date"])
+fig = px.line(emp_sex, x="date", y=["men", "women"], hover_name="date",
+              labels={"date": "Year", "value": "Employment-population ratio (percent)", "variable": "Group"},
+              title="Fewer men and many more women work than in the 1950s")
+shade_recessions(fig, "1948-01-01")
+fig.show()
+yearly = emp_sex.groupby(emp_sex.date.dt.year)[["men", "women"]].mean()
+print(yearly.loc[[1960, 2000, 2019, 2025]].round(1))
+print(f"Women's peak: {emp_sex.women.max():.1f}% in {emp_sex.date[emp_sex.women.idxmax()]:%B %Y}")
+```
+
+Women's ratio rose from 35.5 percent in 1960 to a peak of 58.0 percent in April 2000. Men's fell from
+78.9 percent in 1960 to 66.6 percent in 2019 and 64.9 percent in 2025. Both numbers match the textbook.
+
+**Your turn.** By how many points did women's employment-population ratio rise between 1960 and 2000,
+and by how many did men's fall? Use the `yearly` table.
+
+<details><summary>Hint</summary>
+
+`yearly.loc[2000] - yearly.loc[1960]` subtracts one row from another, column by column.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 2: The U.S. unemployment rate
+
+**Goal.** See how unemployment jumps in recessions and falls in recoveries.
+
+A person is **unemployed** when she has no job, has looked for one in the past four weeks, and is
+available to work. The **labor force** is everybody who is employed or unemployed, and the
+**unemployment rate** is the share of the labor force that is unemployed.
+
+```{python}
+unrate = pd.read_csv(DATA_URL + "fig7-2.csv", parse_dates=["date"])
+fig = px.area(unrate, x="date", y="unemployment_rate", hover_name="date",
+              labels={"date": "Year", "unemployment_rate": "Unemployment rate (percent)"},
+              title="Unemployment jumps in every recession and falls slowly afterwards")
+fig.update_traces(line=dict(color=BLUE, width=2))
+shade_recessions(fig, "1950-01-01")
+fig.update_yaxes(range=[0, 16])
+fig.update_xaxes(rangeslider_visible=True)
+fig.show()
+```
+
+**What to notice.**
+
+- Every shaded recession brings a jump in unemployment. The highest peaks are late 1982, October 2009
+  and April 2020.
+- The Covid-19 jump was the largest and the shortest: the rate fell back much faster than after 2009.
+- Between recessions, unemployment falls gradually, often for many years.
+
+<!-- cell -->
+
+### Key numbers: peaks and recoveries
+
+```{python}
+u = unrate.set_index("date").unemployment_rate
+print(f"May 2007: {u.loc['2007-05-01']:.1f}%   October 2009: {u.loc['2009-10-01']:.1f}%")
+print(f"February 2020: {u.loc['2020-02-01']:.1f}%   April 2020: {u.loc['2020-04-01']:.1f}%")
+after_2009 = u.loc["2009-11":]
+after_2020 = u.loc["2020-05":]
+print(f"First month below 4% after 2009:  {after_2009[after_2009 < 4].index[0]:%B %Y}")
+print(f"First month below 4% after 2020:  {after_2020[after_2020 < 4].index[0]:%B %Y}")
+```
+
+The rates match the textbook, except April 2020: 14.8 percent in today's data, against 14.7 in the
+textbook (seasonal adjustment is revised every year). After the 2009 peak it took until May 2018,
+almost nine years, to get below 4 percent again. After the Covid peak it took until December 2021,
+under two years.
+
+<!-- cell -->
+
+### Table 7.1: the composition of the U.S. labor force
+
+A wider file holds the monthly levels behind the unemployment rate, in millions of people. We rebuild
+Table 7.1 for January 2023, the textbook's month, and for the latest month.
+
+> **Python note.** `.loc[["2023-01-01", last]]` picks two rows by their dates, and `.T` *transposes*
+> the table: rows become columns, so each month becomes a column.
+
+```{python}
+force = pd.read_csv(DATA_URL + "labor_force.csv", parse_dates=["date"]).set_index("date")
+force["unemployment_rate"] = 100 * force.unemployed / force.labor_force
+last = force.index[-1]
+table = force.loc[[pd.Timestamp("2023-01-01"), last]].T
+table.columns = ["January 2023", f"{last:%B %Y}"]
+table["Textbook (Jan. 2023)"] = [266, 166, 160, 5.7, 100, 3.4]
+table.round(2)
+```
+
+January 2023 agrees with the textbook within rounding, except that today's data count 5.77 million
+unemployed (the textbook says 5.7), so the rate is 3.48 rather than 3.4 percent. By the latest month,
+the labor force has grown to about 170 million and unemployment to about 4.2 percent.
+
+The textbook also notes that, with about 266 million people aged 16 and over, one point of the
+employment-population ratio is 2.7 million jobs:
+
+```{python}
+print(f"1% of the population 16+, January 2023: {0.01 * force.loc['2023-01-01', 'population']:.2f} million people")
+print(f"1% of the population 16+, {last:%B %Y}:  {0.01 * force.loc[last, 'population']:.2f} million people")
+```
+
+**Your turn.** Suppose that in the latest month the unemployment rate had been 10 percent, with the
+same labor force. How many fewer people would have had a job?
+
+<details><summary>Hint</summary>
+
+At 10 percent unemployment, employment is `0.9 * force.loc[last, "labor_force"]`. Compare it with
+`force.loc[last, "employed"]`.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 3: The labor market
+
+**Goal.** Draw the supply-and-demand diagram of the labor market and see how its equilibrium moves.
+
+Labor demand $w = \bar{a}_d - \bar{b}_d L$ slopes down and labor supply $w = \bar{a}_s + \bar{b}_s L$
+slopes up. They cross at $(L^*, w^*)$. If the population is a fixed number $N$, the model also gives
+the employment-population ratio $L^*/N$. When you move a slider, the starting curves stay on the chart
+as dashed gray lines, so you can see the shift.
+
+```{python}
+def labor_market(a_d=100.0, b_d=1.0, a_s=10.0, b_s=1.0):
+    """Figure 7.3: labor supply, labor demand and the equilibrium (L*, w*)."""
+    L_star, w_star = equilibrium(a_d, b_d, a_s, b_s)
+    fig = go.Figure()
+    if (a_d, b_d, a_s, b_s) != (100.0, 1.0, 10.0, 1.0):          # keep the starting curves for comparison
+        add_curve(fig, labor_supply(L_grid), "Starting curves", GRAY, "dash")
+        add_curve(fig, labor_demand(L_grid), "", GRAY, "dash")
+    add_curve(fig, labor_supply(L_grid, a_s, b_s), "Labor supply, Lˢ", TEAL)
+    add_curve(fig, labor_demand(L_grid, a_d, b_d), "Labor demand, Lᵈ", BLUE)
+    add_point(fig, L_star, w_star, "")
+    fig.update_layout(title=f"The labor market clears at w* = {w_star:.1f} and L* = {L_star:.1f}",
+                      xaxis=dict(title="Employment, L", range=[0, 100]),
+                      yaxis=dict(title="Wage, w", range=[0, 110]))
+    return fig
+```
+
+> **Python note.** `interact` calls the function and redraws its figure every time you move a
+> slider. A `FloatSlider` chooses a number between `min` and `max` in steps of `step`, starting at
+> `value`. The `;` at the end only hides an extra line of text.
+
+```{python}
+#| kind: widget
+interact(labor_market,
+         a_d=FloatSlider(value=100, min=80, max=120, step=5, description="demand intercept a_d", style=WIDE),
+         b_d=FloatSlider(value=1.0, min=0.75, max=1.5, step=0.25, description="demand slope b_d", style=WIDE),
+         a_s=FloatSlider(value=10, min=0, max=30, step=5, description="supply intercept a_s", style=WIDE),
+         b_s=FloatSlider(value=1.0, min=0.75, max=1.5, step=0.25, description="supply slope b_s", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 3 with a precomputed slider for the demand intercept
+slider_figure(labor_market, "a_d", [80, 90, 100, 110, 120], start=100, label="demand intercept a_d")
+```
+
+**What to notice.**
+
+- With our illustrative numbers the market clears at $L^* = 45$ and $w^* = 55$.
+- A higher $\bar{a}_d$ (firms value every worker more) shifts demand up: the wage **and** employment rise.
+- A higher $\bar{a}_s$ (people need a higher wage before they work) shifts supply up: the wage rises but
+  employment **falls**.
+- Steeper curves (larger slopes) make employment respond less to a given shift.
+
+**Your turn.** Raise the demand intercept $\bar{a}_d$ from 100 to 110. By how much do $L^*$ and $w^*$
+change? Check your answer with `equilibrium(a_d=110)`.
+
+<details><summary>Hint</summary>
+
+With both slopes equal to 1, $L^* = (\bar{a}_d - \bar{a}_s)/2$, so each extra unit of $\bar{a}_d$ adds half a
+unit to $L^*$.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 4: An income tax at rate τ
+
+**Goal.** See how a tax on labor income lowers employment and drives a wedge between the wage
+firms pay and the wage workers keep.
+
+With a tax at rate $\tau$, a worker keeps only $(1-\tau)w$ of the wage $w$ the firm pays. To supply the
+same amount of work as before, workers now need a higher wage from the firm, $w = (\bar{a}_s + \bar{b}_s L)/(1-\tau)$.
+Drawn against the wage firms pay, labor supply shifts **back** (up and to the left). The economy moves
+from $A$ to $B$.
+
+```{python}
+def income_tax(tau=0.25, b_s=1.0):
+    """Figure 7.4: a labor income tax tau shifts labor supply back; the economy moves from A to B."""
+    L_A, w_A = equilibrium(b_s=b_s)
+    L_B, w_B = equilibrium(b_s=b_s, tau=tau)
+    kept = (1 - tau) * w_B                                       # what workers keep at B
+    fig = go.Figure()
+    add_curve(fig, labor_supply(L_grid, b_s=b_s), "Labor supply, no tax", GRAY, "dash")
+    add_curve(fig, labor_supply(L_grid, b_s=b_s) / (1 - tau), "Labor supply with the tax, Lˢ′", TEAL)
+    add_curve(fig, labor_demand(L_grid), "Labor demand, Lᵈ", BLUE)
+    add_point(fig, L_A, w_A, "A")
+    add_point(fig, L_B, w_B, "B")
+    fig.add_trace(go.Scatter(x=[L_B, L_B], y=[kept, w_B], mode="lines+markers", name="Tax wedge",
+                             line=dict(color=GREEN, width=6)))
+    fig.update_layout(title=f"τ = {tau:.0%}: L′ = {L_B:.1f}, firms pay w′ = {w_B:.1f}, workers keep {kept:.1f}",
+                      xaxis=dict(title="Employment, L", range=[0, 100]),
+                      yaxis=dict(title="Wage paid by firms, w", range=[0, 110]))
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(income_tax,
+         tau=FloatSlider(value=0.25, min=0, max=0.5, step=0.05, description="tax rate τ", style=WIDE),
+         b_s=FloatSlider(value=1.0, min=0.5, max=2.0, step=0.25, description="supply slope b_s", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 4 with a precomputed slider for the tax rate
+slider_figure(income_tax, "tau", [0.0, 0.1, 0.2, 0.25, 0.3, 0.4, 0.5], start=0.25, label="tax rate τ")
+```
+
+**What to notice.**
+
+- With a 25 percent tax, employment falls from 45 to about 37.1. Firms pay more (62.9 instead of 55),
+  but workers keep less (47.1). The green bar is the tax per unit of work.
+- The textbook draws the taxed supply curve parallel to the old one. With a tax proportional to the
+  wage, the new curve is a little steeper: the tax takes more when the wage is higher.
+- A flatter supply curve (smaller $\bar{b}_s$) means people respond more to the wage they keep, so the same
+  tax cuts employment by more.
+
+**Your turn.** What tax rate cuts employment from 45 to 30? Find it with the slider, then check it with
+`equilibrium(tau=...)`.
+
+<details><summary>Hint</summary>
+
+Solve $((1-\tau)\cdot 100 - 10)/((1-\tau) + 1) = 30$ for $(1-\tau)$, or try values of `tau` in steps of 0.05.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 5: A reduction in labor demand
+
+**Goal.** See what happens to the wage and employment when firms want fewer workers.
+
+New rules that make firing workers costly, or a jump in the price of an input such as oil, can make
+firms less willing to hire. In the diagram, labor demand shifts down by an amount we call `shift`:
+$w = (\bar{a}_d - \text{shift}) - \bar{b}_d L$. The economy moves from $A$ to $B$.
+
+> **Python note.** `fig.add_annotation(...)` with `showarrow=True` draws an arrow from the point
+> (`ax`, `ay`) to the point (`x`, `y`). With `axref="x"` and `ayref="y"`, both points are given in the
+> units of the axes.
+
+```{python}
+def demand_fall(shift=20.0, b_s=1.0):
+    """Figure 7.5: labor demand shifts back by shift; the wage and employment both fall (A -> B)."""
+    L_A, w_A = equilibrium(b_s=b_s)
+    L_B, w_B = equilibrium(a_d=100 - shift, b_s=b_s)
+    fig = go.Figure()
+    add_curve(fig, labor_demand(L_grid), "Labor demand before, Lᵈ", GRAY, "dash")
+    add_curve(fig, labor_demand(L_grid, 100 - shift), "Labor demand after, Lᵈ′", BLUE)
+    add_curve(fig, labor_supply(L_grid, b_s=b_s), "Labor supply, Lˢ", TEAL)
+    add_point(fig, L_A, w_A, "A")
+    add_point(fig, L_B, w_B, "B")
+    if shift > 0:
+        fig.add_annotation(x=75, y=labor_demand(75, 100 - shift) + 1, ax=75, ay=labor_demand(75) - 1,
+                           xref="x", yref="y", axref="x", ayref="y", text="", showarrow=True,
+                           arrowhead=3, arrowwidth=2, arrowcolor="black")
+    fig.update_layout(title=f"Demand falls by {shift:.0f}: w {w_A:.1f} → {w_B:.1f}, L {L_A:.1f} → {L_B:.1f}",
+                      xaxis=dict(title="Employment, L", range=[0, 100]),
+                      yaxis=dict(title="Wage, w", range=[0, 110]))
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(demand_fall,
+         shift=FloatSlider(value=20, min=0, max=40, step=5, description="fall in labor demand", style=WIDE),
+         b_s=FloatSlider(value=1.0, min=0.5, max=2.0, step=0.25, description="supply slope b_s", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 5 with a precomputed slider for the fall in labor demand
+slider_figure(demand_fall, "shift", [0, 10, 20, 30, 40], start=20, label="fall in labor demand")
+```
+
+**What to notice.**
+
+- A fall in demand of 20 lowers the wage from 55 to 45 and employment from 45 to 35: both fall.
+- With both slopes equal to 1, the fall is split equally between the wage and employment. A flatter
+  supply curve puts more of it on employment; a steeper one puts more of it on the wage.
+- The employment-population ratio falls too. Unemployment rises at first, and may come back down as
+  some discouraged workers stop looking for a job and leave the labor force.
+
+**Your turn.** Set the supply slope $\bar{b}_s$ to 0.5 and then to 2, with a fall in demand of 20. In
+which case does employment fall more? Why?
+
+<details><summary>Hint</summary>
+
+Compare `equilibrium(a_d=80, b_s=0.5)` with `equilibrium(b_s=0.5)`, and do the same for `b_s=2`. A flat
+supply curve means many people leave work when the wage drops a little.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 6: A reduction in labor demand with wage rigidity
+
+**Goal.** See why a wage that does not fall turns a fall in demand into a much larger fall in employment.
+
+Suppose the wage stays at its old level $\bar{w} = w^*$ after labor demand falls. Firms then hire only
+what they want at $\bar{w}$, so employment moves along the new demand curve to $C$:
+
+$$L'' = \frac{(\bar{a}_d - \text{shift}) - \bar{w}}{\bar{b}_d}$$
+
+At $\bar{w}$, the number of people who want to work is still $L^*$, so $L^* - L''$ people would like a job
+but cannot find one. Choose **rigid** or **flexible** with the buttons to compare $C$ with $B$.
+
+```{python}
+def wage_rigidity(shift=20.0, wage="rigid"):
+    """Figure 7.6: labor demand falls; with a rigid wage w-bar the economy moves to C instead of B."""
+    L_A, w_bar = equilibrium()                                    # A: the old equilibrium sets w-bar
+    L_B, w_B = equilibrium(a_d=100 - shift)                      # B: the wage is flexible
+    L_C = demand_at_wage(w_bar, a_d=100 - shift)                 # C: firms' demand at w-bar
+    jobless = supply_at_wage(w_bar) - L_C                        # want to work at w-bar, but no job
+    fig = go.Figure()
+    add_curve(fig, labor_demand(L_grid), "Labor demand before, Lᵈ", GRAY, "dash")
+    add_curve(fig, labor_demand(L_grid, 100 - shift), "Labor demand after, Lᵈ′", BLUE)
+    add_curve(fig, labor_supply(L_grid), "Labor supply, Lˢ", TEAL)
+    add_point(fig, L_A, w_bar, "A")
+    if wage == "rigid":
+        add_point(fig, L_C, w_bar, "C")
+        fig.add_trace(go.Scatter(x=[L_C, L_A], y=[w_bar, w_bar], mode="lines", name="Want a job, cannot find one",
+                                 line=dict(color=GREEN, width=6)))
+        title = f"Rigid wage w̄ = {w_bar:.0f}: L″ = {L_C:.1f} (flexible: L′ = {L_B:.1f}); jobless gap {jobless:.1f}"
+    else:
+        add_point(fig, L_B, w_B, "B")
+        title = f"Flexible wage: the wage falls to w′ = {w_B:.1f} and employment to L′ = {L_B:.1f}"
+    fig.update_layout(title=title, xaxis=dict(title="Employment, L", range=[0, 100]),
+                      yaxis=dict(title="Wage, w", range=[0, 110]))
+    return fig
+```
+
+> **Python note.** `ToggleButtons` shows one button per option; the function receives the text of the
+> chosen button.
+
+```{python}
+#| kind: widget
+interact(wage_rigidity,
+         shift=FloatSlider(value=20, min=0, max=40, step=5, description="fall in labor demand", style=WIDE),
+         wage=ToggleButtons(options=["rigid", "flexible"], value="rigid", description="wage"));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 6 (rigid wage) with a precomputed slider for the fall in labor demand
+slider_figure(wage_rigidity, "shift", [0, 10, 20, 30, 40], start=20, label="fall in labor demand")
+```
+
+**What to notice.**
+
+- With a flexible wage, a fall in demand of 20 moves the economy to $B$: employment 35. With the wage
+  stuck at $\bar{w} = 55$ it moves to $C$: employment 25, twice the fall.
+- At $C$, 45 people want to work at the going wage but only 25 are hired: a gap of 20. Wage rigidity
+  creates unemployment that a flexible wage would not.
+- This is the reason Keynes gave for the mass unemployment of the Great Depression, and rigid wages
+  return in the short-run chapters of the book.
+
+<!-- cell -->
+
+### The bathtub model of unemployment
+
+The textbook's Section 7.4 explains the **natural rate of unemployment** with a simple model. The labor
+force $\bar{L}$ is fixed, and each month a share $\bar{s}$ of the employed lose their job (the **job
+separation rate**) while a share $\bar{f}$ of the unemployed find one (the **job finding rate**):
+
+$$E_t + U_t = \bar{L} \qquad (7.2) \qquad\qquad \Delta U_{t+1} = \bar{s}E_t - \bar{f}U_t \qquad (7.3)$$
+
+Unemployment is like water in a bathtub: job losses are the faucet and job findings the drain. The level
+stops changing when the two flows are equal, which gives the steady-state rate
+
+$$u^* = \frac{\bar{s}}{\bar{f} + \bar{s}} \qquad (7.4)$$
+
+> **Python note.** `range(61)` counts 0, 1, ..., 60, one step per month. Each pass of the loop
+> stores the current rate with `.append` and then applies equations (7.2) and (7.3) once.
+> `interact_manual` adds a button, so nothing happens until you press it.
+
+```{python}
+def bathtub_path(s=0.01, f=0.20):
+    """Section 7.4: simulate the bathtub model for 60 months, starting at 10% unemployment."""
+    L_bar, U = 100.0, 10.0                     # labor force and unemployed (only the ratio matters)
+    months, rates = [], []
+    for t in range(61):
+        months.append(t)
+        rates.append(100 * U / L_bar)
+        E = L_bar - U                          # equation (7.2)
+        U = U + s * E - f * U                  # equation (7.3)
+    u_star = 100 * s / (f + s)                 # equation (7.4)
+    path = pd.DataFrame({"month": months, "rate": rates})
+    fig = px.line(path, x="month", y="rate", hover_name="month",
+                  labels={"month": "Months from the start", "rate": "Unemployment rate (percent)"},
+                  title=f"s = {s:.3f}, f = {f:.2f}: unemployment settles at u* = s/(f+s) = {u_star:.1f}%")
+    fig.update_traces(line=dict(color=BLUE, width=3))
+    fig.add_hline(y=u_star, line_dash="dash", line_color=GRAY)
+    fig.update_yaxes(range=[0, 25])
+    return fig
+```
+
+Choose a job separation rate and a job finding rate, then press **Run the bathtub**.
+
+```{python}
+#| kind: widget
+run_bathtub = interact_manual.options(manual_name="Run the bathtub")
+run_bathtub(bathtub_path,
+            s=FloatSlider(value=0.01, min=0.005, max=0.03, step=0.005, description="job separation rate s", style=WIDE),
+            f=FloatSlider(value=0.2, min=0.1, max=0.5, step=0.05, description="job finding rate f", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: the bathtub model with a precomputed slider for the job finding rate
+slider_figure(bathtub_path, "f", [0.1, 0.15, 0.2, 0.3, 0.4, 0.5], start=0.2, label="job finding rate f")
+```
+
+With the textbook's monthly rates, $\bar{s} = 0.01$ and $\bar{f} = 0.20$, the natural rate is
+$0.01/0.21 \approx 4.8$ percent. Starting from 10 percent, unemployment is already close to it after a
+year, because a fifth of the unemployed find a job every month.
+
+```{python}
+for s, f in [[0.01, 0.20], [0.008, 0.20], [0.008, 0.15]]:
+    print(f"s = {s:<6} f = {f:<5} natural rate u* = {100 * s / (f + s):.2f}%")
+```
+
+The textbook warns that firing costs cut job losses ($\bar{s}$ falls) but can also make firms slow to
+hire ($\bar{f}$ falls). In the second line, firing costs only lower $\bar{s}$, and the natural rate falls to
+3.85 percent. In the third line they also lower $\bar{f}$, and the natural rate rises to 5.06 percent.
+
+**Your turn.** Keep $\bar{s} = 0.01$. What job finding rate $\bar{f}$ gives a natural rate of 6.8 percent,
+Europe's unemployment rate in 2022 (Figure 7)? Check it with the formula.
+
+<details><summary>Hint</summary>
+
+Solve $0.068 = 0.01/(\bar{f} + 0.01)$ for $\bar{f}$. Then try that value with `bathtub_path(f=...)`.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 7: Unemployment in the United States, Europe and Japan
+
+**Goal.** Compare unemployment in three large economies, and see when Europe's rate rose above the
+U.S. rate.
+
+The file has annual rates. "Europe" is the euro area of 12 countries from the European Commission's
+AMECO database, which starts in 1960. The textbook uses an OECD series instead, which runs up to
+about 1 point higher in the mid-1980s.
+
+```{python}
+unemp = pd.read_csv(DATA_URL + "fig7-7.csv")
+unemp = unemp.rename(columns={"unrate_us": "United States", "unrate_europe": "Europe", "unrate_japan": "Japan"})
+unemp.head(7)
+```
+
+The empty cells (`NaN`, "not a number") are the years 1955–1959, before the European series starts.
+
+> **Python note.** `unemp[unemp.year == year]` keeps the rows where the condition is true, and
+> `.iloc[0]` takes the first of them. `add_vline` draws a vertical line at the chosen year.
+
+```{python}
+def unemployment_in(year=2022):
+    """Figure 7.7: unemployment in the U.S., Europe and Japan, with one year's rates in the title."""
+    row = unemp[unemp.year == year].iloc[0]
+    fig = px.line(unemp, x="year", y=["United States", "Europe", "Japan"],
+                  labels={"year": "Year", "value": "Unemployment rate (percent)", "variable": "Economy"})
+    fig.add_vline(x=year, line_dash="dot", line_color=GRAY)
+    fig.update_yaxes(range=[0, 14])
+    fig.update_layout(title=f"{year}: U.S. {row['United States']:.1f}%, Europe {row['Europe']:.1f}%, "
+                            f"Japan {row['Japan']:.1f}%", hovermode="x unified")
+    return fig
+```
+
+> **Python note.** A `Dropdown` is a menu: the function receives the option you pick.
+
+```{python}
+#| kind: widget
+interact(unemployment_in,
+         year=Dropdown(options=list(range(1960, 2026)), value=2022, description="year", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 7 with a precomputed slider for the year
+slider_figure(unemployment_in, "year", [1960, 1975, 1985, 1995, 2013, 2020, 2022, 2025], start=2022, label="year")
+```
+
+**What to notice.**
+
+- In 2022, U.S. unemployment was 3.6 percent and Japan's 2.6 percent, as in the textbook. Europe's was
+  6.8 percent (the textbook's OECD series: 6.7).
+- Until the late 1970s, Europe's rate was below the U.S. rate. It rose steeply between 1975 and 1985 and
+  has stayed high since, with a peak of 12.1 percent in 2013.
+- Japan's rate stayed low throughout. It was above the U.S. rate only in 1999–2001.
+
+<!-- cell -->
+
+### Key numbers: Europe before and after 1975
+
+```{python}
+early = unemp[(unemp.year >= 1960) & (unemp.year <= 1975)]
+late = unemp[unemp.year >= 1985]
+print("Average 1960-1975:", early[["United States", "Europe", "Japan"]].mean().round(2).to_dict())
+print("Average 1985-2025:", late[["United States", "Europe", "Japan"]].mean().round(2).to_dict())
+print("First year with Europe above the U.S.:", unemp[unemp["Europe"] > unemp["United States"]].year.min())
+print("Japan above the U.S. in:", unemp[unemp["Japan"] > unemp["United States"]].year.tolist())
+```
+
+Up to 1975, Europe averaged 2.6 percent (the textbook says about 2.5), half the U.S. average. Since
+1985 it has averaged about 9 percent, against under 6 percent in the United States. The textbook
+explains the change with a mix of **adverse shocks** in the 1970s (the productivity slowdown and oil
+prices) and **labor market institutions**, such as generous unemployment benefits, that kept
+unemployment high once it had risen. In the bathtub model, both work through a lower job finding rate.
+
+<!-- cell -->
+
+### Table 7.2: hours worked per person
+
+Hours worked per person combine three things: how many people work, how many weeks they work, and how
+many hours a week. A wider file holds this measure from the Penn World Table, as an index with the U.S.
+in 2019 = 100. Column `hours_pwt10` uses version 10.01, close to the textbook's version 10.0; column
+`hours_pwt11` uses the latest version, 11.0.
+
+> **Python note.** `.pivot(index="country", columns="year", values=...)` turns the long table into a
+> wide one, with one row per country and one column per year. `[[1960, 1990, 2019]]` keeps three columns.
+
+```{python}
+hours = pd.read_csv(DATA_URL + "hours_per_person.csv")
+countries = ["United States", "Italy", "France", "Germany", "U.K.", "Japan", "South Korea"]
+pwt10 = hours.pivot(index="country", columns="year", values="hours_pwt10").loc[countries, [1960, 1990, 2019]]
+pwt11 = hours.pivot(index="country", columns="year", values="hours_pwt11").loc[countries, [1960, 1990, 2019, 2023]]
+print("PWT 10.01 (the textbook's table):")
+print(pwt10.round(0))
+print("\nPWT 11.0 (latest version):")
+print(pwt11.round(1))
+print(f"\nEurope (four countries) in 2019: PWT 10.01 {pwt10.loc['Italy':'U.K.', 2019].mean():.1f}, "
+      f"PWT 11.0 {pwt11.loc['Italy':'U.K.', 2019].mean():.1f}")
+```
+
+Version 10.01 reproduces every cell of the textbook's table. In 2019, Japan worked about 10 percent more
+hours per person than the United States, and the four European countries about 86 percent of the U.S.
+level on average, while in 1960 all four had worked more than Americans. The latest version revises
+several countries down (the U.K. by about 9 points in 2019, Japan by 7), but the ranking is the same.
+**When a data source is revised, say which version you used.**
+
+**Your turn.** In which of the seven countries did hours per person fall the most between 1960 and 2019?
+Use `pwt10`.
+
+<details><summary>Hint</summary>
+
+`(pwt10[2019] - pwt10[1960]).sort_values()` lists the changes from the largest fall to the largest rise.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 8: College versus high school wages and employment
+
+**Goal.** Document a key fact of the labor market: college graduates earn much more than high school
+graduates, and the gap has grown while the number of college graduates rose.
+
+The textbook uses private data from Acemoglu and Molina. We use the closest public series, from the
+Economic Policy Institute (EPI), based on the Current Population Survey:
+
+- the **college wage premium**: how much more college graduates earn per hour than high school graduates
+  with similar gender, race, age and region, from 1979;
+- the **share of employment** held by workers with a bachelor's or higher degree, from 1976. This is a
+  different measure from the textbook's share of *hours*, which is about twice as high.
+
+```{python}
+college = pd.read_csv(DATA_URL + "fig7-8.csv")
+college.tail()
+```
+
+The premium comes in two versions. `college_premium_pct` is the percent gap: a value of 60 means college
+graduates earn 60 percent more. `college_premium_log_pct` is the same gap in **log points**, $100 \ln(1 + \text{gap})$,
+the unit economists usually plot (and the textbook uses). For small gaps the two are close; for large
+gaps the log version is smaller. Let us check that the two columns agree:
+
+```{python}
+check = 100 * np.log(1 + college.college_premium_pct / 100)
+print(f"Largest difference between the two versions: {(check - college.college_premium_log_pct).abs().max():.2f} log points")
+```
+
+Before plotting, we give the columns readable names for the legend.
+
+```{python}
+named = college.rename(columns={"college_premium_log_pct": "College wage premium (log points)",
+                                "college_share_employment_pct": "Share of employment with a college degree"})
+fig = px.line(named, x="year", y=["College wage premium (log points)", "Share of employment with a college degree"],
+              hover_name="year", color_discrete_sequence=[BLUE, TEAL],
+              labels={"year": "Year", "value": "Percent", "variable": ""},
+              title="College graduates became more numerous and better paid at the same time")
+fig.update_yaxes(range=[0, 60])
+fig.update_layout(legend=dict(orientation="h", y=-0.2, yanchor="top"), hovermode="x unified")
+fig.show()
+```
+
+**What to notice.**
+
+- The premium rose steeply in the 1980s and more slowly in the 1990s. Since 2000 it has moved between
+  about 44 and 49 log points, and it has slipped since 2020.
+- At the same time, the share of workers with a college degree more than doubled. More supply **and** a
+  higher price: Figure 9 shows how supply and demand can produce both.
+- The textbook's lines start in 1963 and show a dip in the premium in the 1970s (Figure 13 explains it).
+  The public data start in 1979.
+
+<!-- cell -->
+
+### Key numbers: the premium and the share
+
+```{python}
+c = college.set_index("year")
+print(c.loc[[1979, 1990, 2000, 2020, 2025], ["college_premium_log_pct", "college_share_employment_pct"]].round(1))
+print(f"Highest premium: {c.college_premium_log_pct.max():.1f} log points in {c.college_premium_log_pct.idxmax()}")
+```
+
+The premium is 48.1 log points in 2020, "nearly 50 percent" as the textbook says; it peaked at 49.2 in
+2016 and is 44.0 in 2025. (The chapter summary of the textbook speaks of 50 and 100 percent, which does
+not fit its own figure.) The share of employment with a college degree rose from 18.3 percent in 1979 to
+40.9 percent in 2020.
+
+<!-- cell -->
+
+### Key numbers: present discounted value
+
+To value a college degree we need a tool from the textbook's Section 7.6. A payment received $T$ years
+from now is worth less than the same payment today, because money today can earn interest at rate $R$.
+Its **present discounted value** is
+
+$$pdv = \frac{\text{future value}}{(1 + R)^T} \qquad (7.7)$$
+
+For a payment that arrives every year for $n$ years, starting today, we add up the present values of
+all the payments. The geometric-series formula gives the sum directly:
+
+$$pdv = \text{payment} \times \frac{1 - \left(\frac{1}{1+R}\right)^n}{1 - \frac{1}{1+R}} \qquad (7.14)$$
+
+> **Python note.** The loop in `pdv` adds one discounted payment per year, so we can check the formula.
+> `**` is a power: `(1 + R) ** t` is $(1+R)^t$. `100_000` is simply 100000; Python ignores the
+> underscore, which only makes large numbers easier to read. `:,.0f` prints a number with thousands
+> separators and no decimals.
+
+```{python}
+def pdv(payment, R, years):
+    """Equation (7.14): present value of `payment` received every year for `years` years, starting today."""
+    total = 0.0
+    for t in range(years):                       # t = 0 is today, t = 1 next year, ...
+        total = total + payment / (1 + R) ** t
+    return total
+
+
+print(f"$1,000 in 5 years at R = 10%:          ${1000 / 1.10 ** 5:,.0f}")
+print(f"$100 a year for 20 years at R = 10%:   ${pdv(100, 0.10, 20):,.0f}")
+a = 1 / 1.10
+print(f"... and with the formula (7.14):       ${100 * (1 - a ** 20) / (1 - a):,.0f}")
+print(f"$100,000 a year for 45 years at 3%:   ${pdv(100_000, 0.03, 45):,.0f}")
+print(f"$30,000 a year for 45 years at 3%:    ${pdv(30_000, 0.03, 45):,.0f}")
+```
+
+The loop and the formula agree. A prize of \$1,000 in five years is worth \$621 today, and \$100 a year for
+20 years is worth \$936, so the second prize is better. A working life of 45 years at \$100,000 a year is
+worth about \$2.53 million today: in this sense a typical new worker is a millionaire. And the \$30,000 a
+year that a college degree adds (\$90,000 instead of \$60,000) is worth about \$758,000, far more than four
+years of tuition and lost earnings.
+
+The chart shows why: each bar is one year's \$100,000 wage valued today. Distant wages count for less, but
+they still add up.
+
+```{python}
+years = np.arange(45)
+today = pd.DataFrame({"year": years, "value": 100_000 / 1.03 ** years})
+fig = px.bar(today, x="year", y="value", hover_name="year", color_discrete_sequence=[TEAL],
+             labels={"year": "Years from today", "value": "Value today of that year's wage (dollars)"},
+             title=f"45 years of 100,000-dollar wages at R = 3% are worth {today.value.sum():,.0f} dollars today")
+fig.show()
+```
+
+**Your turn.** Recompute the value of the 45-year working life at $R = 0.01$ and at $R = 0.05$. Why does a
+higher interest rate lower the value?
+
+<details><summary>Hint</summary>
+
+Call `pdv(100_000, 0.01, 45)` and `pdv(100_000, 0.05, 45)`. A higher $R$ means a dollar saved today grows
+faster, so you need fewer dollars today to match a future payment.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 9: Understanding the rising return to education
+
+**Goal.** See how the college wage can rise even though many more people go to college.
+
+Figure 8 showed both more college graduates and a higher college premium. In a supply-and-demand
+diagram, more supply alone would *lower* the college wage. So demand for college graduates must have
+shifted out too, and by more than supply. Panel (a) is the market for high school graduates, which we
+keep unchanged. Panel (b) is the market for college graduates, with demand
+$w = (90 + \text{shift}_d) - 0.4L$ and supply $w = (30 - \text{shift}_s) + 0.6L$. Before the shifts, the
+college wage is 66 and the high school wage 55, a premium of 20 percent.
+
+We draw the college market in a function of its own, because Figure 13 uses it again. The equilibrium
+before the shifts is marked $*$ and the one after them $**$.
+
+```{python}
+def college_market(fig, shift_d, shift_s, row=None, col=None):
+    """Figures 7.9b and 7.13: the college labor market before (*) and after (**) both curves shift."""
+    L_1, w_1 = equilibrium(a_d=90.0, b_d=0.4, a_s=30.0, b_s=0.6)
+    L_2, w_2 = equilibrium(a_d=90.0 + shift_d, b_d=0.4, a_s=30.0 - shift_s, b_s=0.6)
+    add_curve(fig, labor_supply(L_grid, 30.0, 0.6), "Before the shifts", GRAY, "dash", row, col)
+    add_curve(fig, labor_demand(L_grid, 90.0, 0.4), "", GRAY, "dash", row, col)
+    add_curve(fig, labor_supply(L_grid, 30.0 - shift_s, 0.6), "Labor supply", TEAL, "solid", row, col)
+    add_curve(fig, labor_demand(L_grid, 90.0 + shift_d, 0.4), "Labor demand", BLUE, "solid", row, col)
+    add_point(fig, L_1, w_1, "*", row, col)
+    add_point(fig, L_2, w_2, "**", row, col)
+    return w_1, w_2
+```
+
+> **Python note.** `make_subplots(rows=1, cols=2)` creates a figure with two panels side by side, and
+> `row=..., col=...` tells each drawing function which panel to use.
+
+```{python}
+def rising_return(shift_d=15.0, shift_s=10.0):
+    """Figure 7.9: (a) the high school market is unchanged; (b) college demand shifts out more than supply."""
+    L_hs, w_hs = equilibrium()
+    fig = make_subplots(rows=1, cols=2, subplot_titles=("(a) High school graduates", "(b) College graduates"))
+    add_curve(fig, labor_supply(L_grid), "", TEAL, "solid", 1, 1)
+    add_curve(fig, labor_demand(L_grid), "", BLUE, "solid", 1, 1)
+    add_point(fig, L_hs, w_hs, "*", 1, 1)
+    w_1, w_2 = college_market(fig, shift_d, shift_s, 1, 2)
+    fig.update_xaxes(title_text="Employment", range=[0, 100])
+    fig.update_yaxes(title_text="Wage", range=[0, 110])
+    fig.update_layout(title=f"College wage {w_1:.0f} → {w_2:.1f}; premium over high school "
+                            f"{w_1 / w_hs - 1:.0%} → {w_2 / w_hs - 1:.0%}")
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(rising_return,
+         shift_d=FloatSlider(value=15, min=0, max=20, step=2.5, description="college demand shifts out by", style=WIDE),
+         shift_s=FloatSlider(value=10, min=0, max=20, step=2.5, description="college supply shifts out by", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 9 with a precomputed slider for the shift in college labor demand
+slider_figure(rising_return, "shift_d", [0, 5, 10, 15, 20], start=15, label="college demand shifts out by")
+```
+
+**What to notice.**
+
+- With the default shifts, college employment rises from 60 to 85 **and** the college wage rises from 66 to
+  71. The premium over high school graduates rises from 20 to 29 percent.
+- Set the demand shift to 0: the extra supply alone lowers the college wage. The rising premium needs a
+  large shift in demand.
+- Two explanations for that shift are **skill-biased technical change** (computers and software make
+  skilled workers more productive) and **globalization** (trade with countries where skilled workers are
+  scarce raises their value; trade with countries rich in unskilled labor lowers the wages of the unskilled).
+
+**Your turn.** Keep the supply shift at 10. What is the smallest demand shift that keeps the college wage
+from falling? Find it with the sliders, then explain it with the slopes 0.4 and 0.6.
+
+<details><summary>Hint</summary>
+
+The wage stays put when the two shifts move the equilibrium wage by the same amount in opposite directions.
+For these lines that happens when $0.6 \times \text{shift}_d = 0.4 \times \text{shift}_s$.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 10: U.S. employment in manufacturing
+
+**Goal.** See the long decline of manufacturing jobs, a part of the globalization story.
+
+The file holds monthly employment in manufacturing, in millions of workers, from the Bureau of Labor
+Statistics payroll survey.
+
+```{python}
+manuf = pd.read_csv(DATA_URL + "fig7-10.csv", parse_dates=["date"])
+fig = px.area(manuf, x="date", y="manufacturing_emp_millions", hover_name="date",
+              labels={"date": "Year", "manufacturing_emp_millions": "Employment in manufacturing (millions)"},
+              title="Manufacturing jobs peaked in 1979 and fell sharply after 2000")
+fig.update_traces(line=dict(color=GREEN, width=2))
+shade_recessions(fig, "1950-01-01")
+fig.update_yaxes(range=[10, 20])
+fig.update_xaxes(rangeslider_visible=True, range=["1950-01-01", "2030-01-01"])
+fig.show()
+```
+
+**What to notice.**
+
+- Manufacturing employment grew until the late 1970s, fell in every recession, and was roughly flat in the
+  1990s.
+- From 2000 to 2010 it dropped by about a third and never recovered.
+- Research the textbook cites finds that rising imports from China explain about a quarter of that decline.
+
+<!-- cell -->
+
+### Key numbers: the fall after 2000
+
+```{python}
+m = manuf.set_index("date").manufacturing_emp_millions
+low = m.loc["2000":"2012"]
+fall = m.loc["2000-01-01"] - low.min()
+print(f"Peak: {m.max():.2f} million in {m.idxmax():%B %Y}")
+print(f"January 2000: {m.loc['2000-01-01']:.2f} million;  low: {low.min():.2f} million in {low.idxmin():%B %Y}")
+print(f"Fall: {fall:.2f} million ({fall / m.loc['2000-01-01']:.0%});  a quarter of it: {fall / 4:.2f} million jobs")
+print(f"Latest: {m.iloc[-1]:.2f} million in {m.index[-1]:%B %Y}")
+```
+
+Between January 2000 and February 2010 the sector lost 5.84 million jobs, 34 percent of its employment.
+A quarter of that, the share linked to Chinese imports, is about 1.5 million jobs.
+
+**Your turn.** How many manufacturing jobs were lost between the 1979 peak and January 2000? Compare it
+with the fall after 2000.
+
+<details><summary>Hint</summary>
+
+`m.max() - m.loc["2000-01-01"]` gives the first fall in millions.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 11: Income inequality in the United States and France
+
+**Goal.** Follow a century of top incomes in two countries.
+
+The file gives the share of national income (before taxes and benefits) received by the richest 0.1
+percent of adults, the top 1 in 1,000, from the World Inequality Database. These data come from tax records,
+which show the very top of the distribution well.
+
+```{python}
+top = pd.read_csv(DATA_URL + "fig7-11.csv")
+top = top.rename(columns={"top01_share_us": "United States", "top01_share_france": "France"})
+top.tail()
+```
+
+Look at the last rows. France stops in 2022, and the U.S. value is exactly 9.93 in 2022, 2023 and 2024. Three
+identical values in a row are unusual for an economic series: the database seems to repeat its last estimate
+until new tax data arrive. We keep the rows but treat 2023–2024 with care.
+
+```{python}
+fig = px.line(top, x="year", y=["United States", "France"], hover_name="year",
+              labels={"year": "Year", "value": "Income share of the top 0.1% (percent)", "variable": "Country"},
+              title="Top incomes fell after 1929 in both countries, but rose again only in the U.S.")
+fig.update_yaxes(range=[0, 12])
+fig.update_layout(hovermode="x unified")
+fig.show()
+```
+
+**What to notice.**
+
+- From 1913 to 1929 the top 0.1 percent received about 9 percent of all income on average in both
+  countries, and more than 10 percent in peak years (the textbook says about 10 percent).
+- The Great Depression and World War II cut their share sharply, and it stayed low until about 1980.
+- After 1980 the U.S. share rose back to almost 10 percent, while France's stayed much lower.
+
+<!-- cell -->
+
+### Key numbers: three eras
+
+```{python}
+for start, end in [[1913, 1929], [1950, 1959], [1960, 1979], [2015, 2022]]:
+    era = top[(top.year >= start) & (top.year <= end)]
+    print(f"{start}-{end}: U.S. {era['United States'].mean():.1f}%, France {era['France'].mean():.1f}%")
+```
+
+The 1950s average is 5.0 percent in the United States and 3.7 in France; the textbook's "around 4
+percent" fits the 1960s and 1970s better. Today's data also differ from the textbook's figure in two
+places: a U.S. spike in 1950 (7.25 percent) and a higher French share after 2015 (5.56 percent in 2021,
+against about 2.8 in the textbook). The database is revised as new tax records are added.
+
+**Your turn.** In which year was the U.S. top 0.1 percent share lowest, and how high was it?
+
+<details><summary>Hint</summary>
+
+`top["United States"].idxmin()` gives the row label of the smallest value; read the year with
+`top.loc[row, "year"]`.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 12: Economic growth by income percentile
+
+**Goal.** See that growth since 1980 has been very unequal across the income distribution.
+
+Each point is the average annual growth of real income at one **percentile** of the distribution over 34
+years: from 1946 to 1980, and from 1980 to 2014. Income is measured after taxes, transfers and noncash
+benefits, from the Distributional National Accounts of Piketty, Saez and Zucman. Above the 99th percentile
+the file zooms in: 99.1, 99.2, ..., 99.99, 99.991, ..., 99.999.
+
+```{python}
+growth = pd.read_csv(DATA_URL + "fig7-12.csv")
+growth.head()
+```
+
+`series` tells the two kinds of rows apart: growth at each percentile (the textbook's two curves), and
+growth of group averages (bottom 50 percent, middle 40 percent, top 10 percent, ...) from the authors'
+2022 update, which also covers 1985–2019. As in the textbook, we start at the 5th percentile and stop the
+1946–1980 curve at the 99th, because above it the curve jumps up and down between 1 and 3.6 percent.
+
+> **Python note.** `|` means "or". `.map({...})` replaces each end year with a readable label, and
+> `fig.add_traces(...)` adds the traces of a second chart to the first one.
+
+```{python}
+curves = growth[(growth.series == "g-percentile (PSZ 2018)") & (growth.percentile >= 5)].copy()
+curves = curves[(curves.year == 2014) | (curves.percentile <= 99)]
+curves["period"] = curves.year.map({1980: "1946–1980 (“In 1980”)", 2014: "1980–2014 (“In 2014”)"})
+groups = growth[growth.series == "group average (PSZ 2022)"].copy()
+groups["period"] = groups.start_year.astype(str) + "–" + groups.year.astype(str) + ", group averages"
+fig = px.line(curves, x="percentile", y="growth_pct", color="period", markers=True, hover_name="period",
+              color_discrete_sequence=["#e0a33b", BLUE],
+              labels={"percentile": "Income percentile", "growth_pct": "Average annual growth (percent)", "period": "Period"},
+              title="Since 1980, the richest have seen the fastest income growth")
+dots = px.scatter(groups, x="percentile", y="growth_pct", color="period", hover_name="group",
+                  color_discrete_sequence=["#5aa0d8", TEAL, GREEN], symbol_sequence=["diamond"])
+fig.add_traces(dots.data)
+fig.update_traces(marker=dict(size=6))
+fig.update_yaxes(range=[-0.5, 7])
+fig.update_layout(legend=dict(orientation="h", y=-0.2, yanchor="top"))
+fig.show()
+```
+
+**What to notice.**
+
+- From 1946 to 1980 (orange), the poorer half grew fastest: above 2.5 percent a year at the bottom, under 2
+  percent in the upper middle.
+- From 1980 to 2014 (blue), the pattern flipped: under 1 percent a year up to the 57th percentile,
+  above 2 percent at the 99th percentile, and about 6 percent at the very top.
+- The group averages (diamonds) tell the same story. The newest period, 1985–2019, still favors the top,
+  though less steeply.
+
+<!-- cell -->
+
+### Key numbers: who grew how fast
+
+```{python}
+p1980 = curves[curves.year == 1980].set_index("percentile").growth_pct
+p2014 = growth[(growth.series == "g-percentile (PSZ 2018)") & (growth.year == 2014)].set_index("percentile").growth_pct
+print(f"Median (50th percentile): {p1980[50]:.2f}% a year in 1946-1980, {p2014[50]:.2f}% in 1980-2014")
+print("Percentiles with falling income, 1980-2014:", p2014[p2014 < 0].index.tolist())
+faster = p2014[(p2014.index >= 5) & (p2014.index <= 99)] > p1980
+print(f"First percentile where 1980-2014 growth beats 1946-1980: {faster[faster].index.min():.0f}")
+print(f"Top of the distribution, 1980-2014: 99.9th {p2014[99.9]:.2f}%, 99.99th {p2014[99.99]:.2f}%, 99.999th {p2014[99.999]:.2f}%")
+```
+
+The textbook says that average growth was about 2 percent a year before 1980 and 1.4 percent after. Our file
+does not have the overall average, but the median tells the story: 1.93 percent a year before 1980 and 0.91
+after. Only the bottom five percentiles lost income after 1980, and the 1980–2014 curve rises above the old
+one from the 96th percentile on. At the very top, growth reached 4 to 6 percent a year, as fast as the
+fastest-growing countries.
+
+**Your turn.** Use the `groups` table: how fast did the average income of the bottom 50 percent grow in
+1980–2014, and how fast in 1985–2019?
+
+<details><summary>Hint</summary>
+
+Keep the rows with `groups.group == "bottom 50%"` and look at the `year` and `growth_pct` columns.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Figure 13: The declining college wage premium of the 1970s
+
+**Goal.** Use the college labor market of Figure 9 to explain why the premium *fell* in the 1970s.
+
+The textbook's data show the college premium falling during the 1970s, even though technology kept raising
+the demand for college graduates. The answer: in that decade supply shifted out by **more** than demand. The
+baby boom generation reached college age, and the Vietnam War drew many young men to college. We reuse
+`college_market`, now with a large supply shift.
+
+```{python}
+def premium_1970s(shift_d=10.0, shift_s=25.0):
+    """Figure 7.13: college labor supply shifts out by more than demand, so the college wage falls."""
+    fig = go.Figure()
+    w_1, w_2 = college_market(fig, shift_d, shift_s)
+    L_1 = equilibrium(a_d=90.0, b_d=0.4, a_s=30.0, b_s=0.6)[0]
+    L_2 = equilibrium(a_d=90.0 + shift_d, b_d=0.4, a_s=30.0 - shift_s, b_s=0.6)[0]
+    fig.update_layout(title=f"College employment {L_1:.0f} → {L_2:.1f}, college wage {w_1:.0f} → {w_2:.1f}",
+                      xaxis=dict(title="Employment of college graduates", range=[0, 110]),
+                      yaxis=dict(title="Wage of college graduates", range=[0, 110]))
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(premium_1970s,
+         shift_d=FloatSlider(value=10, min=0, max=20, step=2.5, description="college demand shifts out by", style=WIDE),
+         shift_s=FloatSlider(value=25, min=0, max=30, step=2.5, description="college supply shifts out by", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 13 with a precomputed slider for the shift in college labor supply
+slider_figure(premium_1970s, "shift_s", [0, 5, 10, 15, 20, 25, 30], start=25, label="college supply shifts out by")
+```
+
+**What to notice.**
+
+- Demand shifts out by 10 and supply by 25: employment of college graduates rises from 60 to 95, but their
+  wage falls from 66 to 62.
+- Figures 9 and 13 use the same model. Whether the premium rises or falls depends only on which shift wins.
+- Move the supply shift down to 15 and the wage stops falling: $0.6 \times 10 = 0.4 \times 15$.
+
+**Your turn.** With a supply shift of 25, how large must the demand shift be for the college wage to stay at 66?
+
+<details><summary>Hint</summary>
+
+Use the rule from Figure 9: the wage stays put when $0.6 \times \text{shift}_d = 0.4 \times \text{shift}_s$.
+Check with `premium_1970s(shift_d=..., shift_s=25)`.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
+## Key numbers
+
+This table collects the main numbers of the chapter. Each one is computed with the data and functions above.
+
+```{python}
+rows = [
+    ["Employment-population ratio, 1960 average (%)", ratio.loc["1960"].mean()],
+    ["Employment-population ratio, Dec. 2006 to Jan. 2010 (points)", ratio.loc["2006-12-01"] - ratio.loc["2010-01-01"]],
+    ["Unemployment rate, October 2009 (%)", u.loc["2009-10-01"]],
+    ["Unemployment rate, April 2020 (%)", u.loc["2020-04-01"]],
+    ["Unemployment rate, January 2023, from Table 7.1 (%)", force.loc["2023-01-01", "unemployment_rate"]],
+    ["Labor market: equilibrium employment L*", equilibrium()[0]],
+    ["Labor market: equilibrium wage w*", equilibrium()[1]],
+    ["Employment with a 25% income tax, L'", equilibrium(tau=0.25)[0]],
+    ["Employment after demand falls by 20, flexible wage L'", equilibrium(a_d=80)[0]],
+    ["Employment after demand falls by 20, rigid wage L''", demand_at_wage(55, a_d=80)],
+    ["Natural rate of unemployment, s = 0.01, f = 0.20 (%)", 100 * 0.01 / (0.20 + 0.01)],
+    ["Europe's unemployment rate, 1960-1975 average (%)", early["Europe"].mean()],
+    ["Present value of $100 a year for 20 years at 10%", pdv(100, 0.10, 20)],
+    ["Present value of a working life ($100,000 for 45 years at 3%, $ million)", pdv(100_000, 0.03, 45) / 1e6],
+    ["College wage premium, 2020 (log points)", c.loc[2020, "college_premium_log_pct"]],
+    ["Manufacturing jobs lost, Jan. 2000 to Feb. 2010 (million)", fall],
+    ["U.S. income share of the top 0.1%, 2022 (%)", top.set_index("year").loc[2022, "United States"]],
+]
+pd.DataFrame(rows, columns=["Quantity", "Value"]).round(2)
+```
+
+## Summary
+
+- The employment-population ratio rose for decades as women joined the labor force, while men's ratio
+  fell. Both the ratio and the unemployment rate swing sharply in recessions.
+- In the supply-and-demand model of the labor market, an income tax shifts supply back and lowers
+  employment; a fall in labor demand lowers both the wage and employment. If the wage does not fall,
+  employment falls even more and some people who want a job cannot find one.
+- The bathtub model gives the natural rate of unemployment, $u^* = \bar{s}/(\bar{f} + \bar{s})$: about 5
+  percent with U.S. job finding and separation rates. Europe's higher unemployment since the 1980s reflects
+  adverse shocks combined with labor market institutions.
+- Present discounted values compare payments at different dates: a working life is worth millions of
+  dollars today, and a college degree several hundred thousand.
+- The college premium rose while college graduates became more numerous, so demand for skills must have
+  grown faster than supply. Inequality at the very top has risen sharply in the United States since 1980.
+- The next chapter turns to the other long-run topic of the book: **inflation**.
