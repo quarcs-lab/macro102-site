@@ -13,9 +13,25 @@ Read by `notebooks/ch11-the-is-curve.ipynb` from
 Full definitions and the validation against the textbook are in macro102's
 `original-scanned-book/ch11-the-is-curve/data/fig11-6/notes.md`.
 
-## Wider files built for the notebook widgets
+## Wider files built by `build_data.py`
 
-None. The chapter's only data figure uses `fig11-6.csv` as copied, and the model figures need no data.
+The chapter's only data figure uses `fig11-6.csv` as copied, and the model figures need no data. One wider file
+serves the practice problems (Problem 6). `build_data.py` downloads it from FRED (`fredgraph.csv`, requests' default
+User-Agent) and caches the raw responses in macro102's `.work/ch11/notebook-raw/` (delete a cached file to download
+it again). Run it from the macro102 checkout: `.venv/bin/python -I ../macro102-site/data/ch11/build_data.py`.
+
+- `spending_quarterly.csv`: `date, gdp, consumption, investment`. Quarterly, 1947Q1 to 2026Q2 (318 quarters, no missing
+  values). Each date is the first day of its quarter.
+  - `gdp`: real gross domestic product (BEA via FRED, `GDPC1`, <https://fred.stlouisfed.org/series/GDPC1>).
+  - `consumption`: real personal consumption expenditures (BEA via FRED, `PCECC96`, <https://fred.stlouisfed.org/series/PCECC96>).
+  - `investment`: real gross private domestic investment (BEA via FRED, `GPDIC1`, <https://fred.stlouisfed.org/series/GPDIC1>).
+  - All three in billions of chained 2017 dollars, seasonally adjusted annual rates, rounded to 3 decimals.
+  - Validation: the 294 quarters from 1953Q1 on equal the same columns of `data/ch10/us_quarterly.csv` (largest
+    difference 0.000), and `gdp` equals collect-data's `ex07/raw/fred_GDPC1.csv` (largest difference 0.000).
+  - Look at your data: chained-dollar components do not add up to GDP, so their ratios are not spending shares
+    (real investment is 13.8 percent of real GDP on average, between 9.0 percent in 1949Q2 and 19.5 percent in
+    2025Q1). The practice problem uses growth rates only. The largest four-quarter falls are −7.4 percent for GDP and
+    −8.6 percent for consumption (both 2020Q2), and −29.0 percent for investment (1949Q2).
 
 The figure stays U.S.-only (conventions §6b): its subject is the CBO's February 2009 forecasts of the U.S.
 unemployment rate with and without the ARRA stimulus, a series that exists only for the U.S. Cross-country
