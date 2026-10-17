@@ -33,6 +33,12 @@
 | 21 | [Parting Thoughts](notebooks/ch21-parting-thoughts.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/ch21-parting-thoughts.ipynb) |
 <!-- END chapter-list -->
 
+## Appendices
+
+| Appendix | Notebook | Colab |
+|---|---|---|
+| A | [Google Colab, Python Coding, and Data Science Libraries](notebooks/appA-google-colab-python-and-data-science-libraries.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/appA-google-colab-python-and-data-science-libraries.ipynb) |
+
 ## Repository layout
 
 | Path | What it holds |
@@ -40,6 +46,7 @@
 | `notebooks/` | The chapter notebooks (`.ipynb`, saved with outputs). Open them in Colab. |
 | `src/` | The source of each notebook (`.qmd`). The notebook is generated from it, so edit the source, not the `.ipynb`. |
 | `data/chNN/` | The CSV files each notebook reads, plus a `README.md` with sources and a `build_data.py` that rebuilds the wider files. |
+| `data/appA/`, `images/appA/` | The data files and the Colab screenshots of Appendix A. |
 | `_quarto.yml`, `index.qmd`, `_includes/` | The Quarto book website. |
 
 ## Rebuilding
