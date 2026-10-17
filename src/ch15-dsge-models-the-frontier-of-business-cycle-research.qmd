@@ -43,7 +43,7 @@ import pandas as pd                   # data tables
 import plotly.express as px           # quick charts from data tables
 import plotly.graph_objects as go     # charts built piece by piece (model figures)
 import plotly.io as pio
-from ipywidgets import interact, FloatSlider, IntSlider, ToggleButtons, Dropdown
+from ipywidgets import interact, fixed, FloatSlider, IntSlider, ToggleButtons, Dropdown
 
 # One light blue/green look for every chart
 BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
@@ -1671,3 +1671,762 @@ compare `supply_wage(labor_needed(0.95), 0.65)` with `w0`.
   say how much and how fast GDP, consumption, hours and inflation respond to each shock.
 - The next chapter studies **consumption** itself: the permanent-income hypothesis and the microfoundations behind
   the consumption that this chapter took as given.
+
+<!-- cell -->
+
+## Practice problems
+
+These ten problems put the chapter's tools to work: *conceptual problems* apply its equations to real episodes,
+*data-based problems* send you back to Fernald's data and the Penn World Table, and *modeling problems* answer policy
+questions with the labor-market diagrams. Each problem is marked Basic, Intermediate or Challenge. Try it on your own
+before you open the Hint and the Solution; the sliders of the modeling problems run in Colab (open the notebook with
+the badge at the top), and on the website you can use the website version of each figure above.
+
+<!-- cell -->
+
+### Conceptual problems
+
+<!-- cell -->
+
+**Problem 1 (Basic): How long do shocks last in an estimated DSGE model?** Smets and Wouters (2007) estimated
+their model on quarterly U.S. data from 1966 to 2004. Each of its shocks fades like the shock process of the Model
+overview, $x_{t+1} = \rho\,x_t + \varepsilon_{t+1}$. The table lists five of their estimates of $\rho$ (the posterior
+modes in Table 1b of the [working-paper version](https://www.ecb.europa.eu/pub/pdf/scpwps/ecbwp722.pdf); the article
+is [doi:10.1257/aer.97.3.586](https://doi.org/10.1257/aer.97.3.586)).
+
+| Shock | What it moves | $\rho$ per quarter |
+|---|---|---|
+| productivity | TFP | 0.95 |
+| government spending | public purchases | 0.97 |
+| investment technology | how much new capital each dollar of investment buys | 0.71 |
+| risk premium | the gap between the central bank's rate and the return households require | 0.18 |
+| monetary policy | the interest rate, beyond what the central bank's rule prescribes | 0.12 |
+
+(a) Use the half-life formula of the Model overview to compute the half-life of each shock, in quarters.
+
+(b) Use equation (1) to compute the share of each shock that is still left one year (4 quarters) after it hits.
+
+(c) The monetary policy shock is almost gone after a single quarter, yet the chapter reports that GDP falls most 3 to
+4 quarters after a monetary shock. Which features of a DSGE model can give a short-lived shock long-lived effects?
+
+<details><summary>Hint</summary>
+
+The half-life is $h = \ln 2/(-\ln\rho)$, and by equation (1) the share left after $n$ quarters is $\rho^n$;
+`np.log` gives the natural log. For (c), reread the frictions in "The building blocks of a DSGE model", the adjustment-cost rule
+after equation (1), and ask how a central bank moves its interest rate from one quarter to the next.
+
+</details>
+
+<!-- cell -->
+
+**Your answer:**
+
+```{python}
+# Your answer here
+```
+
+<details><summary>Solution</summary>
+
+**(a) and (b).** For productivity, $h = \ln 2/(-\ln 0.95) = 0.6931/0.0513 = 13.5$ quarters, and after a year
+$0.95^4 = 0.81$ of the shock is left. The same two steps for every shock give:
+
+| Shock | $\rho$ | Half-life, quarters | Share left after a year, $\rho^4$ |
+|---|---|---|---|
+| productivity | 0.95 | 13.5, about 3.4 years | 0.81 |
+| government spending | 0.97 | 22.8, about 5.7 years | 0.89 |
+| investment technology | 0.71 | 2.0 | 0.25 |
+| risk premium | 0.18 | 0.40 | 0.001 |
+| monetary policy | 0.12 | 0.33 | 0.0002 |
+
+The productivity estimate of 0.95 is close to the $\rho = 0.958$ that the Model overview derived from a half-life of
+16 quarters. In Python:
+
+```python
+shocks = {"productivity": 0.95, "government spending": 0.97, "investment technology": 0.71,
+          "risk premium": 0.18, "monetary policy": 0.12}
+for name, rho_shock in shocks.items():
+    half_life = np.log(2) / -np.log(rho_shock)
+    print(f"{name:22s} half-life {half_life:5.2f} quarters, left after a year {rho_shock ** 4:.4f}")
+```
+
+`shocks.items()` walks through the pairs of a dictionary, one name and one value at a time.
+
+**(c)** A shock and its effects are not the same thing. Three features spread a short shock over many quarters:
+
+- **Adjustment costs.** With the rule $y_t = y_{t-1} + \lambda(x_t - y_{t-1})$, the economy closes only part of the
+  gap each quarter, so its response keeps growing after the shock has faded. With $\rho = 0.8$ and $\lambda = 0.3$
+  it peaks 3 quarters later (the Model overview's check).
+- **Sticky prices and wages.** Prices adjust slowly, so a higher nominal interest rate is also a higher real rate for
+  several quarters, and spending stays low.
+- **A smooth policy rule.** In the estimated rule the interest rate puts a weight of 0.81 on its own value of the
+  quarter before (Table 1a of the same paper), so a rate that jumps comes back down only slowly, long after the
+  shock itself is gone.
+
+So the long swings of a DSGE model come either from shocks that are very persistent themselves (productivity,
+government spending) or from frictions that stretch short-lived shocks, like the monetary one, over many quarters.
+
+</details>
+
+<!-- cell -->
+
+**Problem 2 (Intermediate): Two recessions, two stories: 1974 and 1982.** John Fernald's data in `tfp_annual.csv`
+([Federal Reserve Bank of San Francisco](https://www.frbsf.org/research-and-insights/data-and-indicators/total-factor-productivity-tfp/))
+give, for the U.S. business sector (percent per year):
+
+| Year | Output growth | Raw Solow residual | Utilization |
+|---|---|---|---|
+| 1974 | −1.56 | −3.72 | −2.62 |
+| 1982 | −2.31 | −2.76 | −2.94 |
+
+(a) Use equation (4) to compute true TFP growth in each year.
+
+(b) In 1973–74 an oil embargo nearly quadrupled the price of oil, from \$2.90 to \$11.65 a barrel
+([Federal Reserve History](https://www.federalreservehistory.org/essays/oil-shock-of-1973-74)). Our production function
+has no oil in it. Explain why a jump in the price of oil can act like a fall in $\bar{A}$, and use the table
+"Which way do employment and the real wage move?" of the Model overview to say what the flexible-price labor market
+predicts.
+
+(c) In 1981–82 the Federal Reserve tightened money until the federal funds rate approached 20 percent, and
+unemployment reached nearly 11 percent late in 1982
+([Federal Reserve History](https://www.federalreservehistory.org/essays/recession-of-1981-82)). Which row of the same
+table fits 1982? Why did the raw Solow residual fall that year anyway?
+
+(d) What do the two years say about the claim that TFP shocks drive business cycles?
+
+<details><summary>Hint</summary>
+
+Equation (4) says raw residual = true TFP growth + utilization growth, so subtract. For (b), think about what the same
+workers and machines can produce once energy is much more expensive. For (c), a monetary contraction is a monetary
+expansion run in reverse; which friction lets money change employment?
+
+</details>
+
+<!-- cell -->
+
+**Your answer:**
+
+<!-- cell -->
+
+<details><summary>Solution</summary>
+
+**(a)** From equation (4), $g_A = (\text{raw residual}) - g_u$:
+
+- 1974: $g_A = -3.72 - (-2.62) = -1.10$ percent (Fernald's adjusted series has $-1.09$; the identity holds only
+  approximately for annual averages);
+- 1982: $g_A = -2.76 - (-2.94) = +0.18$ percent.
+
+True TFP fell in 1974 and was roughly flat in 1982, although the raw residual fell in both years.
+
+**(b)** Output in equation (2) is value added: what capital and labor produce beyond the materials and energy that firms
+buy. When oil costs nearly four times as much, firms use less of it and switch to slower, less energy-intensive ways of
+working, and some energy-hungry machines stop paying their way. The same $K$ and $L$ then produce less value added,
+which the model reads as a lower $\bar{A}$. With flexible prices, labor demand shifts down: employment and the real
+wage both fall, the first row of the table. This is the real business cycle story, and in 1974 it fits: true TFP fell
+by about 1.1 percent in a recession year.
+
+**(c)** A monetary contraction with **sticky prices**: the output demanded falls, the vertical labor demand curve of
+equation (9) shifts left, and employment and the real wage both fall (the "monetary expansion, sticky prices" row, in
+reverse). The sticky-wage row, run in reverse, fits as well: with nominal wages stuck, a lower price level raises the
+real wage $\bar{W}/P$, and firms hire fewer workers. Either way a nominal rigidity lets money cut employment, and TFP
+plays no role. The raw residual fell by 2.76 percent only because utilization fell by 2.94 percent:
+firms kept workers and machines on hand but ran them less intensively, and equation (3) counts that as lost
+productivity.
+
+**(d)** The evidence is mixed. Some recessions, like 1974, come with a true fall in TFP; others, like 1982, have flat
+TFP and a clear monetary cause. Measured with the raw residual, both years look like TFP recessions, which is why
+the first RBC models looked so successful. A model of the cycle needs both TFP shocks and monetary shocks with
+nominal rigidities: the two flavors that modern DSGE models combine.
+
+</details>
+
+<!-- cell -->
+
+**Problem 3 (Challenge): How elastic must labor supply be?** Economists measure how strongly hours respond to a
+temporary change in the wage, holding consumption fixed, with the **Frisch elasticity** $\eta$. Chetty, Guren, Manoli
+and Weber ([NBER Working Paper 16729](https://www.nber.org/papers/w16729)) note that business-cycle models need much
+larger labor supply elasticities than studies of individual workers find; their synthesis of the micro evidence points
+to Frisch elasticities of about 0.5 for the hours of people who work and 0.25 for the decision to work at all.
+
+(a) Show that the labor supply curve (6) has a Frisch elasticity of 1.
+
+(b) Replace the disutility of work in the household's utility by $\frac{\eta}{\eta+1}\,\bar{\ell}^{-1/\eta}L^{(\eta+1)/\eta}$.
+Derive the new labor supply curve and check that it is equation (6) when $\eta = 1$. Then solve the labor market with
+labor demand (5) and no tax, and show that the elasticity of $L^*$ with respect to $\bar{A}$ is $3\eta/(3+\eta)$.
+
+(c) In Fernald's data for 1950–2025, the growth of hours worked has a standard deviation of 2.57 percentage points
+and the growth of utilization-adjusted TFP one of 1.40 points (files `tfp_inputs.csv` and `tfp_annual.csv`, from the
+[Federal Reserve Bank of San Francisco](https://www.frbsf.org/research-and-insights/data-and-indicators/total-factor-productivity-tfp/)).
+If TFP shocks in the flexible-price labor market were the only reason hours move, how large would $\eta$ have to be?
+Compare it with the micro estimate of 0.5 and with the chapter's $\eta = 1$.
+
+<details><summary>Hint</summary>
+
+(a) Take logs of equation (6) and change $\ln w$ with $c$ fixed. (b) The derivative of the new disutility with
+respect to $L$ is $(L/\bar{\ell})^{1/\eta}$; set it equal to $w/c$. Then repeat steps 1–4 of the labor market's
+"Solving the model", with the power $1/\eta$ in place of 1. (c) If $\ln L$ always moves $\epsilon$ times as much as
+$\ln\bar{A}$, its standard deviation is $\epsilon$ times as large. Solve $3\eta/(3+\eta) = \epsilon$ for $\eta$.
+
+</details>
+
+<!-- cell -->
+
+**Your answer:**
+
+```{python}
+# Your answer here
+```
+
+<details><summary>Solution</summary>
+
+**(a)** Taking logs of (6), $\ln L^s = \ln\bar{\ell} + \ln w - \ln c$. With $c$ fixed, a 1 percent higher wage raises
+$\ln L^s$ by 1 percent: $\partial\ln L^s/\partial\ln w = 1$, so the Frisch elasticity is 1.
+
+**(b)** Utility is now $U = \ln c - \frac{\eta}{\eta+1}\bar{\ell}^{-1/\eta}L^{(\eta+1)/\eta}$, with $c = wL - \bar{S}$.
+The power rule brings down $(\eta+1)/\eta$, which cancels the factor in front, and lowers the power by one, to
+$1/\eta$:
+
+$$\frac{dU}{dL} = \frac{w}{c} - \bar{\ell}^{-1/\eta}L^{1/\eta} = \frac{w}{c} - \left(\frac{L}{\bar{\ell}}\right)^{1/\eta} = 0
+\quad\Longrightarrow\quad L^s = \bar{\ell}\left(\frac{w}{c}\right)^{\eta}.$$
+
+With $\eta = 1$ the disutility is $\frac{1}{2}\bar{\ell}^{-1}L^2$ and $L^s = \bar{\ell}\,w/c$: equation (6). Written as a
+wage, supply is $w = c\,(L/\bar{\ell})^{1/\eta}$. Set it equal to labor demand (5):
+
+$$c\,\bar{\ell}^{-1/\eta}L^{1/\eta} = \frac{2}{3}\cdot\frac{\bar{A}K^{1/3}}{L^{1/3}}
+\quad\Longrightarrow\quad L^{1/\eta + 1/3} = \frac{2}{3}\cdot\frac{\bar{A}K^{1/3}\,\bar{\ell}^{1/\eta}}{c}.$$
+
+The power on the left is $\frac{1}{\eta} + \frac{1}{3} = \frac{3+\eta}{3\eta}$, so raise both sides to $\frac{3\eta}{3+\eta}$:
+
+$$L^* = \left[\frac{2}{3}\cdot\frac{\bar{A}K^{1/3}\,\bar{\ell}^{1/\eta}}{c}\right]^{3\eta/(3+\eta)}.$$
+
+In logs, $\ln L^* = \text{const} + \frac{3\eta}{3+\eta}\ln\bar{A}$: the elasticity is $3\eta/(3+\eta)$, which is $3/4$
+for $\eta = 1$, as in the comparative-statics table. It is 0.429 for $\eta = 0.5$ and 1.5 for $\eta = 3$, and it can never
+reach 3, however elastic labor supply is: the falling marginal product caps it.
+
+**(c)** The required elasticity is $\epsilon = 2.57/1.40 = 1.84$. Solving $3\eta/(3+\eta) = \epsilon$ gives
+$3\eta = \epsilon(3+\eta)$, so $\eta = 3\epsilon/(3-\epsilon) = 4.7$. That is nearly ten times the micro estimate of
+0.5. With $\eta = 0.5$, TFP shocks would move hours with a standard deviation of only $0.429 \times 1.40 = 0.60$
+points, under a quarter of the 2.57 in the data; with the chapter's $\eta = 1$, about $0.75 \times 1.40 = 1.05$
+points. Problem 4 adds a second difficulty: hours and adjusted TFP do not even move in the same direction.
+
+```python
+inputs = pd.read_csv(DATA_URL + "tfp_inputs.csv")
+ratio = inputs.hours_growth.std() / inputs.tfp_util.std()
+print(f"standard deviations: hours {inputs.hours_growth.std():.2f}, adjusted TFP {inputs.tfp_util.std():.2f}")
+print(f"elasticity needed {ratio:.2f}, so eta = {3 * ratio / (3 - ratio):.1f}")
+for eta in (0.5, 1.0, 3.0):
+    print(f"eta = {eta}: employment elasticity {3 * eta / (3 + eta):.3f}")
+```
+
+This is the labor-supply puzzle of real business cycle models: to let TFP shocks drive hours, they need labor supply
+far more elastic than studies of workers find. DSGE models answer with other shocks and with nominal rigidities.
+
+</details>
+
+<!-- cell -->
+
+### Data-based problems
+
+<!-- cell -->
+
+**Problem 4 (Basic): Do hours rise when TFP rises?** The file `tfp_inputs.csv` holds John Fernald's
+growth-accounting data for the U.S. business sector, 1950–2025 ([Federal Reserve Bank of San
+Francisco](https://www.frbsf.org/research-and-insights/data-and-indicators/total-factor-productivity-tfp/); see the
+[data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch15/README.md)): the growth of output, hours,
+capital and labor quality, capital's share, and both TFP measures with utilization. Compute the correlation of hours
+growth with the raw Solow residual and with utilization-adjusted TFP growth. The flexible-price labor market predicts
+that hours rise with TFP (an elasticity of 0.75); with sticky prices and unchanged demand, equation (9) predicts that
+they fall (an elasticity of −3/2). Which prediction do the numbers support, and why do the two TFP measures disagree?
+
+<details><summary>Hint</summary>
+
+`inputs.hours_growth.corr(inputs.tfp_util)` gives one correlation. To see why the measures disagree, also correlate
+hours with `utilization`, and remember equation (4).
+
+</details>
+
+```{python}
+# Your answer here
+```
+
+<!-- cell -->
+
+**Your answer:**
+
+<!-- cell -->
+
+<details><summary>Solution</summary>
+
+Read the file and compute three correlations:
+
+```python
+inputs = pd.read_csv(DATA_URL + "tfp_inputs.csv")
+print(f"hours and raw TFP:      {inputs.hours_growth.corr(inputs.tfp_solow):+.2f}")
+print(f"hours and adjusted TFP: {inputs.hours_growth.corr(inputs.tfp_util):+.2f}")
+print(f"hours and utilization:  {inputs.hours_growth.corr(inputs.utilization):+.2f}")
+```
+
+Hours growth has a correlation of +0.38 with the raw residual but −0.39 with adjusted TFP. Once utilization is
+removed, years of fast TFP growth tend to be years in which hours *fall*. That is the sign that sticky prices predict:
+when TFP rises and demand does not keep up, firms need fewer workers. Basu, Fernald and Kimball (2006),
+["Are Technology Improvements Contractionary?"](https://www.aeaweb.org/articles?id=10.1257/aer.96.5.1418), reach the
+same answer with careful estimates: inputs fall at first when technology improves, which fits simple sticky-price
+models but not the standard RBC model.
+
+The raw residual disagrees because it contains utilization (equation 4), and utilization rises and falls with hours:
+their correlation is +0.65. Firms that hire more also run their workers and machines harder, and plain growth
+accounting records the extra intensity as higher TFP.
+
+</details>
+
+<!-- cell -->
+
+**Problem 5 (Intermediate): Growth accounting by hand.** Fernald computes the raw Solow residual (`tfp_solow`) from the
+columns of `tfp_inputs.csv`. Rebuild it yourself.
+
+(a) Use equation (3), with the weights 1/3 and 2/3, to compute the residual in every year from output, capital and hours
+growth; the notebook's `solow_residual` function works on whole columns. Compare your residual with `tfp_solow` in
+2009 and 2020.
+
+(b) Over 1950–2025, what are the correlation and the average gap between your residual and Fernald's?
+
+(c) Fernald's formula differs from equation (3) in two ways: capital's share $\alpha$ is measured every year
+(`capital_share`), and labor input also grows with **labor quality** $g_q$ (`labor_quality`), the skill and
+experience mix of the hours worked: $g_A = g_Y - \alpha g_K - (1-\alpha)(g_L + g_q)$. Recompute the residual with this
+formula. How large is the largest gap now?
+
+(d) In which two years did labor quality grow fastest, and why might it jump in those years?
+
+<details><summary>Hint</summary>
+
+`solow_residual(inputs.gdp_growth, inputs.capital_growth, inputs.hours_growth)` returns a whole column; store it as a
+new column. `inputs.year.isin([2009, 2020])` picks the two years, and `.nlargest(3, "labor_quality")` the years with
+the fastest labor-quality growth. Look at hours growth in those years.
+
+</details>
+
+```{python}
+# Your answer here
+```
+
+<details><summary>Solution</summary>
+
+```python
+inputs = pd.read_csv(DATA_URL + "tfp_inputs.csv")
+inputs["simple"] = solow_residual(inputs.gdp_growth, inputs.capital_growth, inputs.hours_growth)
+alpha = inputs.capital_share
+inputs["full"] = (inputs.gdp_growth - alpha * inputs.capital_growth
+                  - (1 - alpha) * (inputs.hours_growth + inputs.labor_quality))
+print(inputs[inputs.year.isin([2009, 2020])][["year", "simple", "full", "tfp_solow"]].round(2).to_string(index=False))
+gap = inputs.simple - inputs.tfp_solow
+print(f"equation (3): correlation {inputs.simple.corr(inputs.tfp_solow):.3f}, average gap {gap.mean():.2f}")
+print(f"with alpha and labor quality: largest gap {(inputs.full - inputs.tfp_solow).abs().max():.2f}")
+print(inputs.nlargest(3, "labor_quality")[["year", "hours_growth", "labor_quality"]].to_string(index=False))
+```
+
+**(a)** In 2009, equation (3) gives $-3.75 - \tfrac{1}{3}\times 1.76 - \tfrac{2}{3}\times(-7.74) = +0.82$ percent with
+these rounded numbers (+0.83 from the unrounded data), against Fernald's −0.15; in 2020 it gives +1.27 against −0.23.
+In both deep recessions the simple formula even turns the sign.
+
+**(b)** Over all 76 years the two residuals have a correlation of 0.988, but the simple one is on average 0.23 points
+higher.
+
+**(c)** With the measured capital share and labor quality, the residual is −0.25 in 2009 and −0.29 in 2020, and the
+largest gap in any year is 0.10 points; it is not zero only because the identity is exact for quarterly data and
+approximate for annual averages. Most of the average gap of (b) is labor quality: it grows by 0.38 percent a year on
+average, and equation (3) leaves its contribution, $\tfrac{2}{3} \times 0.38 = 0.25$, inside TFP.
+
+**(d)** The fastest years are 2020 (1.63 percent) and 2009 (1.19 percent), the two years in which hours fell by
+about 7.7 percent. Labor quality weights each hour by what that kind of worker earns. When it jumps, the hours of
+less experienced and lower-paid workers have fallen much more than the others, so the average quality of the hours
+still worked rises. Without that correction, equation (3) counts the better mix of workers as higher TFP.
+
+</details>
+
+<!-- cell -->
+
+**Problem 6 (Challenge): Is the United States an exception?** In Fig. 1's "Beyond the United States" chart, the
+[Penn World Table 11.0](https://www.rug.nl/ggdc/productivity/pwt/) TFP of the United States fell in only half of its
+years of falling GDP, while most countries' TFP fell almost every time.
+
+(a) For each of the 120 countries in `pwt_growth.csv`, compute the correlation between GDP growth and TFP growth over all
+of its years, and collect the results in a table.
+
+(b) What is the median correlation? Where does the United States rank, counting from the lowest? Which five countries
+have the lowest correlations?
+
+(c) Compute the median correlation in each region. Which region stands out?
+
+(d) Does a high correlation show that TFP shocks cause booms and recessions? Use equation (4) and Problem 4.
+
+<details><summary>Hint</summary>
+
+Loop over `sorted(pwt.country.unique())`, keep one country's rows, and compute `.corr()` of its two columns; append a
+small dictionary per country to a list and turn the list into a DataFrame with `pd.DataFrame(rows)`. Then
+`.sort_values("r")`, `.median()` and `.groupby("region")`.
+
+</details>
+
+```{python}
+# Your answer here
+```
+
+<!-- cell -->
+
+**Your answer:**
+
+<!-- cell -->
+
+<details><summary>Solution</summary>
+
+```python
+pwt = pd.read_csv(DATA_URL + "pwt_growth.csv")
+rows = []
+for country in sorted(pwt.country.unique()):
+    data = pwt[pwt.country == country]
+    rows.append({"country": country, "region": data.region.iloc[0], "years": len(data),
+                 "r": data.gdp_growth.corr(data.tfp_growth)})
+table = pd.DataFrame(rows).sort_values("r")
+us_r = table[table.country == "United States"].r.iloc[0]
+print(f"median correlation {table.r.median():.2f}; United States {us_r:.2f}, "
+      f"rank {(table.r < us_r).sum() + 1} of {len(table)} from the lowest")
+print(table.head(5).round(2).to_string(index=False))
+print(table.groupby("region").r.median().round(2).sort_values())
+```
+
+`rows.append({...})` adds one dictionary, one row of the future table, to the list. `.iloc[0]` takes the first value
+of a column.
+
+**(b)** The median correlation is 0.86: in most countries measured TFP rises and falls almost one for one with GDP. The
+United States, at 0.70, ranks 15th of 120 from the lowest. The five lowest are Serbia (0.18, with only 29 years of data),
+Tanzania (0.45), Colombia (0.51), Canada (0.56) and South Africa (0.59).
+
+**(c)** North America, that is Canada and the United States, has a median of 0.63; every other region lies between
+0.83 and 0.91. So the United States is unusual, but not alone: its neighbor is even lower.
+
+**(d)** No. PWT's TFP is a raw Solow residual, and by equation (4) it contains the change in utilization. Whenever GDP
+falls for any reason (less demand, tighter credit, a monetary contraction), firms use their workers and machines less
+intensively, and the residual falls with GDP. The correlation can therefore run from GDP to measured TFP, not from TFP
+to GDP. For the United States, the one country here with a utilization-adjusted series, Problem 4 found that adjusted
+TFP and hours move in opposite directions.
+
+</details>
+
+<!-- cell -->
+
+### Modeling problems
+
+<!-- cell -->
+
+**Problem 7 (Basic): Could a fall in TFP explain 2020?** In 2020 U.S. business output fell by 2.90 percent, while
+Fernald's utilization-adjusted TFP *rose* by 1.81 percent (`tfp_annual.csv`). Feed this measured shock into the
+flexible-price labor market: move the slider from the baseline $\bar{A} = 1$ to the 2020 level $\bar{A}' = 1.0181$,
+as close as the slider allows, and read employment, the real wage and output in the title. Does the model predict a
+recession or a boom? By how many percentage points does its change in output miss the measured −2.90 percent, and
+what does that say about the shocks behind the 2020 recession?
+
+> **Python note.** `fixed(C_BAR)` holds an argument at one value, so `interact` draws no slider for it.
+
+<details><summary>Hint</summary>
+
+At the baseline, TFP and output are both 1, so an output of 1.05 in the title would mean 5 percent more output than
+before the shock. Compare the sign of the model's change with the sign in the data first, then the size. The title
+rounds to two decimals; for more, use `equilibrium(A=...)` and `output(L, A)`.
+
+</details>
+
+```{python}
+#| kind: widget
+interact(labor_market,
+         A=FloatSlider(value=1.0, min=0.9, max=1.1, step=0.005, readout_format=".3f", description="TFP Ā",
+                       style=WIDE),
+         c=fixed(C_BAR), ell=fixed(ELL_BAR));
+```
+
+**Source.** The model of Fig. 2 above, adapted from Fig. 15.2 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
+
+```{python}
+# Your answer here
+```
+
+<details><summary>Solution</summary>
+
+The closest slider value is $\bar{A} = 1.020$. The title reads employment 1.01, a real wage of 0.68 and output 1.03:
+the model predicts a **boom**, with more jobs, higher wages and more output. The functions give the exact numbers:
+
+```python
+L_2020, w_2020 = equilibrium(A=1.0181)       # the measured rise of 1.81 percent
+Y_2020 = output(L_2020, 1.0181)
+print(f"TFP 1.0181: employment {L_2020:.4f}, real wage {w_2020:.4f}, output {Y_2020:.4f}")
+print(f"Output: model {100 * (Y_2020 - 1):+.2f}%, data -2.90%, a miss of {100 * (Y_2020 - 1) + 2.90:.2f} points")
+```
+
+With $\bar{A}' = 1.0181$, employment is 1.0135, the real wage 0.6757 and output 1.0273: output rises by 2.73
+percent, about 3/2 times the rise in TFP. Measured output fell by 2.90 percent, so the model misses by 5.63
+percentage points, and in the wrong direction. A TFP shock cannot explain the pandemic recession: the fall in output
+must have come from other shocks, to the supply of labor and to spending.
+
+</details>
+
+<!-- cell -->
+
+**Problem 8 (Intermediate): How large is the spending multiplier with flexible prices?** A government raises its
+purchases by $\Delta G$, paid for with taxes. Households, poorer over their lifetimes, cut consumption, and as in
+Fig. 5 they work more. The **multiplier** $\Delta Y/\Delta G$ is the rise in output per unit of extra purchases. The
+sliders below set $\Delta G$ and the share of it that households cut from consumption: 1 for a permanent rise, less
+for a temporary one.
+
+(a) For a permanent rise of $\Delta G = 0.1$, what are employment, output and the multiplier?
+
+(b) Keep $\Delta G = 0.1$. What is the smallest share on the slider that gives a multiplier of at least 0.8? Then
+find the exact share with the output formula of (a). Is a program with that share closer to a permanent or to a
+temporary rise in purchases?
+
+(c) Ramey (2011) concludes that the multiplier for a temporary, deficit-financed rise in purchases is probably between
+0.8 and 1.5 ([*Journal of Economic Literature*](https://www.aeaweb.org/articles?id=10.1257/jel.49.3.673)). Can the
+flexible-price model deliver that? What would you add to it?
+
+> **Python note.** The widget cell defines a small function that sets consumption from the two sliders, redraws
+> Fig. 2's diagram with `labor_market`, and then replaces its title with `fig.update_layout(title=...)`.
+
+<details><summary>Hint</summary>
+
+Consumption is $c' = 0.6 - \text{share} \times \Delta G$. Output changes only through employment, because $\bar{A}$
+and $K$ do not move. For (b), raise the share one step at a time and watch the multiplier in the title. For the exact
+share, work backward: first the output that a multiplier of 0.8 requires, then the consumption that gives that output.
+
+</details>
+
+```{python}
+#| kind: widget
+def spending_multiplier(G_rise=0.1, share=1.0):
+    """Figs. 2 and 5 again: purchases rise by G_rise and consumption falls by share x G_rise."""
+    c_new = C_BAR - share * G_rise
+    L_base, w_base = equilibrium()
+    L_new, w_new = equilibrium(c=c_new)
+    multiplier = (output(L_new) - output(L_base)) / G_rise
+    fig = labor_market(c=c_new)
+    fig.update_layout(title=f"Employment {L_new:.2f}, output {output(L_new):.2f}, "
+                            f"multiplier ΔY/ΔG = {round(multiplier, 2) + 0.0:.2f}")
+    return fig
+
+
+interact(spending_multiplier,
+         G_rise=FloatSlider(value=0.1, min=0.02, max=0.2, step=0.02, description="rise in purchases ΔG", style=WIDE),
+         share=FloatSlider(value=1.0, min=0.0, max=1.0, step=0.1, description="share cut from consumption",
+                           style=WIDE));
+```
+
+**Source.** The model of Figs. 2 and 5 above, adapted from Figs. 15.2 and 15.5 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
+
+```{python}
+# Your answer here
+```
+
+<!-- cell -->
+
+**Your answer:**
+
+<!-- cell -->
+
+<details><summary>Solution</summary>
+
+```python
+L_base, w_base = equilibrium()
+for share in (1.0, 0.8, 0.9, 0.3):
+    L_new, w_new = equilibrium(c=C_BAR - share * 0.1)
+    multiplier = (output(L_new) - output(L_base)) / 0.1
+    print(f"share {share}: employment {L_new:.3f}, output {output(L_new):.3f}, "
+          f"multiplier {round(multiplier, 2) + 0.0:.2f}")
+c_exact = C_BAR / 1.08 ** 2                  # the consumption that gives output 1.08
+print(f"A multiplier of 0.8 needs c' = {c_exact:.3f}, a share of {(C_BAR - c_exact) / 0.1:.2f}")
+```
+
+**(a)** A permanent rise cuts consumption from 0.6 to 0.5. By equation (7), employment rises to
+$(0.6/0.5)^{3/4} = 1.147$, and output to $(0.6/0.5)^{1/2} = 1.095$. The multiplier is $(1.095 - 1)/0.1 = 0.95$.
+
+**(b)** On the slider, a share of 0.8 gives a multiplier of 0.74 and a share of **0.9** gives 0.85, so 0.9 is the
+smallest share that reaches 0.8. Exactly: a multiplier of 0.8 needs output $1 + 0.8 \times 0.1 = 1.08$. By (a),
+output is $(0.6/c')^{1/2}$, so $c' = 0.6/1.08^2 = 0.514$, and the share is $(0.6 - 0.514)/0.1 = 0.86$. Households
+must cut their consumption by 86 percent of the extra purchases, almost as much as for a permanent rise. With
+flexible prices, extra purchases raise output only through the wealth effect: people work more because they feel
+poorer.
+
+**(c)** No. For a temporary rise, the case Ramey studies, households lose little lifetime income, so they cut
+consumption by much less than the 86 percent of (b), and the flexible-price multiplier stays far below 0.8: with a
+share of 0.3 it is only 0.26, and less the shorter the program. Only a permanent, tax-financed rise gets
+close to 1, and then consumption and the real wage fall. To reach a multiplier near 1 for a temporary program, add
+**sticky prices**: firms then produce whatever is demanded, so the extra purchases raise output directly, as in
+Fig. 8. The estimated Smets–Wouters model, which has sticky prices, finds a multiplier of about 1 (the note after
+Fig. 5).
+
+</details>
+
+<!-- cell -->
+
+**Problem 9 (Intermediate): One employment target, two frictions.** The central bank wants a monetary expansion that
+raises employment by 10 percent. How large must the expansion be, and what happens to the real wage,
+
+(a) when nominal wages are sticky at $\bar{W} = 0.75$, as in Figs. 6–7, starting from point $A$ with employment 0.70
+(the expansion raises the price level by `size` percent);
+
+(b) when prices are sticky, as in Fig. 8, starting from $Y_0 = 1$ (the expansion raises the output demanded by `size`
+percent)?
+
+(c) Which case is better for the workers who already have a job, and which looks more like an actual boom?
+
+Get close with the sliders, then find the exact answers with the model's equations.
+
+<details><summary>Hint</summary>
+
+With sticky wages, firms are on their labor demand curve, and employment grows with the cube of the price level (the
+Model overview's sticky-wage block). With sticky prices, use equation (9) with $\bar{A} = K = 1$. Set each employment
+ratio equal to 1.1 and solve for $P'$ and $Y'$.
+
+</details>
+
+```{python}
+#| kind: widget
+def expansion(friction="sticky wages", size=3.0):
+    """Figs. 7 and 8 again: prices (sticky wages) or the output demanded (sticky prices) rise by size percent."""
+    if friction == "sticky wages":
+        return sticky_wages(t=1, P_new=1 + size / 100, W_bar=0.75)
+    fig = sticky_prices(Y_new=1 + size / 100, c_new=C_BAR)
+    for trace in fig.data:
+        if trace.text == ("A",):
+            trace.textposition = "top left"      # keeps the letter A clear of a nearby point B
+    return fig
+
+
+interact(expansion,
+         friction=ToggleButtons(options=["sticky wages", "sticky prices"], value="sticky wages",
+                                description="friction"),
+         size=FloatSlider(value=3.0, min=2.0, max=10.0, step=0.5, readout_format=".1f",
+                          description="size of the expansion (percent)", style=WIDE));
+```
+
+**Source.** The models of Figs. 7 and 8 above, adapted from Figs. 15.7 and 15.8 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
+
+```{python}
+# Your answer here
+```
+
+<!-- cell -->
+
+**Your answer:**
+
+<!-- cell -->
+
+<details><summary>Solution</summary>
+
+**(a)** Along labor demand, $L^d = \left[\tfrac{2}{3}\big/(\bar{W}/P')\right]^3 = (P')^3 L^d(\bar{W})$, so employment
+rises by 10 percent when $(P')^3 = 1.1$, that is $P' = 1.1^{1/3} = 1.032$: prices must rise by about 3.2 percent. On the
+slider, 3 percent gives employment 0.77. The real wage falls from 0.75 to $0.75/1.032 = 0.727$, by 3.1 percent.
+
+**(b)** By equation (9), $L = (Y')^{3/2}$, so $(Y')^{3/2} = 1.1$ gives $Y' = 1.1^{2/3} = 1.066$: the output demanded must
+rise by 6.6 percent (on the slider, 6.5 percent already gives employment 1.10). The real wage lies on the supply
+curve, $w = cL/\bar{\ell}$, so it rises by the same 10 percent, from 0.667 to 0.733.
+
+```python
+P_new = 1.1 ** (1 / 3)
+L_A, L_B = labor_demand(0.75), labor_demand(0.75 / P_new)
+print(f"Sticky wages: P' = {P_new:.4f}, employment {L_A:.3f} -> {L_B:.3f}, real wage 0.750 -> {0.75 / P_new:.3f}")
+Y_new = 1.1 ** (2 / 3)
+L_sticky = labor_needed(Y_new)
+print(f"Sticky prices: Y' = {Y_new:.4f}, employment 1.000 -> {L_sticky:.3f}, "
+      f"real wage {supply_wage(1.0):.3f} -> {supply_wage(L_sticky):.3f}")
+```
+
+**(c)** With sticky wages the new jobs are paid for by everyone who already works: their real wage falls by 3.1
+percent. With sticky prices employment and the real wage rise together, by 10 percent each, as they tend to do in
+actual booms. The two pushes differ in size for two reasons. Prices need to rise by only 3.2 percent because labor
+demand is very elastic: firms hire about 3 percent more for each 1 percent fall in the real wage. Output demanded must
+rise by 6.6 percent, two thirds of the employment gain, because $Y = L^{2/3}$: each extra worker adds less output than
+the last.
+
+</details>
+
+<!-- cell -->
+
+**Problem 10 (Challenge): A TFP shock or a tax-like wedge in 2009?** In 2009, hours worked in the U.S. business sector
+fell by 7.74 percent and output by 3.75 percent, while utilization-adjusted TFP rose by 3.53 percent (`tfp_inputs.csv`).
+Chari, Kehoe and McGrattan (2007) showed that many frictions act in a growth model like time-varying **wedges** that
+resemble taxes on labor or investment ([Federal Reserve Bank of Minneapolis staff
+report](https://www.minneapolisfed.org/research/staff-reports/business-cycle-accounting); published in *Econometrica*,
+[doi:10.1111/j.1468-0262.2007.00768.x](https://doi.org/10.1111/j.1468-0262.2007.00768.x)). Jermann and Quadrini (2012)
+find that tighter financing conditions for firms contributed to the 2008–2009 recession
+([*American Economic Review*](https://www.aeaweb.org/articles?id=10.1257/aer.102.1.238)). In our labor market, the
+sales tax $\tau$ is such a wedge.
+
+(a) With the sliders, check that a TFP fall to $\bar{A}' = 0.90$ with no wedge, and a wedge $\tau = 0.10$ with TFP
+unchanged, both lower employment to 0.92, close to the fall in hours of 2009.
+
+(b) For each story, compute the change in output and the measured Solow residual of equation (3), with capital fixed,
+in percent (100 times the change in the log, as in Fernald's data).
+
+(c) Which story fits the 2009 data better?
+
+(d) Suppose the wedge comes from expensive credit: firms must borrow to pay wages before they sell their output. Which
+policies would raise employment in that case, and why would they do little against a true fall in TFP?
+
+<details><summary>Hint</summary>
+
+Only the product $(1-\tau)\bar{A}$ enters equation (7), but output $Y = \bar{A}K^{1/3}L^{2/3}$ contains $\bar{A}$ alone.
+For (b), use `equilibrium`, `output`, `np.log` and `solow_residual(g_Y, 0.0, g_L)`.
+
+</details>
+
+```{python}
+#| kind: widget
+interact(labor_shock,
+         A_new=FloatSlider(value=1.0, min=0.8, max=1.0, step=0.1, description="TFP after the shock Ā′", style=WIDE),
+         tau=FloatSlider(value=0.0, min=0.0, max=0.2, step=0.1, description="tax-like wedge τ", style=WIDE),
+         c_new=fixed(C_BAR));
+```
+
+**Source.** The model of Figs. 3 and 4 above, adapted from Figs. 15.3 and 15.4 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
+
+```{python}
+# Your answer here
+```
+
+<!-- cell -->
+
+**Your answer:**
+
+<!-- cell -->
+
+<details><summary>Solution</summary>
+
+**(a)** In both cases $(1-\tau)\bar{A} = 0.9$, so equation (7) gives the same point: employment $0.9^{3/4} = 0.924$
+and a real wage of 0.616. The title reads "Employment 1.00 → 0.92, real wage 0.67 → 0.62" for either slider.
+
+**(b)** Output and the residual differ, because only the TFP story lowers $\bar{A}$ in the production function:
+
+```python
+for A_new, tau in [(0.9, 0.0), (1.0, 0.1)]:
+    L_new, w_new = equilibrium(A=A_new, tau=tau)
+    g_L = 100 * np.log(L_new)                     # percent, as 100 times the change in the log
+    g_Y = 100 * np.log(output(L_new, A_new))
+    residual = round(solow_residual(g_Y, 0.0, g_L), 2) + 0.0
+    print(f"A = {A_new}, tau = {tau}: employment {g_L:.2f}%, output {g_Y:.2f}%, Solow residual {residual:.2f}%")
+```
+
+| Story | Employment, percent | Output, percent | Solow residual, percent |
+|---|---|---|---|
+| TFP falls to 0.90 | −7.90 | −15.80 | −10.54 |
+| wedge $\tau = 0.10$ | −7.90 | −5.27 | 0.00 |
+
+In the TFP story, $g_Y = g_A + \tfrac{2}{3}g_L = -10.54 + \tfrac{2}{3}\times(-7.90) \approx -15.8$. In the wedge story,
+$\bar{A}$ does not change, so $g_Y = \tfrac{2}{3}g_L = -5.27$ and the residual is zero.
+
+**(c)** The wedge story. With hours down by about 8 percent, a TFP recession would have cut output by about 16
+percent and measured TFP by more than 10 percent. In 2009 output fell by 3.75 percent, the raw residual by only 0.15
+percent, and adjusted TFP rose. The wedge story gets both facts roughly right: an output fall of about 5 percent
+(somewhat less in the data, because capital still grew by 1.76 percent) and no fall in TFP.
+
+**(d)** If the wedge is expensive credit, policies that make borrowing cheaper or easier lower $\tau$ and shift labor
+demand back up: lower interest rates, central bank lending to banks and firms, loan guarantees, or rebuilding banks'
+capital. Against a true TFP fall they would do little, because each worker really produces less: cheaper credit does
+not raise the marginal product of labor, so firms would still want fewer workers at any given wage.
+
+</details>
