@@ -19,11 +19,15 @@ The script checks that the new files reproduce the copied fig2-1.csv and fig2-3.
 
 Multi-country downloads (conventions §6b), cached in ../macro102/.work/ch02/notebook-raw/:
   World Bank WDI API (country list; NE.CON.PRVT.ZS, NE.GDI.TOTL.ZS, NE.CON.GOVT.ZS, NE.RSB.GNFS.ZS;
-  NY.GDP.DEFL.ZS, NY.GDP.DEFL.KD.ZG) and Penn World Table 11.0 (pwt110.dta, labsh).
+  NY.GDP.DEFL.ZS, NY.GDP.DEFL.KD.ZG; NY.GDP.MKTP.CD, NY.GDP.MKTP.PP.CD, SP.POP.TOTL) and Penn World
+  Table 11.0 (pwt110.dta, labsh).
   countries.csv            iso3, country, region, income, g7, g20, oecd     lookup table for the country pickers
   expenditure_world.csv    iso3, country, year, consumption, investment, government, net_exports   percent of GDP
   labor_share_world.csv    iso3, country, year, labor_share              PWT 11.0 labsh, 1950-2023
   deflator_world.csv       iso3, country, year, deflator_2012_100, inflation     GDP deflator, 1960-2025
+  ppp_world.csv            iso3, country, year, gdp_usd_bn, gdp_ppp_bn, population_m   GDP at market exchange
+                           rates and at PPP, and population, 1990-2025; read by the Practice problems
+                           (equation 8 across countries)
 """
 import argparse
 import json
@@ -235,6 +239,30 @@ def deflator_world(cache, names):
           f"inflation vs its growth rate: largest gap {gr.abs().max():.2f} points")
 
 
+def ppp_world(cache, names):
+    """Practice problems: GDP at market exchange rates and at purchasing power parity, and population
+    (WDI NY.GDP.MKTP.CD, NY.GDP.MKTP.PP.CD, SP.POP.TOTL), to apply equation (8) across countries."""
+    cols = {"gdp_usd_bn": ("NY.GDP.MKTP.CD", 1e9), "gdp_ppp_bn": ("NY.GDP.MKTP.PP.CD", 1e9),
+            "population_m": ("SP.POP.TOTL", 1e6)}
+    d = None
+    for col, (code, unit) in cols.items():
+        part = wdi(cache, code).rename(columns={"value": col})
+        part[col] = (part[col] / unit).map(lambda x: float(f"{x:.5g}"))    # 5 significant digits
+        d = part if d is None else d.merge(part, on=["iso3", "year"], how="outer")
+    d = d.dropna(subset=list(cols))                     # years with both GDP measures and population (from 1990)
+    out = tidy(d[d.year <= LAST], names, list(cols))
+    save(out, "ppp_world.csv")
+    us = out[out.iso3 == "USA"].set_index("year")
+    ratio = (us.gdp_usd_bn / us.gdp_ppp_bn - 1).abs().max()
+    nipa = pd.read_csv(os.path.join(HERE, "nipa_annual.csv")).set_index("year").gdp
+    gap = (us.gdp_usd_bn / nipa - 1).dropna() * 100
+    print(f"  U.S.: GDP at market rates / GDP at PPP differs from 1 by at most {ratio:.5f}; "
+          f"WDI GDP vs nipa_annual.csv {gap.index.min()}-{gap.index.max()}: {gap.min():+.2f} to {gap.max():+.2f} percent")
+    price = out.gdp_usd_bn / out.gdp_ppp_bn
+    print(f"  price level relative to the U.S. (GDP at market rates / GDP at PPP): {price.min():.3f} to "
+          f"{price.max():.3f}; years per economy: {out.groupby('iso3').year.count().median():.0f} (median)")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--macro102", default=os.path.join(HERE, "..", "..", "..", "macro102"))
@@ -280,6 +308,7 @@ def main():
     expenditure_world(cache, names)
     labor_share_world(root, cache, names)
     deflator_world(cache, names)
+    ppp_world(cache, names)
 
 
 if __name__ == "__main__":

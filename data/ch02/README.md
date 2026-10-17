@@ -99,4 +99,17 @@ The notebook draws the U.S. textbook series from the figure files above and the 
   - `inflation`: WDI `NY.GDP.DEFL.KD.ZG` (inflation, GDP deflator, annual percent).
   - Validation: the U.S. rows are within 0.8 percent of the annual mean of `fig2-4.csv`, and the U.S.
     inflation within 0.3 points of the growth of that annual mean.
+- `ppp_world.csv`: `iso3, country, year, gdp_usd_bn, gdp_ppp_bn, population_m`. 1990–2025, 204 economies,
+  7,042 rows (years with all three values: 183 economies in 1990, 196 in 2024, 186 in 2025). Read by
+  Practice problem 6, which applies equation (8) across countries (added 2026-10-17).
+  - Source: World Bank WDI `NY.GDP.MKTP.CD` (GDP, current US dollars), `NY.GDP.MKTP.PP.CD` (GDP, PPP,
+    current international dollars) and `SP.POP.TOTL` (population, total). GDP in billions, population in
+    millions, five significant digits.
+  - Validation: for the United States GDP at PPP equals GDP at market exchange rates (an international
+    dollar buys what a U.S. dollar buys in the United States), and WDI GDP is within 0.30 percent of
+    `gdp` in `nipa_annual.csv` for 1990–2025.
+  - The relative price level, `gdp_usd_bn / gdp_ppp_bn`, ranges from 0.014 (Azerbaijan, 1992) to 1.853
+    (Japan, 1995); in 2024 from 0.12 (Nigeria) to 1.20 (Bermuda).
+  - Hygiene: the file includes the "Euro area" aggregate (`EMU`, from `countries.csv`); leave it out when
+    comparing countries.
 
