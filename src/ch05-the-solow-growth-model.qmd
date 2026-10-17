@@ -1262,18 +1262,29 @@ We draw the same chart for every country with data, and color the OECD countries
 Click an entry in the legend to hide or show that group.
 
 > **Python note.** `.map(...)` replaces each value of a column using a dictionary, here turning
-> `True`/`False` into readable group names for the legend.
+> `True`/`False` into readable group names for the legend. `groupby("start_year")` takes one starting year at a
+> time; for each, `np.polyfit` fits a straight line through *all* countries (against `np.log10` of GDP per person,
+> because the axis is a ratio scale). The line is added to the first picture and to every animation frame
+> (`frame.data`), so it moves when you press play.
 
 ```{python}
 growth["group"] = growth.oecd.map({True: "OECD", False: "Rest of the world"})
 fig = px.scatter(growth, x="gdp_pc_start", y="growth", color="group", hover_name="country",
-                 animation_frame="start_year", trendline="ols", trendline_scope="overall",
-                 trendline_options=dict(log_x=True),
+                 animation_frame="start_year",
                  log_x=True, range_x=[300, 400000], range_y=[-6, 10],
                  labels={"gdp_pc_start": "GDP per person in the starting year (2021 dollars, ratio scale)",
                          "growth": "Average annual growth to 2023 (percent)", "group": "Countries",
                          "start_year": "Starting year"},
                  title="Across the world, catch-up is far weaker than within the OECD")
+x_line = np.array([300, 400000])
+world_line = {}                                   # starting year -> the line's two y values
+for year, data in growth.dropna(subset=["gdp_pc_start", "growth"]).groupby("start_year"):
+    slope, intercept = np.polyfit(np.log10(data.gdp_pc_start), data.growth, 1)
+    world_line[str(year)] = intercept + slope * np.log10(x_line)
+fig.add_scatter(x=x_line, y=world_line[fig.frames[0].name], mode="lines", line_color=GRAY,
+                name="All countries: least-squares line")
+for frame in fig.frames:
+    frame.data = frame.data + (go.Scatter(x=x_line, y=world_line[frame.name]),)
 fig.show()
 ```
 
@@ -1286,7 +1297,7 @@ Chart: inspired by Fig. 5.9 in Jones (2024), [*Macroeconomics*, 6th ed.](https:/
 **What to notice.**
 
 - For the world as a whole, starting in 1960, the regression line is nearly flat: poor countries did *not* grow faster on average.
-  Press play: for later starting years the line tilts down a little, but always less than in the OECD.
+  Press play: for later starting years the line tilts down more, but it stays flatter than in the OECD.
 - According to the Solow model, this suggests that most poor countries are close to a **low steady state**. They have low investment rates and low productivity, rather than having been pushed below a high steady state.
 - A few countries, such as South Korea, China and Botswana, grew very fast. Their steady states probably moved up.
 

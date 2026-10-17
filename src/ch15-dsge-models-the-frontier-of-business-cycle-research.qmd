@@ -744,20 +744,26 @@ long["GDP"] = np.where(long.gdp_growth < 0, "GDP fell", "GDP grew")
 long.head()
 ```
 
-> **Python note.** `facet_col="measure"` draws one panel per measure. `trendline="ols"` adds a least-squares
-> regression line, and `trendline_scope="overall"` fits one line per panel through all the points. `.corr()`
-> computes the correlation of two columns, between −1 and 1. The loop at the end shortens the panel titles,
-> which Plotly writes as "measure=...", and `legend_title_text=""` removes the legend's title.
+> **Python note.** `facet_col="measure"` draws one panel per measure. `np.polyfit(x, y, 1)` fits a straight
+> least-squares line and returns its slope and intercept; the first loop draws one such line in each panel, fitted
+> to that panel's points only, with `add_scatter(..., row=1, col=k)`. `.corr()` computes the correlation of two
+> columns, between −1 and 1. The second loop shortens the panel titles, which Plotly writes as "measure=...", and
+> `legend_title_text=""` removes the legend's title.
 
 ```{python}
 r_raw = annual.gdp_growth.corr(annual.tfp_solow)
 r_util = annual.gdp_growth.corr(annual.tfp_util)
 fig = px.scatter(long, x="gdp_growth", y="tfp_growth", facet_col="measure", color="GDP", hover_name="year",
-                 trendline="ols", trendline_scope="overall", trendline_color_override=GRAY,
                  color_discrete_map={"GDP grew": BLUE, "GDP fell": GREEN},
                  labels={"gdp_growth": "GDP growth (%)", "tfp_growth": "TFP growth (%)"},
                  range_x=[-4.5, 10], range_y=[-5, 7.5],
                  title=f"Raw TFP moves with GDP (r = {r_raw:.2f}); adjusted TFP does not (r = {r_util:.2f})")
+x_line = np.array([-4.5, 10])
+for k, measure in enumerate(["tfp_solow", "tfp_util"], start=1):   # panel 1 = raw, panel 2 = adjusted
+    points = annual[["gdp_growth", measure]].dropna()
+    slope, intercept = np.polyfit(points.gdp_growth, points[measure], 1)
+    fig.add_scatter(x=x_line, y=intercept + slope * x_line, mode="lines", line_color=GRAY,
+                    name="Least-squares line", showlegend=(k == 1), row=1, col=k)
 for annotation in fig.layout.annotations:
     annotation.text = annotation.text.split("=")[-1]
 fig.update_xaxes(tickvals=[-2, 0, 2, 4, 6, 8])          # no tick labels in the bottom-left corner
