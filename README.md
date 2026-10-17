@@ -38,6 +38,7 @@
 | Appendix | Notebook | Colab |
 |---|---|---|
 | A | [Google Colab, Python Coding, and Data Science Libraries](notebooks/appA-google-colab-python-and-data-science-libraries.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/appA-google-colab-python-and-data-science-libraries.ipynb) |
+| B | [Accessing Macroeconomic Data with Python](notebooks/appB-accessing-macroeconomic-data-with-python.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/appB-accessing-macroeconomic-data-with-python.ipynb) |
 
 ## Repository layout
 
@@ -46,7 +47,7 @@
 | `notebooks/` | The chapter notebooks (`.ipynb`, saved with outputs). Open them in Colab. |
 | `src/` | The source of each notebook (`.qmd`). The notebook is generated from it, so edit the source, not the `.ipynb`. |
 | `data/chNN/` | The CSV files each notebook reads, plus a `README.md` with sources and a `build_data.py` that rebuilds the wider files. |
-| `data/appA/`, `images/appA/` | The data files and the Colab screenshots of Appendix A. |
+| `data/appA/`, `images/appA/` | The data files and the Colab screenshots of Appendix A. (Appendix B downloads its data live from the original sources.) |
 | `_quarto.yml`, `index.qmd`, `_includes/` | The Quarto book website. |
 
 ## Rebuilding
