@@ -1,0 +1,2805 @@
+---
+title: "C. Math Review for Macroeconomics"
+subtitle: "Which few math tools carry every model in the book?"
+visual-summary: "figures/mindmap.webp"
+visual-summary-bg: "#0f172a"
+format:
+  revealjs:
+    output-file: index.html
+    theme: [default, site-brand.scss, appC.scss]
+    highlight-style: github-dark
+    template-partials:
+      - title-slide.html
+    include-after-body:
+      - live-plot.html
+      - figure-zoom.html
+    center: true
+    slide-number: c/t
+    menu: true
+    chalkboard: true
+    preview-links: auto
+    overview: true
+    progress: true
+    history: true
+    transition: fade
+    width: 1280
+    height: 720
+    fig-align: center
+    auto-stretch: false
+    mermaid-format: svg
+    mermaid:
+      theme: dark
+    link-external-icon: false
+---
+
+## A century at 3% instead of 1% leaves a country seven times richer
+
+[19.2× vs 2.7×]{.bignum}
+[Income after 100 years of growth at 3% and at 1% a year]{.bignum-label}
+
+. . .
+
+[One line of algebra, $y_t = y_0(1+\bar{g})^t$, gives both numbers. This deck builds the small toolkit behind every model in the book, one method at a time.]{.comment}
+
+::: {.notes}
+Open with the number. It comes from the appendix notebook (Section C.3): 1.01^100 = 2.7, 1.03^100 = 19.2. The ratio 19.2/2.7 is about 7.
+
+The point of the hook: two numbers that look almost the same, 1 and 3 percent, become a huge gap once they compound. That is why macroeconomists care so much about growth rates, and why the math of growth (exponents, logs, growth rules) comes first in this deck.
+
+Ask the room: who thinks 3 percent growth for a century makes a country three times as rich as 1 percent? Most first guesses are linear. The deck is about replacing that linear intuition with the right tools.
+
+How the deck is meant to be used: this is a toolkit appendix. Teach it in pieces, one act per class or one act before the chapter that needs it. Each act ends with a formula sheet.
+:::
+
+## Six questions, six families of tools
+
+::: {.incremental}
+- **I. Reading and measuring change:** how do we read an equation and measure a change?
+- **II. Compound growth and logs:** how does growth compound?
+- **III. Growth rules and approximations:** when is "≈" good enough?
+- **IV. Derivatives and optimization:** how do firms and households choose?
+- **V. Equations and dynamics:** how do we solve a model and follow it over time?
+- **VI. Valuing the future and reading data:** what is the future worth today?
+:::
+
+[Each tool: intuition → formula → worked example, step by step → graph → your turn → where the book uses it.]{.takeaway .fragment}
+
+::: {.notes}
+These are the six acts of the deck and the six branches of the mind map on the title slide.
+
+The rhythm repeats for every tool. First the intuition in words. Then the formula. Then a worked example with real numbers, one step at a time (press the arrow for each step). Then a live graph from the book's appendix, with a PREDICT card before it. Then a YOUR TURN exercise: let students try for a minute or two before revealing the ANSWER. A small "USED IN" line names the chapters that use the tool.
+
+The cards: PREDICT (blue) asks for a guess before a graph; YOUR TURN (amber) is an exercise; ANSWER (green) is revealed on the next click; COMMON MISTAKE (red) and IN FACT (green) correct a typical error.
+
+Code appears on a few slides, always short, with the output the notebook printed. Students who want to run it open the appendix notebook in Colab.
+:::
+
+## Three ways to solve one equation: compute, use letters, or search
+
+[When does income growing at 2% a year double? Solve $(1+0.02)^t = 2$.]{.comment}
+
+```python
+years = np.arange(0, 51)                                    # 1. NumPy: compute and look
+income = 1.02 ** years
+print("Income is at least twice its start value in year", years[income >= 2][0])
+
+g, t = sp.symbols("g t")                                    # 2. SymPy: solve with letters
+doubling_time = sp.solve(sp.Eq((1 + g) ** t, 2), t)[0]      # log(2)/log(g + 1)
+print(f"Exact doubling time at 2 percent: {float(doubling_time.subs(g, 0.02)):.2f} years")
+
+t_double = optimize.brentq(lambda t: 1.02 ** t - 2, 1, 100) # 3. SciPy: a root finder
+print(f"brentq finds {t_double:.2f} years")
+```
+
+::: {.output}
+```text
+Income is at least twice its start value in year 36
+Exact doubling time at 2 percent: 35.00 years
+brentq finds 35.00 years
+```
+:::
+
+[NumPy computes many numbers, SymPy does the algebra with letters, SciPy searches when there is no formula.]{.takeaway .fragment}
+
+::: {.notes}
+This is the appendix's opening example ("Three ways to do math in Python"), condensed into one cell; the outputs are the notebook's.
+
+1. NumPy computes income for every whole year from 0 to 50 and keeps the first year in which it is at least 2. It says year 36 because it only looks at whole years: after 35 years income is 1.9999, just short.
+2. SymPy treats g and t as letters and solves (1+g)^t = 2 for t. The answer is a formula, ln 2 / ln(1+g), which holds for every growth rate. Substituting g = 0.02 gives 35.00.
+3. SciPy's brentq is a root finder: it needs a function whose sign differs at the two ends of an interval (here 1 and 100 years) and narrows down the zero in between.
+
+When to use which: NumPy when you want a table or a chart; SymPy when you want to see why a result holds or check a chapter's algebra; SciPy when there is no formula or it is too messy. Many slides below use one of the three.
+:::
+
+# Reading and measuring change {.divider background-color="#3498db"}
+
+[Act I]{.act}
+
+## A few marks tell you what kind of thing each symbol is
+
+::: {.mid-table}
+| Mark | Meaning | Example in the book |
+|----------------------------|--------------------------------------------------|----------------------------------|
+| a bar: $\bar{s}$ | a **parameter**: the model takes it as given | investment rate $\bar{s}$ (Ch. 5) |
+| subscript $t$: $K_t$ | the value **in period** $t$ (a year) | capital $K_t$ |
+| $\Delta x_{t+1} \equiv x_{t+1} - x_t$ | the **change** from one period to the next | $\Delta K_{t+1}$ (Ch. 5) |
+| $g_x$ | the **growth rate** of $x$ | $g_Y$ (Ch. 6) |
+| a star: $k^*$ | a **steady state** or equilibrium value | $k^*$ (Ch. 5) |
+| a tilde: $\widetilde{Y}_t$ | **short-run output**: the % gap from potential | Ch. 9 |
+| $\equiv$ | "is defined as" | $\widetilde{Y}_t \equiv (Y_t - \bar{Y}_t)/\bar{Y}_t$ |
+| $\pi$ | the **inflation rate** (not 3.14159…) | Ch. 8 |
+| $\sum_{t=0}^{T}$ | the **sum** over periods 0 to $T$ | present values (Ch. 7) |
+:::
+
+[Know the marks and an equation reads like a sentence.]{.takeaway .fragment}
+
+::: {.notes}
+This is the appendix's notation table (Section C.1). Walk it top to bottom, with one example each.
+
+The two marks students mix up most: a bar means "given from outside the model" (a parameter or an exogenous variable), a star means "the value the model settles at" (a steady state or an equilibrium). So s̄ is something we choose when we run the model; k* is something the model tells us.
+
+π is the inflation rate in this book, never the number 3.14. The tilde marks short-run output, the percent gap between GDP and potential GDP. The triple bar ≡ means "is defined as": it is not something to prove, it is a naming convention.
+
+Ask: in Y = A K^(1/3) L^(2/3), which letters are variables and which would carry a bar in a model? (Ā is a parameter in Chapter 4; K and L are inputs.)
+:::
+
+## An equation is a sentence: output falls when the interest rate is high
+
+::: {.eqpanel}
+$$\widetilde{Y}_t = \bar{a} - \bar{b}\,(R_t - \bar{r})$$
+:::
+
+::: {.incremental}
+- $\widetilde{Y}_t$: short-run output, the **outcome** (percent above or below potential).
+- $R_t - \bar{r}$: how far the real interest rate is above its long-run value $\bar{r}$.
+- $\bar{b}$: how strongly spending reacts to that gap; $\bar{a}$: a demand shock.
+:::
+
+[Read it aloud: output is the demand shock, minus $\bar{b}$ times the interest-rate gap.]{.takeaway .fragment}
+
+[Ch. 11 (the IS curve), Ch. 12–13 (the short-run model)]{.usedin}
+
+::: {.notes}
+A function links an input to an output. The IS curve of Chapter 11, equation (11.14), says how short-run output depends on the real interest rate.
+
+Read it as a sentence: "Short-run output equals the demand shock ā, minus b̄ times the amount by which the real interest rate exceeds its long-run value r̄." When R equals r̄ and there is no shock, output is at potential.
+
+Units: Ỹ and R are both in percent. b̄ is "points of output per point of interest rate".
+
+Ask: what sign does b̄ have, and why? (Positive: a higher interest rate makes borrowing for houses, machines and cars more expensive, so spending falls.)
+:::
+
+## Worked example: which interest rate closes the output gap?
+
+[Step 1. Set output to potential, $\widetilde{Y}_t = 0$:]{.step}
+$$0 = \bar{a} - \bar{b}\,(R - \bar{r})$$
+
+. . .
+
+[Step 2. Move the interest-rate term to the left:]{.step}
+$$\bar{b}\,(R - \bar{r}) = \bar{a}$$
+
+. . .
+
+[Step 3. Divide by $\bar{b}$ and add $\bar{r}$:]{.step}
+$$R = \bar{r} + \frac{\bar{a}}{\bar{b}}$$
+
+. . .
+
+[Step 4. Numbers: $\bar{a} = 1$, $\bar{b} = 0.5$, $\bar{r} = 2$:]{.step}
+$$R = 2 + \frac{1}{0.5} = \color{#e67e22}{\mathbf{4\%}}$$
+
+::: {.notes}
+Do this on the board, one step per click. The appendix solves it with SymPy (sp.solve(IS.subs(Y_tilde, 0), R)) and gets the same formula, r̄ + ā/b̄, before putting in the numbers. Its printed output: "Real interest rate that closes the gap: 4.0 percent."
+
+The lesson: work with letters first. The formula shows which parameters matter: a bigger demand shock needs a bigger rate rise; a more rate-sensitive economy (bigger b̄) needs a smaller one.
+
+The numbers are the appendix's own illustrative ones: a positive demand shock of 1 percent, b̄ = 0.5, r̄ = 2 percent.
+:::
+
+## Reading the IS curve off a graph
+
+[On the IS curve, where is output at potential, and is output above or below potential when the real rate is 6%?]{.question}
+
+[With $\bar{a} = 1$, $\bar{b} = 0.5$ and $\bar{r} = 2$: predict output at $R = 2$, at $R = 4$ and at $R = 6$.]{.predict}
+
+::: {.notes}
+Collect guesses. The answers: at R = 2, Ỹ = 1 − 0.5 × 0 = 1 (the demand shock alone); at R = 4, Ỹ = 1 − 0.5 × 2 = 0; at R = 6, Ỹ = 1 − 0.5 × 4 = −1.
+
+A common slip: putting R on the horizontal axis. The book draws the IS curve with output horizontal and the interest rate vertical, so a higher rate is a point higher up and to the left.
+:::
+
+## Each point on the IS curve pairs a real rate with an output gap {.live-figure}
+
+<script src="plots/plot1.js"></script>
+<div class="live-plot" data-fig="plot1"></div>
+
+[Model figure: the IS curve $\widetilde{Y}_t = \bar{a} - \bar{b}(R_t - \bar{r})$ with $\bar{a} = 1$, $\bar{b} = 0.5$, $\bar{r} = 2$; illustration of equation (11.14) in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)]{.source-line}
+
+::: {.notes}
+How to read it: short-run output Ỹ (percent) on the horizontal axis, the real interest rate R (percent) on the vertical axis, as in the book. The blue line is the IS curve. The teal dot is output at potential (Ỹ = 0, R = 4). The gray dot is R at its long-run value r̄ = 2, where output is ā = 1 percent above potential.
+
+Point at: the curve slopes down; its slope is −1/b̄ in this diagram (each point of output costs 2 points of interest rate when b̄ = 0.5). Hover the curve at R = 6 to read Ỹ = −1.
+
+The code: sp.lambdify turned the SymPy formula into a NumPy function, and the chart plots x = IS_function(R_grid), y = R_grid.
+:::
+
+## A higher rate moves the economy down and to the left of the IS curve
+
+[The answer: $\widetilde{Y} = 1$ at $R = 2$, $0$ at $R = 4$, and $-1$ at $R = 6$. Each point of $R$ costs $\bar{b} = 0.5$ points of output.]{.comment}
+
+[Spending reacts twice as strongly to the interest rate: $\bar{b} = 1$. Which real interest rate now closes the gap?]{.yourturn}
+
+[$R = \bar{r} + \bar{a}/\bar{b} = 2 + 1/1 = 3\%$. A more rate-sensitive economy needs a **smaller** rate rise.]{.answer .fragment}
+
+::: {.notes}
+Give students a minute. The answer uses the formula from the worked example; no new algebra.
+
+In code: R_closes_gap.subs({abar: 1, bbar: 1, rbar: 2}) returns 3.
+
+Extension question: what if the shock is negative, ā = −1? Then R = 2 − 2 = 0 with b̄ = 0.5: the central bank cuts the real rate to zero. Chapter 14 asks what happens when the rate it needs is below zero.
+:::
+
+## A percent change is not a change in percentage points
+
+::: {.eqpanel}
+$$\text{percent change} = 100 \times \frac{x_1 - x_0}{x_0}$$
+:::
+
+[Unemployment rises from 4% to 5%:]{.step}
+
+. . .
+
+$$\text{change in points: } 5 - 4 = \color{#e67e22}{\mathbf{1}\textbf{ percentage point}}$$
+
+. . .
+
+$$\text{percent change: } 100 \times \frac{5 - 4}{4} = \color{#e67e22}{\mathbf{25}\textbf{ percent}}$$
+
+[Ch. 2 (GDP growth), Ch. 7 (unemployment), Ch. 8 (inflation)]{.usedin}
+
+::: {.notes}
+The appendix's first example (Section C.2). Its output: "Change: 1.0 percentage point" and "Change: 25.0 percent".
+
+The rule: when a variable is already a rate in percent (unemployment, inflation, interest rates, debt as a share of GDP), say "percentage points" for the difference. "Percent" is the relative change.
+
+Both numbers are correct. They answer different questions. Newspapers mix them up all the time.
+:::
+
+## "Unemployment rose 1 percent" is the wrong way to say it
+
+[Unemployment went from 4% to 5%, so it rose by 1 percent.]{.myth}
+
+[It rose by **1 percentage point**. In percent, it rose by **25 percent**: a quarter more people are out of work, relative to the labor force.]{.fact .fragment}
+
+::: {.notes}
+This is the most common slip in macro writing. A central bank that raises its policy rate from 2 to 3 percent raised it by 1 percentage point (or 100 basis points), which is a 50 percent increase in the rate.
+
+Ask: a mortgage rate falls from 7 to 6 percent. How many points? How many percent? (1 point; about 14 percent.)
+:::
+
+## Points or percent? Practice both
+
+[Inflation rises from 2% to 3%. By how many percentage points, and by how many percent? The debt ratio rises from 100% to 110% of GDP: same two questions.]{.yourturn}
+
+[Inflation: $3 - 2 = 1$ point, and $100 \times 1/2 = 50$ percent. Debt: $110 - 100 = 10$ points, and $100 \times 10/100 = 10$ percent.]{.answer .fragment}
+
+[When the base is 100, points and percent coincide; when the base is small, they are far apart.]{.takeaway .fragment}
+
+::: {.notes}
+Let students work in pairs for one minute.
+
+The second case is a trick: with a base of 100 the two numbers agree. That is why the confusion often goes unnoticed for debt ratios near 100 percent, and is large for small rates such as inflation or interest rates.
+
+A ratio such as debt to GDP removes the size of the economy: 30 trillion dollars means little on its own, while 100 percent of GDP can be compared over time and across countries (Chapter 18).
+:::
+
+## An index sets a base year to 100; rebasing just divides
+
+::: {.eqpanel}
+$$\text{rebased index}_t = 100 \times \frac{x_t}{x_{\text{base}}}$$
+:::
+
+[What would 100 dollars of 1913 buy in 2025? The CPI was 9.60 in 1913 and 321.94 in 2025 (base 1982–84 = 100).]{.step}
+
+. . .
+
+$$\text{price ratio} = \frac{321.94}{9.60} = 33.5 \qquad 100 \times 33.5 = \color{#e67e22}{\mathbf{\$3{,}354}} \text{ of 2025}$$
+
+. . .
+
+$$\text{1913 with 2025} = 100: \quad 100 \times \frac{9.60}{321.94} = 3.0$$
+
+[Ch. 2 (real GDP), Ch. 8 (inflation and the CPI)]{.usedin}
+
+::: {.notes}
+A price index measures the price level relative to a base period. The U.S. CPI has the base 1982–84 = 100. To rebase it to 2025 = 100, divide every value by the 2025 value and multiply by 100.
+
+The appendix's printed outputs: "100 dollars of 1913 buy as much as 3,354 dollars of 2025" and "The 1913 price level, with 2025 = 100: 3.0". The CPI levels 9.60 (1913) and 321.94 (2025) are in the prepared file data/appC/us_cpi.csv (MeasuringWorth).
+
+The ratio is about 33.5, so prices rose about 33-fold in 112 years. Rebasing changes the levels of an index but not its percent changes: inflation is the same whatever the base year.
+:::
+
+## pandas rebases a whole price series in one line
+
+```python
+cpi = pd.read_csv(DATA_URL + "us_cpi.csv")
+cpi_2025 = cpi.loc[cpi["year"] == 2025, "cpi"].iloc[0]
+cpi["cpi_2025"] = 100 * cpi["cpi"] / cpi_2025         # rebase: now 2025 = 100
+cpi["inflation"] = 100 * cpi["cpi"].pct_change()      # percent change from the year before
+cpi.tail(3)
+```
+
+::: {.output}
+```text
+     year     cpi    cpi_2025  inflation
+249  2023  304.70   94.644965   4.113989
+250  2024  313.69   97.437411   2.950443
+251  2025  321.94  100.000000   2.629985
+```
+:::
+
+[Rebasing is a division by one number; inflation is `.pct_change()`, the percent change from the year before.]{.takeaway .fragment}
+
+::: {.notes}
+The appendix's cell, with tail(3) instead of tail() to fit the slide; the rows are the notebook's.
+
+.loc[condition, "column"] selects the rows where the condition is true, and .iloc[0] takes the first value. .pct_change() computes (x_t − x_{t−1})/x_{t−1} for every row; the first row has no year before it, so it gets NaN ("not a number").
+
+Read the output: 2025 is now exactly 100; inflation was 4.1 percent in 2023, 3.0 in 2024 and 2.6 in 2025.
+:::
+
+## A century of inflation
+
+[Has the U.S. price level ever fallen? When did prices rise fastest?]{.question}
+
+[Predict the year of the highest and of the lowest yearly CPI inflation since 1914, and roughly how high and how low.]{.predict}
+
+::: {.notes}
+Ask students to commit to a decade for the peak and the trough. Common guesses: the 1970s for the peak, the 1930s for the trough. The chart corrects both.
+:::
+
+## U.S. prices have both soared and fallen since 1914 {.live-figure}
+
+<script src="plots/plot2.js"></script>
+<div class="live-plot" data-fig="plot2"></div>
+
+[Data: [MeasuringWorth, Officer and Williamson, The Annual Consumer Price Index for the United States, 1774–Present](https://www.measuringworth.com/datasets/uscpi/). Chart inspired by Fig. 8.1 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)]{.source-line}
+
+::: {.notes}
+How to read it: the yearly percent change of the CPI, 1914–2025. The gray line marks zero: below it, prices fell (deflation). The title gives the extremes.
+
+Do live: hover the 1917 peak and the 1921 trough; then the early 1930s, then 1947, around 1980 and 2022.
+:::
+
+## The peak came in 1917 and the deepest deflation in 1921
+
+::: {.incremental}
+- Highest inflation: [20.5% in 1917]{.key}; lowest: [−10.7% in 1921]{.key}, right after the World War I boom.
+- Deflation again in the early 1930s; bursts of inflation in 1947, around 1980 and in 2022 (8.0%).
+- Inflation is the percent change of the index, so it does not depend on the base year.
+:::
+
+[Inflation is a growth rate: the percent change of a price index.]{.takeaway .fragment}
+
+::: {.notes}
+The predictions usually miss: the peak was not in the 1970s but during World War I. The 1970s and 1980 peaks were lower but longer.
+
+The 2022 value, 8.0 percent, is in the cpi.tail() output of the notebook (8.004576). The extremes are the chart title's numbers.
+
+Chapter 8 explains the long-run cause of inflation (money growth) and Chapter 12 the short-run one (the Phillips curve).
+:::
+
+## Nominal GDP divided by real GDP gives the price level
+
+::: {.eqpanel}
+$$\text{deflator}_t = 100 \times \frac{\text{nominal GDP}_t}{\text{real GDP}_t}$$
+:::
+
+::: {.mid-table}
+| Year | Nominal GDP (billion \$) | Real GDP (billion 2017 \$) | Deflator (2017 = 100) |
+|------------|:--------------------:|:--------------------:|:----------------:|
+| 1929 | 104.6 | 1,191.1 | 8.8 |
+| 1970 | 1,073.3 | 5,316.4 | 20.2 |
+| 2017 | 19,612.1 | 19,612.1 | [100.0]{.key} |
+| 2025 | 30,861.3 | 23,943.3 | 128.9 |
+:::
+
+[Real GDP removes price changes; the deflator is what is left.]{.takeaway .fragment}
+
+[Ch. 2 (real and nominal GDP), Ch. 8 (inflation)]{.usedin}
+
+::: {.notes}
+Nominal GDP is measured at current prices, real GDP at the prices of a base year (2017 in the BEA data). Their ratio is the GDP deflator, a price index for everything the economy produces.
+
+Worked example for 2025: 100 × 30,861.3 / 23,943.3 = 128.9. Prices of domestic output rose 28.9 percent between 2017 and 2025.
+
+Why is the 2017 deflator exactly 100? Because the real series is measured in 2017 dollars: in 2017, real and nominal GDP are the same number.
+
+The table is the appendix's printed output (nipa rows for 1929, 1970, 2017, 2025).
+:::
+
+## Annualizing: a monthly change compounds over 12 months
+
+::: {.eqpanel}
+$$\text{annual rate} = (1+m)^{12} - 1$$
+:::
+
+[Prices rise 0.3% in one month, $m = 0.003$:]{.step}
+
+. . .
+
+$$1.003^{12} = 1.0366 \quad \Rightarrow \quad \color{#e67e22}{\mathbf{3.66\%}} \text{ a year, a bit more than } 12 \times 0.3 = 3.6$$
+
+. . .
+
+[A quarterly change uses the 4th power: 0.5% a quarter is $1.005^4 - 1 = 2.02\%$ a year.]{.step}
+
+[Ch. 8 and 12 (monthly inflation), Ch. 9 (quarterly GDP growth)]{.usedin}
+
+::: {.notes}
+Monthly and quarterly changes are usually reported at an annual rate: the change that would result if the same change went on for a whole year. Because changes compound, the annual rate is a bit more than 12 times the monthly change.
+
+The appendix's printed output: "0.3% a month is 3.66% at an annual rate (12 x 0.3 = 3.6)" and "0.5% a quarter is 2.02% at an annual rate".
+
+When the BEA says "GDP grew at a 2 percent annual rate in the second quarter", it means the quarter's growth was about 0.5 percent, annualized.
+:::
+
+## Practice: real values and annual rates
+
+[(a) The CPI was 82.38 in 1980 and 321.94 in 2025. What do 100 dollars of 1980 buy in 2025? (b) The deflator was 104.0 in 2019 and 128.9 in 2025: by how many percent did it rise? (c) Annualize 0.2% a month and 1% a quarter.]{.yourturn}
+
+[(a) $100 \times 321.94/82.38 = \$391$. (b) $100 \times (128.9/104.0 - 1) = 24.0\%$. (c) $1.002^{12} - 1 = 2.43\%$ a year; $1.01^4 - 1 = 4.06\%$ a year.]{.answer .fragment}
+
+::: {.notes}
+Parts (a) and (b) are the appendix's own "Your turn" for Section C.2; the answers use the prepared data files (CPI 82.38 in 1980; deflator 103.98 in 2019 and 128.89 in 2025, from data/appC/nipa_annual.csv). Part (c) practices annualizing.
+
+Code for (a): 100 * cpi_2025 / cpi.loc[cpi["year"] == 1980, "cpi"].iloc[0].
+
+Point out in (b): 24 percent in six years is about 3.6 percent a year, the post-2021 inflation burst.
+:::
+
+## Act I formula sheet: reading and measuring change {.formula-sheet}
+
+| Tool | Formula | Python | Used in |
+|------------------------|---------------------------------------------|----------------------------------|-----------|
+| Percent change | $100\,(x_1 - x_0)/x_0$ | `100 * s.pct_change()` | Ch. 2, 7, 8 |
+| Percentage points | $x_1 - x_0$ (for rates already in %) | `s.diff()` | Ch. 7, 8, 18 |
+| Rebase an index | $100\,x_t/x_{\text{base}}$ | `100 * s / s_base` | Ch. 2, 8 |
+| Deflator | $100 \times$ nominal / real | `100 * gdp / real_gdp` | Ch. 2, 8 |
+| Real value | nominal / (price index / 100) | `nominal / (cpi / 100)` | Ch. 2, 8 |
+| Annualize | $(1+m)^{12} - 1$, $(1+q)^4 - 1$ | `(1 + m) ** 12 - 1` | Ch. 8, 9, 12 |
+| Solve for a variable | isolate it, step by step | `sp.solve(eq, R)` | every chapter |
+
+::: {.notes}
+A summary to photograph. The Python column is the pandas or SymPy line that does the job; the appendix notebook has each one in context.
+
+Before moving on, ask one quick question per row. E.g. "Inflation went from 3 to 2 percent: by how many points did it fall, by how many percent?" (1 point; 33 percent.)
+:::
+
+# Compound growth and logs {.divider background-color="#8e44ad"}
+
+[Act II]{.act}
+
+## Five exponent rules do most of the work in growth models
+
+::: {.mid-table}
+| Rule | Example in the book |
+|--------------------------------------|----------------------------------------------------|
+| $x^a \cdot x^b = x^{a+b}$ | $K^{1/3}K^{2/3} = K$ |
+| $(x^a)^b = x^{ab}$ | $(k^{1/3})^{3/2} = k^{1/2}$ |
+| $x^{-a} = 1/x^a$ | $K^{-2/3} = 1/K^{2/3}$ |
+| $x^{1/n} = \sqrt[n]{x}$ | $k^{1/3}$ is the cube root of $k$ |
+| $(xy)^a = x^a y^a$ | $(AK)^{1/3} = A^{1/3}K^{1/3}$ |
+:::
+
+[An exponent counts how many times a number multiplies itself: $x^3 = x \cdot x \cdot x$.]{.takeaway .fragment}
+
+[Ch. 4 (production function), Ch. 5 (Solow), Ch. 6 (Romer)]{.usedin}
+
+::: {.notes}
+The appendix's exponent table (Section C.3). Each example comes from a production function in the book.
+
+Quick check of rule 1: K^(1/3) K^(2/3) = K^(1/3 + 2/3) = K^1 = K. That is the algebra behind constant returns to scale in Chapter 4: doubling K and L doubles output because the exponents add up to one.
+
+Rule 4 is the one students forget: a fractional exponent is a root. 8^(1/3) = 2 because 2 × 2 × 2 = 8.
+:::
+
+## Exponential growth: the same percent each year, more dollars each year
+
+[Start from $y_0$ and grow at the constant rate $\bar{g}$:]{.step}
+$$y_1 = y_0\,(1+\bar{g})$$
+
+. . .
+
+$$y_2 = y_1\,(1+\bar{g}) = y_0\,(1+\bar{g})^2$$
+
+. . .
+
+$$y_t = y_0\,(1+\bar{g})^t$$
+
+[Income grows by the same **percent** each year, so it grows by more and more **dollars**.]{.takeaway .fragment}
+
+[Ch. 3 (growth facts), Ch. 5 (Solow), Ch. 6 (Romer)]{.usedin}
+
+::: {.notes}
+Build the formula one year at a time on the board: each year multiplies the previous one by (1 + ḡ). After t years we have multiplied t times. This is equation (3.7) of the book.
+
+Numbers to make it concrete: start at 100 with 10 percent growth. Year 1: 110 (+10). Year 2: 121 (+11). Year 3: 133.1 (+12.1). The percent is constant; the dollar increase grows.
+
+This is why a constant growth rate produces a curve that bends upward on a normal (linear) chart.
+:::
+
+## Worked example: a century of growth at 1%, 2% and 3%
+
+[Raise $(1+\bar{g})$ to the power 100:]{.step}
+
+. . .
+
+$$1.01^{100} = 2.7 \qquad 1.02^{100} = 7.2 \qquad 1.03^{100} = \color{#e67e22}{\mathbf{19.2}}$$
+
+. . .
+
+[In continuous time growth is written $y_t = y_0 e^{gt}$, with $e \approx 2.718$. For small rates the two are close:]{.step}
+
+$$(1.02)^{100} = 7.24 \qquad \text{vs.} \qquad e^{0.02 \times 100} = 7.39$$
+
+[Tripling the growth rate multiplies the century's gain by seven.]{.takeaway .fragment}
+
+::: {.notes}
+The appendix's printed outputs: "1% a year for 100 years multiplies income by 2.7", "2% ... 7.2", "3% ... 19.2", and "(1.02)^100 = 7.24 versus e^(0.02 x 100) = 7.39".
+
+Why the continuous version is a bit higher: e^(gt) compounds continuously, every instant, not once a year. Section C.6 explains why the two are close for small g (ln(1+g) ≈ g), and Section C.11 uses continuous time.
+
+Ask: at 2 percent, how long does income take to double? Keep the answer for the Rule of 70 in two slides.
+:::
+
+## Two economies, two growth rates
+
+[Economy A grows at 1% a year and economy B at 3%. They start equal. After 100 years, how many times richer is B than A?]{.question}
+
+[Write down a number. Then predict: if B grew at 4% instead, roughly how many times its starting income would it reach?]{.predict}
+
+::: {.notes}
+Collect guesses. Many students say "three times richer", because 3 is three times 1. The answer is about 7 times (19.2 / 2.7).
+:::
+
+## The faster economy pulls away more every year {.live-figure}
+
+<script src="plots/plot3.js"></script>
+<div class="live-plot" data-fig="plot3"></div>
+
+[Model figure: two incomes $y_t = (1+\bar{g})^t$ with $y_0 = 1$; illustration of the constant-growth rule, equation (3.7) in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)]{.source-line}
+
+::: {.notes}
+How to read it: years on the horizontal axis, income relative to the start (start = 1) on the vertical axis. Blue: economy A at 1 percent. Teal: economy B. The slider sets B's growth rate; the title reports both incomes after 100 years.
+
+Do live:
+1. At 3 percent: 2.7 versus 19.2.
+2. Move the slider to 1 percent: the two lines coincide.
+3. Move it to 4 percent: 50.5.
+4. Move it to 2 percent: 7.2.
+
+Point at the shape: B's line bends upward, ever more steeply. The vertical gap between the lines is itself growing exponentially.
+:::
+
+## Two points of growth make a sevenfold gap in a century
+
+::: {.incremental}
+- The answer: B ends at [19.2]{.key} times its start, A at [2.7]{.key}: B is about **7 times** richer, not 3.
+- At 4% a year, B reaches [50.5]{.key} times its start: one more point of growth multiplies the century's gain by 2.6.
+- With 1% growth, income less than triples in a century.
+:::
+
+[Small differences in growth rates become large differences in income.]{.takeaway .fragment}
+
+::: {.notes}
+The numbers are the slider titles of the live figure (computed in the notebook): 1% → 2.7, 1.5% → 4.4, 2% → 7.2, 2.5% → 11.8, 3% → 19.2, 3.5% → 31.2, 4% → 50.5.
+
+50.5 / 19.2 = 2.6.
+
+This is the arithmetic behind Chapter 3's facts on rich and poor countries: a growth difference of 2 points a year, sustained for a century, opens a sevenfold gap between economies that started equal.
+:::
+
+## The Rule of 70: doubling time ≈ 70 divided by the growth rate in percent
+
+[Step 1. Income doubles when $(1+g)^t = 2$. Take logs of both sides:]{.step}
+$$t\,\ln(1+g) = \ln 2$$
+
+. . .
+
+[Step 2. Solve for $t$, then use $\ln(1+g) \approx g$ for a small $g$:]{.step}
+$$t = \frac{\ln 2}{\ln(1+g)} \approx \frac{0.693}{g} = \frac{69.3}{100\,g}$$
+
+. . .
+
+[Step 3. Write $G = 100\,g$, the growth rate in percent, and round 69.3 to 70:]{.step}
+$$t \approx \frac{70}{G} \qquad G = 2: \quad t \approx \frac{70}{2} = \color{#e67e22}{\mathbf{35}} \text{ years (exact: 35.0)}$$
+
+[Ch. 3 (growth over the long run)]{.usedin}
+
+::: {.notes}
+Step 1 uses the power rule for logs, ln(x^a) = a ln x, from the next slides (a short preview). Step 2 uses the approximation ln(1 + g) ≈ g, which Act III studies.
+
+The exact doubling time at 2 percent is 35.00 years (the "three ways" slide). The rule gives 35.
+
+Why 70 and not 69.3? Act III shows that the next term of the approximation adds about 0.35 years, and 70 absorbs it at the growth rates that matter for income.
+:::
+
+## The Rule of 70 is excellent for the growth rates of GDP per person
+
+::: {.mid-table}
+| Growth rate (%) | 0.5 | 1 | 2 | 3 | 5 | 7 | 10 | 20 |
+|----------------------------|:-----:|:-----:|:-----:|:-----:|:-----:|:-----:|:-----:|:-----:|
+| Exact doubling time (years) | 139.0 | 69.7 | 35.0 | 23.4 | 14.2 | 10.2 | 7.3 | 3.8 |
+| Rule of 70 | 140.0 | 70.0 | 35.0 | 23.3 | 14.0 | 10.0 | 7.0 | [3.5]{.key} |
+:::
+
+[Between 1% and 5% the rule is off by a few tenths of a year; at 20% it is off by about four months.]{.takeaway .fragment}
+
+::: {.notes}
+The appendix's table, computed with np.log(2) / np.log(1 + g) for the exact time and 70 / g for the rule.
+
+The rule works because ln(1 + g) ≈ g for small g. At 20 percent, ln(1.2) = 0.18, not 0.20, and the rule underestimates the doubling time: 3.5 versus 3.8 years.
+
+Practical use: at 10 percent a year, a fast catch-up rate, income doubles about every 7 years (exact: 7.3).
+:::
+
+## Practice: doubling and multiplying
+
+[(a) Income grows 3.5% a year. When does it double? Use the rule, then the exact formula. (b) At 2% a year, how many years does it take for income to rise **tenfold**?]{.yourturn}
+
+[(a) Rule: $70/3.5 = 20$ years; exact: $\ln 2/\ln 1.035 = 20.1$ years. (b) $1.02^t = 10 \Rightarrow t = \ln 10/\ln 1.02 = 116.3$ years, a bit more than a century.]{.answer .fragment}
+
+::: {.notes}
+Part (b) is the appendix's "Your turn" for Section C.3. In code: optimize.brentq(lambda t: 1.02 ** t - 10, 1, 300) returns 116.28, the same as math.log(10) / math.log(1.02).
+
+A shortcut for (b): tenfold is a bit more than three doublings (2^3 = 8, 2^3.32 = 10), so about 3.32 × 35 = 116 years.
+:::
+
+## A logarithm undoes an exponent
+
+::: {.eqpanel}
+$$x = e^{z} \iff \ln x = z \qquad\qquad \ln e^{z} = z \qquad e^{\ln x} = x$$
+:::
+
+::: {.mid-table}
+| Rule | In words | Used for |
+|--------------------------|----------------------------------------|----------------------------------------------|
+| $\ln(xy) = \ln x + \ln y$ | the log of a product is the sum of the logs | GDP growth = GDP per person + population growth |
+| $\ln(x/y) = \ln x - \ln y$ | the log of a ratio is the difference | growth of a ratio such as $Y/L$ |
+| $\ln(x^a) = a \ln x$ | an exponent comes down as a factor | growth of $K^{1/3}$ |
+| $\ln 1 = 0$ | | |
+:::
+
+[Logs turn multiplication into addition and powers into multiplication.]{.takeaway .fragment}
+
+::: {.notes}
+The natural log ln x is the power to which e must be raised to get x. The base-10 log works the same way with 10: log10(1000) = 3. Logs are defined only for positive numbers.
+
+The three rules are the reason economists love logs: a model with products and powers, such as Y = A K^(1/3) L^(2/3), becomes a sum after taking logs. The growth rules of Act III follow from them.
+:::
+
+## Python checks the log rules with letters and with numbers
+
+```python
+x, y, a = sp.symbols("x y a", positive=True)   # logs need positive symbols
+print(sp.expand_log(sp.log(x * y)))
+print(sp.expand_log(sp.log(x / y)))
+print(sp.expand_log(sp.log(x ** a)))
+print(np.log(3 * 5), np.log(3) + np.log(5))     # the same number
+print(np.log10(1000), np.exp(np.log(42)))       # 3, and 42 back again
+```
+
+::: {.output}
+```text
+log(x) + log(y)
+log(x) - log(y)
+a*log(x)
+2.70805020110221 2.70805020110221
+3.0 42.00000000000001
+```
+:::
+
+[SymPy writes the natural log as `log`; `np.log` is $\ln$ and `np.log10` the base-10 log.]{.takeaway .fragment}
+
+::: {.notes}
+The appendix's two cells, combined. SymPy needs the symbols declared positive: the log of a negative number is not defined, so the rules would not hold in general.
+
+The last line shows a floating-point rounding: exp(log(42)) gives 42.00000000000001, not exactly 42. Computers store most decimals approximately; the error is in the 15th digit and never matters for economics.
+:::
+
+## Practice: expand a log
+
+[Expand $\ln\!\left(\bar{A}\,K^{1/3}L^{2/3}\right)$ with the three rules. Then simplify $\bar{A}K^{1/3}L^{2/3}$ when $K = L$, and compute $8^{2/3}$.]{.yourturn}
+
+[$\ln \bar{A} + \tfrac{1}{3}\ln K + \tfrac{2}{3}\ln L$ (product rule, then power rule). With $K = L$: $\bar{A}L^{1/3 + 2/3} = \bar{A}L$. And $8^{2/3} = (8^{1/3})^2 = 2^2 = 4$.]{.answer .fragment}
+
+::: {.notes}
+The appendix's SymPy cell shows the first step: sp.expand_log(sp.log(Abar * K ** Rational(1, 3))) prints "log(Abar) + log(K)/3".
+
+The value 8^(2/3) = 4 comes back in Act IV: the marginal product of capital at k = 8 is (1/3) × 8^(−2/3) = 1/12 = 0.083.
+
+The log form ln Y = ln Ā + (1/3) ln K + (2/3) ln L is what Chapter 4 uses to split income differences between countries into a part due to capital and a part due to productivity.
+:::
+
+## On a ratio scale, constant growth is a straight line
+
+[Step 1. Take logs of $y_t = y_0(1+\bar{g})^t$ with the product and power rules:]{.step}
+$$\ln y_t = \ln y_0 + t\,\ln(1+\bar{g})$$
+
+. . .
+
+[Step 2. That is a straight line in $t$: intercept $\ln y_0$, slope $\ln(1+\bar{g}) \approx \bar{g}$.]{.step}
+
+. . .
+
+[Step 3. A ratio scale spaces the axis by logs: 5,000 → 10,000 is as far as 40,000 → 80,000 (both double).]{.step}
+
+[The slope of a line on a ratio scale is the growth rate.]{.takeaway .fragment}
+
+[Ch. 3 (GDP per person over 150 years), Ch. 5, 6, 8]{.usedin}
+
+::: {.notes}
+On a ratio scale (log scale), equal distances on the vertical axis mean equal ratios. Plotting y on a ratio scale is the same as plotting ln y on a normal scale.
+
+So: a series that grows at a constant rate is a straight line; a series whose growth speeds up is a line that gets steeper; a recession is a dip below the line.
+
+This is why the book plots GDP per person over long periods on a ratio scale (Chapter 3).
+:::
+
+## 150 years of U.S. income on two scales
+
+[Does U.S. income look as if growth has sped up in recent decades? Predict what changes when you switch between a linear and a ratio scale.]{.question}
+
+[On the linear scale, will the line look straight or curved? On the ratio scale? Which scale makes the Great Depression look bigger?]{.predict}
+
+::: {.notes}
+Let students commit. A useful hint: think of what a constant growth rate does on each scale (previous slide).
+:::
+
+## U.S. income grew at a nearly constant rate for 150 years {.live-figure}
+
+<script src="plots/plot4.js"></script>
+<div class="live-plot" data-fig="plot4"></div>
+
+[Data: [BEA, Real GDP (`GDPCA`)](https://fred.stlouisfed.org/series/GDPCA), [population (`B230RC0A052NBEA`)](https://fred.stlouisfed.org/series/B230RC0A052NBEA) and [GDP deflator (`A191RD3A086NBEA`)](https://fred.stlouisfed.org/series/A191RD3A086NBEA), via FRED; before 1929, the [Maddison Project Database 2023](https://www.rug.nl/ggdc/historicaldevelopment/maddison/releases/maddison-project-database-2023) (Bolt and van Zanden 2024). Chart inspired by Figs. 3.2 and 3.5 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)]{.source-line}
+
+::: {.notes}
+How to read it: U.S. GDP per person in 2022 dollars, 1870–2025, starting on a ratio scale. The buttons at the bottom right switch between the ratio and the linear scale.
+
+Do live:
+1. On the ratio scale, hold a ruler to the screen: the line is close to straight.
+2. Click "Linear scale": the early decades flatten and the recent ones look steep, as if growth had sped up.
+3. Back to the ratio scale: find the Great Depression dip (1929–1933) and compare it with 2008–2009.
+:::
+
+## The ratio scale shows steady growth of 1.9% a year
+
+::: {.incremental}
+- On the ratio scale the line is nearly straight: growth averaged [1.9% a year]{.key} from 1870 to 2025.
+- On the linear scale the same steady growth bends upward, because each year adds more dollars.
+- The ratio scale shows the Great Depression as the deepest dip; on the linear scale 2008–09 looks as large, though it was much milder in percent.
+:::
+
+[To compare growth over time, use a ratio scale.]{.takeaway .fragment}
+
+::: {.notes}
+The 1.9 percent is the chart title's number, computed with the average-growth formula (y_T/y_0)^(1/T) − 1 (Act III): more precisely 1.88 percent.
+
+The notebook prose: "On the ratio scale, the dip of the Great Depression (1929–1933) stands out clearly, while on the linear scale it looks smaller than the 2008–2009 recession, which was much milder in percent."
+:::
+
+## A curve that gets steeper on a linear chart does not mean faster growth
+
+[The line gets steeper after 1950, so U.S. growth has sped up.]{.myth}
+
+[On a linear scale, **constant** growth already curves upward, because each year adds a fixed percent of a bigger number. Only the slope on a **ratio** scale measures the growth rate.]{.fact .fragment}
+
+::: {.notes}
+A frequent mistake when reading GDP, stock prices or population charts. Ask students to find a chart in today's news with a linear axis over a long period and say what it would look like on a ratio scale.
+:::
+
+## Practice: average growth since 1950
+
+[U.S. GDP per person grew at 1.88% a year from 1870 to 2025. Was growth faster or slower over 1950–2025? Use $\bar{g} = (y_T/y_0)^{1/T} - 1$ with $T = 75$.]{.yourturn}
+
+[With the data in the appendix's file, $(y_{2025}/y_{1950})^{1/75} - 1 = 1.97\%$ a year: a little **faster** than the 1.88% of the whole period.]{.answer .fragment}
+
+::: {.notes}
+The appendix's "Your turn" for Section C.4. The answer uses its prepared file data/appC/fig3-2.csv: select the rows for 1950 and 2025 and apply the formula with T = 75.
+
+The two rates are close, which is the striking fact of Chapter 3: the U.S. growth rate has been remarkably stable for a century and a half.
+:::
+
+## Act II formula sheet: compound growth and logs {.formula-sheet}
+
+| Tool | Formula | Python | Used in |
+|------------------------|---------------------------------------------|------------------------------------|-----------|
+| Exponent rules | $x^a x^b = x^{a+b}$, $(x^a)^b = x^{ab}$, $x^{-a} = 1/x^a$ | `x ** a` | Ch. 4, 5, 6 |
+| Constant growth | $y_t = y_0(1+\bar{g})^t$ | `y0 * (1 + g) ** t` | Ch. 3, 5, 6 |
+| Continuous growth | $y_t = y_0 e^{gt}$ | `y0 * np.exp(g * t)` | Ch. 15+ |
+| Doubling time | $\ln 2/\ln(1+g) \approx 70/G$ | `np.log(2) / np.log(1 + g)` | Ch. 3 |
+| Log rules | $\ln(xy) = \ln x + \ln y$, $\ln x^a = a \ln x$ | `sp.expand_log(...)`, `np.log` | Ch. 3, 4, 5 |
+| Ratio scale | $\ln y_t = \ln y_0 + t\ln(1+\bar{g})$ | `px.line(..., log_y=True)` | Ch. 3, 5, 6, 8 |
+| Average growth | $\bar{g} = (y_T/y_0)^{1/T} - 1$ | `(yT / y0) ** (1 / T) - 1` | Ch. 3, 5 |
+
+::: {.notes}
+The summary of Act II. Quick review questions: What does a straight line on a ratio scale mean? (Constant growth.) What is the doubling time at 7 percent? (About 10 years.) What is ln(1)? (Zero.)
+:::
+
+# Growth rules and approximations {.divider background-color="#2d8659"}
+
+[Act III]{.act}
+
+## Three ways to measure growth give three slightly different numbers
+
+::: {.mid-table}
+| Measure | Formula | In pandas | U.S. GDP per person, 1870–2025 |
+|-----------------------------|----------------------------------------|------------------------------|:------------------:|
+| Year to year | $g_t = (y_t - y_{t-1})/y_{t-1}$ | `100 * y.pct_change()` | mean 1.99% |
+| Log difference | $\ln y_t - \ln y_{t-1}$ | `100 * np.log(y).diff()` | mean 1.86 log points |
+| Average annual growth | $\bar{g} = (y_T/y_0)^{1/T} - 1$ | `(yT / y0) ** (1 / T) - 1` | [1.88%]{.key} |
+:::
+
+. . .
+
+[Worked example: income goes from 100 to 121 in two years. $\bar{g} = (121/100)^{1/2} - 1 = 1.1 - 1 = 10\%$ a year.]{.comment}
+
+[To get from $y_0$ to $y_T$, use the average annual growth rate.]{.takeaway .fragment}
+
+[Ch. 3 (equation 3.9), Ch. 5]{.usedin}
+
+::: {.notes}
+The appendix's printed outputs (Section C.5): "Average annual growth, equation (3.9): 1.88%", "Simple mean of the yearly growth rates: 1.99%", "Mean of the yearly log differences: 1.86 log points".
+
+The average annual growth rate is the constant rate that takes the series from its first to its last value. The mean log difference is its continuous-time version (it equals (ln y_T − ln y_0)/T).
+
+Check of the toy example: 100 × 1.1 × 1.1 = 121.
+:::
+
+## The mean of yearly growth rates overstates growth
+
+[Prices fall 50% one year and rise 50% the next. The average change is zero, so they are back where they started.]{.myth}
+
+[$0.5 \times 1.5 = 0.75$: they end **25% lower**. Ups and downs do not cancel in percent, which is why the simple mean (1.99%) is above the true average growth (1.88%).]{.fact .fragment}
+
+::: {.notes}
+The appendix's own example. A fall of 50 percent needs a rise of 100 percent to get back.
+
+This matters whenever growth is volatile: the simple mean of yearly rates is always at least as large as the average annual growth rate (the arithmetic mean is above the geometric mean). For U.S. GDP per person the difference is 0.11 points a year.
+:::
+
+## Practice: a good year and a bad year
+
+[Income rises 10% one year and falls 10% the next. Where does it end, relative to the start? What is the average annual growth rate?]{.yourturn}
+
+[$1.1 \times 0.9 = 0.99$: income ends 1% lower. Average annual growth: $0.99^{1/2} - 1 = -0.50\%$ a year, although the mean of $+10$ and $-10$ is zero.]{.answer .fragment}
+
+::: {.notes}
+Let students compute it. The point: volatility costs growth, even when good and bad years have the same size.
+
+Finance students know this as "volatility drag".
+:::
+
+## Three growth rules: products add, ratios subtract, powers multiply
+
+::: {.eqpanel}
+$$\text{product: } z = x \cdot y \;\Rightarrow\; g_z \approx g_x + g_y$$
+
+$$\text{ratio: } z = x/y \;\Rightarrow\; g_z \approx g_x - g_y$$
+
+$$\text{power: } z = x^a \;\Rightarrow\; g_z \approx a \cdot g_x$$
+:::
+
+[These three rules turn every growth question in the book into addition and multiplication.]{.takeaway .fragment}
+
+[Ch. 3 (rules), Ch. 4 and 6 (growth accounting), Ch. 8 (quantity theory)]{.usedin}
+
+::: {.notes}
+The three rules of Chapter 3. They follow from the log rules: the growth rate is approximately the change in the log, and logs turn products into sums, ratios into differences and powers into multiples.
+
+Examples to say aloud:
+- GDP = GDP per person × population: GDP growth ≈ per-person growth + population growth.
+- GDP per person = GDP / population: per-person growth ≈ GDP growth − population growth.
+- k^(1/3): its growth is one third of the growth of k.
+:::
+
+## Why "approximately": the product rule drops a tiny cross term
+
+[Step 1. Over one year, each factor grows by its own rate:]{.step}
+$$1 + g_z = (1+g_x)(1+g_y)$$
+
+. . .
+
+[Step 2. Multiply out:]{.step}
+$$1 + g_z = 1 + g_x + g_y + g_x g_y$$
+
+. . .
+
+[Step 3. With 2% and 3%, the cross term is $0.02 \times 0.03 = 0.0006$, so drop it:]{.step}
+$$g_z = 0.0506 \text{ exactly} \qquad \approx \; g_x + g_y = 0.05$$
+
+[In continuous time the rules are exact (Act V).]{.takeaway .fragment}
+
+::: {.notes}
+The appendix's SymPy check: sp.expand((1 + g_x)*(1 + g_y) − 1) prints "g_x*g_y + g_x + g_y", and with 2 and 3 percent it gives 0.0506.
+
+The cross term is the product of two small numbers, so it is tiny. It stops being tiny when the rates are large (high inflation): the next live figure shows when.
+:::
+
+## Worked example: the growth of $Y = A K^{1/3} L^{2/3}$
+
+[Step 1. Product rule: add the growth rates of the three factors:]{.step}
+$$g_Y = g_A + g_{K^{1/3}} + g_{L^{2/3}}$$
+
+. . .
+
+[Step 2. Power rule: each growth rate times its exponent:]{.step}
+$$g_Y = g_A + \tfrac{1}{3}\,g_K + \tfrac{2}{3}\,g_L$$
+
+. . .
+
+[Step 3. Numbers: $g_A = 1$, $g_K = 3$, $g_L = 1$ (percent):]{.step}
+$$g_Y = 1 + 1 + 0.67 = \color{#e67e22}{\mathbf{2.67\%}} \qquad g_{Y/L} = g_Y - g_L = 1.67\%$$
+
+[Ch. 6 (equation 6.14, growth accounting)]{.usedin}
+
+::: {.notes}
+The famous example of the appendix, equation (6.14) of the book. Its printed outputs: "Output growth with g_A = 1, g_K = 3, g_L = 1: 2.67 percent" and "GDP per worker grows at 1.67 percent (ratio rule: g_Y − g_L)".
+
+Growth accounting (Chapter 6) runs this in reverse: measure g_Y, g_K and g_L in the data, and back out g_A, total factor productivity growth, as the residual.
+:::
+
+## Worked example: the quantity theory in growth rates
+
+[Step 1. The quantity equation (money × velocity = prices × real output):]{.step}
+$$M V = P Y$$
+
+. . .
+
+[Step 2. Product rule on both sides:]{.step}
+$$g_M + g_V = g_P + g_Y$$
+
+. . .
+
+[Step 3. Velocity constant ($g_V = 0$), and inflation is $\pi = g_P$:]{.step}
+$$\pi = g_M - g_Y = 7 - 3 = \color{#e67e22}{\mathbf{4\%}}$$
+
+[Ch. 8 (equations 8.1, 8.3 and 8.4)]{.usedin}
+
+::: {.notes}
+The appendix's numbers: 7 percent money growth and 3 percent output growth give about 4 percent inflation.
+
+This is the long-run theory of inflation of Chapter 8: sustained inflation comes from money growing faster than output.
+:::
+
+## Practice: the power and ratio rules
+
+[(a) Capital per person $k$ grows at 6% a year. How fast does $y = k^{1/3}$ grow? (b) In 2025, U.S. real GDP grew 2.34% and the population 0.54%. Approximately how fast did real GDP per person grow?]{.yourturn}
+
+[(a) Power rule: $\tfrac{1}{3} \times 6 = 2\%$. (b) Ratio rule: $2.34 - 0.54 = 1.80\%$; the exact figure in the data is 1.79%.]{.answer .fragment}
+
+::: {.notes}
+Part (b) is the appendix's "Your turn" for Section C.5, answered with its prepared file data/appC/nipa_annual.csv: nipa["g_pop"] = 100 * nipa["population"].pct_change(), and the pct_change of real GDP divided by population. The 2025 values are 2.34 (real GDP), 0.54 (population) and 1.79 (per person).
+
+Part (a) is the Solow model's logic: with diminishing returns, output per person grows much more slowly than capital per person.
+:::
+
+## Testing the product rule on U.S. data
+
+[Nominal GDP = real GDP × the price level, so nominal growth ≈ real growth + inflation. In which years would the rule be farthest off?]{.question}
+
+[Predict: in a normal year, how big is the gap between the two sides? And in which decade would it be largest, and why?]{.predict}
+
+::: {.notes}
+The hint is the cross term: it is large when both growth and inflation are large (in absolute value).
+:::
+
+## Nominal growth ≈ real growth + inflation, almost every year {.live-figure}
+
+<script src="plots/plot5.js"></script>
+<div class="live-plot" data-fig="plot5"></div>
+
+[Data: [BEA, Gross Domestic Product (`GDPA`)](https://fred.stlouisfed.org/series/GDPA) and [Real Gross Domestic Product (`GDPCA`)](https://fred.stlouisfed.org/series/GDPCA), via FRED. Chart inspired by the growth rules and Fig. 3.9 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)]{.source-line}
+
+::: {.notes}
+How to read it: yearly growth rates in percent, 1930–2025. One line is nominal GDP growth; the other is real GDP growth plus the growth of the GDP deflator. If the product rule were exact, the lines would coincide.
+
+Do live: hover 1932 (the largest gap) and 2025. Zoom on the 1930s and 1940s.
+:::
+
+## The rule fails only when growth and inflation are both large
+
+::: {.incremental}
+- The largest gap: [1.51 points in 1932]{.key}, when output and prices both collapsed.
+- In 2025: nominal growth 5.04%, real growth + inflation 4.98%, a gap of a few hundredths of a point.
+- The dropped term is $g_{\text{real}} \times \pi$: small when both rates are a few percent.
+:::
+
+[For normal growth and inflation rates, the growth rules are all you need.]{.takeaway .fragment}
+
+::: {.notes}
+Numbers: the appendix's printed outputs ("Largest gap: 1.51 points in 1932"; the 2025 row: g_nominal 5.04, g_real 2.34, inflation 2.63, sum 4.98).
+
+In 1932 both real GDP and prices fell by large amounts, so the cross term (a product of two large negative rates) was large and positive. Hover 1932 to read both rates.
+:::
+
+## The growth of a ratio is a difference, not a ratio
+
+[Debt grows 6% a year and GDP 4%, so the debt-to-GDP ratio grows by 6/4 = 1.5% a year.]{.myth}
+
+[The ratio rule says $g_{B/Y} \approx g_B - g_Y = 6 - 4 = 2\%$ a year. Growth rates of a ratio **subtract**; they are never divided.]{.fact .fragment}
+
+::: {.notes}
+A common mistake with ratios: debt to GDP, GDP per person, real wages (wage / prices), the real exchange rate.
+
+The same rule gives real wage growth: nominal wage growth minus inflation. If wages rise 5 percent and prices 3 percent, real wages rise about 2 percent.
+
+Act V uses the exact version of this rule to find where the debt ratio settles.
+:::
+
+## Near any point, a smooth curve looks like a straight line
+
+::: {.eqpanel}
+$$f(x) \approx f(x_0) + f'(x_0)\,(x - x_0)$$
+:::
+
+[Apply it to $f(x) = \ln(1+x)$ at $x_0 = 0$: $f(0) = 0$ and $f'(0) = 1/(1+0) = 1$, so]{.step}
+
+. . .
+
+$$\ln(1+x) \approx x$$
+
+. . .
+
+[More terms (SymPy's `series`): $\ln(1+x) = x - \dfrac{x^2}{2} + \dfrac{x^3}{3} - \dots$ At $x = 0.02$ the second term is only 0.0002.]{.step}
+
+[Ch. 3, 9 (log approximations), Ch. 5 (linearizing near the steady state)]{.usedin}
+
+::: {.notes}
+The first-order Taylor approximation: near x0, any smooth function looks like the straight line through f(x0) with slope f'(x0) (the derivative, Act IV). The other approximations of the book are special cases:
+- ln(1 + x) ≈ x when x is small;
+- (1 + a)(1 + b) ≈ 1 + a + b (the growth rules);
+- (1 + a)/(1 + b) ≈ 1 + a − b (the Fisher equation);
+- linearizing a model around its steady state (Act V).
+
+The appendix's SymPy output: sp.series(sp.log(1 + x), x, 0, 4) gives x − x²/2 + x³/3 + O(x⁴).
+:::
+
+## Where the 70 comes from
+
+[Step 1. SymPy's series of the exact doubling time in $g$:]{.step}
+$$\frac{\ln 2}{\ln(1+g)} = \frac{\ln 2}{g} + \frac{\ln 2}{2} - \frac{g \ln 2}{12} + \dots$$
+
+. . .
+
+[Step 2. Write the growth rate in percent, $G = 100\,g$:]{.step}
+$$\frac{69.3}{G} + 0.35 + \dots$$
+
+. . .
+
+[Step 3. At $G = 2$: $34.66 + 0.35 = 35.0 = 70/2$.]{.step}
+
+[70 is $100 \ln 2 \approx 69.3$, rounded up to absorb the second term at normal growth rates.]{.takeaway .fragment}
+
+::: {.notes}
+The appendix's SymPy output: sp.series(sp.log(2)/sp.log(1 + g), g, 0, 2) gives log(2)/g + log(2)/2 − g log(2)/12 + O(g²).
+
+ln 2 = 0.693, so ln 2/g = 69.3/G, and ln 2 / 2 = 0.35 years.
+
+So the Rule of 70 is a Taylor approximation, plus a smart rounding.
+:::
+
+## How good is $\ln(1+x) \approx x$?
+
+[For small $x$, $\ln(1+x)$ and $x$ are almost equal. For which $x$ does the gap become large?]{.question}
+
+[Predict the error as a share of $x$ at $x = 0.05$, at $x = 0.25$ and at $x = 1$. Is $\ln(1+x)$ above or below $x$?]{.predict}
+
+::: {.notes}
+Ask for a rough percentage at each x. Hint: the second term of the series is x²/2.
+:::
+
+## The log approximation is close for small $x$ and drifts for large $x$ {.live-figure}
+
+<script src="plots/plot6.js"></script>
+<div class="live-plot" data-fig="plot6"></div>
+
+[Model figure: the curve $\ln(1+x)$, the line $x$ and the error at the chosen $x$; illustration of the approximation $\ln(1+x) \approx x$ used throughout Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)]{.source-line}
+
+::: {.notes}
+How to read it: blue is the exact curve ln(1 + x); the dashed teal line is the approximation x; the orange segment is the error at the slider's x. The title prints ln(1 + x) and the error.
+
+Do live: start at x = 0.05 (error 0.0012). Move to 0.02, 0.1, 0.2, 0.5 and 1. Then to −0.3: the error grows on the negative side too. The line is always above the curve: x ≥ ln(1 + x).
+:::
+
+## Up to $x = 0.10$ the error is under 5% of $x$; at $x = 1$ it is 31%
+
+::: {.mid-table}
+| $x$ | 0.01 | 0.02 | 0.05 | 0.10 | 0.25 | 0.50 | 1.00 |
+|-------------------------------|:-----:|:-----:|:-----:|:-----:|:-----:|:-----:|:-----:|
+| $\ln(1+x)$ | 0.0100 | 0.0198 | 0.0488 | 0.0953 | 0.2231 | 0.4055 | 0.6931 |
+| error as % of $x$ | 0.5 | 1.0 | 2.4 | 4.7 | [10.7]{.key} | 18.9 | [30.7]{.key} |
+:::
+
+. . .
+
+[Income rises from 100 to 103: $100 \times (\ln 103 - \ln 100) = 2.96$ **log points**, close to 3 percent.]{.comment}
+
+[Log points ≈ percent for changes of a few percent, and only then.]{.takeaway .fragment}
+
+::: {.notes}
+The answers to the prediction: 2.4 percent of x at 0.05, 10.7 percent at 0.25, 30.7 percent at 1. ln(1 + x) is always below x.
+
+The table is the appendix's printed table (Section C.6, "How large is the error?").
+
+Economists call 100 × Δln x a change in log points. For changes of a few percent, log points and percent are nearly the same number.
+:::
+
+## The Fisher equation $R \approx i - \pi$ breaks down at high inflation
+
+::: {.eqpanel}
+$$1 + i = (1+R)(1+\pi) \;\Rightarrow\; R = \frac{1+i}{1+\pi} - 1 \;\approx\; i - \pi$$
+:::
+
+::: {.mid-table}
+| Country, year | nominal rate $i$ | inflation $\pi$ | approximation $i - \pi$ | exact real rate |
+|---------------------------|:-----:|:-----:|:-----:|:-----:|
+| United States, 2023 | 5.1 | 4.1 | 0.9 | 0.9 |
+| United States, 2024 | 5.0 | 3.0 | 2.0 | 2.0 |
+| Argentina, 2023 | 95.8 | 133.5 | −37.7 | −16.1 |
+| Argentina, 2024 | 55.7 | 219.9 | [−164.2]{.key} | [−51.3]{.key} |
+:::
+
+[A real rate below −100% is impossible: lenders would lose more than everything.]{.takeaway .fragment}
+
+[Ch. 8 (equation 8.6), Ch. 12]{.usedin}
+
+::: {.notes}
+The exact link: one dollar lent at the nominal rate i becomes 1 + i dollars, which buys (1 + i)/(1 + π) goods if prices rise by π. The ratio rule's approximation is R ≈ i − π, equation (8.6) of the book.
+
+The table is the appendix's printed output (rates in percent, from its interest-rate panel). With U.S. inflation of a few percent, the two real rates differ by tenths of a point at most. In Argentina in 2024, with inflation above 200 percent, the approximation gives −164 percent, the exact formula −51 percent.
+:::
+
+## The output gap in percent is close to a log difference
+
+::: {.eqpanel}
+$$\widetilde{Y}_t = \frac{Y_t - \bar{Y}_t}{\bar{Y}_t} \;\approx\; \ln Y_t - \ln \bar{Y}_t$$
+:::
+
+::: {.mid-table}
+| Year | 1933 | 1982 | 2009 | 2020 | 2025 |
+|-------------------------------|:-----:|:-----:|:-----:|:-----:|:-----:|
+| gap in percent | [−23.25]{.key} | −6.23 | −4.66 | −3.28 | 1.40 |
+| gap in log points | [−26.47]{.key} | −6.43 | −4.77 | −3.33 | 1.39 |
+:::
+
+[In normal recessions the two agree to a few tenths; in the Great Depression they differ by 3 points.]{.takeaway .fragment}
+
+[Ch. 9 (equation 9.2), Ch. 13, 15]{.usedin}
+
+::: {.notes}
+Since ln(1 + x) ≈ x with x = (Y − Ȳ)/Ȳ, the percent gap is close to the log difference, which is how many researchers compute it.
+
+The table is the appendix's printed output, from actual and CBO potential GDP (data/appC/fig9-2.csv). In 1933 output was 23 percent below potential: a large x, and the two measures part.
+:::
+
+## Log points and percent are the same only for small changes
+
+[A log difference and a percent change are two names for the same number.]{.myth}
+
+[Only for changes of a few percent (100 → 103: 2.96 vs 3). For big ones they part: the 1933 gap is −23.25% but −26.47 log points, and in Argentina $i - \pi$ gives −164% while the exact real rate is −51%.]{.fact .fragment}
+
+::: {.notes}
+The common mistake: using log differences or i − π for large changes (hyperinflation, crises, multi-decade comparisons) and reading them as percent.
+
+Rule of thumb from the table: below 10 percent, the approximation is within 5 percent of the true value; above 25 percent, use the exact formula.
+:::
+
+## Practice: exact or approximate?
+
+[(a) $i = 5\%$, $\pi = 3\%$: compute the real rate both ways. (b) Money grows 100% a year, velocity is constant and output grows 2%. Exactly, $(1+g_M) = (1+\pi)(1+g_Y)$. Compute inflation exactly and with $\pi \approx g_M - g_Y$.]{.yourturn}
+
+[(a) Exact: $1.05/1.03 - 1 = 1.94\%$; approximate: $5 - 3 = 2\%$. (b) Exact: $1 + \pi = 2/1.02$, so $\pi = 96.1\%$; approximate: $100 - 2 = 98\%$.]{.answer .fragment}
+
+::: {.notes}
+Part (b) is the appendix's "Your turn" for Section C.6 (its hint: 1 + π = 2/1.02; the approximation gives 98). With constant velocity, the exact quantity theory (1 + g_M)(1 + g_V) = (1 + g_P)(1 + g_Y) simplifies to the line on the slide.
+
+Lesson: at 5 percent the approximation is off by 0.06 points; at 100 percent money growth, by 2 points.
+:::
+
+## Act III formula sheet: growth rules and approximations {.formula-sheet}
+
+| Tool | Formula | Python | Used in |
+|------------------------|------------------------------------------------|------------------------------------|-----------|
+| Average growth | $\bar{g} = (y_T/y_0)^{1/T} - 1$ | `(yT / y0) ** (1 / T) - 1` | Ch. 3, 5 |
+| Log growth | $100\,\Delta \ln y_t$ (log points) | `100 * np.log(y).diff()` | Ch. 3, 9 |
+| Product rule | $g_{xy} \approx g_x + g_y$ | `g_x + g_y` | Ch. 3, 6, 8 |
+| Ratio rule | $g_{x/y} \approx g_x - g_y$ | `g_x - g_y` | Ch. 3, 8, 18 |
+| Power rule | $g_{x^a} \approx a\,g_x$ | `a * g_x` | Ch. 3, 4, 6 |
+| Growth accounting | $g_Y = g_A + \tfrac13 g_K + \tfrac23 g_L$ | `g_A + g_K / 3 + 2 * g_L / 3` | Ch. 6 |
+| Quantity theory | $\pi \approx g_M - g_Y$ | `g_M - g_Y` | Ch. 8 |
+| Taylor (1st order) | $f(x) \approx f(x_0) + f'(x_0)(x - x_0)$ | `sp.series(f, x, x0, 2)` | Ch. 5, 9 |
+| Log approximation | $\ln(1+x) \approx x$ | `sp.series(sp.log(1 + x), x, 0, 3)` | Ch. 3, 9 |
+| Fisher equation | $R = (1+i)/(1+\pi) - 1 \approx i - \pi$ | `(1 + i) / (1 + pi) - 1` | Ch. 8, 12 |
+
+::: {.notes}
+The summary of Act III. Review questions: GDP grows 3 percent and population 1 percent: per-person growth? (2.) Money grows 10 percent and output 3: inflation? (About 7.) When does ln(1 + x) ≈ x fail? (When x is large, say above 0.1 to 0.25.)
+:::
+
+# Derivatives and optimization {.divider background-color="#b9770e"}
+
+[Act IV]{.act}
+
+## A derivative is a slope: the change in $f$ per unit change in $x$
+
+::: {.eqpanel}
+$$f'(x) = \frac{df}{dx} = \lim_{h \to 0} \frac{f(x+h) - f(x)}{h}$$
+:::
+
+::: {.mid-table}
+| Function | Derivative | Example in the book |
+|------------------------|------------------------|--------------------------------------------------|
+| $x^n$ | $n\,x^{n-1}$ | $\frac{d}{dk}k^{1/3} = \tfrac{1}{3}k^{-2/3}$ |
+| $\ln x$ | $1/x$ | $\frac{d}{dc}\ln c = 1/c$, marginal utility (Ch. 16) |
+| $e^{ax}$ | $a\,e^{ax}$ | continuous growth |
+| $c \cdot f(x)$ | $c \cdot f'(x)$ | constants stay |
+| $f(g(x))$ | $f'(g(x))\,g'(x)$ | the **chain rule** |
+:::
+
+[Economists say **marginal**: the marginal product of capital is the extra output from one more unit of capital.]{.takeaway .fragment}
+
+::: {.notes}
+The derivative f'(x), also written df/dx, is the slope of a function at a point: how much f changes per unit change in x, for a very small change. The limit says: take the slope between x and x + h, and let h shrink.
+
+The rules table is the appendix's (Section C.7). The power rule does most of the work in this book, because production and utility functions are powers.
+
+Chain rule example: d/dx ln(1 + x) = 1/(1 + x) × 1. We used it for the Taylor approximation in Act III.
+:::
+
+## Worked example: the slope of $y = k^{1/3}$ at $k = 1$ and $k = 8$
+
+[Step 1. Power rule: bring the exponent down, reduce it by one:]{.step}
+$$\frac{dy}{dk} = \tfrac{1}{3}\,k^{1/3 - 1} = \tfrac{1}{3}\,k^{-2/3}$$
+
+. . .
+
+[Step 2. At $k = 1$: $1^{-2/3} = 1$:]{.step}
+$$\tfrac{1}{3} \times 1 = 0.333$$
+
+. . .
+
+[Step 3. At $k = 8$: $8^{2/3} = (8^{1/3})^2 = 4$, so $8^{-2/3} = 1/4$:]{.step}
+$$\tfrac{1}{3} \times \tfrac{1}{4} = \tfrac{1}{12} = \color{#e67e22}{\mathbf{0.083}}$$
+
+[Ch. 4 (marginal products), Ch. 5 (Solow: output per person $y = k^{1/3}$)]{.usedin}
+
+::: {.notes}
+This is the marginal product of capital in the Solow model's per-person production function y = k^(1/3) (with Ā = 1, equation 5.6). The appendix's exact slope at k = 8: 0.08333.
+
+The slope falls from 0.333 to 0.083 as capital rises from 1 to 8: each extra unit of capital adds less output. That is diminishing returns, the engine of the Solow model.
+
+8^(2/3) = 4 was in the Act II exercise.
+:::
+
+## Partial derivatives give the marginal products of $K$ and $L$
+
+$$Y = \bar{A}\,K^{1/3}L^{2/3}$$
+
+. . .
+
+$$MPK = \frac{\partial Y}{\partial K} = \tfrac{1}{3}\bar{A}K^{-2/3}L^{2/3} = \tfrac{1}{3}\,\frac{Y}{K} \qquad MPL = \frac{\partial Y}{\partial L} = \tfrac{2}{3}\,\frac{Y}{L}$$
+
+. . .
+
+[Differentiate again in $K$: the slope of the slope.]{.step}
+$$\frac{\partial^2 Y}{\partial K^2} = -\tfrac{2}{9}\,\bar{A}\,K^{-5/3}L^{2/3} < 0$$
+
+[A negative second derivative means diminishing returns: each extra machine adds less.]{.takeaway .fragment}
+
+[Ch. 4 (equations 4.3, 4.4), Ch. 5]{.usedin}
+
+::: {.notes}
+A function of several inputs has a partial derivative for each input: change one, hold the others fixed. Written ∂Y/∂K.
+
+For MPK, treat Ā and L^(2/3) as constants and apply the power rule to K^(1/3). Then rewrite: (1/3) Ā K^(−2/3) L^(2/3) = (1/3) × Ā K^(1/3) L^(2/3) / K = (1/3) Y/K. The marginal product is a share of the average product.
+
+SymPy confirms (appendix outputs): "MPK − (1/3) Y/K = 0", "MPL − (2/3) Y/L = 0", and "Second derivative in K: −2*Abar*L**(2/3)/(9*K**(5/3)) (negative: diminishing returns)".
+
+In SymPy, write the exponent as sp.Rational(1, 3), not 1/3: the decimal 0.3333 would stop SymPy from simplifying exactly.
+:::
+
+## A numerical derivative: shrink the step $h$ until the slope settles
+
+```python
+def y_per_person(k):
+    return k ** (1 / 3)                     # y = k^(1/3), equation (5.6) with A = 1
+
+k0 = 8.0
+for h in [1, 0.1, 0.01, 0.001]:
+    print(f"h = {h:<6}: slope = {(y_per_person(k0 + h) - y_per_person(k0)) / h:.5f}")
+print(f"exact      : slope = {(1 / 3) * k0 ** (-2 / 3):.5f}")
+```
+
+::: {.output}
+```text
+h = 1     : slope = 0.08008
+h = 0.1   : slope = 0.08299
+h = 0.01  : slope = 0.08330
+h = 0.001 : slope = 0.08333
+exact      : slope = 0.08333
+```
+:::
+
+[When a function has no formula, $[f(x+h) - f(x)]/h$ with a small $h$ gives its slope.]{.takeaway .fragment}
+
+::: {.notes}
+The appendix's cell and output (Section C.7, "Numerical derivatives").
+
+With h = 1 the slope is too small (0.080): the secant line reaches past the point where the curve has flattened. As h shrinks, the secant becomes the tangent. With h = 0.001 the two agree to five decimals.
+
+np.gradient does this for a whole grid at once: np.gradient(y_per_person(k_grid), k_grid) gives 0.08334 at k = 8 with steps of 0.1.
+:::
+
+## Tangents to the production function
+
+[Draw the tangent to $y = k^{1/3}$ at $k = 1$ and at $k = 8$. Which tangent is steeper, and by how many times?]{.question}
+
+[Use the worked example. Predict: the ratio of the two slopes, and where on the curve a tangent would be almost flat.]{.predict}
+
+::: {.notes}
+The worked example has both slopes: 0.333 and 0.083. Ask for the ratio before revealing the chart.
+:::
+
+## The marginal product falls as capital rises {.live-figure}
+
+<script src="plots/plot7.js"></script>
+<div class="live-plot" data-fig="plot7"></div>
+
+[Model figure: $y = k^{1/3}$ and its tangents at $k = 1$ and $k = 8$; illustration of the production function (5.6) and its marginal product, as in Chapters 4 and 5 of Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)]{.source-line}
+
+::: {.notes}
+How to read it: capital per person k on the horizontal axis, output per person y on the vertical. The blue curve is y = k^(1/3). The dashed lines are the tangents at k = 1 (teal) and k = 8 (green); the legend prints their slopes.
+
+Point at: each tangent touches the curve at one point. The curve gets flatter as k rises. Hover the curve at k = 1 (y = 1) and k = 8 (y = 2).
+:::
+
+## The slope at $k = 8$ is a quarter of the slope at $k = 1$
+
+::: {.incremental}
+- The answer: [0.333]{.key} at $k = 1$ and [0.083]{.key} at $k = 8$, so the tangent at $k = 8$ is **4 times flatter** ($8^{2/3} = 4$).
+- Output doubles from 1 to 2 while capital rises eightfold: diminishing returns.
+- Far to the right the tangent is almost flat: extra capital adds almost nothing.
+:::
+
+[Diminishing returns are a falling derivative.]{.takeaway .fragment}
+
+::: {.notes}
+The slopes are the chart title's numbers: "the marginal product falls from 0.333 at k = 1 to 0.083 at k = 8".
+
+Output: 1^(1/3) = 1 and 8^(1/3) = 2.
+
+This is the reason the Solow model has a steady state (Act V): as capital rises, the extra output and hence the extra saving shrink, until saving only covers depreciation.
+:::
+
+## Practice: slopes and marginal utility
+
+[(a) Find the slope of $y = k^{1/3}$ at $k = 27$, exactly and with $h = 0.1$. (b) Find the marginal utility $u'(c)$ of $u(c) = \ln c$ and of $u(c) = c^{1/2}$. Do both fall as $c$ rises?]{.yourturn}
+
+[(a) $27^{2/3} = 9$, so $\tfrac{1}{3} \times \tfrac{1}{9} = 0.0370$; with $h = 0.1$: 0.03699. (b) $u' = 1/c$ and $u' = \tfrac{1}{2}c^{-1/2}$; both fall: $u'' = -1/c^2 < 0$ and $u'' = -\tfrac{1}{4}c^{-3/2} < 0$.]{.answer .fragment}
+
+::: {.notes}
+Part (b) is the appendix's "Your turn" for Section C.7 (sp.diff(sp.log(c), c) and sp.diff(sp.sqrt(c), c)).
+
+Why it matters: falling marginal utility means a household gains more from a dollar when it is poor than when it is rich, so it prefers to smooth consumption over time (Chapter 16).
+
+Numerical check for (a): ((27.1)^(1/3) − 3)/0.1 = 0.03699.
+:::
+
+## Each exponent of a Cobb-Douglas function is an elasticity
+
+::: {.eqpanel}
+$$\text{elasticity of } Y \text{ with respect to } K = \frac{\partial Y}{\partial K}\cdot\frac{K}{Y} = \frac{\%\,\Delta Y}{\%\,\Delta K}$$
+:::
+
+[Step 1. Put in $MPK = \tfrac{1}{3}\,Y/K$:]{.step}
+
+. . .
+
+$$\tfrac{1}{3}\,\frac{Y}{K}\cdot\frac{K}{Y} = \color{#e67e22}{\mathbf{\tfrac{1}{3}}} \qquad \text{and likewise for labor: } \tfrac{2}{3}\,\frac{Y}{L}\cdot\frac{L}{Y} = \tfrac{2}{3}$$
+
+[A 1% rise in capital raises output by 1/3 of a percent, whatever the levels.]{.takeaway .fragment}
+
+[Ch. 4 (production), Ch. 6 (growth accounting), Ch. 16 (consumption)]{.usedin}
+
+::: {.notes}
+An elasticity is a ratio of percent changes: it does not depend on units. That is why economists like them: "a 1 percent rise in capital raises output by 0.33 percent" is true in dollars, euros or machines.
+
+SymPy's output in the appendix: "Elasticity of Y with respect to K: 1/3" and "... L: 2/3".
+
+The power rule of growth rates (Act III) is the same fact in time: g_Y = (1/3) g_K when only K grows.
+:::
+
+## Constant returns: double both inputs, and output doubles
+
+[Step 1. Scale both inputs by $\lambda$:]{.step}
+$$F(\lambda K, \lambda L) = \bar{A}(\lambda K)^{1/3}(\lambda L)^{2/3} = \lambda^{1/3 + 2/3}\,\bar{A}K^{1/3}L^{2/3} = \lambda\,Y$$
+
+. . .
+
+[Step 2. Pay each input its marginal product and add up (Euler's theorem):]{.step}
+$$K \cdot MPK + L \cdot MPL = \tfrac{1}{3}Y + \tfrac{2}{3}Y = Y$$
+
+. . .
+
+[Step 3. With $r = MPK$ and $w = MPL$: capital's share $rK/Y = 1/3$, labor's share $wL/Y = 2/3$.]{.step}
+
+[Payments to capital and labor exhaust output exactly: nothing is left over as profit.]{.takeaway .fragment}
+
+[Ch. 4 (equations 4.5, 4.6)]{.usedin}
+
+::: {.notes}
+Constant returns to scale: F(λK, λL) = λF(K, L). The exponents add up to one, so λ^(1/3) λ^(2/3) = λ.
+
+The appendix's SymPy outputs: "F(λK, λL) / F(K, L) = lambda" and "K·MPK + L·MPL − Y = 0".
+
+This is why factor shares add up to one in Chapter 4: when firms pay r = MPK and w = MPL, capital gets 1/3 of output and labor 2/3, and together they exhaust output. Chapter 2 compares these shares with the data.
+:::
+
+## Practice: elasticities and returns to scale
+
+[(a) $Y = K^{0.3}L^{0.7}$. What is the elasticity of output with respect to capital? Labor's share? What happens to $Y$ if both inputs double? (b) $Y = K^{0.5}L^{0.7}$: what happens to $Y$ when both inputs double?]{.yourturn}
+
+[(a) 0.3; labor's share 0.7; output doubles (0.3 + 0.7 = 1). (b) $2^{0.5 + 0.7} = 2^{1.2} = 2.30$: output more than doubles, **increasing** returns to scale.]{.answer .fragment}
+
+::: {.notes}
+In SymPy: sp.simplify(sp.diff(Y, K) * K / Y) gives 0.3, and Y.subs({K: 2*K, L: 2*L}, simultaneous=True) / Y gives 2^1.2.
+
+Increasing returns to scale come back in Chapter 6: ideas are nonrival, so production with ideas has increasing returns.
+:::
+
+## The exponent 1/3 is not the marginal product of capital
+
+[In $Y = \bar{A}K^{1/3}L^{2/3}$, the marginal product of capital is 1/3.]{.myth}
+
+[1/3 is the **elasticity** (and capital's share). The marginal product is $MPK = \tfrac{1}{3}\,Y/K$: it falls as capital rises, from 0.333 at $k = 1$ to 0.083 at $k = 8$.]{.fact .fragment}
+
+::: {.notes}
+The confusion is natural because both numbers involve 1/3. One is a ratio of percent changes (unitless, constant); the other is a ratio of units (output per machine) that changes with K.
+
+Quick check: if MPK were the constant 1/3, there would be no diminishing returns and no Solow steady state.
+:::
+
+## At the top of a hill, the slope is zero
+
+::: {.eqpanel}
+$$\text{first-order condition: } f'(x^*) = 0 \qquad\qquad \text{second-order condition: } f''(x^*) < 0$$
+:::
+
+::: {.incremental}
+- Left of the peak the slope is positive; right of it, negative; at the peak, zero.
+- The second-order condition checks it is a **maximum**: the slope falls as you pass through $x^*$.
+- Recipe: differentiate, set to zero, solve for $x^*$, check the sign of $f''$.
+:::
+
+[Ch. 4 (firms hire), Ch. 16 (households consume), Ch. 17 (firms invest)]{.usedin}
+
+::: {.notes}
+When a function has a maximum at x*, its slope there is zero. That is the first-order condition (FOC). To be sure it is a maximum and not a minimum, the slope must fall as you pass through x*: the second derivative is negative.
+
+Every optimization in the book follows this recipe: the firm's choice of workers (Chapter 4), of capital (Chapter 17) and the household's choice of consumption (Chapter 16).
+:::
+
+## Worked example: a firm hires until the marginal product equals the wage
+
+[$\bar{A} = 1$, $\bar{K} = 8$, so $\bar{K}^{1/3} = 2$. Profit is $\Pi(L) = 2L^{2/3} - wL$.]{.step}
+
+. . .
+
+[Step 1. First-order condition, $MPL = w$:]{.step}
+$$\Pi^{\,\prime}(L) = \tfrac{4}{3}\,L^{-1/3} - w = 0$$
+
+. . .
+
+[Step 2. Solve for $L$: $L^{1/3} = \dfrac{4}{3w}$, so]{.step}
+$$L^* = \frac{64}{27\,w^3}$$
+
+. . .
+
+[Step 3. At $w = 2/3$: $27 \times (2/3)^3 = 8$, so]{.step}
+$$L^* = 64/8 = \color{#e67e22}{\mathbf{8}} \text{ workers}$$
+
+::: {.notes}
+The firm's problem of the appendix (compare equation 4.2 of the book). Profit is revenue minus the wage bill, with the price of output normalized to 1.
+
+Step 1: 2 × (2/3) L^(2/3 − 1) = (4/3) L^(−1/3). This is the MPL; the FOC says hire until MPL = w.
+
+Step 2: invert: L^(1/3) = 4/(3w); cube both sides: L = 64/(27 w^3). SymPy prints 64/(27 w^3), the same formula.
+
+Step 3: with w = 2/3, L* = 8. The labor demand curve slopes down: a higher wage means fewer workers.
+:::
+
+## SymPy and SciPy agree: hire 8 workers
+
+```python
+L, w = sp.symbols("L w", positive=True)
+profit = 8 ** sp.Rational(1, 3) * L ** sp.Rational(2, 3) - w * L      # A = 1, K = 8
+L_star = sp.solve(sp.Eq(sp.diff(profit, L), 0), L)[0]                 # 64/(27*w**3)
+print("Workers hired when w = 2/3:", L_star.subs(w, sp.Rational(2, 3)))
+print("Second derivative at that point:", sp.diff(profit, L, 2).subs({w: sp.Rational(2, 3), L: 8}))
+
+best_L = optimize.minimize_scalar(lambda L: -(8 ** (1 / 3) * L ** (2 / 3) - (2 / 3) * L),
+                                  bounds=(0.1, 50), method="bounded")  # SciPy minimizes
+print(f"minimize_scalar: L* = {best_L.x:.4f}, profit = {-best_L.fun:.4f}")
+```
+
+::: {.output}
+```text
+Workers hired when w = 2/3: 8
+Second derivative at that point: -1/36
+minimize_scalar: L* = 8.0000, profit = 2.6667
+```
+:::
+
+[SciPy's optimizers minimize, so maximize profit by minimizing **minus** the profit.]{.takeaway .fragment}
+
+::: {.notes}
+The appendix's cells, combined (it defines minus_profit with def; the lambda is the same function).
+
+The second derivative −1/36 is negative: a maximum. The numerical optimizer finds the same L* and a maximum profit of 2.6667 (= 2 × 8^(2/3) − (2/3) × 8 = 8 − 5.33).
+:::
+
+## Practice: a higher wage
+
+[The wage doubles, from $w = 2/3$ to $w = 4/3$. How many workers does the firm hire now? By what factor did hiring fall?]{.yourturn}
+
+[$L^* = 64/(27 \times (4/3)^3) = 64/64 = 1$ worker. Hiring falls **8-fold**: $L^*$ moves with $1/w^3$, and $2^3 = 8$.]{.answer .fragment}
+
+::: {.notes}
+A good exam-style question. The elasticity of labor demand with respect to the wage is −3 here: a 1 percent higher wage cuts hiring by 3 percent. That comes from the exponent: L* is proportional to w^(−3), so the power rule gives g_L = −3 g_w.
+:::
+
+## A household chooses consumption today and tomorrow
+
+::: {.eqpanel}
+$$\max_{c_{\text{today}},\,c_{\text{future}}} \; U = \ln c_{\text{today}} + \beta \ln c_{\text{future}}$$
+
+$$\text{subject to} \quad c_{\text{today}} + \frac{c_{\text{future}}}{1+R} = \bar{X}$$
+:::
+
+::: {.incremental}
+- $\beta$: patience; a smaller $\beta$ means the future counts for less.
+- $\bar{X}$: lifetime wealth, in today's dollars.
+- Future consumption costs $1/(1+R)$ today: saving one dollar returns $1+R$.
+:::
+
+[Ch. 16 (equation 16.5, the two-period model)]{.usedin}
+
+::: {.notes}
+The household of Chapter 16 lives two periods and values consumption with log utility. Its budget constraint says the present value of consumption equals lifetime wealth.
+
+Two ways to solve such a problem: substitution (when the constraint is easy to solve) and the Lagrangian (which always works). The next two slides do both and get the same answer.
+:::
+
+## Method 1: substitute the budget constraint into utility
+
+[Step 1. Solve the constraint for future consumption:]{.step}
+$$c_{\text{future}} = (1+R)\,(\bar{X} - c_{\text{today}})$$
+
+. . .
+
+[Step 2. Utility now has one choice variable:]{.step}
+$$U = \ln c_{\text{today}} + \beta \ln\!\left[(1+R)(\bar{X} - c_{\text{today}})\right]$$
+
+. . .
+
+[Step 3. First-order condition (chain rule on the second term):]{.step}
+$$\frac{1}{c_{\text{today}}} - \frac{\beta}{\bar{X} - c_{\text{today}}} = 0 \;\Rightarrow\; c_{\text{today}} = \frac{\bar{X}}{1+\beta}$$
+
+[With $\beta = 1$: consume half of lifetime wealth today, $\bar{X}/2$ (equation 16.9).]{.takeaway .fragment}
+
+::: {.notes}
+Step 3 in detail: d/dc of β ln[(1 + R)(X̄ − c)] is β × 1/[(1 + R)(X̄ − c)] × (−(1 + R)) = −β/(X̄ − c). Setting the FOC to zero: X̄ − c = β c, so c = X̄/(1 + β).
+
+SymPy (appendix output): sp.solve(sp.diff(U, c_today), c_today)[0] gives X/(β + 1).
+
+Note R drops out of c_today: with log utility, a higher interest rate has an income effect and a substitution effect that cancel exactly for today's consumption.
+:::
+
+## Method 2: the Lagrangian gives the Euler equation
+
+[Step 1. Add the constraint, times a multiplier $\mu$:]{.step}
+$$\mathbf{L} = \ln c_{\text{today}} + \beta \ln c_{\text{future}} + \mu\left[\bar{X} - c_{\text{today}} - \frac{c_{\text{future}}}{1+R}\right]$$
+
+. . .
+
+[Step 2. Set each derivative to zero:]{.step}
+$$\frac{1}{c_{\text{today}}} = \mu \qquad\qquad \frac{\beta}{c_{\text{future}}} = \frac{\mu}{1+R}$$
+
+. . .
+
+[Step 3. Divide the two conditions to remove $\mu$:]{.step}
+$$\frac{c_{\text{future}}}{c_{\text{today}}} = \beta\,(1+R)$$
+
+[Patience ($\beta$) and a high interest rate ($R$) tilt consumption toward the future.]{.takeaway .fragment}
+
+[Ch. 16 (equation 16.8, the Euler equation)]{.usedin}
+
+::: {.notes}
+The third condition, ∂ℒ/∂μ = 0, just gives back the budget constraint.
+
+The appendix's SymPy output: c_today = X/(β + 1), c_future = Xβ(R + 1)/(β + 1), and "c_future / c_today = beta*(R + 1) (the Euler equation, 16.8)".
+
+μ is the marginal utility of one more dollar of wealth: the "shadow price" of the constraint.
+:::
+
+## The household's best choice
+
+[Lifetime wealth $\bar{X} = 100$, patience $\beta = 0.96$, interest rate $R = 5\%$. Does the household consume more or less than half of its wealth today?]{.question}
+
+[Predict $c_{\text{today}}$ with the formula $\bar{X}/(1+\beta)$, and the shape of lifetime utility along the budget line.]{.predict}
+
+::: {.notes}
+Students should compute 100/1.96 before the reveal. Then: is the utility curve flat, rising, or hump-shaped along the budget line?
+:::
+
+## Lifetime utility peaks where its slope is zero {.live-figure}
+
+<script src="plots/plot8.js"></script>
+<div class="live-plot" data-fig="plot8"></div>
+
+[Model figure: lifetime utility $\ln c_{\text{today}} + \beta \ln[(1+R)(\bar{X} - c_{\text{today}})]$ with $\bar{X} = 100$, $\beta = 0.96$, $R = 5\%$; illustration of the household's problem, equation (16.5) in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)]{.source-line}
+
+::: {.notes}
+How to read it: consumption today on the horizontal axis, lifetime utility on the vertical axis, moving along the budget line (more today means less in the future). The teal dashed line has slope zero at the peak; the teal dot is the best choice.
+
+Hover near the peak: utility barely changes there. That flatness is the first-order condition.
+:::
+
+## The household consumes a little more than half today
+
+::: {.incremental}
+- The answer: $c_{\text{today}} = 100/1.96 =$ [51.0]{.key}, a bit more than half, because $\beta = 0.96 < 1$.
+- The Euler equation: $c_{\text{future}}/c_{\text{today}} = 0.96 \times 1.05 = 1.008$.
+:::
+
+[With $\beta = 1$ and $R = 5\%$, find $c_{\text{today}}$ and $c_{\text{future}}$.]{.yourturn}
+
+[$c_{\text{today}} = 100/2 = 50$ and $c_{\text{future}} = 1.05 \times 50 = 52.5$: consumption rises over time by the interest rate.]{.answer .fragment}
+
+::: {.notes}
+The chart title: "utility is highest at c_today = 51.0". The appendix also asks to check it with SciPy: optimize.minimize_scalar on minus the utility along the budget line, bounds (1, 99), gives c = 51.0.
+
+Interpretation: with log utility, c_today = X̄/(1 + β) does not depend on R. The household is slightly impatient (β < 1), so it consumes a little more than half of its lifetime wealth today; the Euler equation says future consumption is still slightly higher (1.008 times), because the interest rate (1.05) more than offsets the impatience (0.96).
+
+The exercise: with β = 1, c_future = (1 + R) × (100 − 50) = 52.5, and the Euler ratio is 1.05.
+:::
+
+## A zero derivative can also be a minimum
+
+[Wherever the derivative is zero, the function is at its maximum.]{.myth}
+
+[A zero slope also marks a **minimum** or a flat point. Check the second derivative: for the firm, $\Pi^{\,\prime\prime}(8) = -1/36 < 0$, a maximum. And compare with the corners when the choice is bounded.]{.fact .fragment}
+
+::: {.notes}
+Example: f(x) = x² has f'(0) = 0 at its minimum; f(x) = x³ has f'(0) = 0 at a flat point that is neither.
+
+In economics the objective functions (profit with diminishing returns, log utility) are usually concave, so the FOC does give the maximum. But check: a problem with increasing returns can have its FOC at a minimum of profit.
+:::
+
+## Act IV formula sheet: derivatives and optimization {.formula-sheet}
+
+| Tool | Formula | Python | Used in |
+|------------------------|-----------------------------------------------|---------------------------------------------|-----------|
+| Power rule | $\frac{d}{dx}x^n = n\,x^{n-1}$ | `sp.diff(x ** n, x)` | Ch. 4, 5 |
+| Log and chain rules | $\frac{d}{dx}\ln x = 1/x$; $(f(g))' = f'(g)\,g'$ | `sp.diff(sp.log(c), c)` | Ch. 16 |
+| Partial derivative | $MPK = \partial Y/\partial K = \tfrac{1}{3}Y/K$ | `sp.diff(Y, K)` | Ch. 4 |
+| Diminishing returns | $\partial^2 Y/\partial K^2 < 0$ | `sp.diff(Y, K, 2)` | Ch. 4, 5 |
+| Numerical derivative | $[f(x+h) - f(x)]/h$ | `np.gradient(y, x)` | any |
+| Elasticity | $(\partial Y/\partial K)(K/Y)$ | `sp.simplify(sp.diff(Y, K) * K / Y)` | Ch. 4, 6 |
+| Constant returns | $F(\lambda K, \lambda L) = \lambda F(K, L)$ | `Y.subs({K: lam*K, L: lam*L})` | Ch. 4, 6 |
+| Optimum | $f'(x^*) = 0$, $f''(x^*) < 0$ | `sp.solve(sp.diff(f, x), x)` | Ch. 4, 16, 17 |
+| Numerical optimum | minimize $-f$ | `optimize.minimize_scalar(...)` | any |
+| Euler equation | $c_{\text{future}}/c_{\text{today}} = \beta(1+R)$ | Lagrangian with `sp.solve` | Ch. 16 |
+
+::: {.notes}
+The summary of Act IV. Review: what is the MPL of Y = K^(1/3) L^(2/3) at K = L = 1? (2/3.) A firm's MPL is 5 and the wage is 4: hire more or fewer? (More, until MPL falls to 4.) If β(1 + R) > 1, does consumption rise or fall over time? (Rise.)
+:::
+
+# Equations and dynamics {.divider background-color="#c0392b"}
+
+[Act V]{.act}
+
+## The short-run model is three linear equations in three unknowns
+
+$$\begin{aligned}
+\text{IS:}\quad & \widetilde{Y}_t = \bar{a} - \bar{b}\,(R_t - \bar{r}) \\
+\text{MP rule:}\quad & R_t - \bar{r} = \bar{m}\,(\pi_t - \bar{\pi}) \\
+\text{AS:}\quad & \pi_t = \pi_{t-1} + \bar{\nu}\,\widetilde{Y}_t + \bar{o}
+\end{aligned}$$
+
+. . .
+
+[Move the unknowns $\widetilde{Y}_t, R_t, \pi_t$ to the left and everything else to the right: the matrix form $Mz = c$.]{.step}
+
+$$\begin{pmatrix}1 & \bar{b} & 0\\ 0 & 1 & -\bar{m}\\ -\bar{\nu} & 0 & 1\end{pmatrix}
+\begin{pmatrix}\widetilde{Y}_t\\ R_t\\ \pi_t\end{pmatrix} =
+\begin{pmatrix}\bar{a}+\bar{b}\bar{r}\\ \bar{r}-\bar{m}\bar{\pi}\\ \pi_{t-1}+\bar{o}\end{pmatrix}$$
+
+[Ch. 11 (IS), Ch. 12 (Phillips curve), Ch. 13 (the policy rule and AS/AD)]{.usedin}
+
+::: {.notes}
+The short-run model of Chapters 11–13: the IS curve (11.14), the monetary policy rule (13.1) and the aggregate supply (Phillips) curve (13.2).
+
+Building the matrix, row by row:
+- IS: Ỹ + b̄R = ā + b̄r̄ (move −b̄R to the left, b̄r̄ to the right).
+- MP: R − m̄π = r̄ − m̄π̄.
+- AS: −ν̄Ỹ + π = π_{t−1} + ō.
+
+Each row of M holds the coefficients on (Ỹ, R, π); c holds everything that is known this period.
+:::
+
+## NumPy solves the system in one line
+
+[A negative demand shock $\bar{a} = -2$; $\bar{b} = \bar{m} = \bar{\nu} = 0.5$; $\bar{r} = \bar{\pi} = 2$; last year's inflation 2; no price shock.]{.comment}
+
+```python
+a_, b_, m_, nu_, r_, pibar_, pi_last, o_ = -2, 0.5, 0.5, 0.5, 2, 2, 2, 0
+M = np.array([[1, b_, 0],
+              [0, 1, -m_],
+              [-nu_, 0, 1]])
+c = np.array([a_ + b_ * r_, r_ - m_ * pibar_, pi_last + o_])
+Y_short, R_short, pi_short = np.linalg.solve(M, c)
+print(f"Output gap {Y_short:.3f}%, real rate {R_short:.3f}%, inflation {pi_short:.3f}%")
+```
+
+::: {.output}
+```text
+Output gap -1.778%, real rate 1.556%, inflation 1.111%
+```
+:::
+
+[The shock opens a gap of −1.8%, inflation falls below target, and the central bank cuts the real rate below $\bar{r}$.]{.takeaway .fragment}
+
+::: {.notes}
+The appendix's cell and output (Section C.9), with its own illustrative numbers.
+
+np.array([[...], [...]]) builds a matrix row by row. np.linalg.solve(M, c) solves Mz = c for the vector z.
+
+Check the answer by hand in the MP rule: R − 2 = 0.5 × (1.111 − 2) = −0.444, so R = 1.556. In the IS curve: −2 − 0.5 × (1.556 − 2) = −2 + 0.222 = −1.778.
+:::
+
+## With letters, the solution shows how the policy rule softens a shock
+
+$$\widetilde{Y}_t = \frac{\bar{a} - \bar{b}\bar{m}\,(\pi_{t-1} - \bar{\pi}) - \bar{b}\bar{m}\,\bar{o}}{1 + \bar{b}\bar{m}\bar{\nu}}$$
+
+::: {.incremental}
+- A negative demand shock $\bar{a}$, inflation inherited above target, or a price shock $\bar{o}$ lower output.
+- The factor $1/(1 + \bar{b}\bar{m}\bar{\nu})$ shrinks every shock: here $1/1.125$, so $\bar{a} = -2$ gives $-1.778$.
+- Letters show **which** parameters matter; numbers come last.
+:::
+
+[`sp.solve([IS, MP, AS], [Y, R, pi])` returns this formula.]{.takeaway .fragment}
+
+::: {.notes}
+The appendix's SymPy output, rearranged: (−π_{t−1} b̄m̄ + ā − b̄m̄ō + b̄m̄π̄)/(b̄m̄ν̄ + 1).
+
+With the slide's numbers: b̄m̄ = 0.25, b̄m̄ν̄ = 0.125, inherited inflation equals the target and ō = 0, so Ỹ = −2/1.125 = −1.778, as NumPy found.
+
+Why the shock is softened: when output falls, inflation falls (AS), the central bank cuts the rate (MP), and spending recovers part of the way (IS).
+:::
+
+## Practice: a price shock instead of a demand shock
+
+[Solve the short-run system with no demand shock ($\bar{a} = 0$) and a price shock $\bar{o} = 1$; the other numbers as before. What happens to output, the real rate and inflation?]{.yourturn}
+
+[Output $-0.25/1.125 = -0.222\%$, real rate $2.444\%$, inflation $2.889\%$: **stagflation**. Inflation rises above target, the central bank raises the real rate, and output falls.]{.answer .fragment}
+
+::: {.notes}
+The appendix's "Your turn" for Section C.9. In code: change a_ and o_, rebuild c and call np.linalg.solve again; np.linalg.solve gives [−0.222, 2.444, 2.889]. With SymPy: substitute {abar: 0, ..., obar: 1} into short_run_solution.
+
+Check with the formula: Ỹ = (0 − 0 − 0.25 × 1)/1.125 = −0.222.
+
+This is the inflation-shock experiment of Chapter 13 (an oil price shock).
+:::
+
+## Worked example: the Solow steady state by hand
+
+[Capital stops changing when investment equals depreciation, with $\bar{s} = 0.4$, $\bar{d} = 0.1$, $\bar{A} = 1$:]{.step}
+$$0.4\,k^{1/3} = 0.1\,k$$
+
+. . .
+
+[Step 1. Divide both sides by $0.1\,k^{1/3}$ (for $k > 0$):]{.step}
+$$4 = k^{2/3}$$
+
+. . .
+
+[Step 2. Raise both sides to the power $3/2$:]{.step}
+$$k^* = 4^{3/2} = (\sqrt{4})^3 = \color{#e67e22}{\mathbf{8}} \qquad \text{in general } k^* = \left(\frac{\bar{s}\bar{A}}{\bar{d}}\right)^{3/2}$$
+
+[Ch. 5 (equation 5.8)]{.usedin}
+
+::: {.notes}
+A nonlinear equation, but one we can solve by hand with the exponent rules of Act II: k / k^(1/3) = k^(2/3), and (k^(2/3))^(3/2) = k.
+
+The appendix's outputs: "SymPy: [8]" (with k declared positive) and "Formula (5.8): 8.0".
+
+There is a second root, k = 0: with no capital, there is no output, no investment and no depreciation. We divided it away in Step 1.
+:::
+
+## When there is no formula, a root finder searches for the zero
+
+```python
+def net_investment(k):
+    return 0.4 * k ** (1 / 3) - 0.1 * k              # s A k^(1/3) - d k
+
+print("brentq:", optimize.brentq(net_investment, 1, 100))   # needs a sign change in [1, 100]
+print("fsolve:", optimize.fsolve(net_investment, 5)[0])     # needs a starting guess
+```
+
+::: {.output}
+```text
+brentq: 8.0
+fsolve: 7.999999999999998
+```
+:::
+
+::: {.incremental}
+- `brentq` always finds a root inside an interval where the function changes sign.
+- `fsolve` needs only a starting guess and also solves systems, but a poor guess can land on the other root, $k = 0$.
+:::
+
+::: {.notes}
+The appendix's cell and outputs. Net investment is positive at k = 1 (0.4 − 0.1 = 0.3) and negative at k = 100 (0.4 × 4.64 − 10 < 0), so brentq has a sign change to work with. We start the interval at 1, away from the k = 0 root.
+
+fsolve walks from k = 5 to the root; 7.999999999999998 is 8 up to floating-point rounding.
+:::
+
+## Investment and depreciation
+
+[Plot investment $\bar{s}y = 0.4\,k^{1/3}$ and depreciation $\bar{d}k = 0.1\,k$. Where do they cross, and which is larger to the left of the crossing?]{.question}
+
+[Predict: if capital starts below the crossing, does it rise or fall? And above it?]{.predict}
+
+::: {.notes}
+Ask students to sketch the two curves first: a concave curve from the origin and a straight line from the origin.
+:::
+
+## The steady state is where investment meets depreciation {.live-figure}
+
+<script src="plots/plot9.js"></script>
+<div class="live-plot" data-fig="plot9"></div>
+
+[Model figure: $\bar{s}\bar{A}k^{1/3}$ and $\bar{d}k$ with $\bar{s} = 0.4$, $\bar{d} = 0.1$, $\bar{A} = 1$. Adapted from Fig. 5.1 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)]{.source-line}
+
+::: {.notes}
+How to read it: capital per person k on the horizontal axis. Blue: investment s·y; teal: depreciation d·k; the green dot is the steady state k* = 8, where both equal 0.8.
+
+Point at: to the left of 8, the blue curve is above the line: investment exceeds depreciation, so capital grows. To the right, depreciation wins and capital shrinks. Both curves start at the origin: the k = 0 root.
+:::
+
+## Left of $k^*$ capital grows; right of it capital shrinks
+
+::: {.incremental}
+- The answer: the curves cross at [$k^* = 8$]{.key}, where investment = depreciation = 0.8.
+- Below $k^*$ investment exceeds depreciation, so $k$ rises; above $k^*$ it falls. Either way, $k$ moves toward 8.
+:::
+
+[Lower the investment rate to $\bar{s} = 0.3$, with $\bar{d} = 0.1$ and $\bar{A} = 1$. What is the new steady state?]{.yourturn}
+
+[$k^* = (0.3/0.1)^{3/2} = 3^{3/2} = 5.2$: a lower investment rate means a lower steady state.]{.answer .fragment}
+
+::: {.notes}
+The appendix's "What to notice": the Solow equation has two roots, k = 0 and k* = 8; SymPy, told that k is positive, reports only 8; brentq finds it because the interval starts at 1.
+
+The Your-turn value 5.2 is the appendix's hint for Section C.11, (0.3/0.1)^(3/2) ≈ 5.2.
+
+The stability argument on this slide is informal; the next slides make it precise with difference equations.
+:::
+
+## A difference equation says how today's value depends on yesterday's
+
+::: {.eqpanel}
+$$x_{t+1} = a\,x_t + b$$
+:::
+
+[Step 1. The **steady state** repeats itself: $x^* = a\,x^* + b$, so]{.step}
+$$x^* = \frac{b}{1-a} \qquad (a \neq 1)$$
+
+. . .
+
+[Step 2. Subtract the two equations: the gap to the steady state is multiplied by $a$ each period:]{.step}
+$$x_{t+1} - x^* = a\,(x_t - x^*) \;\Rightarrow\; x_t = x^* + a^t\,(x_0 - x^*)$$
+
+[Ch. 5 (capital), Ch. 7 (unemployment), Ch. 12–13 (inflation), Ch. 18 (public debt)]{.usedin}
+
+::: {.notes}
+A first-order linear difference equation. The book's examples: capital accumulation Δk_{t+1} = s̄y_t − d̄k_t (5.7), the bathtub model of unemployment (Chapter 7), the Phillips curve π_t = π_{t−1} + ν̄Ỹ_t (12.5), and the government budget constraint B_{t+1} = (1 + i)B_t + G_t − T_t (18.2).
+
+Step 2: x_{t+1} − x* = a x_t + b − (a x* + b) = a (x_t − x*). Apply it t times: the gap after t periods is a^t times the initial gap.
+
+SymPy's rsolve gives the same solution (appendix output): steady state −b/(a − 1), and x(t) = a^t (a x_0 + b − x_0)/(a − 1) − b/(a − 1), which simplifies to the formula on the slide.
+:::
+
+## Stability depends on $a$: the gap shrinks only if $\lvert a \rvert < 1$
+
+::: {.mid-table}
+| Value of $a$ | What the gap $a^t(x_0 - x^*)$ does | Path |
+|---------------------------|-----------------------------------------------|---------------------------|
+| $0 < a < 1$ | shrinks, keeping its sign | smooth approach |
+| $a = 0$ | vanishes after one period | jumps to $x^*$ |
+| $-1 < a < 0$ | shrinks, switching sign each period | zigzag approach |
+| $\lvert a \rvert > 1$ | grows without limit | explodes |
+:::
+
+. . .
+
+::: {.eqpanel}
+$$\text{half-life} = \frac{\ln 0.5}{\ln \lvert a \rvert} \qquad a = 0.8: \;\; \frac{\ln 0.5}{\ln 0.8} = 3.1 \text{ periods}$$
+:::
+
+[The closer $\lvert a \rvert$ is to 1, the slower the approach.]{.takeaway .fragment}
+
+::: {.notes}
+The half-life is the number of periods it takes to close half of the gap: solve |a|^t = 0.5 for t (logs again).
+
+a = 0.8: ln 0.5 = −0.693 and ln 0.8 = −0.223, so 3.1 periods. a = 0.5: exactly 1 period.
+
+A negative a makes the path overshoot: x jumps above x*, then below, and so on, while the gap still shrinks.
+:::
+
+## A loop simulates any difference equation
+
+```python
+def simulate_linear(a, b, x0, periods):
+    path = [x0]
+    for period in range(periods):
+        path.append(a * path[-1] + b)                  # x_{t+1} = a x_t + b
+    return np.array(path)
+
+path = simulate_linear(0.8, 1.0, 0.0, 10)
+formula = 5 + 0.8 ** np.arange(0, 11) * (0.0 - 5)      # x* + a^t (x0 - x*), x* = 1/(1 - 0.8) = 5
+print(path.round(3))
+print("Largest difference from the formula:", np.abs(path - formula).max())
+```
+
+::: {.output}
+```text
+[0.    1.    1.8   2.44  2.952 3.362 3.689 3.951 4.161 4.329 4.463]
+Largest difference from the formula: 1.7763568394002505e-15
+```
+:::
+
+[The loop and the formula agree to 15 decimals; the loop also works when the equation is nonlinear.]{.takeaway .fragment}
+
+::: {.notes}
+The appendix's cell and output. Each step multiplies by a = 0.8 and adds b = 1. By hand: 0 → 1 → 0.8 + 1 = 1.8 → 1.44 + 1 = 2.44 → 2.952. The steady state is 1/(1 − 0.8) = 5; after 10 periods the path is at 4.463, about 90 percent of the way.
+
+path[-1] is the last element of the list: the current value.
+:::
+
+## Stability and speed
+
+[Three paths start at $x_0 = 0$ and head for $x^* = 1$, with $a = 0.9$, $a = 0.5$ and $a = -0.5$. Which is slowest? Which zigzags?]{.question}
+
+[Predict the half-life for each value of $a$, and what happens with $a = 0$.]{.predict}
+
+::: {.notes}
+Use the half-life formula. a = 0.9: ln 0.5/ln 0.9 ≈ 6.6. a = 0.5: 1. a = −0.5: also 1, but with a zigzag. a = 0: one step.
+:::
+
+## The value of $a$ sets both the speed and the shape of the path {.live-figure}
+
+<script src="plots/plot10.js"></script>
+<div class="live-plot" data-fig="plot10"></div>
+
+[Model figure: $x_{t+1} = a\,x_t + b$ from $x_0 = 0$, with $b = 1 - a$ so that $x^* = 1$; illustration of a first-order linear difference equation, the form of equations (5.7), (12.5) and (18.2) in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)]{.source-line}
+
+::: {.notes}
+How to read it: periods on the horizontal axis; the blue path of x; the gray dashed line at the steady state x* = 1. The slider sets a (with b = 1 − a, so the steady state stays at 1 and only the speed and the shape change). The title prints the half-life.
+
+Do live: a = 0.9 (slow, 6.6), 0.5 (fast, 1.0), 0 (one jump), −0.5 (zigzag), −0.8 (slow zigzag, 3.1). In the Colab notebook both a and b are live sliders.
+:::
+
+## Half-lives from the slider: 6.6, 3.1, 1.0 and 0.6 periods
+
+::: {.incremental}
+- The answer: $a = 0.9$ is slowest, half-life [6.6]{.key}; $a = 0.8$: 3.1; $a = 0.5$: 1.0; $a = 0.3$: 0.6.
+- $a = -0.5$ and $a = -0.8$ zigzag around $x^*$, with half-lives of 1.0 and 3.1: the size of $a$ sets the speed, its sign the shape.
+- $a = 0$: $x$ reaches $x^*$ after one period.
+:::
+
+[Persistence $a$ close to 1 means slow adjustment; this is what separates the short run from the long run.]{.takeaway .fragment}
+
+::: {.notes}
+The half-lives are the slider titles of the live figure.
+
+Teaching point for the rest of the book: the same math describes very different speeds. The next three examples have half-lives of months (unemployment), about a decade (capital), and years (inflation).
+:::
+
+## Practice: steady state and half-life
+
+[$x_{t+1} = 0.9\,x_t + 2$, starting from $x_0 = 0$. Find the steady state, the half-life, and $x_{10}$. What happens if $a = 1.1$ instead?]{.yourturn}
+
+[$x^* = 2/(1 - 0.9) = 20$; half-life $\ln 0.5/\ln 0.9 = 6.6$ periods; $x_{10} = 20 + 0.9^{10}(0 - 20) = 13.0$. With $a = 1.1$, $\lvert a \rvert > 1$: the path explodes.]{.answer .fragment}
+
+::: {.notes}
+Let students use the solution formula from two slides back. 0.9^10 = 0.349, so x_10 = 20 − 6.97 = 13.0.
+
+With a = 1.1 the "steady state" b/(1 − a) = −20 exists but is unstable: any start other than −20 runs away from it.
+:::
+
+## Example: unemployment converges to its natural rate within months
+
+[Each month a share $\bar{s}$ of workers lose their job and a share $\bar{f}$ of the unemployed find one:]{.step}
+$$u_{t+1} = u_t + \bar{s}(1 - u_t) - \bar{f}u_t = (1 - \bar{s} - \bar{f})\,u_t + \bar{s}$$
+
+. . .
+
+[Our linear form with $a = 1 - \bar{s} - \bar{f}$ and $b = \bar{s}$. With $\bar{s} = 0.01$ and $\bar{f} = 0.20$:]{.step}
+$$u^* = \frac{\bar{s}}{\bar{s} + \bar{f}} = \frac{0.01}{0.21} = \color{#e67e22}{\mathbf{4.76\%}} \qquad \text{half-life} = \frac{\ln 0.5}{\ln 0.79} = 2.9 \text{ months}$$
+
+. . .
+
+[From 10%: 8.90, 8.03, 7.34, … 5.07% after 12 months.]{.step}
+
+[Ch. 7 (the bathtub model, equation 7.4)]{.usedin}
+
+::: {.notes}
+The "bathtub" model of Chapter 7: the job-separation rate s̄ fills the tub, the job-finding rate f̄ drains it. The labor force is normalized to 1.
+
+The appendix's outputs: "Natural rate u* = 4.76%", "Unemployment, months 0–12 (%): [10. 8.9 8.03 7.34 6.8 6.37 6.04 5.77 5.56 5.39 5.26 5.15 5.07]", "Half-life: 2.9 months".
+
+The steady state formula is x* = b/(1 − a) = s̄/(s̄ + f̄).
+:::
+
+## Example: the Solow model closes half its gap in about a decade
+
+[Capital follows $k_{t+1} = k_t + \bar{s}k_t^{1/3} - \bar{d}k_t$: nonlinear. Near $k^*$ it behaves like a linear equation whose $a$ is the **slope** at $k^*$:]{.step}
+$$a = \frac{\partial k_{t+1}}{\partial k_t}\Big|_{k^*} = 1 + \tfrac{1}{3}\bar{s}\,k^{*-2/3} - \bar{d}$$
+
+. . .
+
+[At the steady state $\bar{s}k^{*-2/3} = \bar{d}$ (from $\bar{s}k^{*1/3} = \bar{d}k^*$), so]{.step}
+$$a = 1 - \tfrac{2}{3}\bar{d} = 1 - \tfrac{2}{3}(0.1) = 0.933 \qquad \text{half-life} = \frac{\ln 0.5}{\ln 0.933} = \color{#e67e22}{\mathbf{10.0}} \text{ years}$$
+
+. . .
+
+[A simulation from $k_0 = 4$ closes half the gap to $k^* = 8$ after 11 years ($k = 6.00$).]{.step}
+
+[Ch. 5 (Solow dynamics, equation 5.7)]{.usedin}
+
+::: {.notes}
+This combines three tools: the derivative (Act IV), the Taylor approximation (Act III) and the half-life (this act). Linearizing a model around its steady state is exactly a first-order Taylor approximation.
+
+The appendix's SymPy output for the slope: 1 − 2d/3. Its printed outputs: "Linear approximation: half-life 10.0 years" and "Simulation: half of the gap is closed after 11 years (k = 6.00)".
+
+The simulation is a little slower than the linear approximation because the gap from 4 to 8 is large: far from k*, the linear approximation is less accurate.
+:::
+
+## Example: disinflation is a difference equation in inflation
+
+[Combine the Phillips curve and the AD curve (with $\bar{a} = 0$):]{.step}
+$$\pi_t = \pi_{t-1} + \bar{\nu}\widetilde{Y}_t \qquad \widetilde{Y}_t = -\bar{b}\bar{m}\,(\pi_t - \bar{\pi})$$
+
+. . .
+
+[Substitute and solve for $\pi_t$:]{.step}
+$$\pi_t = a\,\pi_{t-1} + (1 - a)\,\bar{\pi} \qquad a = \frac{1}{1 + \bar{\nu}\bar{b}\bar{m}}$$
+
+. . .
+
+[With $\bar{\nu} = \bar{b} = \bar{m} = 0.5$: $a = 1/1.125 = 0.889$. From 6%: 5.56, 5.16, 4.81, … [3.23%]{.key} after 10 years, toward $\bar{\pi} = 2$.]{.step}
+
+[Ch. 12 (equation 12.5), Ch. 13 (equation 13.3)]{.usedin}
+
+::: {.notes}
+Step 2 in detail: π_t = π_{t−1} − ν̄b̄m̄(π_t − π̄), so π_t (1 + ν̄b̄m̄) = π_{t−1} + ν̄b̄m̄π̄. Divide by (1 + ν̄b̄m̄).
+
+The appendix's SymPy output: π_{t−1}/(b̄m̄ν̄ + 1) + b̄m̄ν̄π̄/(b̄m̄ν̄ + 1), and its simulation: "a = 0.889; inflation over 10 years (%): [6. 5.56 5.16 4.81 4.5 4.22 3.97 3.75 3.56 3.39 3.23]".
+
+Since 0 < a < 1, inflation falls smoothly toward the target; the half-life is ln 0.5/ln 0.889 ≈ 5.9 years. A slow disinflation, because expectations adjust slowly in this model.
+:::
+
+## The debt ratio is a difference equation too
+
+[Step 1. The budget constraint: debt grows with interest $i$ and the primary deficit $D_t$:]{.step}
+$$B_{t+1} = (1+i)\,B_t + D_t$$
+
+. . .
+
+[Step 2. Divide by next year's GDP, $Y_{t+1} = (1+g)\,Y_t$, with $b_t = B_t/Y_t$ and $d = D_t/Y_t$:]{.step}
+$$b_{t+1} = \frac{1+i}{1+g}\,b_t + \frac{d}{1+g}$$
+
+. . .
+
+[Step 3. Linear with $a = (1+i)/(1+g)$: stable if $g > i$. The steady state solves $b(1+g) = (1+i)b + d$:]{.step}
+$$b^* = \frac{d}{g - i}$$
+
+[Ch. 18 (the government budget constraint, equation 18.2)]{.usedin}
+
+::: {.notes}
+The primary deficit is spending other than interest minus taxes, D = G − T. g is the growth rate of nominal GDP.
+
+Step 3: when the economy grows faster than the interest rate (g > i), a < 1 and the ratio settles at b* = d/(g − i). When i > g, a > 1 and the ratio keeps rising unless the government runs primary surpluses.
+
+Units: with i, g and d in percent, b* = d/(g − i) is directly in percent of GDP when you write g − i as a decimal: 2.5 / 0.005 = 500 percent.
+:::
+
+## Simulating U.S. public debt
+
+[U.S. federal debt held by the public was 99.5% of GDP in 2025. With $i = 3.5\%$, $g = 4\%$ and a primary deficit of 2.5% of GDP, where is the ratio in 2055?]{.question}
+
+[Predict the 2055 ratio and the steady state $b^* = d/(g - i)$. Then: what primary balance keeps the ratio at 99.5%?]{.predict}
+
+::: {.notes}
+Students should compute b* = 2.5/(4 − 3.5) × 100 = 500 percent before the reveal, and guess how far the ratio gets in 30 years.
+:::
+
+## A deficit of 2.5% of GDP takes U.S. debt to 153% by 2055 {.live-figure}
+
+<script src="plots/plot11.js"></script>
+<div class="live-plot" data-fig="plot11"></div>
+
+[Data: [U.S. Office of Management and Budget, Historical Tables, Table 7.1](https://www.whitehouse.gov/omb/information-resources/budget/historical-tables/). Simulation: the budget constraint, equation (18.2) in Jones (2024), with illustrative $i$, $g$ and $d$; the historical line is inspired by Fig. 18.2 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)]{.source-line}
+
+::: {.notes}
+How to read it: gray, the actual ratio of federal debt held by the public to GDP, fiscal years 1940–2025; teal, the simulated path 2025–2055 from b_{t+1} = (1 + i)/(1 + g) b_t + d/(1 + g). The slider sets the primary deficit d (percent of GDP), with i = 3.5 and g = 4 fixed. The title prints the 2055 value and the steady state.
+
+Do live: d = 2.5 (153 percent), d = 0 (86 percent), d = −2 (32 percent, a primary surplus), d = 3.5 (180 percent). In Colab, i and g are sliders too: set i above g.
+:::
+
+## With $g$ only half a point above $i$, the steady state is 500% of GDP
+
+::: {.incremental}
+- The answer: [153% in 2055]{.key}, still far from the steady state $2.5/0.005 =$ [500%]{.key}: the ratio keeps rising for decades.
+- A balanced primary budget ($d = 0$) brings the ratio down to 86% by 2055; a surplus of 2% to 32%.
+:::
+
+[The answer to the second question: set $b^* = 99.5$ and solve, $d = b^*(g - i) = 99.5 \times 0.005 = 0.50\%$ of GDP: a small primary **deficit** holds the ratio steady.]{.answer .fragment}
+
+::: {.notes}
+The 2055 values are the slider titles: d = −2: 32 percent; −1: 59; 0: 86; 1: 113; 2: 140; 2.5: 153; 3: 167; 3.5: 180. The 2025 starting value, 99.5 percent, is the appendix's printed output (FY2025).
+
+The second answer is the appendix's "Your turn" for Example 4 (its hint: about half a percent of GDP).
+
+The gap between g and i matters as much as the deficit: with g − i = 0.5 points, every point of deficit adds 200 points to the steady state.
+:::
+
+## A balanced primary budget does not freeze the debt ratio
+
+[If taxes cover all spending except interest ($d = 0$), the debt-to-GDP ratio stays where it is.]{.myth}
+
+[With $d = 0$ the ratio is multiplied by $(1+i)/(1+g)$ every year: it **falls** when $g > i$ (99.5% → 86% by 2055) and **grows without limit** when $i > g$.]{.fact .fragment}
+
+::: {.notes}
+The interest on the debt is not in the primary balance. If the interest rate is above the growth rate, interest payments make the debt grow faster than GDP even with a balanced primary budget: a > 1. If growth is faster, the economy "grows out of" its debt.
+
+This is the r − g debate of Chapter 18 (in nominal terms here, i − g).
+:::
+
+## In continuous time, the growth rules are exact
+
+::: {.eqpanel}
+$$\dot{x} \equiv \frac{dx}{dt} \qquad\qquad g_x = \frac{\dot{x}}{x} = \frac{d \ln x}{dt}$$
+:::
+
+[The growth rate is the time derivative of the log (chain rule: $d\ln x/dx = 1/x$). Then, with no term dropped:]{.step}
+
+. . .
+
+$$\frac{d\ln(xy)}{dt} = \frac{\dot{x}}{x} + \frac{\dot{y}}{y} \qquad \frac{d\ln(x/y)}{dt} = \frac{\dot{x}}{x} - \frac{\dot{y}}{y} \qquad \frac{d\ln x^a}{dt} = a\,\frac{\dot{x}}{x}$$
+
+[The cross term $g_x g_y$ of Act III disappears when time is continuous.]{.takeaway .fragment}
+
+[Ch. 15 (DSGE models) and more advanced books]{.usedin}
+
+::: {.notes}
+The book counts time in periods t = 0, 1, 2, …, but many advanced books let time flow continuously. Then the change Δx_{t+1} becomes the time derivative ẋ, and the growth rate becomes ẋ/x.
+
+The appendix's SymPy outputs (with growth_rate(z) = d/dt of expand_log(log z)):
+- product: Derivative(y(t), t)/y(t) + Derivative(x(t), t)/x(t)
+- ratio: −Derivative(y(t), t)/y(t) + Derivative(x(t), t)/x(t)
+- power: a*Derivative(x(t), t)/x(t)
+:::
+
+## A differential equation links a variable to its own rate of change
+
+[Constant growth: SymPy's `dsolve` solves $\dot{y} = g\,y$ with $y(0) = y_0$:]{.step}
+$$\dot{y} = g\,y \;\Rightarrow\; y(t) = y_0\,e^{gt}$$
+
+. . .
+
+[The Solow model in continuous time has no simple formula; solve it numerically:]{.step}
+$$\dot{k} = \bar{s}\bar{A}\,k^{1/3} - \bar{d}\,k$$
+
+```python
+def k_dot(t, k):
+    return 0.4 * k ** (1 / 3) - 0.1 * k             # dk/dt = s A k^(1/3) - d k
+
+continuous = integrate.solve_ivp(k_dot, t_span=(0, 60), y0=[1.0], t_eval=np.arange(0, 61))
+print(f"Year 20: continuous k = {continuous.y[0][20]:.2f}")
+```
+
+::: {.output}
+```text
+Year 20: continuous k = 5.75
+```
+:::
+
+::: {.notes}
+y(t) = y0 e^(gt) is the continuous version of (3.7), y_t = y0(1 + g)^t (appendix output of dsolve).
+
+solve_ivp ("solve an initial value problem") takes a function that returns k̇, the time span and the starting value, and returns the path. The appendix also iterates the discrete-time version and prints both: "Year 20: discrete k = 5.80, continuous k = 5.75" (the slide shows the continuous half of that cell).
+:::
+
+## Discrete or continuous time?
+
+[Capital starts at $k_0 = 1$ and heads for $k^* = 8$. One version adds a year of net investment at a time; the other updates it at every instant. Which is ahead after 20 years?]{.question}
+
+[Predict the gap between the two paths in year 20, and whether they reach the same steady state.]{.predict}
+
+::: {.notes}
+Hint: in the discrete version, the whole year's net investment is computed at the start-of-year capital, when the return on capital is still high.
+:::
+
+## Both versions of the Solow model reach $k^* = 8$ {.live-figure}
+
+<script src="plots/plot12.js"></script>
+<div class="live-plot" data-fig="plot12"></div>
+
+[Model figure: $k_{t+1} = k_t + 0.4\,k_t^{1/3} - 0.1\,k_t$ and $\dot{k} = 0.4\,k^{1/3} - 0.1\,k$ from $k_0 = 1$; illustration of the capital accumulation equation (5.7) in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612), and of its continuous-time version]{.source-line}
+
+::: {.notes}
+How to read it: years on the horizontal axis, capital per person on the vertical. Blue dots: discrete time, one step a year. Teal: continuous time (solve_ivp). Gray dashed: the steady state k* = 8.
+
+Hover year 20 on both lines.
+:::
+
+## The two paths differ by 0.05 after 20 years
+
+::: {.incremental}
+- The answer: in year 20, [5.80]{.key} (discrete) versus [5.75]{.key} (continuous). The discrete path runs slightly ahead; both reach 8.
+- Discrete and continuous time give the same economics; the choice is one of convenience.
+:::
+
+[Solve the continuous-time model with $\bar{s} = 0.3$. What is the new steady state, and where is $k$ after 20 years?]{.yourturn}
+
+[$k^* = (0.3/0.1)^{3/2} = 5.2$; with `solve_ivp` from $k_0 = 1$, $k(20) = 3.89$, still 1.3 below its steady state.]{.answer .fragment}
+
+::: {.notes}
+The year-20 values are the chart title's (and the appendix's printed output).
+
+Why the discrete path is ahead: it adds a whole year of net investment at the rate of the start of the year; in continuous time that rate is updated at every instant, and it falls as diminishing returns set in.
+
+The exercise is the appendix's "Your turn" for Section C.11; k(20) = 3.89 comes from running its solve_ivp call with 0.3 instead of 0.4.
+:::
+
+## Act V formula sheet: equations and dynamics {.formula-sheet}
+
+| Tool | Formula | Python | Used in |
+|------------------------|-----------------------------------------------------|-----------------------------------------|-----------|
+| Linear system | $Mz = c$ | `np.linalg.solve(M, c)`, `sp.solve([...])` | Ch. 11–13 |
+| Root of an equation | $f(x) = 0$ | `optimize.brentq(f, lo, hi)`, `fsolve` | Ch. 5, 7 |
+| Solow steady state | $k^* = (\bar{s}\bar{A}/\bar{d})^{3/2}$ | `sp.solve(eq, k)` | Ch. 5 |
+| Difference equation | $x_{t+1} = ax_t + b$, $x^* = b/(1-a)$ | a `for` loop; `sp.rsolve` | Ch. 5, 7, 12, 13, 18 |
+| Solution and stability | $x_t = x^* + a^t(x_0 - x^*)$, stable if $\lvert a\rvert < 1$ | `simulate_linear(a, b, x0, T)` | Ch. 5, 7, 13 |
+| Half-life | $\ln 0.5/\ln\lvert a\rvert$ | `math.log(0.5) / math.log(abs(a))` | Ch. 5, 7 |
+| Natural rate | $u^* = \bar{s}/(\bar{s} + \bar{f})$ | `s / (s + f)` | Ch. 7 |
+| Debt dynamics | $b_{t+1} = \frac{1+i}{1+g}b_t + \frac{d}{1+g}$, $b^* = \frac{d}{g-i}$ | `simulate_linear(...)` | Ch. 18 |
+| Continuous growth | $\dot{x}/x = d\ln x/dt$ | `sp.diff(sp.log(x(t)), t)` | Ch. 15+ |
+| Differential equation | $\dot{k} = f(k)$ | `integrate.solve_ivp(f, (0, T), [k0])` | Ch. 15+ |
+
+::: {.notes}
+The summary of Act V. Review: x_{t+1} = 0.5x_t + 3: steady state? (6.) Half-life? (1 period.) Unemployment with s̄ = 0.02 and f̄ = 0.2: natural rate? (9.1 percent.) Debt with i > g and d = 0: rises or falls? (Rises.)
+:::
+
+# Valuing the future and reading data {.divider background-color="#117a65"}
+
+[Act VI]{.act}
+
+## A dollar in the future is worth less than a dollar today
+
+[A dollar saved today at the interest rate $R$ grows to $(1+R)^T$ dollars in $T$ years. Run it backwards:]{.step}
+
+::: {.eqpanel}
+$$\text{present discounted value: } \; pdv = \frac{X}{(1+R)^T}$$
+:::
+
+. . .
+
+[Worked example: 100 dollars paid in 10 years, at 4%:]{.step}
+$$pdv = \frac{100}{1.04^{10}} = \frac{100}{1.48} = \color{#e67e22}{\mathbf{67.6}}$$
+
+[Discounting is compounding in reverse.]{.takeaway .fragment}
+
+[Ch. 7 (equation 7.6, human capital), Ch. 16 (consumption), Ch. 17 (investment), Ch. 18 (debt)]{.usedin}
+
+::: {.notes}
+The present discounted value of a payment X that arrives in T years. Ask first: would you rather have 100 dollars today or 100 dollars in ten years? Everybody says today. Why? Because 100 dollars today, saved at 4 percent, become 148 dollars in ten years.
+
+1.04^10 = 1.480, and 100/1.480 = 67.6. This is also the price of a 10-year zero-coupon bond paying 100 when the interest rate is 4 percent (the appendix's bond output, next slides).
+:::
+
+## A stream of equal payments is a geometric series with a closed form
+
+[Step 1. Write the sum and multiply it by $a$:]{.step}
+$$S = 1 + a + a^2 + \dots + a^n \qquad aS = a + a^2 + \dots + a^{n+1}$$
+
+. . .
+
+[Step 2. Subtract: everything cancels except the first and the last term:]{.step}
+$$S - aS = 1 - a^{n+1} \;\Rightarrow\; S = \frac{1 - a^{n+1}}{1 - a} \quad (a \neq 1)$$
+
+. . .
+
+[Step 3. With $a = 1/(1+R) < 1$ and $n \to \infty$, $a^{n+1} \to 0$: a perpetuity of 1 from today on is worth]{.step}
+$$\frac{1}{1 - \frac{1}{1+R}} = \frac{1+R}{R}$$
+
+[Ch. 7 (equations 7.10–7.14)]{.usedin}
+
+::: {.notes}
+The pdv of a stream of payments is the sum of the pdv of each payment. With equal payments, each term is the previous one times a = 1/(1 + R): a geometric series.
+
+The appendix's SymPy outputs: "Finite sum: Piecewise((n + 1, Eq(a, 1)), ((1 − a**(n + 1))/(1 − a), True))" (the special case a = 1, where all terms are 1, gives n + 1) and "Perpetuity: (R + 1)/R (payments of 1 from today on)".
+
+Example: at R = 5 percent, a perpetuity of 1 a year from today is worth 1.05/0.05 = 21.
+:::
+
+## Worked example: a working life is worth 2.53 million dollars
+
+[45 years of 100,000 dollars a year, the first payment today, discounted at $R = 3\%$:]{.step}
+$$pdv = \sum_{j=0}^{44} \frac{100{,}000}{1.03^{\,j}} = 100{,}000 \times \frac{1 - (1/1.03)^{45}}{1 - 1/1.03}$$
+
+. . .
+
+```python
+R_value, years_working, wage = 0.03, 45, 100_000
+by_formula = wage * (1 - (1 / (1 + R_value)) ** years_working) / (1 - 1 / (1 + R_value))
+by_sum = np.sum(wage / (1 + R_value) ** np.arange(0, years_working))      # years 0-44
+print(f"Formula: {by_formula:,.0f} dollars;  sum of 45 discounted payments: {by_sum:,.0f} dollars")
+```
+
+::: {.output}
+```text
+Formula: 2,525,427 dollars;  sum of 45 discounted payments: 2,525,427 dollars
+```
+:::
+
+[Ch. 7 (equations 7.15 and 7.16, human capital)]{.usedin}
+
+::: {.notes}
+Chapter 7 values a working life of 45 years with an income of 100,000 dollars a year, discounted at 3 percent: the book's 2.53 million dollars. The appendix recomputes it two ways and gets the same number to the dollar.
+
+The undiscounted total is 4.5 million; discounting removes almost half of it, because distant years count for little. Ask: what would the value be at R = 0? (4.5 million.)
+:::
+
+## The present value of a stream
+
+[Twenty yearly payments of 100, the first one today. What are they worth today at $R = 0$, at $R = 5\%$ and at $R = 15\%$?]{.question}
+
+[Predict the three values. Which payments lose the most value as $R$ rises: the early ones or the late ones?]{.predict}
+
+::: {.notes}
+At R = 0 the answer is easy (2,000). Ask students to guess the other two before the reveal.
+:::
+
+## Higher interest rates shrink distant payments the most {.live-figure}
+
+<script src="plots/plot13.js"></script>
+<div class="live-plot" data-fig="plot13"></div>
+
+[Model figure: present values $100/(1+R)^j$ of 20 yearly payments of 100, $j = 0, \dots, 19$; illustration of the present discounted value of a stream of payments, equations (7.10)–(7.14) in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)]{.source-line}
+
+::: {.notes}
+How to read it: the year of each payment on the horizontal axis. The light bars are the payments (100 each); the teal bars are what each one is worth today. The slider sets the interest rate R; the title prints the total present value.
+
+Do live: R = 0 (all bars equal: 2,000), 5 (1,309), 10 (936), 15 (720). Watch the right end of the chart: the year-19 payment shrinks the most.
+:::
+
+## At 15%, twenty payments of 100 are worth only 720 today
+
+::: {.incremental}
+- The answer: [2,000]{.key} at $R = 0$, [1,309]{.key} at 5%, [720]{.key} at 15%.
+- The payment in year 0 is always worth 100; the one in year 19 is worth $100/1.15^{19} \approx 7$ at 15%.
+- So the value of long-lived assets (houses, firms, bonds, human capital) is very sensitive to interest rates.
+:::
+
+[Distant payments lose the most value when the interest rate rises.]{.takeaway .fragment}
+
+::: {.notes}
+The totals are the slider titles: 0% 2,000; 1% 1,823; 2% 1,668; 3% 1,532; 5% 1,309; 7% 1,134; 10% 936; 15% 720.
+
+The year-19 value: 1.15^19 = 14.2, and 100/14.2 = 7.0.
+
+This is why falling interest rates raise house and stock prices, and rising rates lower them (Chapters 14 and 17).
+:::
+
+## Bonds and stocks are present values too
+
+::: {.columns}
+::: {.column width="50%"}
+### A bond paying 100 in 10 years
+
+$$P = \frac{100}{(1+i)^{10}}$$
+
+::: {.mid-table}
+| $i$ | 2% | 4% | 6% |
+|-------|:----:|:----:|:----:|
+| price | 82.0 | 67.6 | [55.8]{.key} |
+:::
+
+When interest rates rise, the prices of existing bonds **fall**.
+:::
+::: {.column width="50%"}
+### A stock whose dividend grows at $g$
+
+$$P = \frac{D}{R - g} \quad \Leftrightarrow \quad \frac{D}{P} = R - g$$
+
+A growing perpetuity, first dividend a year from now. If firms paid out all earnings, the **earnings yield** $E/P$ would equal $R - g$.
+:::
+:::
+
+[Ch. 12, 14 (bond prices and rate hikes), Ch. 17 (equations 17.16 and 17.17, stock prices)]{.usedin}
+
+::: {.notes}
+Bond prices: the appendix's printed outputs ("i = 2%: a 10-year bond paying 100 costs 82.0 today", 67.6 at 4%, 55.8 at 6%). This is why rate hikes hurt bondholders, banks among them (Chapters 12 and 14).
+
+Stocks: summing D(1 + g)^j/(1 + R)^j gives P = D(1 + R)/(R − g) when the first dividend is paid today, or P = D/(R − g) when it is paid a year from now. Chapter 17 reaches the same form from an arbitrage argument: the price is the dividend divided by the interest rate minus the capital gain.
+
+Turned around: the dividend yield D/P equals R − g. A low earnings yield (a high price-earnings ratio) means investors accept a low R or expect fast growth.
+:::
+
+## The earnings yield of U.S. stocks
+
+[Are U.S. stocks cheap or expensive today? The earnings yield $E/P$, the inverse of the price-earnings ratio, measures it. Is it above or below its long-run average?]{.question}
+
+[Predict: when in the last 140 years were stocks cheapest (a high earnings yield), and where is the yield now?]{.predict}
+
+::: {.notes}
+Hint: cheap stocks are those with high earnings relative to the price. Think of crises and bubbles.
+:::
+
+## Stocks are expensive: the earnings yield is far below its average {.live-figure}
+
+<script src="plots/plot14.js"></script>
+<div class="live-plot" data-fig="plot14"></div>
+
+[Data: [Robert Shiller, Online Data (`ie_data.xls`), cyclically adjusted price-earnings ratio of the S&P composite](http://www.econ.yale.edu/~shiller/data.htm). Chart inspired by Fig. 17.3 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)]{.source-line}
+
+::: {.notes}
+How to read it: the earnings yield 1/CAPE in percent, monthly since 1881. CAPE is Shiller's cyclically adjusted price-earnings ratio (price over the average of ten years of real earnings). The gray dashed line is the average since 1881.
+
+Do live: hover around 1920, 1932 and the early 1980s (peaks), then around 2000, 2021 and today (troughs).
+:::
+
+## A low earnings yield means a low expected return or fast expected growth
+
+::: {.incremental}
+- Now: [2.5%]{.key} (October 2026), versus [6.7%]{.key} on average since 1881.
+- High yields (cheap stocks): around 1920, in 1932 and in the early 1980s. Low yields: around 2000, in 2021 and now.
+- By $E/P = R - g$: investors either accept a low return $R$ or expect fast earnings growth $g$.
+:::
+
+[The yield moves inversely with stock prices: a price boom is a falling earnings yield.]{.takeaway .fragment}
+
+::: {.notes}
+The numbers are the chart title's. The historical episodes are the appendix's "What to notice".
+
+Ask: what would have to happen for the earnings yield to return to its average? (Stock prices would have to fall by more than half, or earnings rise a lot.) Which is more likely is a question Chapter 17 leaves open.
+:::
+
+## An investment pays off if its return beats the interest rate
+
+[A project costs 100 today and pays 12 a year for 10 years:]{.step}
+$$NPV(R) = -100 + \sum_{j=1}^{10} \frac{12}{(1+R)^{j}} \qquad \text{internal rate of return: } NPV(IRR) = 0$$
+
+```python
+def npv(rate):
+    return -100 + np.sum(12 / (1 + rate) ** np.arange(1, 11))
+
+print(f"NPV at 3%: {npv(0.03):.2f};  NPV at 5%: {npv(0.05):.2f}")
+print(f"Internal rate of return: {100 * optimize.brentq(npv, 0.0001, 0.5):.2f}%")
+```
+
+::: {.output}
+```text
+NPV at 3%: 2.36;  NPV at 5%: -7.34
+Internal rate of return: 3.46%
+```
+:::
+
+[Do the project if $R$ < IRR: higher interest rates make fewer projects worthwhile.]{.takeaway .fragment}
+
+[Ch. 17 (investment)]{.usedin}
+
+::: {.notes}
+The net present value is the pdv of the payments minus the cost: positive at 3 percent (2.36), negative at 5 percent (−7.34). The internal rate of return is the interest rate at which the NPV is zero; brentq finds it, 3.46 percent, because the NPV changes sign between 0.01 and 50 percent.
+
+This is the logic of Chapter 17: investment falls when the interest rate rises, because projects with an IRR below the new rate are dropped.
+:::
+
+## Practice: bonds, wages and stocks
+
+[(a) Price of a bond paying 100 in 10 years at $i = 3\%$? (b) Value the working life again when wages grow 1% a year: the payment in year $j$ is $100{,}000 \times 1.01^j$. (c) A stock pays a dividend of 2 next year, growing 4% a year; $R = 6\%$. Its price?]{.yourturn}
+
+[(a) $100/1.03^{10} = 74.4$. (b) About [3.02 million]{.key}, up from 2.53: wage growth works like a lower interest rate, roughly $R - g$. (c) $P = 2/(0.06 - 0.04) = 100$.]{.answer .fragment}
+
+::: {.notes}
+Part (b) is the appendix's "Your turn" for Section C.12 (its hint: multiply each payment by 1.01 ** np.arange(0, 45) before discounting; about 3.0 million). The exact sum is 3,018,949 dollars.
+
+(a): between the 2 percent (82.0) and 4 percent (67.6) prices. (c): the growing perpetuity with the first dividend a year from now.
+:::
+
+## Three numbers summarize a series: its mean, median and volatility
+
+::: {.columns}
+::: {.column width="50%"}
+::: {.mid-table}
+| U.S. real GDP growth, 1930–2025 | |
+|----------------------------------|:------:|
+| years | 96 |
+| mean | 3.28% |
+| median | 3.04% |
+| standard deviation | [4.74]{.key} |
+| min, max | −12.90%, 18.89% |
+:::
+:::
+::: {.column width="50%"}
+$$s^2 = \frac{1}{n-1}\sum_{t=1}^{n} (x_t - \bar{x})^2$$
+
+The standard deviation $s$, the square root of $s^2$, is the typical distance from the mean: the **volatility**.
+:::
+:::
+
+[Volatility fell from [2.78]{.key} points in 1950–1984 to [1.66]{.key} in 1985–2025: the **Great Moderation**.]{.takeaway .fragment}
+
+[Ch. 9 (fluctuations), Ch. 13 (the Great Moderation)]{.usedin}
+
+::: {.notes}
+The appendix's printed output of growth_stats["g_real"].describe() and its standard deviations for the two periods. In pandas: .describe(), .mean(), .median(), .std().
+
+Here x̄ is the sample mean (not a parameter: the bar has a different meaning in statistics). The median is the middle value; it is less sensitive to extreme years than the mean.
+
+The Great Moderation: real GDP growth became much less volatile after the mid-1980s. Chapter 13 discusses one explanation, better monetary policy, though the 2008–2009 and 2020 recessions interrupted it.
+:::
+
+## Correlation measures how tightly two series move together
+
+::: {.eqpanel}
+$$\text{corr}(x, y) = \frac{\text{cov}(x, y)}{s_x\,s_y} \in [-1, 1] \qquad \text{least-squares slope} = \frac{\text{cov}(x, y)}{s_x^2}$$
+:::
+
+[The Phillips curve $\Delta\pi_t = \bar{\nu}\,\widetilde{Y}_t$ predicts that inflation rises when output is above potential. Test it on U.S. data, 1950–2025:]{.step}
+
+```python
+gap_inflation = potential[["year", "gap_percent"]].merge(cpi[["year", "inflation"]], on="year")
+gap_inflation["change_in_inflation"] = gap_inflation["inflation"].diff()
+gap_inflation = gap_inflation[gap_inflation["year"] >= 1950]
+correlation = gap_inflation["gap_percent"].corr(gap_inflation["change_in_inflation"])
+slope, intercept = np.polyfit(gap_inflation["gap_percent"], gap_inflation["change_in_inflation"], 1)
+print(f"Correlation: {correlation:.2f};  fitted slope ν = {slope:.2f}")
+```
+
+::: {.output}
+```text
+Correlation: 0.37;  fitted slope ν = 0.34
+```
+:::
+
+::: {.notes}
+The correlation coefficient goes from −1 (exactly opposite) to +1 (exactly together); 0 means no linear relation. The least-squares line is the straight line that minimizes the sum of squared vertical distances to the points; np.polyfit(x, y, 1) returns its slope and intercept.
+
+The appendix's cell and output. .merge(other, on="year") joins the output-gap table and the CPI table row by row on the year.
+
+The fitted slope 0.34 is an estimate of ν̄, the slope of the Phillips curve (equation 12.6).
+:::
+
+## The Phillips curve in the data
+
+[Each point is a year. On the horizontal axis, the output gap; on the vertical axis, the change in inflation. Do the points line up?]{.question}
+
+[Predict the sign of the fitted line, and whether the points will sit close to it or be widely spread.]{.predict}
+
+::: {.notes}
+The correlation of 0.37 on the previous slide is a hint: positive but far from 1.
+:::
+
+## Inflation tends to rise when output is above potential {.live-figure}
+
+<script src="plots/plot15.js"></script>
+<div class="live-plot" data-fig="plot15"></div>
+
+[Data: [BEA, Real GDP (`GDPCA`)](https://fred.stlouisfed.org/series/GDPCA) and [CBO, Real Potential GDP (`GDPPOT`)](https://fred.stlouisfed.org/series/GDPPOT), via FRED; [MeasuringWorth, The Annual Consumer Price Index for the United States](https://www.measuringworth.com/datasets/uscpi/). Chart inspired by Fig. 9.6 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612); our own chart, built from updated data.]{.source-line}
+
+::: {.notes}
+How to read it: one dot per year, 1950–2025. Horizontal: short-run output Ỹ in percent (from CBO potential). Vertical: the change in CPI inflation, in points. The teal line is the least-squares fit (trendline "ols"). Hover a dot to see its year.
+
+Point at the outliers: years with oil shocks sit above the line (inflation rose without a boom).
+:::
+
+## The slope is positive but the points are widely spread
+
+::: {.incremental}
+- The answer: a positive slope, [0.34]{.key}, and a correlation of [0.37]{.key}, positive but far from 1.
+- Other forces move inflation too: oil prices and expectations (Chapters 12 and 13).
+:::
+
+[With $\bar{\nu} = 0.34$, by how much does inflation change in a year when output is 2% above potential? And 4% below?]{.yourturn}
+
+[$0.34 \times 2 = +0.68$ points; $0.34 \times (-4) = -1.36$ points.]{.answer .fragment}
+
+::: {.notes}
+The appendix's "What to notice": the points are widely spread, so the correlation is positive but far from 1.
+
+The exercise turns the estimated slope into a forecast. Remind students that a fitted line describes an average relation in the past; it is not a law (the Lucas critique, Chapter 13).
+:::
+
+## A correlation is not a slope
+
+[The correlation is 0.37, so inflation rises 0.37 points for each point of output gap.]{.myth}
+
+[The **slope** (0.34) says how much $y$ moves with $x$; the **correlation** (0.37) says how tightly the points cluster around the line. Measure inflation in tenths of a point and the slope becomes 3.4; the correlation stays 0.37.]{.fact .fragment}
+
+::: {.notes}
+The two numbers are close here by coincidence. The slope has units (points of inflation per point of output gap); the correlation has none.
+
+A second classic mistake: correlation is not causation. The positive correlation is consistent with the Phillips curve, but a common cause (an oil shock, a change in expectations) could move both.
+:::
+
+## Two ways to split GDP into a trend and a cycle
+
+[Method 1. A straight line through the logs, by least squares:]{.step}
+$$\ln y_t = \alpha + \beta\,t \qquad \text{U.S. GDP per person, 1870–2025: } \beta = \color{#e67e22}{\mathbf{1.95}} \text{ log points a year}$$
+
+. . .
+
+[Method 2. The Hodrick–Prescott filter: a smooth trend $\tau_t$ that trades off fit against smoothness:]{.step}
+$$\min_{\tau} \sum_t (\ln y_t - \tau_t)^2 + \lambda \sum_t (\Delta\tau_{t+1} - \Delta\tau_t)^2 \qquad \Delta\tau_t \equiv \tau_t - \tau_{t-1}$$
+
+. . .
+
+[With $\lambda = 100$ (annual data), the HP gap $100(\ln y_t - \tau_t)$ has a correlation of [0.80]{.key} with the CBO output gap, 1950–2025.]{.step}
+
+[Ch. 9 (trend and fluctuations), Ch. 15]{.usedin}
+
+::: {.notes}
+Chapter 9 splits GDP into a long-run trend (potential output Ȳ_t) and short-run fluctuations (Ỹ_t). Potential output cannot be observed, so it has to be estimated.
+
+Method 1: np.polyfit(gdp_pc["year"], np.log(gdp_pc["gdppc"]), 1); the slope is the trend growth rate in log points (appendix output: 1.95 log points a year, close to the 1.88 percent average growth of Act III).
+
+Method 2: the HP filter, in statsmodels: cycle, trend = hpfilter(np.log(postwar["gdp_actual"]), lamb=100). The first sum keeps the trend close to the data; the second penalizes changes in the trend's slope. λ = 0 gives back the data; a huge λ gives a straight line. The appendix's output: "Correlation of the HP gap with the CBO gap: 0.80".
+:::
+
+## Two estimates of the output gap
+
+[The CBO estimates potential output from a production function; the HP filter is purely statistical. Do the two output gaps agree on the timing of booms and recessions? On their size?]{.question}
+
+[Predict: which gap will show the deeper slump after 2008, and why?]{.predict}
+
+::: {.notes}
+Hint: the HP trend follows the data. If output stays low for years, the trend bends down to meet it.
+:::
+
+## The two gaps move together but differ in size {.live-figure}
+
+<script src="plots/plot16.js"></script>
+<div class="live-plot" data-fig="plot16"></div>
+
+[Data: [BEA, Real GDP (`GDPCA`)](https://fred.stlouisfed.org/series/GDPCA) and [CBO, Real Potential GDP (`GDPPOT`)](https://fred.stlouisfed.org/series/GDPPOT), via FRED. Chart inspired by Fig. 9.3 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)]{.source-line}
+
+::: {.notes}
+How to read it: the U.S. output gap in percent of trend, 1950–2025, two ways: from CBO potential output (log difference) and from the HP filter with λ = 100. The gray line is zero.
+
+Do live: compare the two lines in 1975, 1982, 2009 and 2020. Click a legend entry to hide one line.
+:::
+
+## Every estimate of potential output is a model, not a fact
+
+::: {.incremental}
+- The answer: same timing (correlation [0.80]{.key}), but the HP trend follows the data more closely, so its gaps are smaller and it sees less of a slump after 2008.
+:::
+
+[Recompute the HP gap with $\lambda = 10$ and with $\lambda = 6{,}400$. How does its volatility (standard deviation) change?]{.yourturn}
+
+[Standard deviation of the gap: 1.43 points with $\lambda = 10$, 1.95 with $\lambda = 100$, 2.97 with $\lambda = 6{,}400$ (CBO gap: 2.21). A smoother trend leaves more of the movement to the cycle.]{.answer .fragment}
+
+::: {.notes}
+The appendix's "Your turn" for Section C.13. The values come from its hpfilter call with the three λ values on the same data (100 × cycle).std(); the CBO gap's standard deviation, 2.21, is from the same table.
+
+The lesson for Chapters 9 and 13: whether the economy is "above potential" depends on how potential is measured. Policymakers argue about it in real time.
+:::
+
+## Act VI formula sheet: valuing the future and reading data {.formula-sheet}
+
+| Tool | Formula | Python | Used in |
+|------------------------|---------------------------------------------------|---------------------------------------------|-----------|
+| Present value | $X/(1+R)^T$ | `X / (1 + R) ** T` | Ch. 7, 16, 17, 18 |
+| Geometric sum | $\sum_{j=0}^{n}a^j = \frac{1 - a^{n+1}}{1-a}$ | `sp.summation(a**j, (j, 0, n))` | Ch. 7 |
+| Perpetuity (from today) | $(1+R)/R$ | `(1 + R) / R` | Ch. 7, 17 |
+| Bond price | $100/(1+i)^{T}$ | `100 / (1 + i) ** T` | Ch. 12, 14 |
+| Growing perpetuity | $P = D/(R - g)$ | `D / (R - g)` | Ch. 17 |
+| NPV and IRR | $NPV(R) = -C + \sum_j X_j/(1+R)^j$; $NPV(IRR) = 0$ | `optimize.brentq(npv, lo, hi)` | Ch. 17 |
+| Mean, volatility | $\bar{x}$, $s$ | `s.describe()`, `s.std()` | Ch. 9, 13 |
+| Correlation, slope | $\text{cov}/(s_x s_y)$, $\text{cov}/s_x^2$ | `s.corr(t)`, `np.polyfit(x, y, 1)` | Ch. 9, 12 |
+| Log-linear trend | $\ln y_t = \alpha + \beta t$ | `np.polyfit(t, np.log(y), 1)` | Ch. 3, 9 |
+| HP filter | smooth trend, $\lambda = 100$ (annual) | `hpfilter(np.log(y), lamb=100)` | Ch. 9 |
+
+::: {.notes}
+The summary of Act VI. Review: the pdv of 1,000 in 2 years at 10 percent? (826.) A perpetuity of 1 from today at 4 percent? (26.) Correlation −0.9: tight or loose, and which direction? (Tight, opposite.)
+:::
+
+## What to take away from the math review
+
+::: {.incremental}
+- **Measure change carefully**: percent vs. points, index numbers, real vs. nominal, annual rates.
+- **Growth compounds**: $y_t = y_0(1+\bar{g})^t$, the Rule of 70, logs and the ratio scale.
+- **Growth rules** turn products, ratios and powers into sums; approximations work for small rates and fail at extremes.
+- **Derivatives** give marginal products and elasticities; optima have a zero slope.
+- **Equations and difference equations** give equilibria and paths; stability needs $\lvert a \rvert < 1$.
+- **Present value** turns future payments into one number today; **statistics** test the models.
+:::
+
+::: {.notes}
+One sentence per act. Ask students which act they found hardest, and point them to the matching section of the appendix notebook (C.1–C.13) to practice in Colab.
+
+Every chapter of the book uses these tools. When an equation in a chapter looks hard, come back to the act that covers it.
+:::
+
+## {.recap background-image="figures/mindmap.webp" background-size="contain" background-color="#0f172a"}
+
+::: {.notes}
+The mind map again: six branches, one per act. Walk them in a minute each: reading and measuring change; compound growth and logs; growth rules and approximations; derivatives and optimization; equations and dynamics; valuing the future and reading data.
+:::
+
+## A handful of tools carries every model in the book: most describe growth and change, and their simple approximations hold for small rates but break at extremes {.closing background-color="#2d8659"}
+
+[Back to the chapters: every equation you meet uses one of these six acts]{.act}
+
+::: {.notes}
+The thesis of the appendix. Close by asking students to name one tool they will use in the next chapter.
+:::
+
+## Sources: the live figures {.sources}
+
+::: {.sources-list}
+- **IS curve.** Illustration of the IS curve, equation (11.14) in Jones (2024).
+- **U.S. inflation since 1914.** Data: [MeasuringWorth, Officer and Williamson, The Annual Consumer Price Index for the United States, 1774–Present](https://www.measuringworth.com/datasets/uscpi/). Chart inspired by Fig. 8.1 in Jones (2024).
+- **Two growth rates.** Illustration of the constant-growth rule, equation (3.7) in Jones (2024).
+- **U.S. GDP per person on a ratio scale.** Data: BEA [`GDPCA`](https://fred.stlouisfed.org/series/GDPCA), [`B230RC0A052NBEA`](https://fred.stlouisfed.org/series/B230RC0A052NBEA), [`A191RD3A086NBEA`](https://fred.stlouisfed.org/series/A191RD3A086NBEA) via FRED; before 1929 the [Maddison Project Database 2023](https://www.rug.nl/ggdc/historicaldevelopment/maddison/releases/maddison-project-database-2023) (Bolt and van Zanden 2024). Chart inspired by Figs. 3.2 and 3.5 in Jones (2024).
+- **The product rule in U.S. data.** Data: BEA [`GDPA`](https://fred.stlouisfed.org/series/GDPA) and [`GDPCA`](https://fred.stlouisfed.org/series/GDPCA) via FRED. Chart inspired by the growth rules and Fig. 3.9 in Jones (2024).
+- **$\ln(1+x) \approx x$.** Illustration of the approximation used throughout Jones (2024).
+- **Tangents to $y = k^{1/3}$.** Illustration of the production function (5.6) and its marginal product, Chapters 4 and 5 of Jones (2024).
+- **The household's choice.** Illustration of the household's problem, equation (16.5) in Jones (2024).
+- **Solow steady state.** Adapted from Fig. 5.1 in Jones (2024).
+- **Stability and speed.** Illustration of a first-order linear difference equation, the form of equations (5.7), (12.5) and (18.2) in Jones (2024).
+- **U.S. public debt.** Data: [U.S. Office of Management and Budget, Historical Tables, Table 7.1](https://www.whitehouse.gov/omb/information-resources/budget/historical-tables/). Simulation of equation (18.2); historical line inspired by Fig. 18.2 in Jones (2024).
+- **Discrete and continuous Solow.** Illustration of equation (5.7) in Jones (2024) and its continuous-time version.
+- **Present value of a stream.** Illustration of equations (7.10)–(7.14) in Jones (2024).
+- **Earnings yield.** Data: [Robert Shiller, Online Data](http://www.econ.yale.edu/~shiller/data.htm) (CAPE of the S&P composite). Chart inspired by Fig. 17.3 in Jones (2024).
+- **Phillips curve scatter.** Data: BEA [`GDPCA`](https://fred.stlouisfed.org/series/GDPCA), CBO [`GDPPOT`](https://fred.stlouisfed.org/series/GDPPOT) via FRED; MeasuringWorth CPI. Chart inspired by Fig. 9.6 in Jones (2024).
+- **Two output gaps.** Data: BEA [`GDPCA`](https://fred.stlouisfed.org/series/GDPCA), CBO [`GDPPOT`](https://fred.stlouisfed.org/series/GDPPOT) via FRED. Chart inspired by Fig. 9.3 in Jones (2024).
+:::
+
+::: {.notes}
+One line per live figure, in the order of the deck, with the producers and series codes of the appendix's source notes. The prepared data files are in data/appC/ of the book repository (see its README for the data notes).
+:::
+
+## Sources: data, textbook and further reading {.sources}
+
+::: {.sources-list}
+- **Other numbers on the slides** (Fisher table, output gaps, deflator, debt in 2025, GDP growth statistics): the appendix notebook's printed outputs, from the prepared files in [`data/appC/`](https://github.com/quarcs-lab/macro102-site/tree/main/data/appC) (BEA and CBO via FRED, MeasuringWorth, OMB, an interest-rate panel from the OECD, FRED (`TB3MS`), the World Bank and the Global Inflation Database; see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/appC/README.md)).
+- **Textbook.** Jones, C. I. (2024). [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612) W. W. Norton.
+- **Book appendix.** [Data Science and Macroeconomic Models, Appendix C: Math Review for Macroeconomics](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html) (with the Colab notebook).
+- **SymPy.** The [SymPy tutorial](https://docs.sympy.org/latest/tutorials/intro-tutorial/index.html): solving, calculus, simplification.
+- **SciPy.** The [SciPy user guide](https://docs.scipy.org/doc/scipy/tutorial/index.html): optimization and integration.
+- **NumPy.** [NumPy: the absolute basics for beginners](https://numpy.org/doc/stable/user/absolute_beginners.html).
+- **statsmodels.** The [time-series filters](https://www.statsmodels.org/stable/tsa.html#other-models), including the HP filter.
+- **QuantEcon.** [Python Programming for Economics and Finance](https://python-programming.quantecon.org/) and [A First Course in Quantitative Economics with Python](https://intro.quantecon.org/): difference equations, present values and the Solow model with code.
+:::
+
+::: {.notes}
+The appendix's "Where to learn more" list, plus the data and the textbook. Students who want more practice should start with the QuantEcon lectures.
+:::

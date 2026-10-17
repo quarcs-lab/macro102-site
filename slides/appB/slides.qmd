@@ -1,0 +1,2834 @@
+---
+title: "B. Accessing Macroeconomic Data with Python"
+subtitle: "Where macroeconomic numbers live, and the four ways to bring them into Python"
+visual-summary: "figures/mindmap.webp"
+visual-summary-bg: "#0f172a"
+format:
+  revealjs:
+    output-file: index.html
+    theme: [default, site-brand.scss, appB-code.scss]
+    template-partials:
+      - title-slide.html
+    include-after-body:
+      - live-plot.html
+      - figure-zoom.html
+    center: true
+    slide-number: c/t
+    menu: true
+    chalkboard: true
+    preview-links: auto
+    overview: true
+    progress: true
+    history: true
+    transition: fade
+    width: 1280
+    height: 720
+    fig-align: center
+    auto-stretch: false
+    mermaid-format: svg
+    mermaid:
+      theme: dark
+    link-external-icon: false
+    highlight-style: github-dark
+    code-line-numbers: false
+    code-overflow: scroll
+---
+
+## Five sources, three answers to one simple question
+
+[1.28% or 1.11%?]{.bignum}
+[Average yearly growth of U.S. real GDP per person, 2000–2022, depending on where you download it]{.bignum-label}
+
+. . .
+
+[FRED, the World Bank and the IMF say 1.28% a year. The Penn World Table says 1.16%, the Maddison Project 1.11%. All five are respected sources. By the end of this deck you will download all five yourself, in a few lines of Python, and know why they differ.]{.comment}
+
+::: {.notes}
+Open with the number. These are the growth rates computed in the last section of the appendix notebook (B.10), data downloaded on 17 October 2026: FRED 1.28, World Bank 1.28, IMF WEO 1.28, Penn World Table 1.16, Maddison 1.11 percent per year, 2000–2022.
+
+Ask the room: which number would you put in a report? Most students say "the official one" without knowing which that is. The point of the appendix is that every macroeconomic number has a source, a code, units and a date, and that Python lets you fetch it, check it and record it.
+
+This is a technical appendix, so unlike the chapter decks this one shows code. Every code block is real code from the appendix notebook, and every output is what the notebook printed.
+:::
+
+## Today: six questions, one per act
+
+::: {.incremental}
+- **Where do macroeconomic data live?** Who publishes them, four ways in, three ideas.
+- **How do you get U.S. data from FRED?** Three routes: a CSV address, `pandas-datareader`, `fredapi`.
+- **How do the World Bank and IMF libraries work?** `wbgapi` and `imfp`: search, then download.
+- **Can one piece of code reach many agencies?** SDMX, Eurostat and DBnomics.
+- **What if a dataset has no library?** Read its file: Penn World Table, Maddison, Our World in Data.
+- **Why does one number differ across sources?** The comparison, and good habits.
+:::
+
+::: {.notes}
+These are the six acts of the deck and the six branches of the mind map on the title slide, read clockwise from the upper left.
+
+The arc goes from the map of sources (Act I), through the tools source by source (Acts II–V), to the payoff (Act VI): putting five sources side by side and learning why they disagree.
+
+Tell students they can follow along in Colab: the badge on the appendix page opens the same notebook. The downloads are live, so their numbers may be more recent than the ones on these slides.
+:::
+
+## Every tool in this deck is taught the same way, in four steps
+
+::: {.columns}
+::: {.column width="50%"}
+::: {.incremental}
+1. **What it does**, in one sentence
+2. **The code**, a few lines at a time
+3. **The output** the notebook printed
+4. **The pitfalls**, and how to avoid them
+:::
+:::
+::: {.column width="50%"}
+[Guess before the output appears.]{.predict-output}
+
+[Run a variation yourself.]{.tryit}
+
+[A common error and its fix.]{.watch}
+:::
+:::
+
+::: {.notes}
+Explain the legend of the deck before starting.
+
+- The blue "Predict the output" cards: before the output appears, students say what they expect (how many rows, what kind of dates, which country is on top). Wrong guesses are the useful ones.
+- The purple "Try it in Colab" cards are the appendix's "Your turn" exercises. The hint is in these notes; the solution idea is on the slide only when it teaches something.
+- The amber "Watch out" cards collect the errors students actually hit: API keys, rate limits, wrong codes, units.
+
+Every code block is copied from the appendix notebook (sometimes with a long comment trimmed). Outputs are copied from the executed notebook: data downloaded on 17 October 2026.
+:::
+
+# A map of the data {.divider background-color="#3498db"}
+
+[Act I]{.act}
+
+## Most numbers start at a national statistical office, then get collected
+
+::: {.incremental}
+- **Producers**: national statistical offices, such as the U.S. Bureau of Economic Analysis (BEA) and Bureau of Labor Statistics (BLS), measure GDP, prices and jobs.
+- **Collectors**: FRED, the World Bank, the IMF, the OECD, Eurostat, the ECB and the BIS gather these numbers, check them and put them in one place.
+- **Research datasets**: the Penn World Table and the Maddison Project rebuild the numbers to compare countries and centuries.
+- **You**: one line of Python per series.
+:::
+
+[That is why the same series often appears in several sources, and why the copies can differ.]{.takeaway .fragment}
+
+::: {.notes}
+The supply chain of a macroeconomic number. The BEA computes U.S. GDP; FRED copies it within days; the World Bank and the IMF copy it into their cross-country databases; the Penn World Table and Maddison rework it with their own prices and population figures every few years.
+
+Keep this picture in mind: Act VI comes back to it to explain why the five sources in the hook disagree.
+:::
+
+## Seven collectors hold the official statistics {.compact}
+
+| Source | Published by | What it covers | Easiest route |
+|-----------------|----------------------|------------------------------------------------------|-----------------------|
+| **FRED** | St. Louis Fed | over 800,000 series, mostly U.S.; daily to annual | CSV address; `pandas-datareader`; `fredapi` |
+| **WDI** | World Bank | about 1,400 indicators, 217 economies, since 1960 | `wbgapi` |
+| **WEO, IMF Data** | IMF | GDP, inflation, debt for about 190 countries, **with forecasts** | `imfp`; `sdmx1`; DBnomics |
+| **OECD Data Explorer** | OECD | monthly and quarterly data for 38 members | DBnomics; `sdmx1` |
+| **Eurostat** | European Commission | official statistics of the EU | `eurostat`; `sdmx1` |
+| **ECB Data Portal** | European Central Bank | euro-area money, interest and exchange rates | `sdmx1` |
+| **BIS Data Portal** | Bank for International Settlements | policy rates, credit, house prices | DBnomics; `sdmx1` |
+
+::: {.notes}
+This is the first half of the appendix's map (B.1). Students do not need to memorize it: it is a reference to come back to.
+
+Point at the last column: the route from Python. Several sources have more than one route, and Act IV shows that one library (sdmx1) reaches four of them.
+
+The IMF's World Economic Outlook is the only one here with forecasts, which matters in Act III.
+:::
+
+## Four more sources rebuild or regroup the numbers {.compact}
+
+| Source | Published by | What it covers | Easiest route |
+|-----------------|----------------------|------------------------------------------------------|-----------------------|
+| **Penn World Table** | University of Groningen | real GDP, capital, jobs, productivity; 185 countries, 1950–2023 | read its Stata or Excel file |
+| **Maddison Project** | University of Groningen | GDP per person and population back to the year 1 | read its Excel file |
+| **Our World in Data** | Oxford and Global Change Data Lab | thousands of charts, each with a CSV download | read its CSV address |
+| **DBnomics** | Banque de France and partners | many providers through one website and one library | `dbnomics` |
+
+[The research datasets have no Python library: pandas reads their files directly (Act V).]{.takeaway .fragment}
+
+::: {.notes}
+The second half of the map. The Penn World Table and Maddison are the datasets of the growth chapters (3 to 6). Our World in Data is a chart website built on top of the other sources. DBnomics is not a producer at all: it is a collection that copies many providers.
+
+Ask: which of these would you use for GDP per person in 1870? (Maddison.) For comparing productivity across countries in 2019? (Penn World Table.)
+:::
+
+## There are four ways to get data into Python {.compact}
+
+| Way | Example in this deck | Good | Watch out |
+|----------------------------|-------------------------------|---------------------------------|----------------------------------|
+| **1. A specialized library** for one source | `wbgapi`, `imfp`, `fredapi`, `eurostat` | easy; search functions; tidy tables | one library per source; libraries change |
+| **2. A general library** that speaks SDMX | `sdmx1` for the ECB, IMF, OECD, Eurostat | the same code for many agencies | you must learn each dataset's key |
+| **3. A collection** of many sources | `dbnomics` | one library and one website | its copy can lag months behind |
+| **4. Read a file** from its web address | FRED CSV, PWT, Maddison, OWID | pandas alone; any file online | you must find the address; it can move |
+
+[Acts II–V walk through all four ways, source by source.]{.takeaway .fragment}
+
+::: {.notes}
+This is the organizing idea of the appendix. Every tool in the deck belongs to one of these four ways.
+
+FRED is the nice case because it can be reached in two of the ways: way 4 (its CSV address) and way 1 (two specialized libraries).
+
+The trade-off in one sentence: libraries are convenient but each one is a dependency that can change; reading a file needs nothing but pandas, but you must find the address.
+:::
+
+## Which way would you use?
+
+[You need (a) India's GDP per person in 1870, (b) the euro–dollar exchange rate every month since 1999, and (c) unemployment in five OECD countries. Which of the four ways fits each?]{.question}
+
+. . .
+
+::: {.incremental}
+- (a) **Way 4**: read the Maddison Excel file; there is no library.
+- (b) **Way 2**: `sdmx1` with the ECB's key (or way 3, DBnomics).
+- (c) **Way 3**: DBnomics, which copies the OECD (or way 2, `sdmx1`).
+:::
+
+::: {.notes}
+A quick check that the map makes sense. Give 30 seconds, then reveal one answer at a time.
+
+There is often more than one right answer: the point is to know which doors exist. The deck does each of these three downloads later: Maddison in Act V, the ECB exchange rate and the OECD unemployment rates in Act IV.
+:::
+
+## Why write code when every site has a Download button?
+
+[A skeptic says: "I can click Download and open the file in Excel. Why learn five libraries?"]{.objection}
+
+. . .
+
+[Reply: code is a record. It says exactly which series, which countries and which dates you used; it reruns in seconds when the data are revised; and the same three lines work for 197 countries as for one.]{.rebuttal}
+
+::: {.notes}
+The Devil's advocate of this deck comes early, because it motivates everything else.
+
+Three arguments for code:
+
+1. Reproducibility: a notebook documents every step. A spreadsheet built by hand does not say where its numbers came from.
+2. Updating: statistical offices revise their numbers. Rerunning a cell gets the latest vintage; redoing clicks by hand is slow and error-prone.
+3. Scale: in Act III a single wbgapi call downloads two indicators for 197 countries.
+
+Concede the point that matters: for a one-off look at one series, the website is fine. FRED's website is excellent for browsing and for finding codes.
+:::
+
+## Idea 1: every series has a short code, and codes are precise
+
+::: {.columns}
+::: {.column width="50%"}
+::: {.eqpanel}
+`UNRATE`
+
+[U.S. unemployment rate, FRED]{.comment}
+:::
+:::
+::: {.column width="50%"}
+::: {.eqpanel}
+`NY.GDP.PCAP.KD`
+
+[GDP per person, constant dollars, World Bank]{.comment}
+:::
+:::
+:::
+
+::: {.incremental}
+- Names are vague ("GDP per capita" has seven versions at the World Bank); codes are exact.
+- Find the code first: the source's search box, or a search function in Python.
+:::
+
+[Step one of every download: find the right code.]{.takeaway .fragment}
+
+::: {.notes}
+The first of three ideas from B.1. The FRED code is the end of the series' web address: fred.stlouisfed.org/series/UNRATE.
+
+The "seven versions" is a preview of Act III, where wb.series.info(q="GDP per capita") returns 7 indicators: current dollars, local currency, constant 2015 dollars, growth, constant local currency, PPP current and PPP constant.
+:::
+
+## Idea 2: read the units before you compute anything
+
+::: {.incremental}
+- **Percent or fraction?** 4.2 or 0.042
+- **Dollars or thousands of dollars?** Maddison counts population in thousands, the Penn World Table in millions.
+- **Current or constant prices?** Only constant prices remove inflation.
+- **Monthly, quarterly or annual?** FRED's GDP is quarterly; its unemployment rate is monthly.
+- **Seasonally adjusted or not?**
+:::
+
+[A wrong unit gives a wrong answer that looks right.]{.takeaway .fragment}
+
+::: {.notes}
+The second idea. The population example is real and comes from the notebook outputs in Act V: Zimbabwe in 2022 has a population of 15204.66 in Maddison (thousands of people) and 16.07 in the Penn World Table (millions). Dividing GDP by the wrong one is an error of a factor of 1,000.
+
+FRED's notes on every series page state the units, the frequency and the seasonal adjustment. At the World Bank, the units are in the indicator name ("constant 2015 US$").
+:::
+
+## Idea 3: numbers are revised, so each download is a vintage
+
+::: {.incremental}
+- Statistical offices **revise** their numbers as better information arrives.
+- The growth rate you download today for 2024 may differ from the one published in 2025.
+- Each release is a **vintage**. The IMF even keeps its old forecast editions as separate datasets.
+- So: **always write down when you downloaded your data.**
+:::
+
+::: {.output}
+```text
+Data downloaded on 2026-10-17
+```
+:::
+
+::: {.notes}
+The third idea, and the one most students have never heard of. The output is the last line of the setup cell: the variable TODAY holds the date of the run, and the notebook prints it so that every result can be dated.
+
+Vintages come back three times: the IMF's datasets list (WEO_2026_APR_VINTAGE and others) in Act III, the DBnomics copy that lags in Act IV, and the five-source comparison in Act VI.
+:::
+
+## Setup: install the data libraries once per Colab session
+
+```python
+# Install the data libraries this appendix uses (about 30 seconds, once per session)
+%pip install -q wbgapi fredapi pandas-datareader sdmx1 dbnomics eurostat
+%pip install -q --no-deps imfp
+```
+
+::: {.incremental}
+- Lines that start with `%` are commands for the **notebook**, not Python.
+- `-q` ("quiet") hides most messages.
+- `--no-deps` keeps Colab's own pandas and requests: `imfp` asks for exact versions that Colab may not have.
+:::
+
+::: {.output}
+```text
+Note: you may need to restart the kernel to use updated packages.
+```
+:::
+
+[This note is harmless: ignore it.]{.watch .fragment}
+
+::: {.notes}
+Colab has pandas, NumPy and Plotly already; the seven data libraries are not installed. pip installs them from PyPI, the online catalog of Python libraries.
+
+The two-line install is deliberate. imfp pins exact versions of pandas and requests; installing it normally would downgrade Colab's pandas. --no-deps tells pip not to touch the dependencies, and Colab's versions work fine.
+
+The "restart the kernel" note appears twice in the executed notebook (once per %pip line). It can be ignored here.
+:::
+
+## Setup: one cell loads the common libraries and records the date
+
+```python
+import numpy as np                      # numbers and arrays
+import pandas as pd                     # data tables
+import plotly.express as px             # quick charts from data tables
+import plotly.io as pio
+
+# The prepared data files of the chapters live in the book's GitHub repository
+BOOK_DATA = "https://raw.githubusercontent.com/quarcs-lab/macro102-site/main/data/"
+
+# The date of this run: data change over time, so we print it next to our results
+TODAY = pd.Timestamp.today().strftime("%Y-%m-%d")
+print("Data downloaded on", TODAY)
+```
+
+[Each data library is imported in its own section, right where it is first needed.]{.comment .fragment}
+
+::: {.notes}
+The setup cell, trimmed: the notebook version also sets the chart colours, the chart size and readable tick labels for ratio scales (LOG_TICKS), which we skip here.
+
+Two variables matter later. BOOK_DATA is the address of the book's prepared data files (used in Act V and in the fallback of Act VI). TODAY is the download date, used to name saved files in Act VI.
+
+Importing each data library in its own section is a teaching choice: students see which line belongs to which source.
+:::
+
+# FRED, three routes {.divider background-color="#8e44ad"}
+
+[Act II]{.act}
+
+## FRED is the first stop for U.S. data, and the code is in the address
+
+::: {.eqpanel}
+fred.stlouisfed.org/series/[UNRATE]{.key}
+:::
+
+::: {.incremental}
+- **FRED** (Federal Reserve Economic Data, St. Louis Fed): over 800,000 series, many of them international too.
+- To find a code, type what you want in the FRED search box.
+- Three routes into Python:
+  - **Way 4**: read the CSV file of a series (no library, no key)
+  - **Way 1**: `pandas-datareader` (several series in one call)
+  - **Way 1**: `fredapi` (the official API, with a free key)
+:::
+
+::: {.notes}
+Open the FRED page of UNRATE live if there is internet in the room. Show the code in the address bar and in the page title, the units and the frequency under the chart, and the Download button.
+
+We try all three routes. The first one is the one used in every chapter notebook of the book.
+:::
+
+## Route 1: a FRED series is a CSV file at a fixed address
+
+[`pd.read_csv` reads a CSV file, and it accepts a web address as easily as a file on your computer.]{.step}
+
+```python
+# The address of a FRED series: a fixed beginning plus the series code
+url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=UNRATE"
+unrate = pd.read_csv(url, parse_dates=["observation_date"])
+unrate.tail()
+```
+
+[How many columns will the table have? What will the dates in the last rows look like?]{.predict-output}
+
+::: {.notes}
+CSV: a plain text table, values separated by commas. The address is a fixed beginning plus the series code, so changing UNRATE to any other code downloads that series.
+
+parse_dates=["observation_date"] tells pandas that this column holds dates, so charts put them on a time axis. .tail() shows the last five rows, .head() the first five.
+
+Ask for the prediction: two columns (the date and the series, named after its code); monthly dates on the first day of each month.
+:::
+
+## Two columns, monthly dates: the last value is 4.2% for September 2026
+
+::: {.output}
+```text
+    observation_date  UNRATE
+940       2026-05-01     4.3
+941       2026-06-01     4.2
+942       2026-07-01     4.1
+943       2026-08-01     4.1
+944       2026-09-01     4.2
+```
+:::
+
+::: {.incremental}
+- The column is named after the code: `UNRATE`.
+- Monthly data are dated on the **first day of the month**.
+- Row 944 is the 945th month: the series starts in January 1948.
+:::
+
+::: {.notes}
+The output of the notebook, data downloaded 17 October 2026.
+
+The row numbers on the left are pandas' index: row 0 is January 1948, so row 944 is September 2026 (944 months later). Ask students to check: 1948 + 944/12 = 1948 + 78.67, i.e. September 2026.
+
+The value 4.2 is percent of the labor force, seasonally adjusted: the units are on the FRED page, not in the file.
+:::
+
+## A small function turns one line into a reusable tool
+
+```python
+def read_fred(code):
+    """Download one FRED series as a table with the columns date and <code>."""
+    url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=" + code
+    table = pd.read_csv(url, parse_dates=["observation_date"])
+    return table.rename(columns={"observation_date": "date"})
+
+
+cpi = read_fred("CPIAUCSL")     # the consumer price index for all urban consumers
+cpi.tail()
+```
+
+. . .
+
+::: {.output}
+```text
+          date  CPIAUCSL
+952 2026-05-01   333.979
+953 2026-06-01   332.568
+954 2026-07-01   332.813
+955 2026-08-01   334.131
+956 2026-09-01   336.298
+```
+:::
+
+::: {.notes}
+A function: give it a code, it returns the table, with the long date column renamed to date. We will call it many times in this deck (unemployment, CPI, the 10-year bond in the exercise, GDP per person in Act VI).
+
+The CPI is an index (1982–84 = 100), a price level: 336.298 in September 2026. It is not inflation. That is the next slide.
+:::
+
+## Inflation is the 12-month growth rate of the price level
+
+::: {.eqpanel}
+$$\text{inflation}_t = \left(\frac{\text{CPI}_t}{\text{CPI}_{t-12}} - 1\right) \times 100$$
+:::
+
+```python
+cpi["inflation"] = (cpi["CPIAUCSL"] / cpi["CPIAUCSL"].shift(12) - 1) * 100
+```
+
+::: {.incremental}
+- `.shift(12)` moves the column down by 12 rows, so each row sees the value of 12 months earlier.
+- The formula on the slide and the line of code are the same thing.
+:::
+
+[What will the inflation column hold in the first 12 rows of the table?]{.predict-output}
+
+::: {.notes}
+The predict question: the first 12 rows have no value 12 months earlier, so .shift(12) gives NaN ("not a number", pandas' mark for a missing value), and so does the inflation rate. Inflation starts in January 1948 + 12 months.
+
+Why 12 months: with monthly data, comparing with the same month a year earlier removes seasonal patterns and gives the rate that the news reports.
+:::
+
+## `merge` lines up two series by date in one table
+
+```python
+# Put unemployment and inflation side by side in one table, matched by date
+fred = read_fred("UNRATE").merge(cpi[["date", "inflation"]], on="date")
+fred = fred.rename(columns={"UNRATE": "Unemployment rate",
+                            "inflation": "Inflation rate (CPI, 12 months)"})
+fred = fred[fred["date"] >= "1960-01-01"]
+fred.tail()
+```
+
+. . .
+
+::: {.output}
+```text
+          date  Unemployment rate  Inflation rate (CPI, 12 months)
+940 2026-05-01                4.3                         4.166615
+941 2026-06-01                4.2                         3.463531
+942 2026-07-01                4.1                         3.303856
+943 2026-08-01                4.1                         3.353016
+944 2026-09-01                4.2                         3.717251
+```
+:::
+
+::: {.notes}
+merge(..., on="date") keeps the months present in both tables and puts the columns side by side. The rename gives readable names for the chart legend; the filter keeps 1960 onward.
+
+Point at the last row: September 2026, unemployment 4.2 percent, inflation 3.72 percent over the past 12 months.
+:::
+
+## Plotly wants long tables: `melt` stacks the columns {.compact}
+
+::: {.columns}
+::: {.column width="45%"}
+**Wide**: one column per series
+
+| date | Unemployment | Inflation |
+|------------|:-----:|:-----:|
+| 2026-09-01 | 4.2 | 3.72 |
+:::
+::: {.column width="55%"}
+**Long**: one row per date *and* series
+
+| date | series | percent |
+|------------|------------|:-----:|
+| 2026-09-01 | Unemployment | 4.2 |
+| 2026-09-01 | Inflation | 3.72 |
+:::
+:::
+
+```python
+fred_long = fred.melt(id_vars="date", var_name="series", value_name="percent")
+```
+
+[Long format lets `px.line(..., color="series")` draw one line per series.]{.takeaway .fragment}
+
+::: {.notes}
+Wide versus long is the most useful reshaping idea in the appendix; it comes back for the World Bank (one column per year) and in Act VI.
+
+id_vars stays as it is; every other column becomes a pair of (series name, value). The names var_name and value_name are ours.
+
+The numbers are the last row of the previous output.
+:::
+
+## One more cell prints the latest month and draws the chart
+
+```python
+latest = fred.dropna().iloc[-1]          # the last month with both numbers
+print(f"Latest month: {latest['date']:%B %Y}")
+print(f"Unemployment rate: {latest['Unemployment rate']:.1f} percent")
+print(f"Inflation rate: {latest['Inflation rate (CPI, 12 months)']:.1f} percent")
+
+fig = px.line(fred_long, x="date", y="percent", color="series",
+              title="U.S. unemployment and inflation, monthly, from FRED",
+              labels={"date": "", "percent": "Percent", "series": ""})
+fig.show()
+```
+
+. . .
+
+::: {.output}
+```text
+Latest month: September 2026
+Unemployment rate: 4.2 percent
+Inflation rate: 3.7 percent
+```
+:::
+
+::: {.notes}
+.dropna() drops rows with a missing value; .iloc[-1] takes the last row. The f-strings format the date as "September 2026" (%B %Y) and the numbers with one decimal (:.1f).
+
+The notebook also moves the legend above the chart (fig.update_layout), trimmed here.
+:::
+
+## U.S. unemployment and inflation
+
+[When were inflation and unemployment at their highest since 1960?]{.question}
+
+::: {.notes}
+Collect guesses. Students usually know the 2020 unemployment spike and the 2022 inflation; fewer know that inflation was far higher around 1980.
+:::
+
+## Two series, one line of code each, sixty-six years of history {.live-figure}
+
+<script src="plots/plot1.js"></script>
+<div class="live-plot" data-fig="plot1"></div>
+
+[Data: U.S. Bureau of Labor Statistics through [FRED](https://fred.stlouisfed.org/), [`UNRATE`](https://fred.stlouisfed.org/series/UNRATE) and [`CPIAUCSL`](https://fred.stlouisfed.org/series/CPIAUCSL), seasonally adjusted; inflation is our 12-month percent change. Topics of Chapters 7, 8 and 12 of Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)]{.source-line}
+
+::: {.notes}
+How to read it: monthly data since January 1960, both in percent. Hover to read a month; drag to zoom into a period; double-click to zoom out. Click a legend entry to hide a series.
+
+Do live: zoom into 1973–1983 (the Great Inflation and the Volcker disinflation), then into 2019–2023 (the pandemic spike in unemployment and the inflation surge that followed).
+:::
+
+## Inflation peaked around 1980; unemployment spikes in every recession
+
+::: {.incremental}
+- Inflation peaked in the 1970s and early 1980s, fell for decades, and jumped again in 2021–2022.
+- Unemployment spikes in every recession; April 2020 (the pandemic) is the highest in the chart.
+- Latest month in the download: unemployment [4.2%]{.key}, inflation [3.7%]{.key} (September 2026).
+:::
+
+[Two series, one line of code each: the CSV route needs no library and no registration.]{.takeaway .fragment}
+
+::: {.notes}
+These are the "What to notice" points of the appendix. The economics of each line is in the chapters: unemployment in Chapter 7, inflation in Chapter 8, the two together in Chapter 12.
+
+The route is the one used by every chapter notebook in this book, because it needs nothing but pandas.
+:::
+
+## Route 2: `pandas-datareader` asks for several series in one call
+
+[It reads FRED (and a few other sources) and lines the series up by date for you.]{.step}
+
+```python
+import pandas_datareader.data as web
+
+# Real GDP and real personal consumption, quarterly, billions of chained 2017 dollars
+macro = web.DataReader(["GDPC1", "PCECC96"], "fred", start="2000-01-01")
+macro["consumption share"] = macro["PCECC96"] / macro["GDPC1"]
+macro.tail()
+```
+
+. . .
+
+::: {.output}
+```text
+                GDPC1    PCECC96  consumption share
+DATE
+2025-04-01  23884.563  16378.319           0.685728
+2025-07-01  24112.966  16526.176           0.685365
+2025-10-01  24125.479  16604.582           0.688259
+2026-01-01  24274.383  16634.157           0.685256
+2026-04-01  24408.011  16788.685           0.687835
+```
+:::
+
+::: {.notes}
+DataReader(list of codes, "fred", start=...) returns one table with one column per code, indexed by the date (the column DATE). Quarterly data are dated on the first day of the quarter.
+
+The ratio is the consumption share of GDP: about 0.69 in every recent quarter (0.687835 in 2026 Q2), the well-known fact that consumption is about two thirds of GDP (Chapter 2). Both series are in billions of chained 2017 dollars, so the ratio is a pure number.
+:::
+
+## You install with a hyphen, but import with an underscore
+
+[`%pip install pandas-datareader`, then `import pandas-datareader`.]{.myth}
+
+[Python names cannot contain hyphens. You **install** `pandas-datareader` and **import** `pandas_datareader`. The same happens with `sdmx1`, which you import as `sdmx`.]{.fact .fragment}
+
+::: {.notes}
+A classic beginner error: import pandas-datareader is read by Python as "pandas minus datareader" and fails with a SyntaxError.
+
+The name on PyPI and the name in Python often differ. Two more examples from this appendix: pip install sdmx1 → import sdmx; pip install wbgapi → import wbgapi as wb (here only a nickname is added).
+:::
+
+## Route 3: `fredapi` uses FRED's official API, with a free key
+
+::: {.incremental}
+- An **API** (application programming interface) is a web address designed for programs rather than people.
+- `fredapi` can also **search** FRED from Python.
+- It needs an **API key**: a personal password for programs, 32 letters and digits, free.
+:::
+
+. . .
+
+::: {.columns .smaller}
+::: {.column width="45%"}
+**Get a key**
+
+1. Create a free FRED account.
+2. Request a key on the API keys page.
+:::
+::: {.column width="55%"}
+**Store it in Colab**
+
+3. Key icon (*Secrets*) → *Add new secret*: `FRED_API_KEY`.
+4. Paste the key; switch on *Notebook access*.
+:::
+:::
+
+::: {.notes}
+Walk through the steps; do not show a real key. The account is at fred.stlouisfed.org, the key at fredaccount.stlouisfed.org/apikeys.
+
+Colab Secrets live in the left sidebar under the key icon. A secret is stored with the user's Google account, not inside the notebook file, so sharing the notebook does not share the key.
+:::
+
+## The key is read from Colab Secrets, never typed into the notebook
+
+```python
+FRED_API_KEY = None
+try:
+    from google.colab import userdata
+    FRED_API_KEY = userdata.get("FRED_API_KEY")
+except Exception:
+    print("No FRED API key found, so this example is skipped. Follow steps 1-3 above to add one.")
+
+if FRED_API_KEY:
+    from fredapi import Fred
+    fred_api = Fred(api_key=FRED_API_KEY)
+    found = fred_api.search("real gross domestic product per capita")
+    print(found[["title", "frequency_short", "units_short", "popularity"]].head(10))
+    gdp = fred_api.get_series("GDPC1", observation_start="2020-01-01")
+    print(gdp.tail())
+```
+
+[`try:` runs a block; `except:` says what to do if it fails, instead of stopping with an error.]{.comment .fragment}
+
+::: {.notes}
+Read it top to bottom:
+
+1. Start with no key.
+2. Try to read the secret. Outside Colab, or without a secret called FRED_API_KEY, this fails, and the except block prints a message.
+3. Only if a key was found, connect to FRED, search for "real gross domestic product per capita", print the ten most popular matches (title, frequency, units, popularity), and download real GDP since 2020.
+
+The if makes the notebook run for everybody, key or no key.
+:::
+
+## Our run had no key, so the cell skipped politely
+
+::: {.output}
+```text
+No FRED API key found, so this example is skipped. Follow steps 1-3 above to add one.
+```
+:::
+
+::: {.incremental}
+- The notebook was executed outside Colab, without a secret: the `except` branch ran.
+- With a key, the cell prints the ten most popular FRED series matching the search, then the last values of `GDPC1`.
+:::
+
+[Never paste a key into a notebook you share: anybody who sees it can use it. Never put one on a slide or in a screenshot either.]{.watch .fragment}
+
+::: {.notes}
+This is honest output: the website version of the notebook was built without a key, so we cannot show the search results here. Students who add a key in Colab will see a table of matching series.
+
+If a key leaks (in a shared notebook, a GitHub repository, a screenshot), delete it on the FRED API keys page and request a new one.
+:::
+
+## Pasting a key into a cell is not "just for now"
+
+[It is fine to paste my API key into the notebook while I test; I will delete it later.]{.myth}
+
+[Notebooks are copied, shared and saved with their history. Anyone who sees the key can use it under your name. Keep it in Colab Secrets from the first run.]{.fact .fragment}
+
+::: {.notes}
+The habit matters more than the FRED key itself: later in their careers students will hold keys to paid services and private databases.
+
+Rule of thumb: a key belongs to a person, a notebook belongs to everyone who receives it.
+:::
+
+## Three routes to FRED: pick by what you need {.compact}
+
+| Route | Needs | Strength | Use it when |
+|------------------------|---------------------|-----------------------------------|----------------------------------|
+| **CSV address** (way 4) | pandas only | no library, no key, always works | one series at a time; the book's choice |
+| **`pandas-datareader`** (way 1) | one library | several series, aligned by date | a few series you want in one table |
+| **`fredapi`** (way 1) | a free key | search, metadata, the official API | you search for codes from Python |
+
+[Same data, three doors: the CSV route is the simplest and the one every chapter notebook uses.]{.takeaway .fragment}
+
+::: {.notes}
+A summary to photograph. All three return the same numbers: they read the same FRED database.
+
+FRED also has an official API without a library (a web address with your key), but that is what fredapi wraps for you.
+:::
+
+## Daily or monthly? Check the dates of what you download
+
+[Use `read_fred` to download the 10-year Treasury yield (`DGS10`) and the federal funds rate (`FEDFUNDS`). Print the last rows of each. Which one is monthly, and which one is daily?]{.tryit}
+
+::: {.notes}
+The "Your turn" of B.3. Hint: bond = read_fred("DGS10") and then bond.tail(). Look at the dates in the first column: consecutive working days, or the first day of each month? The FRED page of each series states its frequency.
+
+Answer: DGS10 is daily (business days), FEDFUNDS is monthly. The lesson: the frequency lives in the dates, so look at them before merging two series.
+:::
+
+# Agency libraries {.divider background-color="#2d8659"}
+
+[Act III]{.act}
+
+## The World Bank's own library searches before it downloads
+
+::: {.incremental}
+- **World Development Indicators** (WDI): about 1,400 indicators for 217 economies, mostly annual since 1960.
+- The standard source for comparing countries over time.
+- `wbgapi`, written by the World Bank, imported as `wb`.
+- The workflow: **search** the indicator → **find** the country codes → **download** → **reshape**.
+:::
+
+::: {.notes}
+This is way 1: a specialized library. Its advantage over reading files: search functions and tidy tables.
+
+The four steps of the workflow are the four next slides.
+:::
+
+## Search the indicator names first
+
+```python
+import wbgapi as wb
+
+wb.series.info(q="GDP per capita")
+```
+
+. . .
+
+::: {.output}
+```text
+id                 value
+-----------------  ---------------------------------------------------
+NY.GDP.PCAP.CD     GDP per capita (current US$)
+NY.GDP.PCAP.CN     GDP per capita (current LCU)
+NY.GDP.PCAP.KD     GDP per capita (constant 2015 US$)
+NY.GDP.PCAP.KD.ZG  GDP per capita growth (annual %)
+NY.GDP.PCAP.KN     GDP per capita (constant LCU)
+NY.GDP.PCAP.PP.CD  GDP per capita, PPP (current international $)
+NY.GDP.PCAP.PP.KD  GDP per capita, PPP (constant 2021 international $)
+                   7 elements
+```
+:::
+
+::: {.notes}
+q= searches the indicator names. Seven indicators measure "GDP per capita" in different ways: current or constant dollars (with or without inflation), local currency units (LCU), growth rates, and PPP (purchasing power parity).
+
+Next slide: which one should we pick?
+:::
+
+## Which of the seven codes measures growth over time?
+
+[You want to compare how fast GDP per person grew in five countries since 1960. Which code do you pick, and why?]{.question}
+
+. . .
+
+::: {.incremental}
+- `NY.GDP.PCAP.KD`: **constant 2015 U.S. dollars** remove inflation, so changes are real growth.
+- Current dollars (`.CD`) mix real growth with inflation and exchange-rate swings.
+- For comparing *levels* across countries in one year, use PPP (`NY.GDP.PCAP.PP.KD`); we do that next.
+:::
+
+::: {.notes}
+Give the room 20 seconds. The common wrong answer is .CD, the first in the list.
+
+The growth-rate series .KD.ZG is also tempting; it is fine for year-to-year growth, but for a chart of levels over time we want .KD on a ratio scale, where the slope is the growth rate.
+
+The PPP version is the right measure for comparing living standards across countries (Chapter 2 of Jones explains why market exchange rates mislead).
+:::
+
+## Countries have three-letter codes; search them too
+
+```python
+wb.economy.info(q="Korea")
+```
+
+[How many economies will match "Korea"?]{.predict-output}
+
+. . .
+
+::: {.output}
+```text
+id    value                      region    incomeLevel
+----  -------------------------  --------  -------------
+KOR   Korea, Rep.                EAS       HIC
+PRK   Korea, Dem. People's Rep.  EAS       LIC
+      2 elements
+```
+:::
+
+[Two Koreas: `KOR` (South, high income) and `PRK` (North, low income). Check the name, not just the word.]{.watch .fragment}
+
+::: {.notes}
+wb.economy.info searches the economy names and returns the code, the region (EAS = East Asia and Pacific) and the income level (HIC = high income, LIC = low income).
+
+The same trap exists elsewhere: "Congo" matches two countries (Congo, Dem. Rep. and Congo, Rep.). Codes are precise; names are not (Idea 1).
+:::
+
+## One call downloads one indicator for five countries
+
+```python
+countries = ["USA", "CHN", "IND", "KOR", "BRA"]
+gdppc = wb.data.DataFrame("NY.GDP.PCAP.KD", countries, time=range(1960, 2030),
+                          numericTimeKeys=True, labels=True)
+gdppc.iloc[:, :6]          # all rows, the first 6 columns
+```
+
+::: {.incremental}
+- `time=range(1960, 2030)`: every year available in that range.
+- `numericTimeKeys=True`: years as numbers (`2020`), not text (`"YR2020"`).
+- `labels=True`: adds the country names.
+:::
+
+::: {.notes}
+range(1960, 2030) asks for 1960 to 2029; years without data are simply not returned, so asking a little beyond today is safe and future-proof.
+
+.iloc[:, :6] selects all rows and the first six columns, so the table fits on screen: the country name and five years.
+:::
+
+## The table is wide: one row per country, one column per year
+
+::: {.output}
+```text
+               Country          1960          1961          1962  \
+economy
+BRA             Brazil   2603.519010   2743.388888   2838.472299
+KOR        Korea, Rep.   1037.728992   1077.104640   1087.793622
+IND              India    312.777848    316.739645    318.381946
+CHN              China    241.382661    177.349529    166.085165
+USA      United States  18991.544600  19108.935362  19965.143574
+
+                 1963          1964
+economy
+BRA       2772.579949   2785.074432
+...
+```
+:::
+
+[In 1960 Korea's GDP per person (about \$1,038) was below Brazil's (about \$2,604), in constant 2015 dollars.]{.comment .fragment}
+
+::: {.notes}
+The output, trimmed to the first rows of the continuation block. The index is the economy code; the backslash at the end of the first block means "the table continues below".
+
+Wide tables are how the World Bank thinks (a spreadsheet with years across). Plotly needs long tables, so the next step is melt, exactly as for FRED.
+
+The Korea–Brazil comparison sets up the chart: by the end of the period the order is reversed.
+:::
+
+## `melt` again, then a ratio-scale chart
+
+```python
+gdppc_long = gdppc.melt(id_vars="Country", var_name="year", value_name="gdp_pc").dropna()
+print("Years:", gdppc_long["year"].min(), "to", gdppc_long["year"].max())
+
+fig = px.line(gdppc_long, x="year", y="gdp_pc", color="Country", log_y=True,
+              title="GDP per person in five economies, World Bank WDI",
+              labels={"year": "", "gdp_pc": "GDP per person, constant 2015 dollars (ratio scale)",
+                      "Country": ""})
+fig.update_yaxes(tickvals=LOG_TICKS, tickformat=",")
+fig.show()
+```
+
+. . .
+
+::: {.output}
+```text
+Years: 1960 to 2025
+```
+:::
+
+::: {.notes}
+melt with id_vars="Country" turns every year column into rows. .dropna() drops the country-years without data.
+
+log_y=True puts the vertical axis on a ratio (log) scale: equal vertical distances are equal ratios, so equal slopes mean equal growth rates (Appendix A, Section A.5.5, and Chapter 3). LOG_TICKS gives readable tick labels (100, 300, 1,000, ...).
+
+The data run from 1960 to 2025 in this download.
+:::
+
+## GDP per person in five economies
+
+[Which of the five economies grew fastest since 1960, and how can you tell on a ratio scale?]{.question}
+
+::: {.notes}
+Ask for one country and one reason. The reason we want: on a ratio scale, the steepest line grew fastest, whatever its level.
+:::
+
+## On a ratio scale the steepest line grew fastest {.live-figure}
+
+<script src="plots/plot2.js"></script>
+<div class="live-plot" data-fig="plot2"></div>
+
+[Data: World Bank, [World Development Indicators](https://databank.worldbank.org/source/world-development-indicators), [`NY.GDP.PCAP.KD`](https://data.worldbank.org/indicator/NY.GDP.PCAP.KD) (constant 2015 U.S. dollars), downloaded with `wbgapi`. Growth across countries: Chapter 3 of Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)]{.source-line}
+
+::: {.notes}
+How to read it: GDP per person in constant 2015 dollars, ratio scale, 1960–2025. Hover to read a country-year. Click a country in the legend to hide it; double-click to isolate it.
+
+Do live: isolate Korea and Brazil to show the crossing; then China and India.
+:::
+
+## China and Korea grew fastest; Brazil slowed after 1980
+
+::: {.incremental}
+- China's and Korea's lines are the **steepest**: their incomes grew fastest.
+- Brazil's line is much **flatter after 1980**: its income per person grew slowly.
+- Korea started below Brazil in 1960 and is now far above it.
+:::
+
+[One call, five countries, sixty-six years: the World Bank library does the search, the download and the labels.]{.takeaway .fragment}
+
+::: {.notes}
+The "What to notice" of B.4. The economics of why some countries grow fast is in Chapters 3 to 6.
+
+A reading caution worth repeating: the vertical distance between two lines on a ratio scale is a ratio, not a dollar gap.
+:::
+
+## A snapshot: two indicators for every country in one year
+
+```python
+YEAR = 2023
+snapshot = wb.data.DataFrame(["NY.GDP.PCAP.PP.KD", "SP.DYN.LE00.IN"], "all", time=YEAR,
+                             skipAggs=True, columns="series", labels=True)
+snapshot = snapshot.rename(columns={"NY.GDP.PCAP.PP.KD": "gdp_pc_ppp",
+                                    "SP.DYN.LE00.IN": "life_expectancy"})
+snapshot = snapshot.dropna()
+print(len(snapshot), "countries have both numbers in", YEAR)
+snapshot.head()
+```
+
+::: {.incremental}
+- `"all"`: every economy. `skipAggs=True`: leave out groups such as "World" or "Euro area".
+- `columns="series"`: one column per indicator (instead of one per year).
+:::
+
+::: {.notes}
+Two indicators at once: GDP per person at PPP (constant 2021 international dollars), the right measure for comparing living standards, and life expectancy at birth.
+
+Without skipAggs, the table would also hold dozens of regional and income-group aggregates, which would show up as giant dots in a scatter plot.
+:::
+
+## 197 countries have both numbers for 2023
+
+::: {.output}
+```text
+197 countries have both numbers in 2023
+                    Country    gdp_pc_ppp  life_expectancy
+economy
+ZWE                Zimbabwe   5218.045266           62.775
+ZMB                  Zambia   3673.484197           66.349
+PSE      West Bank and Gaza   5562.424426           65.170
+VNM                Viet Nam  13534.799784           74.588
+VUT                 Vanuatu   3782.826490           71.477
+```
+:::
+
+[The rows come in reverse alphabetical order of the code; order never matters for a scatter plot.]{.comment .fragment}
+
+::: {.notes}
+197 economies after dropping those with a missing value. The World Bank uses "economies" because some (West Bank and Gaza, Hong Kong SAR) are not countries.
+
+Units: gdp_pc_ppp is in constant 2021 international dollars; life expectancy in years.
+:::
+
+## Merge in each country's income group
+
+```python
+economies = wb.economy.DataFrame(skipAggs=True)
+income_names = {"HIC": "High income", "UMC": "Upper middle income",
+                "LMC": "Lower middle income", "LIC": "Low income"}
+economies["income group"] = economies["incomeLevel"].map(income_names)
+snapshot = snapshot.merge(economies[["income group"]], left_index=True, right_index=True)
+snapshot["income group"].value_counts()
+```
+
+. . .
+
+::: {.output}
+```text
+income group
+High income            73
+Upper middle income    58
+Lower middle income    46
+Low income             20
+```
+:::
+
+::: {.notes}
+wb.economy.DataFrame lists every economy with its region and income group. A dictionary turns the World Bank's codes into readable names, and .map applies it.
+
+merge(left_index=True, right_index=True) matches the two tables on their index, the three-letter economy code.
+
+73 + 58 + 46 + 20 = 197: every country in the snapshot got a group.
+:::
+
+## Richer countries live longer
+
+[As income rises, does life expectancy rise steadily, faster and faster, or more and more slowly?]{.question}
+
+[Sketch the shape of the cloud of 197 countries before you see it: x is GDP per person (ratio scale), y is life expectancy.]{.predict}
+
+::: {.notes}
+Ask students to draw the shape in the air or on paper. The interesting debate is between "straight line" and "flattening curve".
+:::
+
+## Life expectancy rises steeply among poor countries, then flattens {.live-figure}
+
+<script src="plots/plot3.js"></script>
+<div class="live-plot" data-fig="plot3"></div>
+
+[Data: World Bank, [WDI](https://databank.worldbank.org/source/world-development-indicators), [`NY.GDP.PCAP.PP.KD`](https://data.worldbank.org/indicator/NY.GDP.PCAP.PP.KD) (PPP, constant 2021 international dollars) and [`SP.DYN.LE00.IN`](https://data.worldbank.org/indicator/SP.DYN.LE00.IN), 2023; income groups from the [World Bank classification](https://datahelpdesk.worldbank.org/knowledgebase/articles/906519). Related to Chapter 3 of Jones (2024).]{.source-line}
+
+::: {.notes}
+How to read it: one dot per country in 2023; x is GDP per person at PPP on a ratio scale, y is life expectancy in years; colours are the World Bank income groups. Hover over a dot to see the country's name.
+
+Do live: hover the lowest dots in the high-income group and the highest in the low-income group; click income groups in the legend to hide and show them.
+:::
+
+## The cloud bends: big gains at low incomes, small gains at high incomes
+
+::: {.incremental}
+- Among poor countries, life expectancy **rises steeply** with income.
+- Among rich countries, the cloud **flattens**.
+- The ratio scale matters: each step to the right is a doubling or tripling of income.
+:::
+
+[The chart shows an association, not a cause: income, health systems and education move together.]{.takeaway .fragment}
+
+::: {.notes}
+"What to notice" of B.4. Caution for the policy students: the chart does not say that raising income raises life expectancy by a given amount. Public health, education and institutions differ along the same axis.
+:::
+
+## Unemployment in Spain, Germany and South Africa
+
+[Search the indicator code of the **unemployment rate** with `wb.series.info(q="unemployment")`, then download it for Spain, Germany and South Africa (`ESP`, `DEU`, `ZAF`) from 2000 on and show the table.]{.tryit}
+
+::: {.notes}
+The "Your turn" of B.4. Hint: the modeled ILO estimate is SL.UEM.TOTL.ZS. Then:
+
+wb.data.DataFrame("SL.UEM.TOTL.ZS", ["ESP", "DEU", "ZAF"], time=range(2000, 2030), numericTimeKeys=True, labels=True)
+
+The search returns many unemployment indicators (by sex, age, education, national or ILO definitions). Picking the right one is the exercise. South Africa's rate is far above the two European ones.
+:::
+
+## The IMF's World Economic Outlook comes with forecasts
+
+::: {.incremental}
+- Published **twice a year**, in April and October.
+- GDP growth, inflation, unemployment and debt for about 190 countries.
+- Unlike most sources: **forecasts for the next five years**.
+- `imfp` reads it, and every other dataset of the IMF's data portal, in **four steps**:
+:::
+
+. . .
+
+::: {.eqpanel}
+`imf_get_dataflows()` → `imf_get_datastructure()` → `imf_get_codelists()` → `imf_get()`
+
+[which datasets? → which dimensions? → which codes? → the data]{.comment}
+:::
+
+::: {.notes}
+The four steps are the logic of most international databases, so they are worth learning once: a database holds datasets; each dataset has dimensions (country, indicator, frequency); each dimension has a list of allowed codes; a download picks codes for each dimension.
+
+The same logic returns in Act IV with SDMX.
+:::
+
+## Step 1: which datasets exist?
+
+```python
+import imfp
+
+# Step 1: the IMF's datasets; .str.contains keeps the rows whose name contains a word
+datasets = imfp.imf_get_dataflows()
+print(len(datasets), "datasets")
+datasets[datasets["name"].str.contains("World Economic Outlook")][["id", "name"]]
+```
+
+. . .
+
+::: {.output}
+```text
+224 datasets
+                       id                                       name
+196  WEO_2026_APR_VINTAGE    World Economic Outlook (WEO) 2026 April
+209  WEO_2025_OCT_VINTAGE  World Economic Outlook (WEO) 2025 October
+212                   WEO               World Economic Outlook (WEO)
+```
+:::
+
+[`WEO` is the latest edition; the others are **vintages**, kept to show what the IMF predicted at the time.]{.takeaway .fragment}
+
+::: {.notes}
+224 datasets on the IMF portal. The filter keeps the rows whose name contains "World Economic Outlook".
+
+Idea 3 in action: the IMF keeps old editions as separate datasets. A researcher who wants to know how wrong the April 2026 forecast was can download that vintage and compare it with the latest data.
+:::
+
+## Steps 2 and 3: which dimensions, and which codes?
+
+```python
+# Step 2: the dimensions of the WEO
+print(imfp.imf_get_datastructure("WEO"))
+
+# Step 3: the indicator codes; we keep those about GDP at constant prices
+indicators = imfp.imf_get_codelists("INDICATOR", "WEO")
+indicators[indicators["name"].str.contains("constant prices", case=False)][["code", "name"]]
+```
+
+. . .
+
+::: {.columns}
+::: {.column width="40%"}
+::: {.output}
+```text
+  dimension_id       type  position
+0      COUNTRY  Dimension         0
+1    INDICATOR  Dimension         1
+2    FREQUENCY  Dimension         2
+```
+:::
+:::
+::: {.column width="60%"}
+::: {.output}
+```text
+           code                                               name
+10  NGDP_RPCHMK  Gross domestic product (GDP), Constant prices,...
+16    NGDP_RPCH  Gross domestic product (GDP), Constant prices,...
+18       NGDP_R  Gross domestic product (GDP), Constant prices,...
+48      NGDPRPC  Gross domestic product (GDP), Constant prices,...
+91   NGDPRPPPPC  Gross domestic product (GDP), Constant prices,...
+```
+:::
+:::
+:::
+
+::: {.notes}
+Step 2: the WEO has three dimensions, in this order: COUNTRY, INDICATOR, FREQUENCY.
+
+Step 3: the indicator codes, filtered to those about GDP at constant prices. case=False makes the search ignore capital letters. The names are cut off with "..." because they are long; print indicators.loc[16, "name"] to read one in full.
+
+Next slide: which code is real GDP growth?
+:::
+
+## Which code is the growth rate of real GDP?
+
+[Five codes all start with "GDP, constant prices". `NGDP_R`, `NGDP_RPCH`, `NGDPRPC`, …: which one is the **percent change**?]{.question}
+
+. . .
+
+::: {.incremental}
+- `NGDP_RPCH`: real GDP, **p**ercent **ch**ange. That is the growth rate.
+- `NGDP_R`: the level of real GDP; `NGDPRPC`: real GDP **p**er **c**apita (used in Act VI).
+- When the names are cut off, print one in full before you trust it.
+:::
+
+::: {.notes}
+IMF codes are abbreviations that become readable once you know the pattern: NGDP = nominal GDP, _R = real (constant prices), PCH = percent change, PC = per capita, PPPPC = PPP per capita.
+
+NGDPRPC is the one we use in Act VI for the five-source comparison.
+:::
+
+## Step 4: pick codes for each dimension and download
+
+```python
+# Step 4: the data
+weo = imfp.imf_get("WEO", {"COUNTRY": ["USA", "CHN", "IND", "DEU", "BRA"],
+                           "INDICATOR": "NGDP_RPCH"})
+weo["year"] = weo["TIME_PERIOD"].astype(int)   # the years arrive as text: make them numbers
+names = {"USA": "United States", "CHN": "China", "IND": "India", "DEU": "Germany", "BRA": "Brazil"}
+weo["country"] = weo["COUNTRY"].map(names)
+weo = weo[weo["year"] >= 2000]
+print("Years:", weo["year"].min(), "to", weo["year"].max())
+weo[["country", "year", "OBS_VALUE", "COUNTRY_UPDATE_DATE"]].tail()
+```
+
+[What will be the last year in the table, in a download made in October 2026?]{.predict-output}
+
+::: {.notes}
+imf_get takes the dataset and a dictionary {dimension: codes}. The columns TIME_PERIOD and OBS_VALUE hold the year and the value; these names come from the SDMX standard (Act IV).
+
+The years arrive as text ("2025"), so .astype(int) turns them into numbers; otherwise the filter year >= 2000 would compare text with a number and fail.
+
+Ask for the prediction: most students say 2025 or 2026. The answer is on the next slide.
+:::
+
+## The table runs to 2031: the last years are forecasts
+
+::: {.output}
+```text
+Years: 2000 to 2031
+           country  year  OBS_VALUE COUNTRY_UPDATE_DATE
+255  United States  2027   2.292985           9/30/2026
+256  United States  2028   2.056286           9/30/2026
+257  United States  2029   1.880588           9/30/2026
+258  United States  2030   1.753132           9/30/2026
+259  United States  2031   1.755000           9/30/2026
+```
+:::
+
+[Data and forecasts arrive in one column. From the current year on, most values are projections: label them.]{.watch .fragment}
+
+::: {.notes}
+The WEO gives five years of forecasts beyond the current year: here to 2031. The update date, 30 September 2026, is the October 2026 edition.
+
+For a few countries the last year or two of "data" are estimates too. The notebook shades every year from the current one (2026) on.
+:::
+
+## Shade the forecast years so nobody mistakes them for data
+
+```python
+FIRST_FORECAST = pd.Timestamp.today().year       # the current year
+fig = px.line(weo, x="year", y="OBS_VALUE", color="country", markers=True,
+              title="Real GDP growth with IMF forecasts, World Economic Outlook",
+              labels={"year": "", "OBS_VALUE": "Real GDP growth, percent per year", "country": ""})
+fig.add_vrect(x0=FIRST_FORECAST - 0.5, x1=weo["year"].max() + 0.5, fillcolor=GRAY, opacity=0.15,
+              line_width=0, annotation_text="IMF forecasts", annotation_position="top left")
+fig.add_hline(y=0, line_color=GRAY, line_width=1)
+fig.show()
+```
+
+[`add_vrect` shades a vertical band; `add_hline` draws the zero line.]{.comment .fragment}
+
+::: {.notes}
+pd.Timestamp.today().year makes the chart update itself: rerun the notebook in 2027 and the band starts in 2027.
+
+The band starts half a year before the first forecast year so that the forecast dot sits inside it.
+:::
+
+## Real GDP growth with IMF forecasts
+
+[How do the IMF's forecast lines differ in shape from the actual growth of the past 25 years?]{.question}
+
+[Before you look: will the forecast years show recessions, booms, or something else?]{.predict}
+
+::: {.notes}
+Collect guesses. Some students expect the IMF to forecast a recession somewhere; ask them which year and why.
+:::
+
+## Actual growth jumps around; the forecasts are smooth {.live-figure}
+
+<script src="plots/plot4.js"></script>
+<div class="live-plot" data-fig="plot4"></div>
+
+[Data: International Monetary Fund, [World Economic Outlook database](https://www.imf.org/en/Publications/WEO/weo-database), `NGDP_RPCH` (real GDP, percent change), from the [IMF data portal](https://data.imf.org/) with `imfp`. Growth over the business cycle: Chapter 9 of Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)]{.source-line}
+
+::: {.notes}
+How to read it: real GDP growth in percent per year, 2000–2031, five countries; the grey band marks the IMF forecasts; the thin line is zero. Hover a marker to read a value; click a country in the legend to hide it.
+
+Do live: isolate the United States and Germany to see 2009 and 2020; then look at China's forecast path.
+:::
+
+## Forecasts assume a gradual return to normal growth
+
+::: {.incremental}
+- Actual growth jumps: the 2009 financial crisis and the 2020 pandemic stand out.
+- The forecast lines are **smooth**: the IMF assumes each economy returns gradually to its normal growth rate.
+- U.S. forecast: [2.29%]{.key} in 2027, easing to [1.76%]{.key} in 2031.
+:::
+
+[A forecast is a model's assumption, not an observation. Shade it, and say which edition it comes from.]{.takeaway .fragment}
+
+::: {.notes}
+"What to notice" of B.5. The numbers are the Step 4 output: 2.292985 in 2027 and 1.755 in 2031 for the United States.
+
+Recessions are almost never forecast five years out: no forecaster knows when the next one comes, so the central path is smooth. Compare the vintages in Step 1 to see how forecasts change from one edition to the next.
+:::
+
+## Which country has the highest unemployment in the latest forecast year?
+
+[Download the WEO **unemployment rate** (indicator `LUR`) for the same five countries and draw it with `px.line`. Which country is highest in the last forecast year?]{.tryit}
+
+::: {.notes}
+The "Your turn" of B.5. Hint: copy the Step 4 cell and replace "NGDP_RPCH" by "LUR". Some countries have no unemployment data in the WEO; their lines will be missing (an empty result for a valid code is a common surprise). To see the last year, use table[table["year"] == table["year"].max()].
+:::
+
+# One standard, one door {.divider background-color="#a3650f"}
+
+[Act IV]{.act}
+
+## SDMX: one standard, so one library speaks to many agencies
+
+::: {.incremental}
+- **SDMX** (Statistical Data and Metadata eXchange): a standard shared by central banks and statistical agencies.
+- `sdmx1` (imported as `sdmx`) speaks it: the same few lines work for the ECB, the IMF, the OECD, Eurostat…
+- Way 2 of the four: learn one library, reach many agencies.
+:::
+
+```python
+import sdmx
+
+print(sdmx.list_sources())
+```
+
+. . .
+
+::: {.output}
+```text
+['ABS', 'ABS_JSON', 'AR1', 'BBK', 'BIS', 'COMP', 'ECB', 'EMPL', 'ESTAT', 'ESTAT3',
+ 'ESTAT_COMEXT', 'GROW', 'ILO', 'IMF', 'IMF_DATA', 'IMF_DATA3', 'INEGI', 'INSEE', 'ISTAT',
+ 'LSD', 'NB', 'NBB', 'OECD', 'OECD3', 'OECD_JSON', 'SGR', 'SGR3', 'SPC', 'STAT_EE', 'StatCan',
+ 'UNESCO', 'UNICEF', 'UNSD', 'UY110', 'WB', 'WB_WDI']
+```
+:::
+
+::: {.notes}
+The list has 36 agency codes: among them the ECB, ESTAT (Eurostat), IMF, OECD, BIS, ILO, the World Bank (WB, WB_WDI), national statistical offices (INSEE for France, ISTAT for Italy, StatCan for Canada, ABS for Australia, INEGI for Mexico) and the Bundesbank (BBK).
+
+The output is wrapped here onto several lines to fit the slide; the notebook prints it as one long list.
+:::
+
+## In SDMX every series is a key: one code per dimension
+
+::: {.eqpanel}
+[M]{.key} . [USD]{.key} . [EUR]{.key} . [SP00]{.key} . [A]{.key}
+:::
+
+| Dimension | Code | Meaning |
+|------------------------|:-----------:|------------------------------------------|
+| `FREQ` | `M` | monthly |
+| `CURRENCY` | `USD` | the U.S. dollar |
+| `CURRENCY_DENOM` | `EUR` | measured against the euro |
+| `EXR_TYPE` | `SP00` | spot rate |
+| `EXR_SUFFIX` | `A` | average over the period |
+
+[Browse the series and their keys on the ECB Data Portal (dataset `EXR`).]{.comment}
+
+::: {.notes}
+The ECB's exchange-rate dataset EXR has five dimensions. A key picks one code for each, in a fixed order. The full series name is EXR.M.USD.EUR.SP00.A.
+
+Note that SP00 ends with two zeros, not the letter O. Typing SPOO gives an empty result or an error: a classic.
+:::
+
+## Which part of the key would you change for the yen?
+
+[You have the key for the monthly dollar–euro rate. Which one code would you change to get the **Japanese yen** against the euro, and to what?]{.question}
+
+. . .
+
+[`CURRENCY`: change `USD` to `JPY`. Everything else stays: monthly, against the euro, spot rate, average.]{.takeaway}
+
+::: {.notes}
+This is the core skill of SDMX: once you understand one key, the neighbouring series are one code away. The British pound is GBP.
+
+It is also the "Try it" exercise of this section, a few slides on.
+:::
+
+## The ECB client downloads a key in four lines
+
+```python
+ecb = sdmx.Client("ECB")
+key = {"FREQ": "M", "CURRENCY": "USD", "CURRENCY_DENOM": "EUR",
+       "EXR_TYPE": "SP00", "EXR_SUFFIX": "A"}
+message = ecb.data("EXR", key=key, params={"startPeriod": "1999"})
+usd = sdmx.to_pandas(message).reset_index()
+usd["date"] = pd.to_datetime(usd["TIME_PERIOD"])
+usd[["date", "value"]].tail()
+```
+
+. . .
+
+::: {.output}
+```text
+          date     value
+328 2026-05-01  1.167320
+329 2026-06-01  1.151800
+330 2026-07-01  1.141748
+331 2026-08-01  1.159310
+332 2026-09-01  1.151323
+```
+:::
+
+::: {.notes}
+Line by line: a client for the ECB; the key as a dictionary of dimension: code; the data request with a start period; sdmx.to_pandas returns a pandas Series (one column with an index), and .reset_index() turns it into a table with one column per dimension plus a value column; TIME_PERIOD arrives as text, so pd.to_datetime makes it a date.
+
+September 2026: one euro bought 1.15 dollars.
+:::
+
+## Lowest and highest: two lines of code find them {.small-code}
+
+```python
+print(f"Lowest: {usd['value'].min():.2f} dollars per euro, in {usd.loc[usd['value'].idxmin(), 'date']:%B %Y}")
+print(f"Highest: {usd['value'].max():.2f} dollars per euro, in {usd.loc[usd['value'].idxmax(), 'date']:%B %Y}")
+```
+
+[Guess the range: how low and how high has the euro been, in dollars, since 1999?]{.predict-output}
+
+. . .
+
+::: {.output}
+```text
+Lowest: 0.85 dollars per euro, in June 2001
+Highest: 1.58 dollars per euro, in July 2008
+```
+:::
+
+::: {.notes}
+.min() and .max() give the values; .idxmin() and .idxmax() give the row where they occur, and .loc reads the date in that row.
+
+Students usually guess a narrow range. The euro has been worth well below one dollar (0.85 in June 2001) and well above 1.5 (1.58 in July 2008).
+:::
+
+## The euro in dollars
+
+[Has one euro always been worth more than one dollar?]{.question}
+
+::: {.notes}
+A quick show of hands: yes or no. Many students have only known a euro above one dollar, except briefly in 2022.
+:::
+
+## A euro has bought from 0.85 to 1.58 dollars since 1999 {.live-figure}
+
+<script src="plots/plot5.js"></script>
+<div class="live-plot" data-fig="plot5"></div>
+
+[Data: European Central Bank, [ECB Data Portal](https://data.ecb.europa.eu/data/datasets/EXR), series `EXR.M.USD.EUR.SP00.A` (euro reference exchange rate, U.S. dollar, monthly average), downloaded with `sdmx1`. Exchange rates: Chapter 20 of Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)]{.source-line}
+
+::: {.notes}
+How to read it: U.S. dollars per euro, monthly average, since January 1999. A higher line means a stronger euro (a weaker dollar). Hover to read a month.
+
+Do live: point at 2001 (below 0.9), 2008 (the peak), and 2022 (back near parity).
+:::
+
+## Exchange rates move a lot, and the quote direction matters
+
+::: {.incremental}
+- The euro has been worth well **below one dollar** ([0.85]{.key}, June 2001) and well **above 1.5** ([1.58]{.key}, July 2008).
+- September 2026: [1.15]{.key} dollars per euro.
+- A higher line is a **stronger euro**: the series is dollars *per euro*.
+:::
+
+[Check the quote: "dollars per euro" and "euros per dollar" move in opposite directions.]{.watch .fragment}
+
+::: {.notes}
+"What to notice" of B.6, plus a units warning. Many sources quote the dollar the other way (euros per dollar, or yen per dollar). Flipping a ratio flips the meaning of "up". Chapter 20 is about exchange rates.
+:::
+
+## Same code, another agency: Eurostat through `sdmx1`
+
+[Only the agency (`ESTAT`), the dataset and the key change. Here the key is one text: the codes in their fixed order, separated by dots; `+` asks for several codes.]{.step}
+
+::: {.eqpanel}
+[A]{.key} . [Y15-74]{.key} . [PC_ACT]{.key} . [T]{.key} . [ES+DE]{.key}
+
+[annual · ages 15–74 · percent of the labor force · total (both sexes) · Spain and Germany]{.comment}
+:::
+
+```python
+estat = sdmx.Client("ESTAT")
+message = estat.data("une_rt_a", key="A.Y15-74.PC_ACT.T.ES+DE")
+unemployment = sdmx.to_pandas(message).reset_index()
+unemployment[["geo", "TIME_PERIOD", "value"]].tail()
+```
+
+::: {.notes}
+This proves the point of SDMX: the code is the same as for the ECB. The dimensions of Eurostat's table une_rt_a (annual unemployment rates) are frequency, age, unit, sex and country, in that order.
+
+The key can be a dictionary (as for the ECB) or one dotted text (as here). The text form is shorter but you must know the order of the dimensions.
+:::
+
+## Spain's unemployment rate fell from 14.9% in 2021 to 10.5% in 2025
+
+::: {.output}
+```text
+   geo TIME_PERIOD  value
+29  ES        2021   14.9
+30  ES        2022   13.0
+31  ES        2023   12.2
+32  ES        2024   11.4
+33  ES        2025   10.5
+```
+:::
+
+::: {.incremental}
+- The last rows are Spain (`ES`): the rows of both countries are stacked in one long table.
+- Two-letter country codes at Eurostat, not three-letter ones.
+:::
+
+::: {.notes}
+The table is long: Germany's rows come first, Spain's last, so .tail() shows Spain. To see Germany: unemployment[unemployment["geo"] == "DE"].
+
+Country codes differ by source: Spain is ESP at the World Bank and the IMF, ES at Eurostat and the ECB. Greece is EL at Eurostat (not GR). Another reason to check codes.
+:::
+
+## The yen or the pound against the euro
+
+[Change the ECB key to download the monthly exchange rate of the **Japanese yen** (`JPY`) or the **British pound** (`GBP`) against the euro since 1999, and draw it.]{.tryit}
+
+::: {.notes}
+The "Your turn" of B.6. Hint: copy the ECB cell and change "CURRENCY": "USD" to "CURRENCY": "JPY". Then copy the chart cell, replacing usd by the name of the new table.
+
+The units change too: yen per euro is in the hundreds, pounds per euro below one. Update the axis label.
+:::
+
+## The `eurostat` package: ask for the dimensions, then filter
+
+[Every Eurostat table has a code, shown next to its name on the website: `une_rt_a` is the annual unemployment rate.]{.step}
+
+```python
+import eurostat
+
+print(eurostat.get_pars("une_rt_a"))      # the dimensions of the table
+```
+
+[How many dimensions? Think of the SDMX key we just used for this same table.]{.predict-output}
+
+. . .
+
+::: {.output}
+```text
+['freq', 'age', 'unit', 'sex', 'geo']
+```
+:::
+
+[The same five dimensions as the SDMX key, now in lowercase: it is the same table through another door.]{.takeaway .fragment}
+
+::: {.notes}
+Way 1 for Eurostat: a specialized library. get_pars lists the dimensions so that we know what to filter. Big Eurostat tables have many dimensions; downloading everything would be slow.
+:::
+
+## `filter_pars` keeps only the rows you want
+
+```python
+filters = {"age": "Y15-74", "sex": "T", "unit": "PC_ACT"}
+eu_unemp = eurostat.get_data_df("une_rt_a", filter_pars=filters)
+# a shorter name for the country column
+eu_unemp = eu_unemp.rename(columns={"geo\\TIME_PERIOD": "geo"})
+LAST = eu_unemp.columns[-1]          # the last column is the latest year
+eu_unemp.iloc[:5, :8]
+```
+
+. . .
+
+::: {.output}
+```text
+  freq     age    unit sex geo  2003  2004  2005
+0    A  Y15-74  PC_ACT   T  AT   NaN   NaN   NaN
+1    A  Y15-74  PC_ACT   T  BA   NaN   NaN   NaN
+2    A  Y15-74  PC_ACT   T  BE   NaN   NaN   NaN
+3    A  Y15-74  PC_ACT   T  BG   NaN   NaN   NaN
+4    A  Y15-74  PC_ACT   T  CH   NaN   NaN   NaN
+```
+:::
+
+::: {.notes}
+The filters: all ages from 15 to 74, both sexes (T = total), the rate as a percent of the labor force (PC_ACT). There is no country filter, so every country comes back.
+
+The table is wide again: one column per year. The odd column name geo\TIME_PERIOD means "country down, time across"; the double backslash in the code is how Python writes one backslash.
+:::
+
+## Empty cells are normal: many series start later
+
+::: {.incremental}
+- `NaN` ("not a number") is how pandas marks a **missing value**.
+- In the first years, many countries have no data yet.
+- Country codes have two letters: `EL` is Greece; `EU27_2020` is the European Union; codes starting with `EA` are euro-area aggregates.
+:::
+
+[Missing is not zero: never fill `NaN` with 0 in an economic series.]{.watch .fragment}
+
+::: {.notes}
+Students often panic at a column of NaN. The table above starts in 2003 and the first five countries (Austria, Bosnia and Herzegovina, Belgium, Bulgaria, Switzerland) have no value for 2003–2005 in this table version.
+
+Filling missing unemployment with zero would claim full employment: a real mistake seen in student projects.
+:::
+
+## Names from a dictionary, then the latest year
+
+```python
+geo_names = dict(eurostat.get_dic("une_rt_a", "geo"))
+eu_unemp["country"] = eu_unemp["geo"].map(geo_names)
+eu_unemp.loc[eu_unemp["geo"] == "EU27_2020", "country"] = "European Union"   # a shorter label
+
+latest = eu_unemp[["geo", "country", LAST]].dropna().sort_values(LAST)
+latest = latest[~latest["geo"].str.startswith("EA")]          # drop the euro-area aggregates
+print("Year:", LAST, "-", len(latest) - 1, "countries and the European Union")
+latest.tail()
+```
+
+. . .
+
+::: {.output}
+```text
+Year: 2025 - 34 countries and the European Union
+   geo                 country  2025
+12  EL                  Greece   8.9
+15  FI                 Finland   9.7
+13  ES                   Spain  10.5
+26  MK         North Macedonia  11.5
+1   BA  Bosnia and Herzegovina  12.2
+```
+:::
+
+::: {.notes}
+get_dic returns (code, name) pairs, and dict turns them into a dictionary for .map. The ~ means "not": keep the rows whose code does not start with EA.
+
+The latest year is 2025: 34 countries plus the EU. The five highest rates: Greece 8.9, Finland 9.7, Spain 10.5, North Macedonia 11.5, Bosnia and Herzegovina 12.2 percent.
+:::
+
+## Unemployment rates in Europe
+
+[Where in Europe is unemployment highest, and is the EU average closer to the top or the bottom?]{.question}
+
+[Name the two EU members you expect at the top.]{.predict}
+
+::: {.notes}
+Collect guesses. Spain and Greece are the usual answers; Finland surprises most students.
+:::
+
+## Spain and Finland top the EU; the Western Balkans are higher still {.live-figure}
+
+<script src="plots/plot6.js"></script>
+<div class="live-plot tall" data-fig="plot6"></div>
+
+[Data: Eurostat, [table `une_rt_a`](https://ec.europa.eu/eurostat/databrowser/view/une_rt_a/default/table), ages 15–74, downloaded with the `eurostat` package. Unemployment: Chapter 7 of Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)]{.source-line}
+
+::: {.notes}
+How to read it: one bar per country, unemployment in percent of the labor force (ages 15–74), 2025; the European Union bar is in a different colour. Bars are sorted by length. Hover a bar to read the value.
+
+Do live: find the EU bar and the countries around it; hover the top and the bottom.
+:::
+
+## Unemployment differs a lot, even inside one market and one currency
+
+::: {.incremental}
+- Highest in the EU: **Spain** ([10.5%]{.key}) and **Finland** ([9.7%]{.key}); Greece is next ([8.9%]{.key}).
+- Outside the Union, North Macedonia ([11.5%]{.key}) and Bosnia and Herzegovina ([12.2%]{.key}) are higher still.
+- One common market, and for many one currency, yet very different labor markets.
+:::
+
+[The `eurostat` package: a table code, a few filters, and names from a dictionary.]{.takeaway .fragment}
+
+::: {.notes}
+"What to notice" of B.7. Why rates differ so much is a Chapter 7 question: labor market institutions, unemployment insurance, employment protection, the structure of the economy.
+:::
+
+## Youth unemployment
+
+[Draw the unemployment rate of **youth** (ages 15 to 24) instead. Which countries are at the top?]{.tryit}
+
+::: {.notes}
+The "Your turn" of B.7. Hint: change the age filter to "Y15-24" in the filters dictionary and run the cells of the section again. Do not forget to change the axis label of the chart.
+
+Youth rates are typically more than twice the overall rate.
+:::
+
+## DBnomics: one door to many providers
+
+::: {.incremental}
+- DBnomics **copies** the data of the IMF, OECD, Eurostat, ECB, BIS, national offices and more.
+- One search website and one Python library: way 3, a collection.
+- Every series has an address: **provider / dataset / series**, shown on its page.
+:::
+
+```python
+from dbnomics import fetch_series
+
+us_growth = fetch_series("IMF/WEO:latest/USA.NGDP_RPCH.pcent_change")
+print(us_growth.columns.tolist())
+us_growth[["series_name", "period", "value"]].tail()
+```
+
+::: {.notes}
+The address reads: provider IMF, dataset WEO:latest, series USA.NGDP_RPCH.pcent_change, the same indicator code we downloaded with imfp in Act III.
+
+Find addresses by searching db.nomics.world; the address is shown on every series page.
+:::
+
+## The same IMF series, from DBnomics
+
+::: {.output}
+```text
+['@frequency', 'provider_code', 'dataset_code', 'dataset_name', 'series_code', 'series_name',
+ 'original_period', 'period', 'original_value', 'value', 'weo-country', 'weo-subject', 'unit',
+ 'WEO Country', 'WEO Subject', 'Unit']
+                                          series_name     period  value
+46  United States – Gross domestic product, consta... 2026-01-01  1.744
+47  United States – Gross domestic product, consta... 2027-01-01  1.983
+48  United States – Gross domestic product, consta... 2028-01-01  2.122
+49  United States – Gross domestic product, consta... 2029-01-01  2.122
+50  United States – Gross domestic product, consta... 2030-01-01  2.122
+```
+:::
+
+[Compare with Act III: `imfp` gave **2.29%** for 2027 and ran to 2031. DBnomics gives **1.98%** and stops in 2030. Why?]{.takeaway .fragment}
+
+::: {.notes}
+The columns list is wrapped to fit. DBnomics returns many columns: the provider, dataset and series codes, names, and both the original period and a parsed date (period, as the first day of the year).
+
+The comparison is a teaching moment the appendix only hints at. Same indicator, same country, same "latest" label, different numbers: imfp read the October 2026 WEO (update date 30 September 2026, forecasts to 2031); the DBnomics copy is most likely an earlier edition, with forecasts to 2030. Ask students to predict the reason before the next slide.
+:::
+
+## DBnomics keeps a copy, and some copies lag by months
+
+::: {.incremental}
+- The difference is a **vintage**: the DBnomics copy of "WEO latest" is an older edition than the one `imfp` read from the IMF.
+- The same happens with any collection: it is only as fresh as its last copy.
+- Always look at the **latest date** of what you downloaded before you rely on it.
+:::
+
+[A collection is convenient, not authoritative. When the latest number matters, go to the original provider.]{.watch .fragment}
+
+::: {.notes}
+This is the "Watch out" of B.8 made concrete. DBnomics is excellent for exploration and for providers that are hard to reach otherwise, but it is a copy.
+
+Check with code: us_growth["period"].max() gives the last year; compare it with the original source.
+:::
+
+## The OECD's monthly unemployment rates, through DBnomics
+
+```python
+oecd = fetch_series("OECD", "DSD_KEI@DF_KEI",
+                    dimensions={"REF_AREA": ["USA", "JPN", "DEU", "FRA", "GBR"], "FREQ": ["M"],
+                                "MEASURE": ["UNEMP"]})
+oecd = oecd[oecd["period"] >= "2000-01-01"]
+print("Latest month:", f"{oecd['period'].max():%B %Y}")
+```
+
+[FRED's U.S. unemployment rate ran to September 2026 in the same run. What will the latest month be here?]{.predict-output}
+
+. . .
+
+::: {.output}
+```text
+Latest month: May 2026
+```
+:::
+
+::: {.notes}
+The second form of fetch_series: the provider, the dataset, and a dictionary with the codes of each dimension (here the OECD's Key Economic Indicators: five countries, monthly, unemployment).
+
+May 2026 versus September 2026 at FRED: the DBnomics copy (or the OECD dataset itself) is four months behind. That is why the cell prints the latest month.
+:::
+
+## Unemployment in five rich economies
+
+[When the pandemic hit in 2020, did unemployment jump by the same amount in the U.S., Japan, Germany, France and the U.K.?]{.question}
+
+::: {.notes}
+Ask for a guess of the U.S. peak and the German peak. Then show the chart.
+:::
+
+## In 2020 U.S. unemployment jumped far higher than in Europe or Japan {.live-figure}
+
+<script src="plots/plot7.js"></script>
+<div class="live-plot" data-fig="plot7"></div>
+
+[Data: OECD, [Key Economic Indicators](https://data-explorer.oecd.org/) (`DSD_KEI@DF_KEI`, measure `UNEMP`, monthly), through [DBnomics](https://db.nomics.world/OECD/DSD_KEI@DF_KEI). Unemployment across countries: Chapter 7 of Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)]{.source-line}
+
+::: {.notes}
+How to read it: monthly unemployment rates in percent since January 2000 for five countries. Hover to read a month; drag to zoom into 2019–2021.
+
+Do live: zoom into 2020 and compare the U.S. spike with Germany and Japan.
+:::
+
+## Europe and Japan protected jobs; U.S. firms laid off and rehired
+
+::: {.incremental}
+- The U.S. rate jumped **far higher** in 2020 than the others.
+- European countries and Japan protected jobs with **short-time work** schemes.
+- U.S. firms laid workers off and rehired them later.
+:::
+
+[The same shock, different institutions, different unemployment: one chart from one DBnomics call.]{.takeaway .fragment}
+
+::: {.notes}
+"What to notice" of B.8. Short-time work (Kurzarbeit in Germany, chômage partiel in France) pays firms to cut hours instead of jobs. The deck of Chapter 10 comes back to it (jobs versus hours in the pandemic).
+:::
+
+## How fresh is the DBnomics copy of the BIS policy rates?
+
+[Look up the U.S. series of central bank policy rates from the BIS on DBnomics, address `"BIS/WS_CBPOL/M.US"`. What is the latest month in the DBnomics copy? Try `"M.XM"` (euro area) and `"M.JP"` (Japan) too.]{.tryit}
+
+::: {.notes}
+The "Your turn" of B.8. Hint: rates = fetch_series("BIS/WS_CBPOL/M.US"), then rates[["period", "value"]].tail(). Compare the last date with today's date.
+
+The exercise trains the habit of the section: always check the latest date of a copy.
+:::
+
+## Three doors to the same Eurostat table {.compact}
+
+| Door | Way | How you name the data |
+|----------------------|--------------|-----------------------------------------------------------|
+| `sdmx1` | 2: SDMX | `estat.data("une_rt_a", key="A.Y15-74.PC_ACT.T.ES+DE")` |
+| `eurostat` | 1: specialized | `get_data_df("une_rt_a", filter_pars={"age": "Y15-74", ...})` |
+| `dbnomics` | 3: collection | `fetch_series("Eurostat", "une_rt_a", dimensions={"geo": ["ES", "DE"], ...})` |
+
+[Same table, three ways to name it. Learn the dimensions once, and every door opens.]{.takeaway .fragment}
+
+::: {.notes}
+A synthesis slide. The first two rows are the appendix's own code. The third is the general form of fetch_series used for the OECD, applied to Eurostat's provider on DBnomics, with the other dimensions age Y15-74, sex T and unit PC_ACT. The appendix does not run it; we tested it on 18 October 2026 and it returns the same two series (A.Y15-74.PC_ACT.T.ES and .DE).
+
+What stays the same across doors: the table code une_rt_a and its five dimensions (freq, age, unit, sex, geo).
+:::
+
+# Files on the web {.divider background-color="#b83b5e"}
+
+[Act V]{.act}
+
+## Some key datasets have no library: pandas reads their files
+
+| File type | pandas function | Example |
+|-----------------------------|----------------------------------------------|------------------------------------------|
+| CSV (`.csv`) | `pd.read_csv(address)` | FRED, Our World in Data, this book's files |
+| Excel (`.xlsx`) | `pd.read_excel(address, sheet_name=...)` | Maddison Project Database |
+| Stata (`.dta`) | `pd.read_stata(address)` | Penn World Table |
+
+[The only hard part is finding the address of the file.]{.takeaway .fragment}
+
+::: {.notes}
+Way 4. All three functions accept a web address as well as a file path. Stata is a statistics program popular with economists; its .dta files keep variable types and are compact.
+
+The next slides show three different tricks for finding an address: a data archive's API (Penn World Table), a fixed archive address (Maddison), and a chart address plus .csv (Our World in Data).
+:::
+
+## The Penn World Table compares productivity across countries
+
+::: {.incremental}
+- Real GDP, employment, hours, capital and productivity, comparable across countries: [185]{.key} countries, 1950–2023.
+- The dataset of Chapters 3 to 6.
+- Stored at **DataverseNL**, a data archive. Each dataset has a permanent identifier (a **DOI**).
+- Dataverse has an API that lists the files of a dataset with their numbers.
+:::
+
+::: {.notes}
+The DOI of Penn World Table 11.0 is 10.34894/FABVLR. A DOI is a permanent address for a dataset or a paper: the files can move, the DOI still resolves.
+
+Feenstra, Inklaar and Timmer (2015) is the reference paper of the Penn World Table.
+:::
+
+## Ask the archive's API for the list of files
+
+```python
+import requests
+
+files_api = "https://dataverse.nl/api/datasets/:persistentId/versions/:latest/files"
+reply = requests.get(files_api, params={"persistentId": "doi:10.34894/FABVLR"})   # PWT 11.0
+pwt_files = pd.json_normalize(reply.json()["data"])
+pwt_files[["dataFile.id", "dataFile.filename", "dataFile.filesize"]]
+```
+
+::: {.incremental}
+- `requests` downloads anything from the web.
+- `.json()` reads the reply (nested lists and dictionaries).
+- `pd.json_normalize` flattens it into a table.
+:::
+
+::: {.notes}
+The API address asks for the files of the latest version of the dataset with this DOI. The reply is JSON; the list of files is under the key "data". json_normalize turns each file's nested description into columns with dotted names such as dataFile.id.
+:::
+
+## Twelve files; the main one is `pwt110.dta`, number 554030
+
+::: {.output}
+```text
+    dataFile.id                    dataFile.filename  dataFile.filesize
+0        554047          program_package_pwt_110.zip            4883267
+1        554026            pwt110_capital_detail.dta            1793875
+2        554029           pwt110_capital_detail.xlsx            3948645
+3        554030                           pwt110.dta            3739965
+4        554028              pwt110_labor_detail.dta            2723875
+5        554024                   pwt110_na_data.dta            2092044
+...
+9        554025  pwt110_user_guide_to_data_files.pdf             119363
+10       554031                  pwt110_whatsnew.pdf             394645
+11       554105                          pwt110.xlsx            5839841
+```
+:::
+
+[The download address of a file is `https://dataverse.nl/api/access/datafile/` followed by its id.]{.comment .fragment}
+
+::: {.notes}
+Trimmed: rows 6–8 (more detail files) are left out. The Excel version pwt110.xlsx works too (pd.read_excel with sheet_name="Data"), but the Stata file is smaller (3.7 MB against 5.8 MB) and faster.
+
+The user guide is in the list too: read the documentation of a dataset before you use its variables.
+:::
+
+## Look up the id, build the address, read the Stata file
+
+```python
+PWT_ID = pwt_files.loc[pwt_files["dataFile.filename"] == "pwt110.dta", "dataFile.id"].iloc[0]
+PWT_URL = f"https://dataverse.nl/api/access/datafile/{PWT_ID}"
+print("Downloading", PWT_URL, "... (about 4 MB)")
+pwt = pd.read_stata(PWT_URL)
+print(pwt.shape[0], "rows,", pwt.shape[1], "columns,", pwt["countrycode"].nunique(), "countries,",
+      int(pwt["year"].min()), "to", int(pwt["year"].max()))
+pwt[["countrycode", "country", "year", "rgdpo", "emp", "pop"]].tail()
+```
+
+[How many rows? Think: 185 countries times the years from 1950 to 2023.]{.predict-output}
+
+::: {.notes}
+Looking up the id by file name, instead of typing 554030, keeps the code working if the archive renumbers the files in a new version.
+
+The prediction: 185 × 74 years = 13,690. The table is long (one row per country-year), so the count is exact if every country has every year.
+:::
+
+## 13,690 rows: 185 countries × 74 years, in long format
+
+::: {.output}
+```text
+Downloading https://dataverse.nl/api/access/datafile/554030 ... (about 4 MB)
+13690 rows, 51 columns, 185 countries, 1950 to 2023
+      countrycode   country  year         rgdpo       emp        pop
+13685         ZWE  Zimbabwe  2019  45106.468750  5.272343  15.271368
+13686         ZWE  Zimbabwe  2020  45983.898438  5.206007  15.526888
+13687         ZWE  Zimbabwe  2021  44440.199219  5.298346  15.797210
+13688         ZWE  Zimbabwe  2022  48054.238281  5.344455  16.069056
+13689         ZWE  Zimbabwe  2023  50540.847656  5.504774  16.340822
+```
+:::
+
+::: {.incremental}
+- `rgdpo`: real GDP (output side), **millions** of 2021 dollars at PPP.
+- `emp`: people employed, **millions**. `pop`: population, **millions**.
+:::
+
+::: {.notes}
+185 × 74 = 13,690: one row for every country and year, so the table is already long and ready for Plotly.
+
+51 variables: the Penn World Table documentation explains each one. The units matter for the next step: both rgdpo and emp are in millions, so their ratio is dollars per worker.
+:::
+
+## GDP per worker, relative to the United States
+
+::: {.eqpanel}
+$$\text{GDP per worker} = \frac{\texttt{rgdpo}}{\texttt{emp}} \qquad \text{relative to U.S.} = 100 \times \frac{\text{GDP per worker}_{i,t}}{\text{GDP per worker}_{US,t}}$$
+:::
+
+```python
+pwt["gdp_per_worker"] = pwt["rgdpo"] / pwt["emp"]
+us = pwt[pwt["countrycode"] == "USA"][["year", "gdp_per_worker"]]
+us = us.rename(columns={"gdp_per_worker": "us_gdp_per_worker"})
+pwt = pwt.merge(us, on="year")
+pwt["relative_to_us"] = 100 * pwt["gdp_per_worker"] / pwt["us_gdp_per_worker"]
+
+catch_up = pwt[pwt["countrycode"].isin(["KOR", "DEU", "MEX", "BRA", "CHN", "IND"])
+               & (pwt["year"] >= 1960)]
+fig = px.line(catch_up, x="year", y="relative_to_us", color="country",
+              title="GDP per worker relative to the United States, Penn World Table 11.0",
+              labels={"year": "", "relative_to_us": "GDP per worker, United States = 100",
+                      "country": ""})
+```
+
+::: {.notes}
+GDP per worker is a measure of labor productivity (Chapter 4). The trick: take the U.S. rows, rename the column, and merge them back by year, so every row can divide by the U.S. value of the same year.
+
+isin(...) keeps six countries; & combines two conditions (each in parentheses). The notebook ends the cell with fig.show(), trimmed here.
+:::
+
+## Catching up with U.S. productivity
+
+[Which of these economies has closed the gap with U.S. GDP per worker since 1960, and has any fallen further behind?]{.question}
+
+[Korea, Germany, Mexico, Brazil, China, India: pick one climber and one faller.]{.predict}
+
+::: {.notes}
+Most students pick Korea and China as climbers. The faller is harder: Mexico and Brazil are the candidates.
+:::
+
+## Korea climbed from under a tenth to over half of U.S. productivity {.live-figure}
+
+<script src="plots/plot8.js"></script>
+<div class="live-plot" data-fig="plot8"></div>
+
+[Data: Feenstra, Inklaar and Timmer (2015), [Penn World Table 11.0](https://www.rug.nl/ggdc/productivity/pwt/), `pwt110.dta` from [DataverseNL](https://dataverse.nl/dataset.xhtml?persistentId=doi:10.34894/FABVLR); GDP per worker is `rgdpo / emp`. Related to Chapters 3 and 4 of Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)]{.source-line}
+
+::: {.notes}
+How to read it: GDP per worker as a percent of the U.S. level in the same year (United States = 100), 1960–2023. Hover to read a country-year; click countries in the legend.
+
+Do live: isolate Korea and Mexico; then China and India.
+:::
+
+## Korea and China caught up; Mexico fell behind
+
+::: {.incremental}
+- **Korea**: less than a tenth of U.S. GDP per worker in 1960, well over half by the 2020s.
+- **China**'s climb starts later, around 2000.
+- **Mexico** moved the other way: relative to the United States, its workers produce much less today than in 1980.
+:::
+
+[One API call to find the file, one `read_stata` to load it: no library needed.]{.takeaway .fragment}
+
+::: {.notes}
+"What to notice" of B.9.1. Why Korea caught up and Mexico did not is the subject of Chapters 4 to 6 (capital, TFP, ideas, institutions).
+:::
+
+## The Maddison Project: GDP per person over two thousand years
+
+::: {.incremental}
+- One Excel file with several sheets: `Notes`, `Sources`, `GDPpc`, `Population`, `Full data`, …
+- The sheet `Full data` is already in **long** format.
+- Stored at DataverseNL too, so the same kind of address works.
+:::
+
+```python
+MADDISON_URL = "https://dataverse.nl/api/access/datafile/421302"     # mpd2023_web.xlsx
+print("Downloading", MADDISON_URL, "... (about 5 MB, may take 20 seconds)")
+maddison = pd.read_excel(MADDISON_URL, sheet_name="Full data")
+print(maddison.shape[0], "rows,", maddison["countrycode"].nunique(), "countries,",
+      maddison["year"].min(), "to", maddison["year"].max())
+maddison.tail()
+```
+
+::: {.notes}
+sheet_name chooses the sheet. Without it, pandas reads the first sheet (Notes), which is text, not data: a common surprise.
+
+Here the file id 421302 is typed directly; for the Penn World Table we looked it up. Both work; looking it up is more robust.
+:::
+
+## 131,144 rows from the year 1 to 2022, and population in thousands
+
+::: {.output}
+```text
+Downloading https://dataverse.nl/api/access/datafile/421302 ... (about 5 MB, may take 20 seconds)
+131144 rows, 169 countries, 1 to 2022
+       countrycode   country              region  year        gdppc       pop
+131139         ZWE  Zimbabwe  Sub Saharan Africa  2018  1900.199191  14096.56
+131140         ZWE  Zimbabwe  Sub Saharan Africa  2019  1753.024449  14344.59
+131141         ZWE  Zimbabwe  Sub Saharan Africa  2020  1585.972804  14614.82
+131142         ZWE  Zimbabwe  Sub Saharan Africa  2021  1687.253154  14900.01
+131143         ZWE  Zimbabwe  Sub Saharan Africa  2022  1703.529373  15204.66
+```
+:::
+
+[Zimbabwe, 2022: population **15204.66** here (thousands) but **16.07** in the Penn World Table (millions). Same country, same year, different units and estimates.]{.watch .fragment}
+
+::: {.notes}
+169 countries, from the year 1 (for a few countries) to 2022. gdppc is GDP per person in 2011 dollars.
+
+The units comparison is from the two outputs on these slides: Maddison 15,204.66 thousand people in 2022; Penn World Table 16.069 million. Two lessons: the units differ by a factor of 1,000, and the estimates themselves differ (15.2 versus 16.1 million). That second lesson returns in Act VI.
+:::
+
+## Two centuries of GDP per person on a ratio scale
+
+```python
+long_run = maddison[maddison["countrycode"].isin(["GBR", "USA", "JPN", "CHN", "IND"])]
+long_run = long_run[long_run["year"] >= 1820].dropna(subset=["gdppc"])
+
+fig = px.line(long_run, x="year", y="gdppc", color="country", log_y=True,
+              title="Two centuries of GDP per person, Maddison Project Database 2023",
+              labels={"year": "", "gdppc": "GDP per person, 2011 dollars (ratio scale)",
+                      "country": ""})
+fig.update_yaxes(tickvals=LOG_TICKS, tickformat=",")
+fig.show()
+```
+
+[`dropna(subset=["gdppc"])` drops only the rows where GDP per person is missing; the early years are patchy.]{.comment .fragment}
+
+::: {.notes}
+Five countries since 1820, ratio scale. Before 1820 the estimates are sparse; dropping missing values avoids gaps that Plotly would draw as broken lines.
+:::
+
+## Two centuries of GDP per person
+
+[In 1820, how far apart were Britain, the United States, Japan, China and India? Close together, or already far apart?]{.question}
+
+::: {.notes}
+Ask for a ratio: was Britain twice as rich as India in 1820? Ten times? Then show the chart.
+:::
+
+## Around 1820 the five economies were much closer than today {.live-figure}
+
+<script src="plots/plot9.js"></script>
+<div class="live-plot" data-fig="plot9"></div>
+
+[Data: Bolt and van Zanden (2024), [Maddison Project Database 2023](https://www.rug.nl/ggdc/historicaldevelopment/maddison/releases/maddison-project-database-2023), `mpd2023_web.xlsx` from [DataverseNL](https://dataverse.nl/dataset.xhtml?persistentId=doi:10.34894/INZBF2). Inspired by the long-run growth facts of Chapter 3 of Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)]{.source-line}
+
+::: {.notes}
+How to read it: GDP per person in 2011 dollars on a ratio scale, 1820–2022, five countries. Hover to read a year. On a ratio scale, a straight line is constant growth.
+
+Do live: hover the 1820 values; then follow Japan's climb after 1950 and China's after 1980.
+:::
+
+## Britain and the U.S. pulled away first; Asia caught up later
+
+::: {.incremental}
+- Around 1820 the five economies were **much closer** than today.
+- The United Kingdom and the United States pulled away first.
+- Japan caught up in the 20th century; China and India took off only in the last few decades.
+:::
+
+[One Excel file, one sheet name: two thousand years of data in one line of pandas.]{.takeaway .fragment}
+
+::: {.notes}
+"What to notice" of B.9.2. This is the Great Divergence and the later catch-up, the opening facts of Chapter 3.
+:::
+
+## Our World in Data: every chart has a CSV at its address + `.csv`
+
+::: {.incremental}
+- Our World in Data (OWID) turns data from many sources into charts.
+- The chart at `ourworldindata.org/grapher/share-of-population-in-extreme-poverty` has its data at the same address plus `.csv`.
+- OWID asks programs to say who they are, with a **User-Agent** header (a short label sent with the request).
+:::
+
+```python
+OWID_URL = "https://ourworldindata.org/grapher/share-of-population-in-extreme-poverty.csv"
+poverty = pd.read_csv(OWID_URL, storage_options={"User-Agent": "Our World In Data data fetch/1.0"})
+SHARE = poverty.columns[3]           # the column with the poverty rate (its name is long)
+print("Column:", SHARE)
+poverty.tail()
+```
+
+::: {.notes}
+storage_options passes the User-Agent to the web request. Without it, OWID sometimes refuses the download with an HTTP 403 Forbidden error (see the common-errors table in Act VI).
+
+poverty.columns[3] takes the fourth column by position, because its name is long. That is convenient but fragile: if OWID adds a column, the position changes. Printing the name is the safety check.
+:::
+
+## The poverty column, and the empty years at the end
+
+::: {.output}
+```text
+Column: Share of population in poverty ($3 a day)
+         Entity Code  Year  Share of population in poverty ($3 a day)  \
+59367  Zimbabwe  ZWE  2019                                  49.219894
+59368  Zimbabwe  ZWE  2020                                        NaN
+59369  Zimbabwe  ZWE  2021                                        NaN
+59370  Zimbabwe  ZWE  2022                                        NaN
+59371  Zimbabwe  ZWE  2023                                        NaN
+...
+```
+:::
+
+::: {.incremental}
+- The poverty line: **\$3 a day**, in 2021 prices.
+- Zimbabwe's last survey value is 2019 (49.2%); later years are empty.
+:::
+
+[Picking a column by position (`columns[3]`) breaks if the file gains a column: print its name to check.]{.watch .fragment}
+
+::: {.notes}
+Trimmed: the table also has Population and the OWID world region. Poverty data come from household surveys, which are infrequent, so country series have gaps. Regional series are filled in by World Bank estimates and projections.
+:::
+
+## Five regions since 1990
+
+```python
+regions = ["World", "Sub-Saharan Africa (WB)", "South Asia (WB)", "East Asia and Pacific (WB)",
+           "Latin America and Caribbean (WB)"]
+poor = poverty[poverty["Entity"].isin(regions) & (poverty["Year"] >= 1990)]
+
+fig = px.line(poor, x="Year", y=SHARE, color="Entity",
+              category_orders={"Entity": regions},
+              title="Share of people in extreme poverty, by region, Our World in Data",
+              labels={"Year": "", SHARE: "Percent of the population", "Entity": ""})
+fig.show()
+```
+
+[The regions are rows of the same table: their names end in "(WB)", the World Bank's regions.]{.comment .fragment}
+
+::: {.notes}
+OWID mixes countries and regions in the column Entity. The names must be typed exactly, including "(WB)". category_orders fixes the order of the legend.
+:::
+
+## Extreme poverty by region
+
+[Where did extreme poverty fall most since 1990, and where do most of the world's extreme poor live today?]{.question}
+
+::: {.notes}
+Collect guesses for both halves of the question.
+:::
+
+## East Asia's extreme poverty fell from a majority to almost nothing {.live-figure}
+
+<script src="plots/plot10.js"></script>
+<div class="live-plot" data-fig="plot10"></div>
+
+[Data: World Bank, [Poverty and Inequality Platform](https://pip.worldbank.org/), as processed by [Our World in Data](https://ourworldindata.org/grapher/share-of-population-in-extreme-poverty) (below \$3 a day, 2021 prices); recent years are World Bank projections from older surveys. Related to Chapter 3 of Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)]{.source-line}
+
+::: {.notes}
+How to read it: the percent of the population living below 3 dollars a day (2021 prices), 1990 onward, for the world and four World Bank regions. Hover to read a year.
+
+Do live: hover East Asia in 1990 and today; then Sub-Saharan Africa.
+:::
+
+## Growth in China cut poverty; Sub-Saharan Africa now holds most of the poor
+
+::: {.incremental}
+- Extreme poverty in **East Asia** fell from a majority of the population in 1990 to almost nothing, mostly because of growth in China.
+- **Sub-Saharan Africa** now holds most of the world's extreme poor.
+- The most recent years are World Bank **projections** from older household surveys.
+:::
+
+[A chart address plus `.csv` and a User-Agent: that is all OWID needs.]{.takeaway .fragment}
+
+::: {.notes}
+"What to notice" of B.9.3, with the projection caveat from the source note. Growth and poverty are discussed in Chapter 3.
+:::
+
+## Every chapter of this book reads its data the same way
+
+```python
+# The U.S. unemployment rate prepared for Chapter 7 (folder data/ch07)
+book_unrate = pd.read_csv(BOOK_DATA + "ch07/fig7-2.csv", parse_dates=["date"])
+print("From", f"{book_unrate['date'].min():%B %Y}", "to", f"{book_unrate['date'].max():%B %Y}")
+book_unrate.tail()
+```
+
+. . .
+
+::: {.output}
+```text
+From January 1950 to September 2026
+          date  unemployment_rate
+915 2026-05-01                4.3
+916 2026-06-01                4.2
+917 2026-07-01                4.1
+918 2026-08-01                4.1
+919 2026-09-01                4.2
+```
+:::
+
+::: {.notes}
+BOOK_DATA is the raw GitHub address set in the setup cell. On GitHub, the Raw button of a file gives its plain address, which starts with raw.githubusercontent.com. Each chapter folder has a README.md that says where every file comes from.
+
+The values match FRED's UNRATE in Act II (4.2 in September 2026): the book's file is a prepared copy of the same series, starting in 1950.
+:::
+
+## Human capital in Korea, India and the United States
+
+[Use the Penn World Table already in memory (`pwt`) to draw the **human capital index** `hc` for Korea, India and the United States since 1950.]{.tryit}
+
+::: {.notes}
+The "Your turn" of B.9. Hint: select the countries with pwt[pwt["countrycode"].isin(["KOR", "IND", "USA"])], then px.line(table, x="year", y="hc", color="country").
+
+hc is based on years of schooling and the returns to education. Korea's rise is steep. No new download is needed: reuse the table in memory (a good habit, Act VI).
+:::
+
+# One number, many sources {.divider background-color="#4d7c0f"}
+
+[Act VI]{.act}
+
+## How fast has U.S. income per person grown since 2000? Ask five sources {.compact}
+
+| Source | Series | Unit |
+|---------------------------|------------------------------------|------------------------------------------|
+| **FRED** | `A939RX0Q048SBEA` | real GDP per capita, quarterly → averaged over each year |
+| **World Bank** | `NY.GDP.PCAP.KD` | constant 2015 dollars |
+| **IMF WEO** | `NGDPRPC` | GDP per capita, constant prices, national currency |
+| **Penn World Table** | `rgdpna / pop` | real GDP from the national accounts, per person |
+| **Maddison Project** | `gdppc` | 2011 dollars |
+
+[We already know how to reach every one of them. Now we put them in one table.]{.takeaway .fragment}
+
+::: {.notes}
+The payoff of the deck: every tool from Acts II–V in one comparison. The question is the hook's question.
+
+Note the units column: five different units. Comparing the levels directly would be meaningless, which is why we will index them.
+
+For the Penn World Table we use rgdpna (real GDP from the national accounts) rather than rgdpo, because it is the series meant for growth over time.
+:::
+
+## FRED is quarterly: average the four quarters of each year
+
+```python
+# FRED: quarterly data, so we average the four quarters of each year
+fred_pc = read_fred("A939RX0Q048SBEA")
+fred_pc["year"] = fred_pc["date"].dt.year
+fred_pc = fred_pc[fred_pc["year"] < pd.Timestamp.today().year]     # complete years only
+fred_pc = fred_pc.groupby("year")["A939RX0Q048SBEA"].mean().rename("FRED")
+```
+
+[Why drop the current year before averaging?]{.predict-output}
+
+. . .
+
+[In October 2026 only the first quarters of 2026 exist: their average is not an annual value comparable with the other sources.]{.takeaway}
+
+::: {.notes}
+.dt.year extracts the year from each date; groupby("year").mean() averages the quarters of each year; .rename("FRED") names the result after its source, so that it becomes a column name later.
+
+The incomplete year is a frequency pitfall: averaging two quarters of a growing series would bias the 2026 value. The notebook keeps complete years only.
+:::
+
+## The World Bank needs a transpose; the IMF needs numeric years
+
+```python
+# World Bank
+wb_pc = wb.data.DataFrame("NY.GDP.PCAP.KD", "USA", time=range(1990, 2030), numericTimeKeys=True)
+wb_pc = wb_pc.T["USA"].rename("World Bank")    # .T swaps rows and columns: years become rows
+
+# IMF World Economic Outlook
+imf_pc = imfp.imf_get("WEO", {"COUNTRY": "USA", "INDICATOR": "NGDPRPC"})
+imf_pc["year"] = imf_pc["TIME_PERIOD"].astype(int)
+imf_pc = imf_pc.set_index("year")["OBS_VALUE"].rename("IMF WEO")
+print(fred_pc.tail(3), wb_pc.tail(3), imf_pc.tail(3), sep="\n\n")
+```
+
+::: {.incremental}
+- The World Bank table is wide (one column per year): `.T` turns years into rows.
+- Each source becomes a pandas **Series** indexed by year and named after its source.
+:::
+
+::: {.notes}
+The goal of these cells: three Series with the same kind of index (the year as a number), so that pd.concat can match them.
+
+These are the same calls as in Act III, only for one country and a different indicator (NGDPRPC, real GDP per capita).
+:::
+
+## The IMF column runs to 2031: forecasts are mixed in
+
+::: {.columns}
+::: {.column width="33%"}
+::: {.output}
+```text
+year
+2023    67412.25
+2024    68788.50
+2025    70020.25
+Name: FRED
+```
+:::
+:::
+::: {.column width="33%"}
+::: {.output}
+```text
+2023    65667.28158
+2024    66856.51317
+2025    67945.61465
+Name: World Bank
+```
+:::
+:::
+::: {.column width="34%"}
+::: {.output}
+```text
+year
+2029    75400.028306
+2030    76495.271236
+2031    77616.076824
+Name: IMF WEO
+```
+:::
+:::
+:::
+
+::: {.incremental}
+- FRED and the World Bank end in 2025; the IMF's last years are **forecasts** to 2031.
+- The levels differ too (\$70,020 versus \$67,946 in 2025): different base years.
+:::
+
+::: {.notes}
+The output, with the "dtype: float64" lines trimmed. FRED's values are chained 2017 dollars, the World Bank's constant 2015 dollars: same economy, different price base, so different levels.
+
+The IMF column will be cut at the last year that all five sources share, so the forecasts drop out of the comparison automatically (next slides).
+:::
+
+## Penn World Table and Maddison: reuse the tables already in memory
+
+```python
+# Penn World Table and Maddison: already in memory from B.9
+us_pwt = pwt[pwt["countrycode"] == "USA"].copy()
+us_pwt["gdp_pc"] = us_pwt["rgdpna"] / us_pwt["pop"]
+pwt_pc = us_pwt.set_index("year")["gdp_pc"].rename("Penn World Table")
+pwt_pc.index = pwt_pc.index.astype(int)
+
+mad_pc = maddison[maddison["countrycode"] == "USA"].set_index("year")["gdppc"].rename("Maddison")
+
+# One table: pd.concat puts the five columns side by side, matching the years
+sources = pd.concat([fred_pc, wb_pc, imf_pc, pwt_pc, mad_pc], axis=1).sort_index()
+sources.loc[2000:]
+```
+
+[`pd.concat(..., axis=1)` matches the five Series on their year index, leaving `NaN` where a source has no value.]{.comment .fragment}
+
+::: {.notes}
+.copy() avoids pandas' warning about modifying a slice. The PWT years arrive as floating-point numbers from the Stata file, so .astype(int) makes them integers like the other indexes. Without that, 2000.0 and 2000 would still match, but the table would print oddly.
+
+No download here: the Penn World Table and Maddison tables are already in memory, the polite way to use servers (good habit).
+:::
+
+## Five columns, five units: the levels cannot be compared directly
+
+::: {.output}
+```text
+          FRED    World Bank       IMF WEO  Penn World Table      Maddison
+2000  49914.50  48616.254628  49933.506536      55171.319764  45886.470498
+...
+2010  54188.25  52812.682987  54206.538072      59465.698228  49266.915862
+...
+2020  61127.00  59533.609024  61225.660175      65783.138914  54379.206512
+2021  64828.50  63096.785615  64839.516732      69617.537868  57522.704626
+2022  66037.25  64322.233282  66057.138042      71079.677954  58487.465861
+2023  67412.25  65667.281580  67438.383199      72718.486651           NaN
+2024  68788.50  66856.513170  68810.761710               NaN           NaN
+2025  70020.25  67945.614650  70032.247214               NaN           NaN
+...
+2031       NaN           NaN  77616.076824               NaN           NaN
+```
+:::
+
+[In 2000 the levels range from about \$45,900 (Maddison) to \$55,200 (Penn World Table).]{.comment .fragment}
+
+::: {.notes}
+Trimmed to a few years. The last year with all five sources is 2022: Maddison ends in 2022, the Penn World Table in 2023, the official sources in 2025, the IMF forecasts in 2031.
+
+The level differences come from units (base years, PPP dollars) and from population estimates. They say nothing about growth. To compare growth, we index.
+:::
+
+## Index each source to 2000 = 100, then compute average growth
+
+::: {.eqpanel}
+$$\text{index}_t = 100 \times \frac{y_t}{y_{2000}} \qquad g = \left(\frac{y_{\text{end}}}{y_{2000}}\right)^{1/(\text{end} - 2000)} - 1$$
+:::
+
+```python
+END = int(sources.dropna().index.max())       # the last year with all five sources
+index = 100 * sources.loc[2000:END] / sources.loc[2000]
+growth = 100 * ((sources.loc[END] / sources.loc[2000]) ** (1 / (END - 2000)) - 1)
+print(f"Average annual growth of U.S. real GDP per person, 2000-{END}, percent:")
+print(growth.round(2).to_string())
+```
+
+::: {.incremental}
+- An index removes the units: every source starts at 100.
+- $g$ is the constant yearly growth rate that takes $y_{2000}$ to $y_{\text{end}}$.
+:::
+
+::: {.notes}
+sources.dropna() keeps the years with all five values; .index.max() is the last of them, 2022. Dividing a table by one row (sources.loc[2000]) divides each column by its own 2000 value.
+
+The growth formula is the average annual growth rate of Chapter 3: the constant rate g such that y_2000 × (1 + g)^(end − 2000) = y_end.
+:::
+
+## Will the five sources agree on the growth rate?
+
+[Same country, same years, same concept. Will the five average growth rates for 2000–2022 be equal, almost equal, or clearly different? Which sources will agree?]{.predict-output}
+
+::: {.notes}
+Give students a minute to commit to an answer, ideally in writing. Then reveal the output. Hint for discussion: think of which sources copy the latest official U.S. numbers and which rebuild them every few years.
+:::
+
+## Three sources say 1.28% a year; the research datasets say less
+
+::: {.output}
+```text
+Average annual growth of U.S. real GDP per person, 2000-2022, percent:
+FRED                1.28
+World Bank          1.28
+IMF WEO             1.28
+Penn World Table    1.16
+Maddison            1.11
+```
+:::
+
+::: {.incremental}
+- FRED, the World Bank and the IMF agree **exactly**: [1.28%]{.key}. All three copy the latest official U.S. numbers.
+- The Penn World Table ([1.16%]{.key}) and the Maddison Project ([1.11%]{.key}) show slower growth.
+- The gap: 0.17 percentage points a year, every year, for 22 years.
+:::
+
+::: {.notes}
+The numbers of the hook, now explained by the code that made them.
+
+The gap is in percentage points, not percent: 1.28 − 1.11 = 0.17 points. Over 22 years a small yearly gap adds up to a visible difference in the index, as the chart shows.
+:::
+
+## U.S. real GDP per person in five sources
+
+[Where in the 22 years do the five lines part ways: at once, slowly, or after one event?]{.question}
+
+::: {.notes}
+Ask students to look for the moment the Penn World Table and Maddison lines fall below the other three.
+:::
+
+## The five sources tell the same story with different numbers {.live-figure}
+
+<script src="plots/plot11.js"></script>
+<div class="live-plot" data-fig="plot11"></div>
+
+[Data: BEA through [FRED](https://fred.stlouisfed.org/series/A939RX0Q048SBEA) (`A939RX0Q048SBEA`); World Bank [WDI](https://data.worldbank.org/indicator/NY.GDP.PCAP.KD) (`NY.GDP.PCAP.KD`); IMF [WEO](https://www.imf.org/en/Publications/WEO/weo-database) (`NGDPRPC`); [Penn World Table 11.0](https://www.rug.nl/ggdc/productivity/pwt/) (`rgdpna`, `pop`); [Maddison Project Database 2023](https://www.rug.nl/ggdc/historicaldevelopment/maddison/releases/maddison-project-database-2023) (`gdppc`). Related to Chapters 2 and 3 of Jones (2024).]{.source-line}
+
+::: {.notes}
+How to read it: each source's U.S. real GDP per person as an index, 2000 = 100, 2000–2022. Hover to compare the five values in one year.
+
+Do live: hover 2009 (the dip of the Great Recession in every source) and 2022 (the spread at the end). FRED, the World Bank and the IMF lie on top of each other.
+:::
+
+## Why sources differ: vintages, population and prices
+
+::: {.incremental}
+- **Vintages.** Each source copied the official U.S. numbers at a different time, and the BEA revises GDP every year. FRED updates within days; the Penn World Table and Maddison every few years.
+- **Population.** GDP per person divides by population, and the sources use different estimates (Census Bureau, United Nations, their own).
+- **Prices and methods.** Different base years and, for the Penn World Table and Maddison, their own international prices.
+:::
+
+[Always say where a number comes from, and compare sources when a result matters.]{.takeaway .fragment}
+
+::: {.notes}
+The three reasons of B.10, which are the three ideas of Act I in action: vintages (Idea 3), units and prices (Idea 2), and the exact series behind a name (Idea 1).
+
+The Zimbabwe population comparison of Act V is the same mechanism on a smaller scale: 15.2 million in Maddison against 16.1 million in the Penn World Table.
+:::
+
+## Different sources do not mean one of them is wrong
+
+[The sources disagree, so one of them must have made a mistake.]{.myth}
+
+[All five can be right about what they measure. They copied the official data at different dates, divided by different population estimates and used different prices. The error would be to report a number without its source.]{.fact .fragment}
+
+::: {.notes}
+The misconception of the act. Policy students in particular will meet conflicting numbers in reports and the press.
+
+The practical rule: pick the source that fits the question (official national accounts for recent U.S. growth; the Penn World Table for cross-country comparisons in PPP; Maddison for the very long run), say which one you used, and check whether the conclusion survives another source.
+:::
+
+## Does the gap shrink after 2010?
+
+[Repeat the comparison for **2010 to the last common year**. Are the differences between the sources larger or smaller than for 2000 onwards?]{.tryit}
+
+::: {.notes}
+The "Your turn" of B.10. Hint: in the cell that computes index and growth, replace each 2000 by 2010. Remember the exponent: 1 / (END − 2010).
+
+A good extension: write a small function growth_between(start, end) so that any period is one call away.
+:::
+
+## Good habit: save what you download, with the date in the name
+
+```python
+# Save a table with the download date in its name
+file_name = f"us_unemployment_inflation_{TODAY}.csv"
+fred.to_csv(file_name, index=False)
+print("Saved", file_name)
+```
+
+. . .
+
+::: {.output}
+```text
+Saved us_unemployment_inflation_2026-10-17.csv
+```
+:::
+
+[A Colab session is temporary: download the file from the *Files* icon, or save it to Google Drive.]{.watch .fragment}
+
+::: {.notes}
+Sources change, revise and sometimes move their files. A saved copy with the date in its name is your own vintage.
+
+index=False leaves out pandas' row numbers. The file appears under the Files icon in Colab's left sidebar and disappears when the session ends unless you download it or save it to Drive.
+:::
+
+## Five habits make a download trustworthy
+
+::: {.incremental}
+- **Save what you download**, with the date in the file name.
+- **Write down the source, the series code and the date** next to every result.
+- **Check the units and the latest date** before you compute anything: `.tail()` is your friend.
+- **Keep keys secret**: Colab Secrets, never the notebook.
+- **Be polite to the servers**: download once and reuse the table.
+:::
+
+::: {.notes}
+The good-habits list of B.11. Every Sources note in the book (and every source line on these slides) follows the second habit: producer, series code, and the date of the download.
+
+Citing data: name the producer (BLS, World Bank, IMF), the dataset and its edition (Penn World Table 11.0, Maddison Project Database 2023, WEO October 2026), the series code, and the download date. For research datasets, cite the paper too (Feenstra, Inklaar and Timmer 2015; Bolt and van Zanden 2024).
+:::
+
+## Read the documentation before you trust a series
+
+::: {.incremental}
+- **FRED**: the notes under every series chart give the units, the frequency, the seasonal adjustment and the original producer.
+- **World Bank**: every indicator page has a definition, a source and its limitations.
+- **Penn World Table**: the user guide sits in the file list we downloaded (`pwt110_user_guide_to_data_files.pdf`).
+- **Maddison**: the `Notes` and `Sources` sheets of the Excel file.
+- **Eurostat, ECB, OECD**: the metadata page of each dataset explains every dimension code.
+:::
+
+[Five minutes with the documentation saves an afternoon of wrong results.]{.takeaway .fragment}
+
+::: {.notes}
+A habit the appendix implies in every section: read the units and the definitions where the producer writes them. The Penn World Table's user guide was in the Dataverse file list of Act V; Maddison's documentation is in the first two sheets of the workbook (which pandas would read by default if you forget sheet_name).
+
+Ask: where would you find out whether FRED's GDPC1 is annualized? (In the notes on its series page: it is a seasonally adjusted annual rate.)
+:::
+
+## Cite a dataset as carefully as a paper
+
+::: {.incremental}
+- **Who** produced it: the agency or the authors.
+- **What**: the dataset and its edition (Penn World Table 11.0; WEO, October 2026).
+- **Which series**: the code (`UNRATE`, `NY.GDP.PCAP.KD`).
+- **Where**: the link or the DOI. **When**: the download date.
+:::
+
+. . .
+
+::: {.eqpanel}
+U.S. Bureau of Labor Statistics, Unemployment Rate [`UNRATE`], retrieved from FRED, Federal Reserve Bank of St. Louis, fred.stlouisfed.org/series/UNRATE, 17 October 2026.
+:::
+
+::: {.notes}
+The example follows the citation format that FRED itself suggests on every series page: producer, title, code, "retrieved from FRED", the address and the date.
+
+For research datasets, cite the paper as well: Feenstra, Inklaar and Timmer (2015) for the Penn World Table; Bolt and van Zanden (2024) for the Maddison Project. The source lines on every chart of this deck follow the same pattern.
+:::
+
+## When a download fails, fall back on a copy
+
+```python
+try:
+    unemployment_rate = read_fred("UNRATE")
+    print("Downloaded from FRED")
+except Exception as problem:
+    print("FRED did not answer:", problem)
+    unemployment_rate = pd.read_csv(BOOK_DATA + "ch07/fig7-2.csv", parse_dates=["date"])
+    print("Using the copy stored in the book's repository instead")
+```
+
+. . .
+
+::: {.output}
+```text
+Downloaded from FRED
+```
+:::
+
+[Servers are sometimes down, busy or changed. Wait a minute and run the cell again first.]{.comment .fragment}
+
+::: {.notes}
+Errors usually arrive as an HTTPError or a ConnectionError. The try/except pattern from the fredapi cell is reused: try the live source; if it fails, print the problem and read the book's prepared copy.
+
+In our run FRED answered, so only the first branch ran. To see the fallback, break the code on purpose (read_fred("UNRATEX")) and run it.
+:::
+
+## Predict the fix
+
+[`read_fred("UNRATES")` stops with `HTTPError: HTTP Error 404: Not Found`. What went wrong, and how do you fix it?]{.predict-output}
+
+. . .
+
+[A 404 means the address does not exist: here the series code is misspelled (`UNRATES`). Check the code on the FRED website and copy it exactly.]{.takeaway}
+
+::: {.notes}
+A quick debugging exercise before the table of common errors. Ask students to read the error message aloud: the last line of a Python error is the most useful one.
+
+Variants to try: a 403 (add a User-Agent), a ModuleNotFoundError (rerun the install cell).
+:::
+
+## Common errors, part 1: installing and addressing {.compact}
+
+| Error message | What it usually means | What to do |
+|------------------------------------------|---------------------------------------|----------------------------------------|
+| `ModuleNotFoundError: No module named 'wbgapi'` | the library is not installed in this session | run the `%pip install` cell again |
+| `HTTPError: HTTP Error 404: Not Found` | the web address or the series code is wrong | check the code on the source's website; copy it exactly |
+| `HTTPError: HTTP Error 403: Forbidden` | the server refused the program | add a User-Agent, as for Our World in Data |
+| `HTTPError: HTTP Error 429` or `503` | too many requests, or the server is busy | wait a minute and try again; download less often |
+
+::: {.notes}
+The first half of the appendix's table. The 429 is a rate limit: the server counts your requests and refuses when there are too many. Downloading once and reusing the table (the good habit) avoids it.
+
+A new Colab session forgets every installed library, so ModuleNotFoundError is the first error of almost every session that skips the install cell.
+:::
+
+## Common errors, part 2: inside the data {.compact}
+
+| Error message | What it usually means | What to do |
+|------------------------------------------|---------------------------------------|----------------------------------------|
+| `KeyError: 'value'` | a column name that does not exist | print `table.columns` and use the exact name |
+| an empty table | no data for this combination of codes | check each code of the key; try fewer filters |
+| `ValueError` in `pd.read_excel` | wrong sheet name | open the file and check the sheet names |
+| an API key error | no key, or a key not visible to the notebook | add it in Colab Secrets and switch on *Notebook access* |
+
+[Read the last line of the error first: it usually names the problem.]{.takeaway .fragment}
+
+::: {.notes}
+The second half of the table. The last row is ours, from the fredapi section: if the secret exists but Notebook access is off, userdata.get fails and the cell skips politely.
+
+Empty tables are the silent error: no message, just nothing. The causes in this deck: SPOO instead of SP00 in an SDMX key, LUR for a country with no unemployment data in the WEO, a Eurostat filter value that does not exist.
+:::
+
+## Cheat sheet: one call per source {.compact-xs}
+
+| Source | Library (way) | The call that downloads |
+|--------------------|--------------------------|--------------------------------------------------------------------|
+| FRED | pandas (4) | `pd.read_csv("https://fred.stlouisfed.org/graph/fredgraph.csv?id=UNRATE")` |
+| FRED | `pandas-datareader` (1) | `web.DataReader(["GDPC1", "PCECC96"], "fred", start="2000-01-01")` |
+| FRED | `fredapi` (1, key) | `Fred(api_key=KEY).get_series("GDPC1")` |
+| World Bank | `wbgapi` (1) | `wb.data.DataFrame("NY.GDP.PCAP.KD", ["USA", "CHN"], time=range(1960, 2030))` |
+| IMF | `imfp` (1) | `imfp.imf_get("WEO", {"COUNTRY": ["USA"], "INDICATOR": "NGDP_RPCH"})` |
+| ECB | `sdmx1` (2) | `sdmx.Client("ECB").data("EXR", key={...})` |
+| Eurostat | `eurostat` (1) | `eurostat.get_data_df("une_rt_a", filter_pars={...})` |
+| OECD, IMF, BIS… | `dbnomics` (3) | `fetch_series("IMF/WEO:latest/USA.NGDP_RPCH.pcent_change")` |
+| Penn World Table | pandas (4) | `pd.read_stata("https://dataverse.nl/api/access/datafile/554030")` |
+| Maddison | pandas (4) | `pd.read_excel(".../datafile/421302", sheet_name="Full data")` |
+| Our World in Data | pandas (4) | `pd.read_csv(chart_address + ".csv", storage_options={"User-Agent": ...})` |
+
+::: {.notes}
+A slide to photograph or print. Every call is from this deck (the fredapi line is shortened: in the notebook the key comes from Colab Secrets, never typed).
+
+The search functions are the other half of each library: wb.series.info and wb.economy.info, imfp.imf_get_codelists, sdmx.list_sources, eurostat.get_pars and get_dic, fredapi's search.
+:::
+
+## Where to learn more {.compact}
+
+::: {.smaller}
+- **FRED**: the [FRED website](https://fred.stlouisfed.org/), [`fredapi`](https://github.com/mortada/fredapi), [`pandas-datareader`](https://pandas-datareader.readthedocs.io/en/latest/remote_data.html)
+- **World Bank**: the [`wbgapi` documentation](https://pypi.org/project/wbgapi/) and the [data catalog](https://datacatalog.worldbank.org/)
+- **IMF**: the [`imfp` documentation](https://promptlytechnologies.com/imfp/) and the [IMF data portal](https://data.imf.org/)
+- **SDMX**: the [`sdmx1` documentation](https://sdmx1.readthedocs.io/), with examples for each agency
+- **Eurostat**: the [`eurostat` package](https://pypi.org/project/eurostat/) and the [data browser](https://ec.europa.eu/eurostat/databrowser/)
+- **DBnomics**: the [website](https://db.nomics.world/) and its [Python client](https://git.nomics.world/dbnomics/dbnomics-python-client)
+- **Penn World Table** and **Maddison**: the [Groningen Growth and Development Centre](https://www.rug.nl/ggdc/)
+- **Our World in Data**: [how to download data](https://docs.owid.io/projects/etl/api/) from its charts
+- **Python for economists**: QuantEcon, [Python Programming for Economics and Finance](https://python-programming.quantecon.org/)
+:::
+
+::: {.notes}
+The reading list of B.11, with the links. The documentation of each library has more examples than this appendix can show; sdmx1's has a page per agency.
+:::
+
+## What to remember from this appendix
+
+::: {.incremental}
+- **The map**: official collectors (FRED, World Bank, IMF, OECD, Eurostat, ECB, BIS) and research datasets (Penn World Table, Maddison, Our World in Data).
+- **Four ways in**: a specialized library, SDMX, a collection, or a file read straight from its address.
+- **Every series has a code**: find it first, then check the units and the latest date.
+- **Sources differ** because of vintages, population estimates and prices: 1.28% versus 1.11% a year.
+- **Record where and when** you got every number; keep keys secret; save a copy.
+:::
+
+::: {.notes}
+One point per act, more or less: Act I (map and four ways), Acts II–V (codes, units, latest dates), Act VI (sources differ; habits).
+
+Every chapter of the book reads prepared copies of these data from its GitHub repository. With this appendix, students can go back to the original sources, update them, and extend any chapter to other countries and years.
+:::
+
+## {.recap background-image="figures/mindmap.webp" background-size="contain" background-color="#0f172a"}
+
+::: {.notes}
+Walk the six branches clockwise from the upper left, half a minute each: the map and the three ideas; FRED's three routes; the agency libraries; one standard and one door; files on the web; one number from many sources and the habits that make it trustworthy.
+:::
+
+## Every number has a source, a code, units and a date: record all four, and Python can fetch it again in seconds {.closing background-color="#4d7c0f"}
+
+[Next: Appendix C. Math Review for Macroeconomics]{.act}
+
+::: {.notes}
+The thesis of the appendix. The code is the easy part; the habits make the result trustworthy and reproducible.
+:::
+
+## Sources: data shown {.sources}
+
+::: {.sources-list}
+- **U.S. unemployment and inflation.** U.S. Bureau of Labor Statistics through [FRED](https://fred.stlouisfed.org/): [`UNRATE`](https://fred.stlouisfed.org/series/UNRATE), [`CPIAUCSL`](https://fred.stlouisfed.org/series/CPIAUCSL); real GDP and consumption [`GDPC1`](https://fred.stlouisfed.org/series/GDPC1), [`PCECC96`](https://fred.stlouisfed.org/series/PCECC96) (BEA).
+- **GDP per person and life expectancy.** World Bank, [World Development Indicators](https://databank.worldbank.org/source/world-development-indicators): [`NY.GDP.PCAP.KD`](https://data.worldbank.org/indicator/NY.GDP.PCAP.KD), [`NY.GDP.PCAP.PP.KD`](https://data.worldbank.org/indicator/NY.GDP.PCAP.PP.KD), [`SP.DYN.LE00.IN`](https://data.worldbank.org/indicator/SP.DYN.LE00.IN); [income classification](https://datahelpdesk.worldbank.org/knowledgebase/articles/906519); via `wbgapi`.
+- **Real GDP growth and forecasts.** IMF, [World Economic Outlook database](https://www.imf.org/en/Publications/WEO/weo-database), `NGDP_RPCH`, `NGDPRPC` (October 2026 edition), from the [IMF data portal](https://data.imf.org/) via `imfp`; the same series via [DBnomics](https://db.nomics.world/).
+- **Dollars per euro.** European Central Bank, [ECB Data Portal](https://data.ecb.europa.eu/data/datasets/EXR), `EXR.M.USD.EUR.SP00.A`, via `sdmx1`.
+- **Unemployment in Europe.** Eurostat, [table `une_rt_a`](https://ec.europa.eu/eurostat/databrowser/view/une_rt_a/default/table), via `eurostat` and `sdmx1`.
+- **Unemployment in five rich economies.** OECD, Key Economic Indicators `DSD_KEI@DF_KEI`, measure `UNEMP`, through [DBnomics](https://db.nomics.world/OECD/DSD_KEI@DF_KEI).
+- **Productivity.** Feenstra, R. C., R. Inklaar and M. P. Timmer (2015), "The Next Generation of the Penn World Table", *American Economic Review* 105(10); [Penn World Table 11.0](https://www.rug.nl/ggdc/productivity/pwt/), [doi:10.34894/FABVLR](https://doi.org/10.34894/FABVLR).
+- **Long-run GDP per person.** Bolt, J. and J. L. van Zanden (2024), [Maddison Project Database 2023](https://www.rug.nl/ggdc/historicaldevelopment/maddison/releases/maddison-project-database-2023), [doi:10.34894/INZBF2](https://doi.org/10.34894/INZBF2).
+- **Extreme poverty.** World Bank, [Poverty and Inequality Platform](https://pip.worldbank.org/), as processed by [Our World in Data](https://ourworldindata.org/grapher/share-of-population-in-extreme-poverty).
+- **Five sources compared.** [`A939RX0Q048SBEA`](https://fred.stlouisfed.org/series/A939RX0Q048SBEA) (BEA via FRED), `NY.GDP.PCAP.KD`, `NGDPRPC`, PWT 11.0 `rgdpna`/`pop`, Maddison 2023 `gdppc`. All data downloaded on 17 October 2026.
+:::
+
+## Sources: tools and texts {.sources}
+
+::: {.sources-list}
+- **Libraries.** [`pandas`](https://pandas.pydata.org/), [`plotly`](https://plotly.com/python/), [`pandas-datareader`](https://pandas-datareader.readthedocs.io/), [`fredapi`](https://github.com/mortada/fredapi), [`wbgapi`](https://pypi.org/project/wbgapi/), [`imfp`](https://promptlytechnologies.com/imfp/), [`sdmx1`](https://sdmx1.readthedocs.io/), [`eurostat`](https://pypi.org/project/eurostat/), [`dbnomics`](https://git.nomics.world/dbnomics/dbnomics-python-client), [`requests`](https://requests.readthedocs.io/).
+- **Data archives and standards.** [DataverseNL](https://dataverse.nl/) (Penn World Table and Maddison files); [SDMX](https://sdmx.org/) (Statistical Data and Metadata eXchange).
+- **Further reading.** QuantEcon, [Python Programming for Economics and Finance](https://python-programming.quantecon.org/).
+- **Textbook.** Jones, C. I. (2024). [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612) W. W. Norton. The data topics are those of Chapters 2–4, 7–9, 12 and 20.
+- **Book appendix, with the code and every figure.** [Data Science and Macroeconomic Models, Appendix B](https://quarcs-lab.github.io/macro102-site/notebooks/appB-accessing-macroeconomic-data-with-python.html).
+:::
