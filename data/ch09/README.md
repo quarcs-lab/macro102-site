@@ -26,9 +26,9 @@ Full definitions, vintages and the validation against the textbook are in macro1
 
 ## Wider files built for the notebook
 
-All three files are made by `build_data.py` from raw files saved by macro102's `/collect-data`
+All four files are made by `build_data.py` from raw files saved by macro102's `/collect-data`
 (`original-scanned-book/ch09-an-introduction-to-the-short-run/data/`, folders `fig9-3/raw/`,
-`fig9-4/raw/` and `fig9-5/raw/`). Run it with `python build_data.py --macro102 PATH`.
+`fig9-4/raw/`, `fig9-5/raw/` and `fig9-8/raw/`). Run it with `python build_data.py --macro102 PATH`.
 
 - `recessions.csv`: `peak, trough`. The 9 NBER business-cycle peaks and troughs whose trough is in 1960 or later (first day of the month), from 1960-04 / 1961-02 to 2020-02 / 2020-04.
   - Source: NBER-based recession indicator `USREC` via FRED. `peak` is the month before the first recession month, `trough` the last recession month (the NBER's official dates).
@@ -42,6 +42,11 @@ All three files are made by `build_data.py` from raw files saved by macro102's `
   - Known gap: October 2025 is missing (prices were not collected during the federal government shutdown), so `cpi` and `inflation_12m` are empty for that month. It is left missing here.
   - Validation: with October 2025 interpolated, the calendar-year means reproduce the annual inflation of `fig9-5.csv` (largest difference 0.0005 points).
   - Used for the monthly inflation line of Figure 5 and the check of the Covid-19 recession (12-month inflation 2.34 percent in February 2020, 0.31 percent in April 2020).
+- `unemployment_monthly.csv`: `date, unrate`. The civilian unemployment rate, percent, monthly, seasonally adjusted, 1948-01 to 2026-09 (945 months).
+  - Source: BLS Current Population Survey via FRED (`UNRATE`), from collect-data's `fig9-8/raw/fred_UNRATE.csv`.
+  - Known gap: the BLS published no unemployment rate for October 2025, the month of the federal government shutdown, so `unrate` is empty for that month. It is left missing here; the practice problem that uses the file fills it with `interpolate()`.
+  - Validation: with October 2025 interpolated, the calendar-year means reproduce `unrate` in `fig9-8.csv` (largest difference 0.0003 points). The Sahm recession indicator computed from this file (the 3-month average of `unrate` minus its lowest value over the previous 12 months, rounded to 2 decimals) reproduces FRED's [`SAHMCURRENT`](https://fred.stlouisfed.org/series/SAHMCURRENT) exactly in all 919 months whose window has no missing value. `build_data.py` downloads FRED's file once and caches it in macro102's `.work/ch09/notebook-raw/`.
+  - Used for the Sahm-rule problem in the Practice problems (data-based problems).
 
 ## Multi-country files (conventions.md §6b)
 

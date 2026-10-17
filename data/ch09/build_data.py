@@ -7,10 +7,14 @@ original-scanned-book/ch09-an-introduction-to-the-short-run/data/):
   fig9-3/raw/fred_USREC.csv      NBER recession indicator, monthly (1 = recession month)
   fig9-4/raw/fred_PAYEMS.csv     total nonfarm payroll employment, thousands, monthly, SA (BLS)
   fig9-5/raw/fred_CPIAUCSL.csv   CPI-U all items, index 1982-84 = 100, monthly, SA (BLS)
+  fig9-8/raw/fred_UNRATE.csv     unemployment rate, percent, monthly, SA (BLS)
 Outputs (next to this script):
   recessions.csv           peak, trough                NBER peaks and troughs whose trough is in 1960 or later
   payroll_employment.csv   date, payroll_millions      payroll employment, millions, monthly, 1979-12 on
   cpi_monthly.csv          date, cpi, inflation_12m    CPI and 12-month inflation (percent), monthly, 1959-01 on
+  unemployment_monthly.csv date, unrate                unemployment rate (percent), monthly, 1948-01 on
+                           (Practice problems: the Sahm rule; validated against FRED's SAHMCURRENT, downloaded
+                           once and cached in macro102's .work/ch09/notebook-raw/)
 
 Multi-country files (conventions.md 6b), downloaded from public sources with requests' default User-Agent and
 cached in macro102's .work/ch09/notebook-raw/ (delete a cached file to download it again):
@@ -82,6 +86,34 @@ def cpi(root):
     print(f"cpi_monthly.csv: {len(out)} months, {out.index.min():%Y-%m} to {out.index.max():%Y-%m}, "
           f"{int(out.cpi.isna().sum())} missing month(s); largest difference of annual inflation from "
           f"fig9-5.csv: {worst:.4f}")
+
+
+SAHM_URL = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=SAHMCURRENT"
+
+
+def unemployment_monthly(root, raw):
+    """Monthly unemployment rate; October 2025 stays missing (no BLS estimate for the shutdown month)."""
+    u = fred(root, "fig9-8/raw/fred_UNRATE.csv")
+    out = pd.DataFrame({"unrate": u})
+    out.index.name = "date"
+    out.to_csv(os.path.join(HERE, "unemployment_monthly.csv"), date_format="%Y-%m-%d")
+    # validation 1: calendar-year means (October 2025 interpolated, as collect-data does) reproduce fig9-8.csv
+    filled = u.interpolate()
+    annual = filled.groupby(filled.index.year).agg(["mean", "count"])
+    annual = annual[annual["count"] == 12]["mean"]
+    ref = pd.read_csv(os.path.join(HERE, "fig9-8.csv")).set_index("year").unrate
+    worst = (annual.reindex(ref.index) - ref).abs().max()
+    # validation 2: the Sahm indicator (3-month average minus its low over the previous 12 months) reproduces
+    # FRED's SAHMCURRENT in every month whose 15-month window has no missing value
+    average = u.rolling(3).mean()
+    sahm = (average - average.shift(1).rolling(12).min()).round(2)
+    fred_sahm = pd.read_csv(download(SAHM_URL, "fred_SAHMCURRENT.csv", raw), parse_dates=["observation_date"])
+    fred_sahm = fred_sahm.set_index("observation_date").SAHMCURRENT
+    both = pd.concat([sahm, fred_sahm], axis=1).dropna()
+    print(f"unemployment_monthly.csv: {len(out)} months, {out.index.min():%Y-%m} to {out.index.max():%Y-%m}, "
+          f"{int(out.unrate.isna().sum())} missing month(s); largest difference of the annual means from "
+          f"fig9-8.csv: {worst:.4f}; Sahm indicator vs FRED SAHMCURRENT: {len(both)} months, largest difference "
+          f"{(both.iloc[:, 0] - both.iloc[:, 1]).abs().max():.4f}")
 
 
 LAST = 2025                                     # last complete year: Economic Outlook 119 projects 2026-2027
@@ -212,6 +244,7 @@ def main():
     recessions(root)
     payroll(root)
     cpi(root)
+    unemployment_monthly(root, raw)
     short_run_panel(raw)
     employment_quarterly(raw)
 
