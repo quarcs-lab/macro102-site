@@ -49,7 +49,7 @@
 | `src/` | The source of each notebook (`.qmd`). The notebook is generated from it, so edit the source, not the `.ipynb`. |
 | `data/chNN/` | The CSV files each notebook reads, plus a `README.md` with sources and a `build_data.py` that rebuilds the wider files. |
 | `data/appA/`, `images/appA/` | The data files and the Colab screenshots of Appendix A. (Appendix B downloads its data live from the original sources.) |
-| `_quarto.yml`, `index.qmd`, `_includes/` | The Quarto book website. |
+| `_quarto.yml`, `index.qmd`, `_includes/` | The Quarto book website, in a dark theme (the default, in the colors of the book cover) and a light one, switched with the button at the top right. `_includes/theme-*.scss` hold the colors; `_includes/plotly-theme.html` recolors the saved charts for the dark theme, so each chart is stored only once. |
 
 ## Rebuilding
 
