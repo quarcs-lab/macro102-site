@@ -2,17 +2,6 @@
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/ch13-stabilization-policy-and-the-as-ad-framework.ipynb)
 
-*Data Science and Macroeconomic Models: A Python Companion to Intermediate Macroeconomics* · Carlos Mendez
-
-> **How to use this notebook.** In Colab, click *Runtime → Run all*. After that, every model
-> figure has live sliders: move one and the model is solved again on the spot. On the book
-> website the same figures come with one precomputed slider. Each section ends with a short
-> **Your turn** task, and you can try it in the empty code cell below the task.
->
-> **Sources.** The figures are adapted from, or inspired by, the figures in
-> Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612) A **Sources**
-> note below each figure names the original figure and links to the data.
-
 <!-- cell -->
 
 ## Learning goals
@@ -31,38 +20,6 @@ you will be able to:
   inflation-output loops, and three centuries of inflation;
 - in Python: write one `simulate` loop and reuse it in many figures, build tables from lists of
   dictionaries, reshape data with `melt`, join tables with `merge`, and compare two vintages of the same data.
-
-<!-- cell -->
-
-## Figures in this chapter
-
-The figures follow the order of the textbook chapter. The second column shows which textbook
-figure inspired each notebook figure. Every figure here is our own adaptation, drawn with our own code
-(and, for data figures, with updated data); none is a copy of the original.
-
-| Figure | Textbook figure | Type | What you can change |
-|---|---|---|---|
-| Figure 1 | 13.1 The aggregate demand curve | model | inflation target π̄, policy response m̄, b̄, demand shock ā |
-| Figure 2 | 13.2 The AD curve after an inflation shock | model | new inflation rate π′, policy response m̄ |
-| Figure 3 | 13.3 An aggressive monetary policy rule | model | policy response m̄, new inflation rate π′ |
-| Figure 4 | 13.4 The aggregate supply curve | model | last year's inflation, slope ν̄, inflation shock ō |
-| Figure 5 | 13.5 The AS/AD framework | model | expected inflation, target π̄, m̄, ν̄ |
-| Figure 6 | 13.6 The initial response to an inflation shock | model | shock ō, period, m̄, ν̄ |
-| Figure 7 | 13.7 Two periods after an inflation shock | model | shock ō, m̄, ν̄ |
-| Figure 8 | 13.8 Three periods after an inflation shock | model | shock ō, period, m̄, ν̄ |
-| Figure 9 | 13.9 The effects of an inflation shock: summary | model | shock ō, m̄, ν̄ |
-| Figure 10 | 13.10 The initial response to disinflation | model | new target π̄′, period, m̄, ν̄ |
-| Figure 11 | 13.11 The dynamics of disinflation | model | new target π̄′, m̄, ν̄ |
-| Figure 12 | 13.12 A positive aggregate demand shock | model | shock ā, period, m̄, ν̄ |
-| Figure 13 | 13.13 Dynamics as the AS curve shifts | model | shock ā, period, m̄, ν̄ |
-| Figure 14 | 13.14 The unraveling after the AD shock ends | model | shock ā, period, m̄, ν̄ |
-| Figure 15 | 13.15 A positive aggregate demand shock: summary | model | shock ā, last period of the shock, m̄, ν̄ |
-| Figure 16 | 13.16 The fed funds rate, actual and predicted | data | r̄ and m̄ of the policy rule; country (33 central banks) |
-| Figure 17 | 13.17 Inflation-output loops in the U.S. economy | data | years shown, data vintage; loops in 40 OECD economies (menu) |
-| Figure 18 | 13.18 Forecasting and the Great Recession | data | show or hide forecasts (legend) |
-| Figure 19 | 13.19 Inflation in the OECD | data | countries (194 economies; groups and legend on the website) |
-| Figure 20 | 13.20 Costless disinflation by coordinating expectations | model | credibility of the new target, π̄′, m̄, ν̄ |
-| Figure 21 | 13.21 Nearly 300 years of inflation in the United Kingdom | data | hover for each period; 17 more countries since 1871 (countries) |
 
 <!-- cell -->
 
@@ -134,7 +91,11 @@ def slider_figure(make_figure, name, values, start, label=None):
     return fig
 ```
 
-## The model in code
+## Model overview
+
+This chapter puts the whole short-run model into one picture. The central bank now follows a simple rule: when inflation is above its target, it raises the real interest rate, which cools spending and pulls output below potential. That rule gives a downward-sloping **aggregate demand (AD) curve** linking inflation to output. The Phillips curve, written in levels, becomes an upward-sloping **aggregate supply (AS) curve**: inflation this year equals the inflation people expected plus a boost when the economy runs hot. Where the two curves cross we read this period's output and inflation.
+
+The model takes the inflation target, the strength of the policy response, the slope of the AS curve and any shocks as given. It tells us how output and inflation move from one period to the next as expectations catch up, until the economy is back at its **steady state**, with inflation on target and output at potential. Below we write the equations, pick one shared set of illustrative numbers, and build the tools every section reuses: a solver for one period, a loop that runs an event over many periods, and the drawing functions. The sections then use them for the AD and AS curves, three events, the U.S. data, and modern monetary policy.
 
 The short-run model of Chapter 12 has three equations: the IS curve
 $\tilde{Y}_t = \bar{a} - \bar{b}(R_t - \bar{r})$, the MP curve (the central bank chooses $R_t$) and the
@@ -153,7 +114,7 @@ $$\text{AS:}\quad \pi_t = \pi_{t-1} + \bar{\nu}\tilde{Y}_t + \bar{o}. \qquad (13
 
 Last year's inflation $\pi_{t-1}$ in the AS curve is **expected inflation**: firms expect inflation to stay
 where it was (*adaptive expectations*, $\pi^e_t = \pi_{t-1}$). We write it as `pi_e` in the code, because
-Figure 20 will let expectations be formed differently.
+Fig. 20 will let expectations be formed differently.
 
 The model has two unknowns, $\tilde{Y}_t$ and $\pi_t$. Substitute the AS curve into the AD curve and solve
 for output; then the AS curve gives inflation:
@@ -164,12 +125,12 @@ $$\tilde{Y}_t = \frac{\bar{a} - \bar{b}\bar{m}\,(\pi^e_t + \bar{o} - \bar{\pi})}
 this notebook start from one illustrative set of parameters:
 
 - inflation target $\bar{\pi} = 2$ percent, the target of the U.S., the U.K., the euro area and Japan;
-- policy response $\bar{m} = 1/2$, John Taylor's value, used again in Figure 16;
+- policy response $\bar{m} = 1/2$, John Taylor's value, used again in Fig. 16;
 - interest sensitivity $\bar{b} = 2$, as in Chapter 11's example;
 - Phillips-curve slope $\bar{\nu} = 1$ (illustrative);
 - the shocks: an inflation shock $\bar{o} = 2$ points for one period, an aggregate demand shock
   $\bar{a} = 2$ points for nine periods, and a disinflation from a target of 4 to 2 percent (the numbers of
-  textbook Figure 13.20).
+  textbook Fig. 13.20).
 
 With these values $\bar{b}\bar{m}\bar{\nu} = 1$, so the denominator above is 2: after any shock, the economy
 closes **half** of the remaining inflation gap every period. That matches the spacing of the textbook's figures.
@@ -261,7 +222,7 @@ def simulate(a_list, o_list, pi_start=PI_BAR, pi_bar=PI_BAR, m=M_BAR, nu=NU_BAR)
 simulate(NO_SHOCK, shock_list(2.0, 1)).head(6).round(3)
 ```
 
-The table is the inflation shock of Figures 6 to 9: inflation jumps to 3 percent in period 1, then falls to
+The table is the inflation shock of Figs. 6 to 9: inflation jumps to 3 percent in period 1, then falls to
 2.5, 2.25, 2.125, ...; the gap to the 2 percent target halves every period, and so does the recession.
 The column `target` is the inflation target behind each period's AD curve, and `pi_e` is expected inflation,
 the height of that period's AS curve at $\tilde{Y} = 0$.
@@ -377,7 +338,7 @@ def asad_axes(fig, title, panels=1):
 
 ### Countries and colors
 
-The data figures at the end of this chapter (Figures 16–21) can go beyond the textbook's economies: the same series
+The data figures at the end of this chapter (Figs. 16–21) can go beyond the textbook's economies: the same series
 exist for many other countries. The file `countries.csv` lists every economy in the chapter's multi-country files, with
 its region and whether it belongs to the OECD. We give each country a fixed color, so that it keeps its color when you
 add or remove others, and two countries that are shown together never share a color. The function `missing_or_off`
@@ -535,7 +496,13 @@ def group_menu(fig, book, small=8):
     return compact(fig)
 ```
 
-## Figure 1: The aggregate demand curve
+## Monetary policy rules and the AD curve
+
+We combine the IS curve with the central bank's rule to get the AD curve, then see how the strength of the policy response changes its slope.
+
+<!-- cell -->
+
+### Fig. 1: The aggregate demand curve
 
 **Goal.** Build the AD curve from the IS curve and the policy rule, and see what each parameter does to it.
 
@@ -556,7 +523,7 @@ stays behind as a dashed gray line.
 
 ```{python}
 def ad_curve(pi_bar=PI_BAR, m=M_BAR, b=B_BAR, a=0.0):
-    """Figure 13.1: the AD curve, with the point where inflation equals the target."""
+    """Fig. 13.1: the AD curve, with the point where inflation equals the target."""
     fig = asad_figure()
     if (pi_bar, m, b, a) != (PI_BAR, M_BAR, B_BAR, 0.0):
         label = "AD (baseline)"
@@ -583,11 +550,11 @@ interact(ad_curve,
 
 ```{python}
 #| kind: website
-# @title Website version: Figure 1 with a precomputed slider for the demand shock
+# @title Website version: Fig. 1 with a precomputed slider for the demand shock
 slider_figure(ad_curve, "a", [-2.0, -1.0, 0.0, 1.0, 2.0], start=0.0, label="demand shock ā")
 ```
 
-**Source.** Adapted from Figure 13.1 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
+**Source.** Adapted from Fig. 13.1 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
 
@@ -597,7 +564,7 @@ slider_figure(ad_curve, "a", [-2.0, -1.0, 0.0, 1.0, 2.0], start=0.0, label="dema
   $\bar{b}\bar{m} = 1$ point of output in the baseline. Raise $\bar{m}$ or $\bar{b}$ and the curve becomes flatter.
 - A demand shock $\bar{a}$ and a new target $\bar{\pi}$ **shift** the curve: $\bar{a}$ moves it right or left, $\bar{\pi}$ up
   or down. The dot always sits at $(\bar{a}, \bar{\pi})$.
-- A change in inflation itself does not shift the curve; it is a movement along it (Figure 2).
+- A change in inflation itself does not shift the curve; it is a movement along it (Fig. 2).
 
 **Your turn.** The central bank raises its target from 2 to 3 percent. At an inflation rate of 3 percent, what
 output does the AD curve now give, compared with the baseline? Check with the sliders and with `ad_output`.
@@ -614,18 +581,18 @@ Compare `ad_output(3.0)` with `ad_output(3.0, pi_bar=3.0)`. A higher target mean
 
 ```
 
-## Figure 2: The AD curve after an inflation shock
+### Fig. 2: The AD curve after an inflation shock
 
 **Goal.** See why higher inflation moves the economy **along** the AD curve instead of shifting it.
 
 The economy starts in steady state at point $A$: inflation at the 2 percent target, output at potential. Now
 inflation jumps to $\pi' = 3$ percent. The policy rule raises the real interest rate by
 $\bar{m}(\pi' - \bar{\pi}) = 0.5$ points, investment falls, and output falls to point $B$. The readout in the title
-follows the chain: inflation, then the interest rate, then output. Figures 2 and 3 share one function.
+follows the chain: inflation, then the interest rate, then output. Figs. 2 and 3 share one function.
 
 ```{python}
 def inflation_rises(pi_new=3.0, m=M_BAR):
-    """Figures 13.2-13.3: inflation rises from the target to pi_new; the economy moves along AD from A to B."""
+    """Figs. 13.2-13.3: inflation rises from the target to pi_new; the economy moves along AD from A to B."""
     Y_B = ad_output(pi_new, m=m)
     fig = asad_figure()
     if m != M_BAR:
@@ -653,12 +620,12 @@ interact(inflation_rises,
 
 ```{python}
 #| kind: website
-# @title Website version: Figure 2 with a precomputed slider for the new inflation rate
+# @title Website version: Fig. 2 with a precomputed slider for the new inflation rate
 slider_figure(inflation_rises, "pi_new", [1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 5.0], start=3.0,
               label="new inflation rate π′ (%)")
 ```
 
-**Source.** Adapted from Figure 13.2 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
+**Source.** Adapted from Fig. 13.2 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
 
@@ -670,7 +637,7 @@ slider_figure(inflation_rises, "pi_new", [1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 5.0
 
 <!-- cell -->
 
-### Key numbers: the policy rule
+#### Key numbers: the policy rule
 
 The textbook's example: with $\bar{m} = 1/2$, inflation 2 points above target raises the real interest rate by
 1 point. Through the AD curve, that costs $\bar{b} \times 1 = 2$ points of output.
@@ -695,14 +662,14 @@ Solve $-3 = -\bar{b}\bar{m}(\pi - 2)$ with $\bar{b}\bar{m} = 1$, then try `ad_ou
 
 ```
 
-## Figure 3: An aggressive monetary policy rule
+### Fig. 3: An aggressive monetary policy rule
 
 **Goal.** See how the policy response $\bar{m}$ sets the slope of the AD curve.
 
 A central bank with a high $\bar{m}$ answers each point of extra inflation with a large rise in the real interest
 rate, and so with a deep recession. Its AD curve is **flat**: a small change in inflation means a big change in
 output. Here $\bar{m} = 1$, twice the baseline, and the dashed gray line is the baseline AD curve. We keep the
-same rise in inflation as in Figure 2, so you can compare the two recessions.
+same rise in inflation as in Fig. 2, so you can compare the two recessions.
 
 ```{python}
 #| kind: widget
@@ -713,11 +680,11 @@ interact(inflation_rises,
 
 ```{python}
 #| kind: website
-# @title Website version: Figure 3 with a precomputed slider for the policy response
+# @title Website version: Fig. 3 with a precomputed slider for the policy response
 slider_figure(inflation_rises, "m", [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75], start=1.0, label="policy response m̄")
 ```
 
-**Source.** Adapted from Figure 13.3 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
+**Source.** Adapted from Fig. 13.3 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
 
@@ -742,7 +709,13 @@ Use a loop: `for m in [0.25, 0.5, 1.0, 2.0]:` and print `ad_output(3.0, m=m)` in
 
 ```
 
-## Figure 4: The aggregate supply curve
+## Aggregate supply and the AS/AD diagram
+
+Next comes the AS curve, the Phillips curve in levels. Putting it next to the AD curve gives the diagram that solves the model and shows its steady state.
+
+<!-- cell -->
+
+### Fig. 4: The aggregate supply curve
 
 **Goal.** Read the Phillips curve as an upward-sloping **aggregate supply** curve.
 
@@ -755,7 +728,7 @@ $\tilde{Y} = 0$ at $\pi_{t-1}$ (plus any inflation shock $\bar{o}$), so it **shi
 
 ```{python}
 def as_curve(pi_prev=PI_BAR, nu=NU_BAR, o=0.0):
-    """Figure 13.4: the AS curve, which crosses Y~ = 0 at last year's inflation plus the shock."""
+    """Fig. 13.4: the AS curve, which crosses Y~ = 0 at last year's inflation plus the shock."""
     fig = asad_figure()
     if (pi_prev, nu, o) != (PI_BAR, NU_BAR, 0.0):
         label = "AS (baseline)"
@@ -780,11 +753,11 @@ interact(as_curve,
 
 ```{python}
 #| kind: website
-# @title Website version: Figure 4 with a precomputed slider for last year's inflation
+# @title Website version: Fig. 4 with a precomputed slider for last year's inflation
 slider_figure(as_curve, "pi_prev", [1.0, 2.0, 3.0, 4.0, 5.0], start=2.0, label="last year's inflation (%)")
 ```
 
-**Source.** Adapted from Figure 13.4 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
+**Source.** Adapted from Fig. 13.4 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
 
@@ -809,7 +782,7 @@ Solve $3.5 = 2 + 1 \times \tilde{Y}$, then try `as_inflation(1.5)`.
 
 ```
 
-## Figure 5: The AS/AD framework
+### Fig. 5: The AS/AD framework
 
 **Goal.** Put the two curves in one diagram and find the short-run equilibrium, and the steady state.
 
@@ -821,7 +794,7 @@ is a steady state.
 
 ```{python}
 def asad_diagram(pi_e=PI_BAR, pi_bar=PI_BAR, m=M_BAR, nu=NU_BAR):
-    """Figure 13.5: the AS and AD curves and the short-run equilibrium where they cross."""
+    """Fig. 13.5: the AS and AD curves and the short-run equilibrium where they cross."""
     Y, pi = solve_asad(pi_e, pi_bar=pi_bar, m=m, nu=nu)
     fig = asad_figure()
     add_as(fig, "AS", TEAL, pi_e, nu)
@@ -846,11 +819,11 @@ interact(asad_diagram,
 
 ```{python}
 #| kind: website
-# @title Website version: Figure 5 with a precomputed slider for expected inflation
+# @title Website version: Fig. 5 with a precomputed slider for expected inflation
 slider_figure(asad_diagram, "pi_e", [1.0, 2.0, 3.0, 4.0, 5.0], start=2.0, label="expected inflation (%)")
 ```
 
-**Source.** Adapted from Figure 13.5 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
+**Source.** Adapted from Fig. 13.5 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
 
@@ -877,7 +850,13 @@ Try `solve_asad(4.0)`. Compare the inflation it gives with 4 and with the target
 
 ```
 
-## Figure 6: The initial response to an inflation shock
+## Event 1: an inflation shock
+
+A one-time jump in inflation, such as an oil price spike, hits an economy in its steady state. We follow the AS/AD diagram period by period as the economy finds its way back.
+
+<!-- cell -->
+
+### Fig. 6: The initial response to an inflation shock
 
 **Goal.** See the first period of **Event #1**: an inflation shock, such as a lasting rise in the price of oil.
 
@@ -886,7 +865,7 @@ stayed at potential, inflation would rise one for one, to 4 percent. But the pol
 inflation with a higher interest rate, so the economy slides down the AD curve, from $A$ to $B$: inflation rises
 and output falls at the same time. This is **stagflation**, the U.S. experience after the oil shocks of the 1970s.
 
-Figures 6 to 9 show the same event at different periods, so we write one function. It simulates the event with
+Figs. 6 to 9 show the same event at different periods, so we write one function. It simulates the event with
 `simulate` and draws period `t`: the AS curves of the earlier periods in light teal, the current one in full
 color, and the path so far, with the textbook's letters ($B$, $C$, $D$ for periods 1, 2, 3).
 
@@ -940,7 +919,7 @@ SHOCK_LETTERS = {1: "B", 2: "C", 3: "D"}                     # the textbook's le
 
 
 def inflation_shock(o=2.0, t=1, m=M_BAR, nu=NU_BAR):
-    """Figures 13.6 and 13.8: the economy t periods after a one-period inflation shock o."""
+    """Figs. 13.6 and 13.8: the economy t periods after a one-period inflation shock o."""
     path = simulate(NO_SHOCK, shock_list(o, 1), m=m, nu=nu)
     fig = asad_figure()
     add_event_curves(fig, path, t, list(range(1, t + 1)), m, nu)
@@ -963,11 +942,11 @@ interact(inflation_shock,
 
 ```{python}
 #| kind: website
-# @title Website version: Figure 6 with a precomputed slider for the size of the shock
+# @title Website version: Fig. 6 with a precomputed slider for the size of the shock
 slider_figure(inflation_shock, "o", [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0], start=2.0, label="inflation shock ō")
 ```
 
-**Source.** Adapted from Figure 13.6 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
+**Source.** Adapted from Fig. 13.6 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
 
@@ -992,7 +971,7 @@ $\bar{m} = 1$. Which policy gives less inflation, and what does it cost?
 
 ```
 
-## Figure 7: Two periods after an inflation shock
+### Fig. 7: Two periods after an inflation shock
 
 **Goal.** See why the AS curve does **not** jump back after the shock ends.
 
@@ -1005,7 +984,7 @@ $C$: inflation falls a little, and the central bank lets output recover a little
 
 ```{python}
 def two_periods(o=2.0, m=M_BAR, nu=NU_BAR):
-    """Figure 13.7: (a) the AS curve of period 2 and (b) the move from B to C."""
+    """Fig. 13.7: (a) the AS curve of period 2 and (b) the move from B to C."""
     path = simulate(NO_SHOCK, shock_list(o, 1), m=m, nu=nu)
     fig = asad_figure(2, ("(a) Period 2: the AS curve moves to AS<sub>2</sub>", "(b) Period 2: the Fed steers the economy to C"))
     for col in [1, 2]:
@@ -1029,11 +1008,11 @@ interact(two_periods,
 
 ```{python}
 #| kind: website
-# @title Website version: Figure 7 with a precomputed slider for the policy response
+# @title Website version: Fig. 7 with a precomputed slider for the policy response
 slider_figure(two_periods, "m", [0.25, 0.5, 1.0, 1.5, 2.0], start=0.5, label="policy response m̄")
 ```
 
-**Source.** Adapted from Figure 13.7 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
+**Source.** Adapted from Fig. 13.7 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
 
@@ -1058,12 +1037,12 @@ $\pi_1 = 3$ and no shock.
 
 ```
 
-## Figure 8: Three periods after an inflation shock
+### Fig. 8: Three periods after an inflation shock
 
 **Goal.** Follow the economy one more period and see the transition dynamics.
 
 In period 3 expected inflation falls again, to $\pi_2 = 2.5$ percent, so the AS curve shifts down once more, to
-AS₃, and the economy moves to $D$. It is the same function as in Figure 6, now starting at $t = 3$. Move the period
+AS₃, and the economy moves to $D$. It is the same function as in Fig. 6, now starting at $t = 3$. Move the period
 slider to watch the AS curve creep back toward its original position.
 
 ```{python}
@@ -1077,11 +1056,11 @@ interact(inflation_shock,
 
 ```{python}
 #| kind: website
-# @title Website version: Figure 8 with a precomputed slider for the period
+# @title Website version: Fig. 8 with a precomputed slider for the period
 slider_figure(inflation_shock, "t", [1, 2, 3, 4, 5, 6, 8], start=3, label="period t")
 ```
 
-**Source.** Adapted from Figure 13.8 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
+**Source.** Adapted from Fig. 13.8 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
 
@@ -1107,13 +1086,13 @@ it out.)
 
 ```
 
-## Figure 9: The effects of an inflation shock: summary
+### Fig. 9: The effects of an inflation shock: summary
 
 **Goal.** See the whole event at once, in the AS/AD diagram and over time.
 
 Panel (a) is the textbook's summary: the jump from $A$ to $B$, then the slow return along the AD curve back to $A$.
 Panel (b) adds the same path as two time series, so you can read how long the stagflation lasts. One function draws
-the summaries of all three events (Figures 9, 11 and 15).
+the summaries of all three events (Figs. 9, 11 and 15).
 
 ```{python}
 def add_time_paths(fig, path, col=2):
@@ -1131,7 +1110,7 @@ def add_time_paths(fig, path, col=2):
 
 
 def event_summary(path, letters, as_periods, m=M_BAR, nu=NU_BAR):
-    """Figures 13.9, 13.11, 13.15: (a) the whole path in the AS/AD diagram, (b) the same path over time."""
+    """Figs. 13.9, 13.11, 13.15: (a) the whole path in the AS/AD diagram, (b) the same path over time."""
     fig = asad_figure(2, ("(a) The AS/AD diagram", "(b) Inflation and output over time"))
     add_event_curves(fig, path, T_MAX, as_periods, m, nu)
     add_event_path(fig, path, T_MAX, letters)
@@ -1140,7 +1119,7 @@ def event_summary(path, letters, as_periods, m=M_BAR, nu=NU_BAR):
 
 
 def inflation_shock_summary(o=2.0, m=M_BAR, nu=NU_BAR):
-    """Figure 13.9: a one-period inflation shock o, from the jump to B back to the steady state A."""
+    """Fig. 13.9: a one-period inflation shock o, from the jump to B back to the steady state A."""
     path = simulate(NO_SHOCK, shock_list(o, 1), m=m, nu=nu)
     fig = event_summary(path, {1: "B"}, [1], m, nu)
     asad_axes(fig, f"Shock ō = {o:.1f}: inflation peaks at {path.pi.max():.2f}%; sum of Ỹ = {round(path.Y.sum(), 2) + 0.0:.2f}")
@@ -1157,11 +1136,11 @@ interact(inflation_shock_summary,
 
 ```{python}
 #| kind: website
-# @title Website version: Figure 9 with a precomputed slider for the slope of the AS curve
+# @title Website version: Fig. 9 with a precomputed slider for the slope of the AS curve
 slider_figure(inflation_shock_summary, "nu", [0.25, 0.5, 1.0, 1.5, 2.0], start=1.0, label="AS slope ν̄")
 ```
 
-**Source.** Adapted from Figure 13.9 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612) Panel (b), the time paths of inflation and output, is our addition.
+**Source.** Adapted from Fig. 13.9 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612) Panel (b), the time paths of inflation and output, is our addition.
 
 <!-- cell -->
 
@@ -1175,7 +1154,7 @@ slider_figure(inflation_shock_summary, "nu", [0.25, 0.5, 1.0, 1.5, 2.0], start=1
 
 <!-- cell -->
 
-### Key numbers: the inflation gap halves every period
+#### Key numbers: the inflation gap halves every period
 
 With $\bar{b}\bar{m}\bar{\nu} = 1$, the AS/AD solution makes the gap between inflation and the target shrink by the
 factor $1/(1 + \bar{b}\bar{m}\bar{\nu}) = 1/2$ each period.
@@ -1208,7 +1187,13 @@ shock appears only once.
 
 ```
 
-## Figure 10: The initial response to disinflation
+## Event 2: disinflation
+
+Now the central bank lowers its inflation target. Because expectations adjust slowly, getting inflation down costs a recession along the way.
+
+<!-- cell -->
+
+### Fig. 10: The initial response to disinflation
 
 **Goal.** See **Event #2**: the central bank lowers its inflation target, as Paul Volcker's Fed did in the 1980s.
 
@@ -1220,7 +1205,7 @@ only the event changes.
 
 ```{python}
 def disinflation(pi_new=2.0, t=1, m=M_BAR, nu=NU_BAR):
-    """Figures 13.10-13.11: t periods after the inflation target is cut from PI_OLD to pi_new."""
+    """Figs. 13.10-13.11: t periods after the inflation target is cut from PI_OLD to pi_new."""
     path = simulate(NO_SHOCK, NO_SHOCK, PI_OLD, pi_new, m, nu)
     fig = asad_figure()
     add_event_curves(fig, path, t, list(range(1, t + 1)), m, nu)
@@ -1243,11 +1228,11 @@ interact(disinflation,
 
 ```{python}
 #| kind: website
-# @title Website version: Figure 10 with a precomputed slider for the new target
+# @title Website version: Fig. 10 with a precomputed slider for the new target
 slider_figure(disinflation, "pi_new", [0.0, 1.0, 2.0, 3.0, 4.0], start=2.0, label="new target π̄′ (%)")
 ```
 
-**Source.** Adapted from Figure 13.10 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
+**Source.** Adapted from Fig. 13.10 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
 
@@ -1272,17 +1257,17 @@ output.
 
 ```
 
-## Figure 11: The dynamics of disinflation
+### Fig. 11: The dynamics of disinflation
 
 **Goal.** Follow the disinflation to the new steady state $C$.
 
 After period 1, firms expect lower inflation, so the AS curve shifts down period by period, just as after the
 inflation shock. The economy slides down AD₁ from $B$ to the new steady state $C$, where inflation equals the new
-target and output is back at potential. The summary function of Figure 9 draws it; we add the point $C$.
+target and output is back at potential. The summary function of Fig. 9 draws it; we add the point $C$.
 
 ```{python}
 def disinflation_summary(pi_new=2.0, m=M_BAR, nu=NU_BAR):
-    """Figure 13.11: from A through B to the new steady state C, in the diagram and over time."""
+    """Fig. 13.11: from A through B to the new steady state C, in the diagram and over time."""
     path = simulate(NO_SHOCK, NO_SHOCK, PI_OLD, pi_new, m, nu)
     fig = event_summary(path, {1: "B"}, [T_MAX], m, nu)
     add_point(fig, 0.0, pi_new, "C")
@@ -1300,11 +1285,11 @@ interact(disinflation_summary,
 
 ```{python}
 #| kind: website
-# @title Website version: Figure 11 with a precomputed slider for the policy response
+# @title Website version: Fig. 11 with a precomputed slider for the policy response
 slider_figure(disinflation_summary, "m", [0.25, 0.5, 1.0, 1.5, 2.0], start=0.5, label="policy response m̄")
 ```
 
-**Source.** Adapted from Figure 13.11 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
+**Source.** Adapted from Fig. 13.11 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
 
@@ -1315,7 +1300,7 @@ slider_figure(disinflation_summary, "m", [0.25, 0.5, 1.0, 1.5, 2.0], start=0.5, 
 - A more aggressive central bank (higher $\bar{m}$) makes the recession deeper and shorter, but the total loss stays
   near 2. Only the AS slope $\bar{\nu}$ changes it: the total loss is $(\bar{\pi} - \bar{\pi}')/\bar{\nu}$.
 - Why must there be a recession at all? Because firms keep expecting the old inflation. If everyone believed the new
-  target at once, the economy could jump straight from $A$ to $C$. Figure 20 returns to this idea.
+  target at once, the economy could jump straight from $A$ to $C$. Fig. 20 returns to this idea.
 
 **Your turn.** Make a table of the total output loss for $\bar{\nu}$ = 0.5, 1 and 2. Is the loss close to
 $2/\bar{\nu}$?
@@ -1332,7 +1317,13 @@ $\bar{\nu}$ the economy adjusts more slowly, but 20 periods are still enough to 
 
 ```
 
-## Figure 12: A positive aggregate demand shock
+## Event 3: a positive aggregate demand shock
+
+A temporary spending boom raises output and inflation. When the boom ends, the higher inflation it left behind has to be squeezed out with a recession.
+
+<!-- cell -->
+
+### Fig. 12: A positive aggregate demand shock
 
 **Goal.** See the first period of **Event #3**: a boom in demand, for example from a boom in Europe that raises the
 demand for U.S. exports.
@@ -1340,14 +1331,14 @@ demand for U.S. exports.
 A positive $\bar{a}$ shifts the AD curve **out** to AD₁: at every inflation rate, output is higher. Firms see the extra
 demand and raise their prices, so the economy moves up the AS curve from $A$ to $B$. Part of the shock shows up as more
 output, part as more inflation. In our baseline the shock $\bar{a} = 2$ lasts nine periods. One function draws
-Figures 12 to 14, with the textbook's letters $B$, $C$ and $D$ at periods 1, 8 and 10.
+Figs. 12 to 14, with the textbook's letters $B$, $C$ and $D$ at periods 1, 8 and 10.
 
 ```{python}
 DEMAND_LETTERS = {1: "B", 8: "C", 10: "D"}
 
 
 def demand_shock(a=2.0, t=1, m=M_BAR, nu=NU_BAR):
-    """Figures 13.12-13.14: t periods after a demand shock a that lasts from period 1 to A_LAST."""
+    """Figs. 13.12-13.14: t periods after a demand shock a that lasts from period 1 to A_LAST."""
     path = simulate(shock_list(a, A_LAST), NO_SHOCK, m=m, nu=nu)
     fig = asad_figure()
     add_event_curves(fig, path, t, list(range(1, t + 1)), m, nu)
@@ -1368,11 +1359,11 @@ interact(demand_shock,
 
 ```{python}
 #| kind: website
-# @title Website version: Figure 12 with a precomputed slider for the demand shock
+# @title Website version: Fig. 12 with a precomputed slider for the demand shock
 slider_figure(demand_shock, "a", [-2.0, -1.0, 0.0, 1.0, 2.0, 3.0, 4.0], start=2.0, label="demand shock ā")
 ```
 
-**Source.** Adapted from Figure 13.12 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
+**Source.** Adapted from Fig. 13.12 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
 
@@ -1381,7 +1372,7 @@ slider_figure(demand_shock, "a", [-2.0, -1.0, 0.0, 1.0, 2.0, 3.0, 4.0], start=2.
 - A shock of 2 points raises output by 1 percent and inflation by 1 point, to 3 percent: again half and half.
 - A negative $\bar{a}$ is a fall in demand: output and inflation both fall.
 - The economy cannot stay at $B$. Inflation is above what firms expected, so the AS curve will shift. Which way?
-  Figure 13 answers.
+  Fig. 13 answers.
 
 **Your turn.** With $\bar{\nu} = 2$ (prices react strongly to demand), how much of the shock $\bar{a} = 2$ goes into
 output and how much into inflation in period 1?
@@ -1397,7 +1388,7 @@ output and how much into inflation in period 1?
 
 ```
 
-## Figure 13: Dynamics as the AS curve shifts
+### Fig. 13: Dynamics as the AS curve shifts
 
 **Goal.** See that while the demand shock lasts, the economy drifts to **higher** inflation, not back to $A$.
 
@@ -1420,11 +1411,11 @@ interact(demand_shock,
 
 ```{python}
 #| kind: website
-# @title Website version: Figure 13 with a precomputed slider for the period
+# @title Website version: Fig. 13 with a precomputed slider for the period
 slider_figure(demand_shock, "t", [1, 2, 3, 4, 6, 8, 9], start=8, label="period t")
 ```
 
-**Source.** Adapted from Figure 13.13 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
+**Source.** Adapted from Fig. 13.13 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
 
@@ -1437,7 +1428,7 @@ slider_figure(demand_shock, "t", [1, 2, 3, 4, 6, 8, 9], start=8, label="period t
 
 <!-- cell -->
 
-### Key numbers: inflation at point C
+#### Key numbers: inflation at point C
 
 ```{python}
 a, path = 2.0, simulate(shock_list(2.0, A_LAST), NO_SHOCK)
@@ -1463,7 +1454,7 @@ The formula gives $2 + 2/(2 \times 1)$. For the simulation, `simulate(shock_list
 
 ```
 
-## Figure 14: The unraveling after the aggregate demand shock ends
+### Fig. 14: The unraveling after the aggregate demand shock ends
 
 **Goal.** See what happens when the boom ends: a recession.
 
@@ -1484,11 +1475,11 @@ interact(demand_shock,
 
 ```{python}
 #| kind: website
-# @title Website version: Figure 14 with a precomputed slider for the period
+# @title Website version: Fig. 14 with a precomputed slider for the period
 slider_figure(demand_shock, "t", [9, 10, 11, 12, 14, 16, 20], start=10, label="period t")
 ```
 
-**Source.** Adapted from Figure 13.14 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
+**Source.** Adapted from Fig. 13.14 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
 
@@ -1514,7 +1505,7 @@ slider_figure(demand_shock, "t", [9, 10, 11, 12, 14, 16, 20], start=10, label="p
 
 ```
 
-## Figure 15: A positive aggregate demand shock: summary
+### Fig. 15: A positive aggregate demand shock: summary
 
 **Goal.** See the whole boom-and-bust cycle, and what happens if the shock ends sooner.
 
@@ -1524,7 +1515,7 @@ The slider sets the last period of the shock; the letters $C$ and $D$ mark that 
 
 ```{python}
 def demand_shock_summary(a=2.0, last=A_LAST, m=M_BAR, nu=NU_BAR):
-    """Figure 13.15: a demand shock a in periods 1 to last, in the AS/AD diagram and over time."""
+    """Fig. 13.15: a demand shock a in periods 1 to last, in the AS/AD diagram and over time."""
     path = simulate(shock_list(a, last), NO_SHOCK, m=m, nu=nu)
     fig = event_summary(path, {1: "B", last: "C", last + 1: "D"}, [last], m, nu)
     asad_axes(fig, f"ā = {a:.1f} in periods 1–{last}: π peaks at {path.pi.max():.2f}%; sum of Ỹ = {round(path.Y.sum(), 2) + 0.0:.2f}")
@@ -1542,11 +1533,11 @@ interact(demand_shock_summary,
 
 ```{python}
 #| kind: website
-# @title Website version: Figure 15 with a precomputed slider for the last period of the shock
+# @title Website version: Fig. 15 with a precomputed slider for the last period of the shock
 slider_figure(demand_shock_summary, "last", [2, 3, 5, 7, 9, 12], start=9, label="last period of the shock")
 ```
 
-**Source.** Adapted from Figure 13.15 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
+**Source.** Adapted from Fig. 13.15 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
 
@@ -1572,7 +1563,13 @@ simulation.
 
 ```
 
-## Figure 16: The fed funds rate, actual and predicted
+## Empirical evidence
+
+How well does the model describe real economies? We compare the fed funds rate with a simple policy rule, look for counterclockwise inflation-output loops, and see how forecasters missed the Great Recession.
+
+<!-- cell -->
+
+### Fig. 16: The fed funds rate, actual and predicted
 
 **Goal.** Test the policy rule on U.S. data: does it predict the Federal Reserve's interest rate?
 
@@ -1624,7 +1621,7 @@ def policy_rule(pi, r_bar=2.0, m=M_BAR, pi_bar=PI_BAR):
 
 ```{python}
 def fed_funds_chart(r_bar=2.0, m=M_BAR, country="United States"):
-    """Figure 13.16: the actual policy rate of one country and the rate predicted by the policy rule."""
+    """Fig. 13.16: the actual policy rate of one country and the rate predicted by the policy rule."""
     part = rules[rules.country == country]
     actual = "Actual fed funds rate" if country == "United States" else "Actual policy rate"
     chart = pd.DataFrame({"date": part.date, actual: part.policy_rate,
@@ -1659,13 +1656,13 @@ interact(fed_funds_chart,
 
 ```{python}
 #| kind: website
-# @title Website version: Figure 16 with a precomputed slider for r̄
+# @title Website version: Fig. 16 with a precomputed slider for r̄
 compact(slider_figure(fed_funds_chart, "r_bar", [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0], start=2.0, label="r̄ in the rule (%)"))
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: Figure 16 with a menu for the country
+# @title Website version: Fig. 16 with a menu for the country
 menu_figure(fed_funds_chart, "country", sorted(rules.country.unique()), "United States")
 ```
 
@@ -1675,7 +1672,7 @@ for the other economies, [Bank for International Settlements, central bank polic
 and [OECD, Consumer price indices, CPI excluding food and energy (`DSD_PRICES@DF_PRICES_ALL`), via the OECD Data Explorer](https://data-explorer.oecd.org/).
 Prepared files: [`data/ch13/taylor_rule.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch13/taylor_rule.csv) and [`data/ch13/taylor_rule_countries.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch13/taylor_rule_countries.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch13/README.md)).
-Figure: inspired by Figure 13.16 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
+Chart: inspired by Fig. 13.16 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
 
@@ -1697,7 +1694,7 @@ On the website, the second chart offers the 33 economies, with Taylor's numbers 
 
 <!-- cell -->
 
-### Key numbers: how closely does the Fed follow the rule?
+#### Key numbers: how closely does the Fed follow the rule?
 
 > **Python note.** `taylor[(taylor.date >= start) & (taylor.date <= end)]` keeps the quarters between two dates.
 > `.corr()` gives the correlation between two columns: 1 means they move perfectly together. `idxmax()` gives the
@@ -1734,12 +1731,12 @@ $\bar{r}$ lowers the rule by the same amount in every quarter. For another count
 
 ```
 
-## Figure 17: Inflation-output loops in the U.S. economy
+### Fig. 17: Inflation-output loops in the U.S. economy
 
 **Goal.** Look for the model's counterclockwise loops in U.S. data.
 
 The model predicts that the economy moves in **counterclockwise loops** in a diagram with output on the horizontal
-axis and inflation on the vertical axis (Figure 15): a boom raises inflation, high inflation leads the central bank to
+axis and inflation on the vertical axis (Fig. 15): a boom raises inflation, high inflation leads the central bank to
 cause a recession, and the recession brings inflation down. Each point below is one year: the output gap
 $\tilde{Y}$ (actual GDP relative to the Congressional Budget Office's estimate of potential GDP) and CPI inflation.
 
@@ -1771,7 +1768,7 @@ MOVED = {2020: "bottom center", 2021: "middle right", 2025: "bottom center"}   #
 
 
 def loops_chart(years="1960–1985", vintage="Current data"):
-    """Figure 13.17: annual (output gap, inflation) points connected in time order."""
+    """Fig. 13.17: annual (output gap, inflation) points connected in time order."""
     first, last, x_range, y_range, y_ticks = WINDOWS[years]
     column = VINTAGES[vintage]
     part = loops[(loops.year >= first) & (loops.year <= last)].dropna(subset=[column])
@@ -1799,7 +1796,7 @@ interact(loops_chart,
 
 ```{python}
 #| kind: website
-# @title Website version: Figure 17 with buttons for the two periods and the two data vintages
+# @title Website version: Fig. 17 with buttons for the two periods and the two data vintages
 choices = [("1960–1985", "Current data"), ("1985–2025", "Current data"), ("1985–2025", "Textbook data")]
 names = ["1960–1985", "1985–2025", "1985–2022, textbook data"]
 figures = [loops_chart(years, vintage) for years, vintage in choices]
@@ -1829,7 +1826,7 @@ fig
 the textbook vintage of GDP and potential GDP (30 March 2023) from [ALFRED, the St. Louis Fed's archive of past data vintages](https://alfred.stlouisfed.org/series?seid=GDPPOT).
 Prepared file: [`data/ch13/loops_vintages.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch13/loops_vintages.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch13/README.md)).
-Figure: inspired by Figure 13.17 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
+Chart: inspired by Fig. 13.17 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
 
@@ -1845,7 +1842,7 @@ Figure: inspired by Figure 13.17 in Jones (2024), [*Macroeconomics*, 6th ed.](ht
 
 <!-- cell -->
 
-### Key numbers: two vintages of the same year
+#### Key numbers: two vintages of the same year
 
 The textbook says that in 2009 "output was more than 5 percent below potential", and that inflation rose from 2009 to
 2011 despite the slump.
@@ -1866,11 +1863,11 @@ is no longer true. Inflation did rise, from −0.32 to 3.14 percent, partly beca
 
 <!-- cell -->
 
-### Loops in other countries
+#### Loops in other countries
 
 The OECD estimates the output gap of 40 economies, most of them since 1985, with one method for all. The file
 `output_gaps_oecd.csv` has these estimates, and `inflation_annual.csv` has CPI inflation for 194 economies (the
-World Bank's numbers, and for the four economies of Figure 19 the numbers of that figure). We join them by country and
+World Bank's numbers, and for the four economies of Fig. 19 the numbers of that figure). We join them by country and
 year. For the United States the OECD's gap differs from the CBO's: it is 0.2 points higher on average since 1985, and
 −3.98 percent in 2009 instead of −4.66. Potential output cannot be observed, so every estimate of the gap is a model.
 
@@ -1886,7 +1883,7 @@ eo_loops[eo_loops.country == "United Kingdom"].head(3)
 
 ```{python}
 def oecd_loops_chart(country="United States"):
-    """Figure 13.17, extended: annual (output gap, inflation) points of one country, OECD estimates of the gap."""
+    """Fig. 13.17, extended: annual (output gap, inflation) points of one country, OECD estimates of the gap."""
     part = eo_loops[eo_loops.country == country]
     label = part.year.astype(str).where((part.year % 5 == 0) | (part.year == part.year.max()), "")
     x_range = [np.floor(part.output_gap.min()) - 1, np.ceil(part.output_gap.max()) + 1]
@@ -1913,10 +1910,10 @@ menu_figure(oecd_loops_chart, "country", sorted(eo_loops.country.unique()), "Uni
 
 **Sources.** Data: [OECD, *Economic Outlook* No. 119, output gap (measure `GAP`, dataflow `DSD_EO@DF_EO`), via the OECD Data Explorer](https://data-explorer.oecd.org/);
 [World Bank, World Development Indicators, Inflation, consumer prices (`FP.CPI.TOTL.ZG`)](https://data.worldbank.org/indicator/FP.CPI.TOTL.ZG),
-with the rows of the U.S., the U.K., the euro area and Japan from the sources of Figure 19.
+with the rows of the U.S., the U.K., the euro area and Japan from the sources of Fig. 19.
 Prepared files: [`data/ch13/output_gaps_oecd.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch13/output_gaps_oecd.csv) and [`data/ch13/inflation_annual.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch13/inflation_annual.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch13/README.md)).
-Figure: inspired by Figure 13.17 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
+Chart: inspired by Fig. 13.17 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
 
@@ -1940,7 +1937,7 @@ in the current data.
 
 ```
 
-## Figure 18: Forecasting and the Great Recession
+### Fig. 18: Forecasting and the Great Recession
 
 **Goal.** See how professional forecasters missed the Great Recession, quarter after quarter.
 
@@ -1986,7 +1983,7 @@ fig.show()
 The textbook figure comes from James Stock and Mark Watson, ["Twenty Years of Time Series Econometrics in Ten Pictures," *Journal of Economic Perspectives* 31(2), 2017](https://www.aeaweb.org/articles?id=10.1257/jep.31.2.59).
 Prepared file: [`data/ch13/fig13-18.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch13/fig13-18.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch13/README.md)).
-Figure: inspired by Figure 13.18 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
+Chart: inspired by Fig. 13.18 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
 
@@ -2001,7 +1998,7 @@ Figure: inspired by Figure 13.18 in Jones (2024), [*Macroeconomics*, 6th ed.](ht
 
 <!-- cell -->
 
-### Key numbers: forecast errors one year ahead
+#### Key numbers: forecast errors one year ahead
 
 For each survey, we compare the last point of its forecast path (four quarters ahead) with what actually happened.
 
@@ -2029,7 +2026,13 @@ Use `spf.employment_actual.max()` and `.min()`, and `idxmax()`/`idxmin()` with `
 
 ```
 
-## Figure 19: Inflation in the OECD
+## Modern monetary policy and inflation targeting
+
+Inflation fell around the world after the 1980s. These figures show why expectations and credible targets matter so much, and how inflation in the United Kingdom has behaved over three centuries.
+
+<!-- cell -->
+
+### Fig. 19: Inflation in the OECD
 
 **Goal.** Compare inflation in the U.S., the U.K., the euro area and Japan since 1960.
 
@@ -2044,10 +2047,10 @@ oecd.tail(4)
 ```
 
 Each value is the CPI inflation rate of one year, in percent. A data note: the textbook's U.S. line ends at about 6.3
-percent in 2022, but the full-year value is 8.0 percent (as in the textbook's own Figure 13.17). The textbook probably
+percent in 2022, but the full-year value is 8.0 percent (as in the textbook's own Fig. 13.17). The textbook probably
 used an early partial-year number.
 
-The table `prices` of Figure 17 has the same inflation rates for 194 economies (for these four it repeats this file),
+The table `prices` of Fig. 17 has the same inflation rates for 194 economies (for these four it repeats this file),
 so the chart can show any set of countries. Pick them from the list; the four textbook economies come first.
 
 > **Python note.** `set(countries) != set(BOOK_FOUR)` compares the two groups of names without caring about their
@@ -2058,7 +2061,7 @@ BOOK_FOUR = ("United States", "United Kingdom", "Euro area", "Japan")
 
 
 def oecd_chart(countries=BOOK_FOUR):
-    """Figure 13.19: annual CPI inflation in the chosen economies since 1960."""
+    """Fig. 13.19: annual CPI inflation in the chosen economies since 1960."""
     part = prices[prices.country.isin(countries)]
     low, high, ticks = -3, 26, [0, 5, 10, 15, 20, 25]
     for wider_low, wider_high in [(-10, 60), (-20, 120)]:     # a wider axis only when a chosen country needs it
@@ -2085,7 +2088,7 @@ interact(oecd_chart, countries=SelectMultiple(options=list(BOOK_FOUR) + sorted(s
 
 ```{python}
 #| kind: website
-# @title Website version: Figure 19 with buttons for groups of countries
+# @title Website version: Fig. 19 with buttons for groups of countries
 shown = OECD_PLUS                                          # the OECD and eight large emerging economies
 fig = oecd_chart(countries=shown)
 fig.update_layout(title=oecd_chart().layout.title.text, yaxis=dict(range=None, autorange=True, tickvals=None),
@@ -2098,7 +2101,7 @@ for the U.S., the U.K. and Japan; [World Bank, World Development Indicators, Inf
 for the euro area, Japan since 2021 and all other economies.
 Prepared files: [`data/ch13/fig13-19.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch13/fig13-19.csv) and [`data/ch13/inflation_annual.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch13/inflation_annual.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch13/README.md)).
-Figure: inspired by Figure 13.19 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
+Chart: inspired by Fig. 13.19 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
 
@@ -2116,7 +2119,7 @@ list a group of countries in the legend, and a click on a country adds it.
 
 <!-- cell -->
 
-### Key numbers: inflation by decade
+#### Key numbers: inflation by decade
 
 > **Python note.** `oecd.year // 10 * 10` turns each year into its decade (1974 becomes 1970). `groupby` puts the years
 > of each decade in one group, and `.mean()` averages each group.
@@ -2144,7 +2147,7 @@ Filter `by_country.loc[1995:2015, "Japan"]` with `<= 0`, and count the rows with
 
 ```
 
-## Figure 20: Costless disinflation by coordinating expectations
+### Fig. 20: Costless disinflation by coordinating expectations
 
 **Goal.** See how a **credible** central bank could lower inflation without a recession.
 
@@ -2158,11 +2161,11 @@ The Fed announces a cut in its target from 4 to 2 percent. If firms believe it a
 down together with the AD curve, and the economy goes straight from $A$ to $B$ with output at potential. To see the
 middle ground, the slider sets the **credibility** of the announcement: the share of the cut that firms build into
 their expectations, $\pi^e = \text{credibility} \times \bar{\pi}' + (1 - \text{credibility}) \times 4$. Credibility 0 is
-the adaptive case of Figure 10.
+the adaptive case of Fig. 10.
 
 ```{python}
 def credible_disinflation(credibility=1.0, pi_new=2.0, m=M_BAR, nu=NU_BAR):
-    """Figure 13.20: the target falls from PI_OLD to pi_new; expectations follow it in proportion to credibility."""
+    """Fig. 13.20: the target falls from PI_OLD to pi_new; expectations follow it in proportion to credibility."""
     pi_e = credibility * pi_new + (1 - credibility) * PI_OLD
     Y, pi = solve_asad(pi_e, pi_bar=pi_new, m=m, nu=nu)
     fig = asad_figure()
@@ -2195,19 +2198,19 @@ interact(credible_disinflation,
 
 ```{python}
 #| kind: website
-# @title Website version: Figure 20 with a precomputed slider for credibility
+# @title Website version: Fig. 20 with a precomputed slider for credibility
 slider_figure(credible_disinflation, "credibility", [0.0, 0.25, 0.5, 0.75, 1.0], start=1.0,
               label="credibility of the new target")
 ```
 
-**Source.** Adapted from Figure 13.20 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612) The credibility slider, which spans the cases between adaptive and fully credible expectations, is our addition.
+**Source.** Adapted from Fig. 13.20 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612) The credibility slider, which spans the cases between adaptive and fully credible expectations, is our addition.
 
 <!-- cell -->
 
 **What to notice.**
 
 - With full credibility, inflation falls to 2 percent at once and output stays at potential: a costless disinflation.
-- With credibility 0, we are back in Figure 10: inflation falls only to 3 percent and output to −1 percent.
+- With credibility 0, we are back in Fig. 10: inflation falls only to 3 percent and output to −1 percent.
 - In between, every bit of credibility saves output. This is why central banks explain their policy, announce
   **inflation targets**, and build a reputation: managing expectations is one of the main tools of modern monetary
   policy. It also explains the **time consistency problem**: a central bank that might later be tempted to inflate
@@ -2215,10 +2218,10 @@ slider_figure(credible_disinflation, "credibility", [0.0, 0.25, 0.5, 0.75, 1.0],
 
 <!-- cell -->
 
-### Key numbers: the cost of a disinflation
+#### Key numbers: the cost of a disinflation
 
 We compare the total output lost while inflation falls from 4 to 2 percent, under adaptive expectations (the whole path
-of Figure 11) and with a fully credible announcement.
+of Fig. 11) and with a fully credible announcement.
 
 ```{python}
 adaptive = simulate(NO_SHOCK, NO_SHOCK, PI_OLD, 2.0)
@@ -2245,7 +2248,7 @@ Expected inflation is `0.5 * 2.0 + 0.5 * 4.0`; pass it to `solve_asad(..., pi_ba
 
 ```
 
-## Figure 21: Nearly 300 years of inflation in the United Kingdom
+### Fig. 21: Nearly 300 years of inflation in the United Kingdom
 
 **Goal.** Judge monetary policy over three centuries: which period came closest to low and stable inflation?
 
@@ -2297,7 +2300,7 @@ fig.show()
 The textbook figure follows Ricardo Reis (2022), "The Burst of High Inflation in 2021–22: How and Why Did We Get Here?", London School of Economics working paper.
 Prepared file: [`data/ch13/fig13-21.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch13/fig13-21.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch13/README.md)).
-Figure: inspired by Figure 13.21 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
+Chart: inspired by Fig. 13.21 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
 
@@ -2312,7 +2315,7 @@ Figure: inspired by Figure 13.21 in Jones (2024), [*Macroeconomics*, 6th ed.](ht
 
 <!-- cell -->
 
-### Key numbers: distance to the goal
+#### Key numbers: distance to the goal
 
 ```{python}
 uk.sort_values("distance")[["period", "n_years", "avg_inflation", "sd_inflation", "distance"]].head(5).round(2)
@@ -2323,7 +2326,7 @@ about 1 percent a year. The partial window 2017–2025 sits at 3.16.
 
 <!-- cell -->
 
-### Other countries since 1871
+#### Other countries since 1871
 
 Long price series exist for other rich countries too. The Jordà–Schularick–Taylor *Macrohistory Database* has consumer
 prices for 17 more countries from 1870 to 2020; we extend them to 2025 with the World Bank's inflation rates. The file
@@ -2352,7 +2355,7 @@ extreme: the chart counts such windows in its title instead of drawing them.
 
 ```{python}
 def windows_chart(countries=("United Kingdom",)):
-    """Figure 13.21, extended: average and volatility of inflation in 20-year windows, chosen countries."""
+    """Fig. 13.21, extended: average and volatility of inflation in 20-year windows, chosen countries."""
     part = windows[windows.country.isin(countries)]
     x_range, y_range = [-3, 8.5], [-0.7, 13]
     if part["mean"].max() > 8.5 or part["std"].max() > 13 or part["mean"].min() < -3:
@@ -2395,7 +2398,7 @@ to 2020 (Jordà, Schularick and Taylor 2017, ["Macrofinancial History and the Ne
 for the United Kingdom, the Bank of England and ONS series of the chart above.
 Prepared file: [`data/ch13/inflation_long_annual.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch13/inflation_long_annual.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch13/README.md)).
-Figure: inspired by Figure 13.21 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
+Chart: inspired by Fig. 13.21 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
 
@@ -2421,34 +2424,7 @@ the axes.
 
 ```
 
-## Key numbers
-
-This table collects the main numbers of the chapter. Each one is computed with the functions and data above.
-
-```{python}
-shock = simulate(NO_SHOCK, shock_list(2.0, 1))
-boom = simulate(shock_list(2.0, A_LAST), NO_SHOCK)
-rows = [
-    ["Rise in R when inflation is 2 points above target (m = 1/2)", 0.5 * 2.0],
-    ["Inflation shock o = 2: inflation in period 1, %", shock.pi[1]],
-    ["Inflation shock o = 2: output in period 1, %", shock.Y[1]],
-    ["Inflation shock: sum of output over 20 periods", shock.Y.sum()],
-    ["Disinflation 4% -> 2%: output lost over 20 periods, %", -adaptive.Y.sum()],
-    ["Demand shock a = 2: pi_c = pi_bar + a / (b m), %", PI_BAR + 2.0 / (B_BAR * M_BAR)],
-    ["Demand shock: inflation in period 10 (= period 1), %", boom.pi[10]],
-    ["Policy rule i = 1 + 1.5 pi at 2% inflation, %", policy_rule(2.0)],
-    ["Correlation of the fed funds rate with the rule, 1960-2023Q1", book_span.fed_funds.corr(book_span.rule)],
-    ["Actual minus rule, 2009-2020 average, points", taylor[(taylor.date >= "2009") & (taylor.date < "2021")].gap.mean()],
-    ["Output gap 2009, textbook data (March 2023), %", by_year.loc[2009, "output_gap_2023"]],
-    ["Output gap 2009, current data, %", by_year.loc[2009, "output_gap"]],
-    ["Peak U.K. inflation in the 1970s, %", by_country.loc[1970:1979, "United Kingdom"].max()],
-    ["U.S. CPI inflation in 2022, %", by_country.loc[2022, "United States"]],
-    ["U.K. 1997-2016: distance to the goal", uk.distance[uk.period == "1997–2016"].iloc[0]],
-]
-pd.DataFrame(rows, columns=["Quantity", "Value"]).round(2)
-```
-
-## Summary
+## Concluding remarks
 
 - A **monetary policy rule** $R_t - \bar{r} = \bar{m}(\pi_t - \bar{\pi})$ turns the IS curve into the downward-sloping **AD
   curve** $\tilde{Y}_t = \bar{a} - \bar{b}\bar{m}(\pi_t - \bar{\pi})$; the Phillips curve is the upward-sloping **AS curve**.
