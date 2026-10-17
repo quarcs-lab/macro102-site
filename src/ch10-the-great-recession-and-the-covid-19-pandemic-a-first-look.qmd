@@ -8,6 +8,8 @@
 > read its values, and click a name in a legend to hide or show that series. In Colab, click
 > *Runtime → Run all*: some figures then get a menu or buttons, and the figure is drawn again when you
 > change them. On the book website the same figures come with a precomputed slider or a few buttons.
+> Most figures also have a **Beyond the U.S.** part: in Colab, pick countries in the list (hold Ctrl, or Cmd on a
+> Mac, to pick several); on the website, click a country in the legend to add it.
 > Each section ends with a short **Your turn** task, and you can try it in the empty code cell below it.
 
 <!-- cell -->
@@ -25,7 +27,9 @@ Covid-19 pandemic of 2020. This chapter looks at both in the data. By the end of
 - use a **balance sheet** to compute net worth and **leverage**, and explain why leverage turns small falls
   in asset prices into bankruptcies;
 - in Python: find peaks and troughs with `idxmax` and `idxmin`, shade recessions with one small function,
-  reshape a table with `melt`, compare two vintages of the same data, and turn log changes into percent changes.
+  reshape a table with `melt`, compare two vintages of the same data, and turn log changes into percent changes;
+- go beyond the textbook's countries: pick any of up to 61 economies from long (tidy) data files, and spot breaks,
+  gaps and changes of definition in international data.
 
 <!-- cell -->
 
@@ -36,17 +40,17 @@ figure each notebook figure replicates.
 
 | Figure | Textbook figure | Type | What you can change |
 |---|---|---|---|
-| Figure 1 | 10.1 A bursting bubble in U.S. housing prices? | data | the boom and bust that is measured (menu) |
-| Figure 2 | 10.2 The Fed funds rate | data | the period shown: four episodes of Fed policy (menu) |
-| Figure 3 | 10.3 Liquidity and risk shocks from interest rate spreads | data | — (click a spread in the legend to hide it) |
-| Figure 4 | 10.4 The S&P 500 stock price index (real) | data | the stock market crash that is measured (menu) |
+| Figure 1 | 10.1 A bursting bubble in U.S. housing prices? | data | the boom and bust that is measured (menu); house prices in 58 economies (country list) |
+| Figure 2 | 10.2 The Fed funds rate | data | the period shown: four episodes of Fed policy (menu); policy rates of 41 central banks (country list) |
+| Figure 3 | 10.3 Liquidity and risk shocks from interest rate spreads | data | interbank spreads in 35 economies (country list) |
+| Figure 4 | 10.4 The S&P 500 stock price index (real) | data | the stock market crash that is measured (menu); real stock prices in 45 economies (country list) |
 | Figure 5 | 10.5 International Covid-19 deaths and lost GDP | data | the date of the death count: March 2023 or August 2026 (buttons) |
-| Figure 6 | 10.6 GDP in select OECD countries | data | — (click a country in the legend; double-click to show it alone) |
-| Figure 7 | 10.7 Nonfarm employment in the U.S. economy | data | — (drag the range slider under the chart to zoom) |
-| Figure 8 | 10.8 U.S. short-run output, Ỹ | data | — (click a data vintage in the legend to hide it) |
-| Figure 9 | 10.9 The U.S. unemployment rate | data | the recession that is measured (menu); Table 10.1 recomputed |
-| Figure 10 | 10.10 Consumer price index inflation in the U.S., U.K., and euro area | data | log change or percent change (buttons) |
-| Figure 11 | 10.11 Core inflation in the U.S., U.K., and euro area | data | all three countries, or headline and core inflation of one (menu) |
+| Figure 6 | 10.6 GDP in select OECD countries | data | the countries shown: 49 economies (country list) |
+| Figure 7 | 10.7 Nonfarm employment in the U.S. economy | data | the period shown (range slider); employment in 45 economies (country list) |
+| Figure 8 | 10.8 U.S. short-run output, Ỹ | data | the data vintage (legend); OECD output gaps of 40 economies (country list) |
+| Figure 9 | 10.9 The U.S. unemployment rate | data | the recession that is measured (menu); unemployment in 40 economies (country list); Table 10.1 recomputed |
+| Figure 10 | 10.10 Consumer price index inflation in the U.S., U.K., and euro area | data | log change or percent change (buttons); inflation in 61 economies (country list) |
+| Figure 11 | 10.11 Core inflation in the U.S., U.K., and euro area | data | the three economies, or headline and core inflation of one of 46 economies (menu) |
 
 <!-- cell -->
 
@@ -66,7 +70,7 @@ import pandas as pd                   # data tables
 import plotly.express as px           # quick charts from data tables
 import plotly.graph_objects as go     # charts built piece by piece
 import plotly.io as pio
-from ipywidgets import interact, Dropdown, ToggleButtons
+from ipywidgets import interact, Dropdown, ToggleButtons, SelectMultiple
 
 # One light blue/green look for every chart
 BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
@@ -187,6 +191,126 @@ recessions.tail(3)
 
 The Great Recession runs from the peak in December 2007 to the trough in June 2009, and the Covid-19
 recession from February to April 2020, only two months.
+
+<!-- cell -->
+
+### Tools for comparing countries
+
+The textbook's figures show the United States, and two of them the U.K. and the euro area. But the financial
+crisis and the pandemic hit the whole world, and the same data exist for many other economies: the Bank for
+International Settlements (BIS) collects house prices and central bank interest rates, the OECD unemployment,
+employment, stock prices and output gaps, and the IMF and Eurostat consumer prices. Most figures below therefore
+get a **"Beyond the U.S."** part, where you pick the countries. Each of those data files is **long**: one row per
+country and date. The small file `countries.csv` lists every economy with its region.
+
+```{python}
+countries = pd.read_csv(DATA_URL + "countries.csv")
+countries.head()
+```
+
+A country should keep its color in every chart, so we give each one a fixed color once. The textbook's
+economies keep the chapter's colors.
+
+> **Python note.** `enumerate(...)` hands over each country name together with its position `i` (0, 1, 2, ...).
+> `i % len(PALETTE)` is the remainder of the division, so the positions cycle through the list of colors.
+> `.update({...})` overwrites some entries of a dictionary.
+
+```{python}
+PALETTE = px.colors.qualitative.Dark24 + px.colors.qualitative.Alphabet + px.colors.qualitative.Light24
+COUNTRY_COLORS = {}
+for i, name in enumerate(countries.country):
+    COUNTRY_COLORS[name] = PALETTE[i % len(PALETTE)]
+COUNTRY_COLORS.update({"United States": BLUE, "United Kingdom": GREEN, "Euro area": TEAL,
+                       "S. Korea": "#5aa0d8", "Sweden": ORANGE, "Germany": "#0b4f47"})
+```
+
+Three small functions do the work in every "Beyond the U.S." chart. `pick` keeps the rows of the chosen
+countries and lists the chosen countries that have no data. `largest_fall` and `largest_rise` apply
+`peak_to_trough` and `low_to_high` to each chosen country and report the most extreme one.
+
+> **Python note.** `panel.country.isin(names)` is true for the rows of the chosen countries, and
+> `panel[column].notna()` for the rows with a value; `&` requires both. `for name, rows in chosen.groupby("country")`
+> visits one country at a time, with `rows` holding its rows. `None` means "nothing found yet".
+> `", ".join(missing)` glues a list of names into one text, separated by commas. In a Plotly title, `<br>` starts a
+> new line and `<sup>...</sup>` writes smaller text.
+
+```{python}
+def pick(panel, names, column):
+    """Rows of the chosen countries that have a value in `column`, and the chosen countries without data."""
+    chosen = panel[panel.country.isin(names) & panel[column].notna()]
+    missing = []
+    for name in names:
+        if name not in set(chosen.country):
+            missing.append(name)
+    return chosen, missing
+
+
+def no_data_note(missing):
+    """A second, smaller title line that names the chosen countries without data."""
+    if missing:
+        return "<br><sup>No data: " + ", ".join(missing) + "</sup>"
+    return ""
+```
+
+```{python}
+def largest_fall(chosen, column, start, end):
+    """Among the chosen countries, the largest peak-to-trough fall between start and end."""
+    worst = None
+    for name, rows in chosen.groupby("country"):
+        series = rows.set_index("date")[column]
+        if len(series[start:end]) > 1:
+            peak, trough, change = peak_to_trough(series, start, end)
+            if worst is None or change < worst[3]:
+                worst = (name, peak, trough, change)
+    return worst                                # (country, peak date, trough date, percent change)
+
+
+def largest_rise(chosen, column, start, end):
+    """Among the chosen countries, the largest rise from a low to a later high between start and end."""
+    most = None
+    for name, rows in chosen.groupby("country"):
+        series = rows.set_index("date")[column]
+        if len(series[start:end]) > 1:
+            low, high, rise = low_to_high(series, start, end)
+            if most is None or rise > most[3]:
+                most = (name, low, high, rise)
+    return most                                 # (country, low date, high date, rise in points)
+```
+
+The website cannot run Python, so its versions of these charts draw **every** country at once and show only the
+textbook's countries; a click on a name in the legend adds a country, and a menu shows one region at a time.
+The next helper sets that up. Run it and move on.
+
+```{python}
+#| kind: helper
+# @title Helper for the website versions with all countries (run this cell; you do not need to read it)
+def all_countries(make_figure, names, shown):
+    """Draw make_figure(names) for every country; show only `shown` and add a menu by region."""
+    fig = make_figure(tuple(names))
+    fig.update_layout(title=make_figure(tuple(shown)).layout.title)      # the title of the textbook's view
+    region = dict(zip(countries.country, countries.region))
+    choices = [("Textbook's view", list(shown)), ("All countries", list(names))]
+    for r in ["Americas", "Europe", "Asia and Pacific", "Africa and Middle East"]:
+        choices.append((r, [n for n in names if region.get(n) == r]))
+    buttons = []
+    for label, members in choices:
+        visible = [True if t.name in members else "legendonly" for t in fig.data]
+        buttons.append(dict(label=label, method="restyle", args=[{"visible": visible}]))
+    for trace in fig.data:
+        trace.visible = True if trace.name in shown else "legendonly"
+        # a lighter page: the country name once in the hover text instead of once per point, months without the
+        # day and time, and values rounded to 2 decimals
+        trace.hovertemplate = trace.hovertemplate.replace("%{hovertext}", trace.name)
+        trace.hovertext = None
+        if trace.x is not None and len(trace.x) > 0 and hasattr(trace.x[0], "strftime"):
+            trace.x = [d.strftime("%Y-%m") for d in pd.to_datetime(trace.x)]
+        trace.y = np.round(np.asarray(trace.y, dtype=float), 2)
+    fig.update_yaxes(autorange=True, tickmode="auto")                  # the y-axis follows the visible countries
+    fig.update_layout(margin=dict(t=120), legend=dict(title_text="Click to add"),
+                      updatemenus=[dict(type="dropdown", direction="down", x=0, y=1.02, xanchor="left",
+                                        yanchor="bottom", buttons=buttons, showactive=True)])
+    return fig
+```
 
 <!-- cell -->
 
@@ -362,6 +486,64 @@ The first two numbers match the textbook. The third does not: in this real index
 textbook's prose probably uses another index (for example nominal prices, or a 20-city index with the booming
 coastal markets). **Always check which series a number comes from.**
 
+<!-- cell -->
+
+### Beyond the U.S.: house prices in other countries
+
+Was the U.S. bubble unusual? The BIS publishes **real residential property prices** (house prices divided by the
+consumer price index) for about 60 economies, quarterly, as an index with 2010 = 100. For the U.S. the BIS uses a
+different house-price index than Shiller, but it tells the same story: a fall of 38.9 percent from the 2006 peak,
+against Shiller's 35.3 percent in quarterly averages.
+
+```{python}
+house_panel = pd.read_csv(DATA_URL + "house_prices_panel.csv", parse_dates=["date"])
+house_panel.tail(3)
+```
+
+> **Python note.** `SelectMultiple` is a list from which you can pick several entries: hold Ctrl (Cmd on a Mac)
+> and click. It hands the function a *tuple* of names, such as `("United States", "Spain")`. `color="country"`
+> draws one line per country, and `color_discrete_map=COUNTRY_COLORS` gives each its fixed color.
+
+```{python}
+def house_world(names=("United States",)):
+    """Figure 10.1 beyond the U.S.: BIS real house prices (2010 = 100, ratio scale) in the chosen countries."""
+    chosen, missing = pick(house_panel, names, "real_house_price")
+    fig = px.line(chosen, x="date", y="real_house_price", color="country", log_y=True, hover_name="country",
+                  color_discrete_map=COUNTRY_COLORS,
+                  labels={"date": "Year", "real_house_price": "Real house prices (2010 = 100)", "country": "Country"})
+    worst = largest_fall(chosen, "real_house_price", "2000-01-01", "2015-12-31")
+    title = "No data between 2000 and 2015"
+    if worst is not None:
+        name, peak, trough, change = worst
+        title = (f"Largest 2000–15 bust: {name}, {change:.1f}% "
+                 f"({peak.year}Q{peak.quarter} to {trough.year}Q{trough.quarter})")
+    fig.update_layout(title=title + no_data_note(missing))
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(house_world, names=SelectMultiple(options=sorted(house_panel.country.unique()), value=("United States",),
+                                           rows=8, description="countries"));
+```
+
+```{python}
+#| kind: website
+# @title Website version: house prices in every country (click a country in the legend to add it)
+all_countries(house_world, sorted(house_panel.country.unique()), ["United States"])
+```
+
+Click a country in the legend to add it, or choose a region in the menu.
+
+**What to notice.**
+
+- The title reports the U.S. bust in the BIS data: 38.9 percent from 2006Q1 to 2011Q3. Add Ireland and Spain: their
+  real house prices fell by 56.7 and 44.5 percent after 2007, more than in the U.S. Both had banking crises too.
+- Add Germany and Japan: real house prices in Germany fell slowly for three decades, by 30.8 percent from 1981 to
+  2010, and Japan's bubble burst in 1991, long before the U.S. one. Not every country had a boom in the 2000s.
+- **Data hygiene.** The series start in different years (Italy in 1947, Poland in 2010), so check the first date
+  of a country before you compare long-run changes.
+
 **Your turn.** How many months did it take, after the trough of February 2012, for real house prices to climb
 back above their December 2005 peak?
 
@@ -462,6 +644,68 @@ The textbook's numbers are the Fed's **targets**. The effective rate follows the
 1.00 percent in May 2004 and 4.94 percent in May 2006, and 1.26 and 5.24 percent two months later. From
 January 2009 to November 2015 the rate never rose above 0.22 percent, and it first moved up in December 2015.
 
+<!-- cell -->
+
+### Beyond the U.S.: central bank policy rates
+
+Every central bank has a policy rate like the Fed's. The BIS collects them for 41 economies, as the rate in force at
+the **end** of each month. For the U.S. the BIS uses the middle of the Fed's target range, so its line steps where
+the effective rate of Figure 2 moves smoothly; the two differ by 0.04 points in a typical month.
+
+```{python}
+rates_panel = pd.read_csv(DATA_URL + "policy_rates_panel.csv", parse_dates=["date"])
+rates_panel.tail(3)
+```
+
+The title measures the rate hikes of 2021–24 with `largest_rise`: the rise from the lowest rate to the highest
+later rate, in percentage points.
+
+> **Python note.** `line_shape="hv"` draws each line as steps (horizontal, then vertical), because a policy rate
+> stays put until the central bank changes it. `fig.add_hline(y=0, ...)` draws a horizontal line at zero.
+
+```{python}
+def policy_world(names=("United States",)):
+    """Figure 10.2 beyond the U.S.: BIS central bank policy rates (end of month) in the chosen countries."""
+    chosen, missing = pick(rates_panel, names, "policy_rate")
+    fig = px.line(chosen, x="date", y="policy_rate", color="country", hover_name="country",
+                  color_discrete_map=COUNTRY_COLORS, line_shape="hv",          # rates change in steps
+                  labels={"date": "Year", "policy_rate": "Policy rate (percent)", "country": "Country"})
+    most = largest_rise(chosen, "policy_rate", "2021-01-01", "2024-12-31")
+    title = "No data for 2021–24"
+    if most is not None:
+        name, low, high, rise = most
+        title = f"Largest 2021–24 hike: {name}, +{rise:.2f} points ({low:%b %Y} to {high:%b %Y})"
+    fig.add_hline(y=0, line_dash="dash", line_color="black", line_width=1)
+    fig.update_layout(title=title + no_data_note(missing))
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(policy_world, names=SelectMultiple(options=sorted(rates_panel.country.unique()), value=("United States",),
+                                            rows=8, description="countries"));
+```
+
+```{python}
+#| kind: website
+# @title Website version: policy rates in every country (click a country in the legend to add it)
+all_countries(policy_world, sorted(rates_panel.country.unique()), ["United States"])
+```
+
+Click a country in the legend to add it, or choose a region in the menu.
+
+**What to notice.**
+
+- Add the euro area and the United Kingdom: like the Fed, the Bank of England and the European Central Bank cut to
+  almost zero after 2008 and raised their rates in 2022–23, by 5.15 and 4.50 points.
+- Add Switzerland and Japan: their policy rates were **negative** for years (Switzerland −0.75 percent from 2015),
+  so zero is not quite a floor. Banks paid the central bank to hold their reserves.
+- Add Brazil or Türkiye: emerging economies raised rates much more (+11.75 and +41.5 points), because their
+  inflation was much higher. The y-axis widens to fit them.
+- **Data hygiene.** The euro area never goes below zero here, although the ECB charged −0.5 percent on deposits
+  from 2019 to 2022: until September 2024 the BIS uses the ECB's main refinancing rate, and from then on its deposit
+  rate. A series can change its definition in the middle.
+
 **Your turn.** By how many percentage points did the Fed raise the rate from March 2022 to August 2023, and
 by how many from May 2004 to July 2006? Which tightening was larger, and which was faster?
 
@@ -548,6 +792,69 @@ The textbook's "modest premium of 0.2 to 0.4 percentage points" is the calm phas
 From August 2007 the spread averaged 1.31 points, close to the textbook's "between 1.0 and 1.5". The textbook's
 "more than 4.5 percentage points" refers to single days in October 2008: monthly averages, as in our file,
 smooth the spike to 3.35 points.
+
+<!-- cell -->
+
+### Beyond the U.S.: stress in other money markets
+
+The TED spread exists only in U.S. dollars, and LIBOR is gone. But the OECD publishes two money-market rates for
+35 economies: a **3-month interbank rate** (a 3-month loan between banks, like LIBOR) and an **overnight interbank
+rate** (a one-day loan, which follows the policy rate). Their difference is a risk premium too: a bank that lends
+for three months instead of one day fears more that the borrower fails. It is **not** the TED spread, and it also
+moves when banks expect the policy rate to change. For the U.S. it peaks in the same month as the TED spread,
+October 2008, but at 2.22 instead of 3.35 points.
+
+```{python}
+spreads_panel = pd.read_csv(DATA_URL + "interbank_spreads_panel.csv", parse_dates=["date"])
+spreads_panel.tail(3)
+```
+
+The euro-area countries share the euro area's money-market rates once they adopt the euro, so the file keeps them
+only for the years when they had rates of their own (Greece in 2000, for example); choose "Euro area" for the rest.
+
+> **Python note.** `chosen.date.dt.year.between(2007, 2009)` is true for the dates in the years 2007 to 2009.
+> `crisis.spread.idxmax()` is the row label of the largest spread, and `crisis.loc[...]` picks that whole row, so
+> `top.country` and `top.date` say where and when it happened.
+
+```{python}
+def spread_world(names=("United States",)):
+    """Figure 10.3 beyond the U.S.: 3-month interbank rate minus the overnight rate, in the chosen countries."""
+    chosen, missing = pick(spreads_panel, names, "spread")
+    fig = px.line(chosen, x="date", y="spread", color="country", hover_name="country",
+                  color_discrete_map=COUNTRY_COLORS,
+                  labels={"date": "Year", "spread": "Spread (percentage points)", "country": "Country"})
+    crisis = chosen[chosen.date.dt.year.between(2007, 2009)]
+    title = "No data for 2007–09"
+    if len(crisis) > 0:
+        top = crisis.loc[crisis.spread.idxmax()]                 # the row with the largest spread
+        title = f"Largest spread in 2007–09: {top.country}, {top.spread:.2f} points ({top.date:%b %Y})"
+    shade_recessions(fig)
+    fig.update_layout(title=title + no_data_note(missing))
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(spread_world, names=SelectMultiple(options=sorted(spreads_panel.country.unique()), value=("United States",),
+                                            rows=8, description="countries"));
+```
+
+```{python}
+#| kind: website
+# @title Website version: interbank spreads in every country (click a country in the legend to add it)
+all_countries(spread_world, sorted(spreads_panel.country.unique()), ["United States"])
+```
+
+Click a country in the legend to add it, or choose a region in the menu. The shaded bands are U.S. recessions.
+
+**What to notice.**
+
+- Add the euro area and the United Kingdom: their spreads also jumped in August 2007 and peaked in October 2008, at
+  1.29 and 1.72 points. The crisis spread through the money markets of the whole world at once.
+- Add Canada: its spread hardly moved (at most 0.11 points in 2007–09). Canada's banks were not hit by the crisis.
+- **Data hygiene.** Add Russia and Romania: in their currency crises the spread reaches 14.8 points (Russia, January
+  2009) and 19.6 points (Romania, March 2000), and Russia's falls to −27 points in 2000. An overnight rate can spike
+  when a central bank defends its currency, so a large negative spread here is not a sign of calm.
 
 **Your turn.** Compare the two spreads in March 2020. Which one rose more, and how does the March 2020 spike
 compare with October 2008?
@@ -640,6 +947,59 @@ From November 2007 to March 2009, the textbook's dates, the real index fell 48.9
 in October 2007 it fell 51.7 percent. By March 2009 it was below every month of 1997–1999, "below levels from a
 decade earlier". It took until November 2013 to get back to the 2007 peak, and in March 2009 the index was
 58.6 percent below its record of August 2000.
+
+<!-- cell -->
+
+### Beyond the U.S.: real stock prices in other countries
+
+The OECD publishes a broad share-price index for 45 economies, monthly. Dividing it by each country's consumer price
+index (from the IMF) gives **real** stock prices, which the file stores as an index with 2015 = 100. For the U.S. this
+broad index fell 54.1 percent from October 2007 to March 2009, close to the S&P 500's 51.7 percent.
+
+```{python}
+stocks_panel = pd.read_csv(DATA_URL + "share_prices_panel.csv", parse_dates=["date"])
+stocks_panel.tail(3)
+```
+
+```{python}
+def stocks_world(names=("United States",)):
+    """Figure 10.4 beyond the U.S.: real share prices (2015 = 100, ratio scale) in the chosen countries."""
+    chosen, missing = pick(stocks_panel, names, "real_share_price")
+    fig = px.line(chosen, x="date", y="real_share_price", color="country", log_y=True, hover_name="country",
+                  color_discrete_map=COUNTRY_COLORS,
+                  labels={"date": "Year", "real_share_price": "Real stock prices (2015 = 100)", "country": "Country"})
+    worst = largest_fall(chosen, "real_share_price", "2007-01-01", "2009-12-31")
+    title = "No data for 2007–09"
+    if worst is not None:
+        name, peak, trough, change = worst
+        title = f"Largest 2007–09 crash: {name}, {change:.1f}% ({peak:%b %Y} to {trough:%b %Y})"
+    fig.update_layout(title=title + no_data_note(missing))
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(stocks_world, names=SelectMultiple(options=sorted(stocks_panel.country.unique()), value=("United States",),
+                                            rows=8, description="countries"));
+```
+
+```{python}
+#| kind: website
+# @title Website version: real stock prices in every country (click a country in the legend to add it)
+all_countries(stocks_world, sorted(stocks_panel.country.unique()), ["United States"])
+```
+
+Click a country in the legend to add it, or choose a region in the menu.
+
+**What to notice.**
+
+- The crash was global. Add Germany, Japan and the United Kingdom: real stock prices fell by 55.4, 57.6 and 45.5
+  percent. Add Iceland: its banks collapsed, and its real stock prices fell by 96 percent.
+- After 2009 the paths split. Real U.S. stock prices in 2026 are about 1.5 times their 2007 high, but Greece's are
+  only a third of theirs, after the euro crisis of 2010–15.
+- **Data hygiene.** The file starts Brazil in 1993 and Slovenia in mid-1994: before that their indexes jump more than
+  threefold in a single month, a sign of a break (a new index or a currency reform), so `build_data.py` drops those
+  months.
 
 **Your turn.** Real stock prices also fell in 1990. Measure that fall with `peak_to_trough`, using the window
 January to December 1990.
@@ -805,26 +1165,68 @@ country and quarter, so that `color="country"` can draw one line per country.
 ```{python}
 NAMES = {"gdp_index_usa": "U.S.", "gdp_index_kor": "S. Korea", "gdp_index_swe": "Sweden",
          "gdp_index_deu": "Germany", "gdp_index_gbr": "U.K.", "gdp_index_esp": "Spain"}
-COLORS = {"U.S.": BLUE, "S. Korea": "#5aa0d8", "Sweden": ORANGE, "Germany": "#0b4f47", "U.K.": GREEN,
-          "Spain": TEAL}
 long = oecd.melt(id_vars="date", var_name="country", value_name="index")
 long["country"] = long.country.map(NAMES)
 long.tail(3)
 ```
 
+The OECD publishes the same quarterly GDP for 49 economies. The file `gdp_quarterly_panel.csv` is already long, with
+the same index (2019Q4 = 100); its six textbook countries are identical to `fig10-6.csv`.
+
 ```{python}
-fig = px.line(long, x="date", y="index", color="country", hover_name="country", color_discrete_map=COLORS,
-              labels={"date": "Quarter", "index": "Real GDP (index, 2019Q4 = 100)", "country": "Country"},
-              title="The U.K. and Spain fell furthest in 2020; South Korea and Sweden least")
-fig.update_traces(line_width=3)
-fig.add_hline(y=100, line_dash="dash", line_color="black", line_width=1)
-fig.add_vline(x="2022-10-01", line_dash="dot", line_color=GRAY)
-fig.add_annotation(x="2022-10-01", y=80, text="The textbook's data end here", showarrow=False, xshift=95,
-                   font=dict(size=12, color=GRAY))
-fig.update_xaxes(range=["2019-09-01", "2026-06-01"])
-fig.update_yaxes(range=[75, 119], tickvals=[80, 85, 90, 95, 100, 105, 110, 115])
-fig.show()
+gdp_panel = pd.read_csv(DATA_URL + "gdp_quarterly_panel.csv", parse_dates=["date"])
+gdp_panel.tail(3)
 ```
+
+The chart function takes the countries to show; the title compares the deepest fall in 2020 with the mildest.
+
+> **Python note.** `groupby("country").gdp_index.min()` gives each country's lowest index, and `.sort_values()`
+> sorts them from small to large, so `.index[0]` is the country with the deepest fall and `.index[-1]` the one with
+> the mildest. `fig.add_vline` draws a vertical line.
+
+```{python}
+BOOK_SIX = ("Germany", "S. Korea", "Spain", "Sweden", "United Kingdom", "United States")
+
+
+def gdp_chart(names=BOOK_SIX):
+    """Figure 10.6: real GDP (index, 2019Q4 = 100) in the chosen countries, from 2019Q4 to today."""
+    chosen, missing = pick(gdp_panel, names, "gdp_index")
+    fig = px.line(chosen, x="date", y="gdp_index", color="country", hover_name="country",
+                  color_discrete_map=COUNTRY_COLORS,
+                  labels={"date": "Quarter", "gdp_index": "Real GDP (index, 2019Q4 = 100)", "country": "Country"})
+    fig.update_traces(line_width=3)
+    lowest = chosen[chosen.date.dt.year == 2020].groupby("country").gdp_index.min().sort_values()
+    title = "No data for 2020"
+    if len(lowest) > 0:
+        title = f"Lowest point in 2020: {lowest.index[0]} {lowest.iloc[0] - 100:.1f}%"
+    if len(lowest) > 1:
+        title = title + f", {lowest.index[-1]} only {lowest.iloc[-1] - 100:.1f}%"
+    fig.add_hline(y=100, line_dash="dash", line_color="black", line_width=1)
+    fig.add_vline(x="2022-10-01", line_dash="dot", line_color=GRAY)
+    fig.add_annotation(x="2022-10-01", y=80, text="The textbook's data end here", showarrow=False, xshift=95,
+                       font=dict(size=12, color=GRAY))
+    fig.update_xaxes(range=["2019-09-01", "2026-06-01"])
+    if chosen.gdp_index.max() < 117:            # the textbook's range, or a wider one for fast growers
+        fig.update_yaxes(range=[75, 119], tickvals=[80, 85, 90, 95, 100, 105, 110, 115])
+    else:
+        fig.update_yaxes(range=[75, 155], tickvals=[80, 90, 100, 110, 120, 130, 140, 150])
+    fig.update_layout(title=title + no_data_note(missing))
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(gdp_chart, names=SelectMultiple(options=sorted(gdp_panel.country.unique()), value=BOOK_SIX, rows=8,
+                                         description="countries"));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 6 with every country (click a country in the legend to add it)
+all_countries(gdp_chart, sorted(gdp_panel.country.unique()), list(BOOK_SIX))
+```
+
+Click a country in the legend to add it, or choose a region in the menu. In Colab, pick countries in the list.
 
 **What to notice.**
 
@@ -833,7 +1235,10 @@ fig.show()
 - The U.K. had a second dip in early 2021, during a new lockdown. Spain took the longest to get back to its
   2019 level.
 - After the textbook's data end, the paths spread out: the U.S. kept growing fast, while German GDP has been
-  close to its 2019 level for four years. Click a country in the legend to hide it; double-click to show it alone.
+  close to its 2019 level for four years.
+- Add India: its GDP fell the most of all 49 economies, by 23.8 percent, but by 2026 it was 46.5 percent above its
+  2019 level, and the y-axis widens to show it. **Data hygiene:** add Ireland too. Its GDP is 41 percent above 2019,
+  but much of that is profits that multinational firms book in Ireland, not output made by people living there.
 
 <!-- cell -->
 
@@ -936,6 +1341,68 @@ The Great Recession cost 8.7 million jobs, 6.3 percent of employment, and it too
 to get them back. The Covid-19 recession cost 21.9 million jobs, 14.4 percent, more than twice as much, but
 employment was back at its old peak after 28 months.
 
+<!-- cell -->
+
+### Beyond the U.S.: employment in other countries
+
+Payroll employment comes from a U.S. survey of employers; other countries count jobs differently. What every OECD
+country has is a **labour force survey** of households, which counts the employed people aged 15 and over. The
+OECD publishes it quarterly and seasonally adjusted, in thousands of people. Countries differ hugely in size, so we
+compare **indexes**: employment divided by its level in 2019Q4, times 100.
+
+> **Python note.** `base` holds each country's employment in 2019Q4, with the country names as labels.
+> `jobs_panel.country.map(base)` looks up that value for every row, so the division compares each quarter with
+> the same country's 2019Q4. A country with no 2019Q4 value gets `NaN`.
+
+```{python}
+jobs_panel = pd.read_csv(DATA_URL + "employment_panel.csv", parse_dates=["date"])
+base = jobs_panel[jobs_panel.date == "2019-10-01"].set_index("country").employment
+jobs_panel["index_2019q4"] = 100 * jobs_panel.employment / jobs_panel.country.map(base)
+jobs_panel.tail(3)
+```
+
+```{python}
+def jobs_world(names=("United States",)):
+    """Figure 10.7 beyond the U.S.: household-survey employment (2019Q4 = 100) in the chosen countries."""
+    chosen, missing = pick(jobs_panel, names, "index_2019q4")
+    fig = px.line(chosen, x="date", y="index_2019q4", color="country", hover_name="country",
+                  color_discrete_map=COUNTRY_COLORS,
+                  labels={"date": "Year", "index_2019q4": "Employment (index, 2019Q4 = 100)", "country": "Country"})
+    worst = largest_fall(chosen, "index_2019q4", "2019-10-01", "2020-12-31")
+    title = "No data for 2019–20"
+    if worst is not None:
+        name, peak, trough, change = worst
+        title = (f"Largest Covid-19 fall in employment: {name}, {change:.1f}% "
+                 f"({peak.year}Q{peak.quarter} to {trough.year}Q{trough.quarter})")
+    fig.add_hline(y=100, line_dash="dash", line_color="black", line_width=1)
+    fig.update_layout(title=title + no_data_note(missing))
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(jobs_world, names=SelectMultiple(options=sorted(jobs_panel.country.unique()), value=("United States",),
+                                          rows=8, description="countries"));
+```
+
+```{python}
+#| kind: website
+# @title Website version: employment in every country (click a country in the legend to add it)
+all_countries(jobs_world, sorted(jobs_panel.country.unique()), ["United States"])
+```
+
+Click a country in the legend to add it, or choose a region in the menu.
+
+**What to notice.**
+
+- In the household survey, U.S. employment fell by 13.3 percent from 2019Q4 to 2020Q2, a little more than payroll
+  employment (11.8 percent in quarterly averages). Add Canada: almost the same fall, 13.0 percent.
+- Add Germany, Japan and the United Kingdom: employment fell by only 1.7 to 2.4 percent. These countries paid firms
+  to keep workers on reduced hours (*Kurzarbeit*, furlough), so the pandemic showed up in hours, not in jobs.
+- Add Spain: before Covid-19 it had a much worse crisis. Its employment fell by 17.5 percent from 2008 to 2013.
+- **Data hygiene.** Brazil and Indonesia appear in the list but report "no data": their series stop in 2015 and
+  2013, before the 2019Q4 base, so the index cannot be computed.
+
 **Your turn.** How many jobs did the U.S. economy add over the last 12 months of the data? Compare it with the
 average yearly gain from 2015 to 2019.
 
@@ -1020,6 +1487,74 @@ With the 2023 data, $\tilde{Y}$ fell to $-5.48$ percent in 2009 and to $-10.42$ 
 back above it in 2021Q4. With today's data the 2009 slump is a bit shallower, $-4.98$ percent, $\tilde{Y}$ turned
 positive in 2018Q1, and after 2020 it was back above zero by 2021Q2. Either way, the recovery from 2020 took
 about a year, against almost a decade after 2009.
+
+<!-- cell -->
+
+### Beyond the U.S.: output gaps in OECD countries
+
+The CBO estimates potential output only for the U.S. The OECD estimates it for its members, and publishes the
+**output gap**, the same $\tilde{Y}$ in percent, once a year in its *Economic Outlook* (number 119, June 2026). The
+file is annual, from 1990 to 2027; the values for 2026 and 2027 are the OECD's **projections**.
+
+```{python}
+gaps_panel = pd.read_csv(DATA_URL + "output_gap_panel.csv")
+gaps_panel.tail(3)
+```
+
+Two estimates of the same U.S. gap can differ, because potential output is never observed. We compare the OECD's
+annual gap with the yearly average of the CBO-based $\tilde{Y}$ of Figure 8.
+
+```{python}
+us_oecd = gaps_panel[gaps_panel.country == "United States"].set_index("year").output_gap
+us_cbo = srun.short_run_output.groupby(srun.index.year).mean()
+pd.DataFrame({"OECD": us_oecd, "CBO-based": us_cbo}).loc[[2009, 2010, 2019, 2020, 2022, 2025]].round(2)
+```
+
+> **Python note.** `x="year"` with `markers=True` draws one dot per year joined by lines. `fig.add_vrect` shades the
+> projection years, from 2025.5 to 2027.5, so the band covers the dots of 2026 and 2027.
+
+```{python}
+def gap_world(names=("United States",)):
+    """Figure 10.8 beyond the U.S.: OECD output gaps (percent of potential output) in the chosen countries."""
+    chosen, missing = pick(gaps_panel, names, "output_gap")
+    fig = px.line(chosen, x="year", y="output_gap", color="country", hover_name="country", markers=True,
+                  color_discrete_map=COUNTRY_COLORS,
+                  labels={"year": "Year", "output_gap": "Output gap, Ỹ (percent)", "country": "Country"})
+    since_2007 = chosen[chosen.year >= 2007]
+    title = "No data since 2007"
+    if len(since_2007) > 0:
+        low = since_2007.loc[since_2007.output_gap.idxmin()]
+        title = f"Deepest output gap since 2007: {low.country}, {low.output_gap:.1f}% in {low.year}"
+    fig.add_hline(y=0, line_dash="dash", line_color="black", line_width=1)
+    fig.add_vrect(x0=2025.5, x1=2027.5, fillcolor=GRAY, opacity=0.2, line_width=0)
+    fig.add_annotation(x=2026.5, y=1, yref="paper", yanchor="top", text="OECD<br>projections", showarrow=False,
+                       font=dict(size=12, color=GRAY))
+    fig.update_layout(title=title + no_data_note(missing))
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(gap_world, names=SelectMultiple(options=sorted(gaps_panel.country.unique()), value=("United States",),
+                                         rows=8, description="countries"));
+```
+
+```{python}
+#| kind: website
+# @title Website version: output gaps in every OECD country (click a country in the legend to add it)
+all_countries(gap_world, sorted(gaps_panel.country.unique()), ["United States"])
+```
+
+Click a country in the legend to add it, or choose a region in the menu.
+
+**What to notice.**
+
+- The two U.S. estimates agree on the shape but not on the numbers: in 2020 the OECD's gap is −4.2 percent against
+  −3.3 for the CBO-based average, and in 2022 the OECD still sees output below potential (−0.7) while the CBO-based
+  measure is above it. Potential output is an estimate, and so is every output gap.
+- Add Greece, Italy and Spain: their output gaps stayed below −3 percent until 2015 (Spain) or 2016 (Greece and
+  Italy), because the euro crisis of 2010–13 followed the financial crisis. Greece's gap reached −10.6 percent in 2012.
+- Add the United Kingdom: its 2020 gap, −9.0 percent, was twice the U.S. one, as in Figure 6.
 
 **Your turn.** Find the quarter in which the two vintages differ the most, and by how much.
 
@@ -1166,6 +1701,58 @@ of this chapter show that the same calculation with the data as published in 201
 fall of 6.3 percent is the monthly peak-to-trough fall of Figure 7, from December 2007 to February 2010, not the
 change between the NBER quarters (5.0 percent).
 
+<!-- cell -->
+
+### Beyond the U.S.: unemployment rates in other countries
+
+The OECD publishes **harmonised** unemployment rates for 40 economies: each country's labour force survey, adjusted to
+the same international definition, monthly and seasonally adjusted. For the U.S. the OECD rate is exactly the BLS rate
+of Figure 9 (the largest difference over 320 months is 0.0).
+
+```{python}
+unemp_panel = pd.read_csv(DATA_URL + "unemployment_panel.csv", parse_dates=["date"])
+unemp_panel.tail(3)
+```
+
+```{python}
+def unemployment_world(names=("United States",)):
+    """Figure 10.9 beyond the U.S.: OECD harmonised unemployment rates in the chosen countries."""
+    chosen, missing = pick(unemp_panel, names, "unemployment_rate")
+    fig = px.line(chosen, x="date", y="unemployment_rate", color="country", hover_name="country",
+                  color_discrete_map=COUNTRY_COLORS,
+                  labels={"date": "Year", "unemployment_rate": "Unemployment rate (percent)", "country": "Country"})
+    title = "No data"
+    if len(chosen) > 0:
+        top = chosen.loc[chosen.unemployment_rate.idxmax()]       # the row with the highest rate
+        title = f"Highest unemployment since 2000: {top.country}, {top.unemployment_rate:.1f}% ({top.date:%b %Y})"
+    shade_recessions(fig)
+    fig.update_layout(title=title + no_data_note(missing))
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(unemployment_world, names=SelectMultiple(options=sorted(unemp_panel.country.unique()),
+                                                  value=("United States",), rows=8, description="countries"));
+```
+
+```{python}
+#| kind: website
+# @title Website version: unemployment rates in every country (click a country in the legend to add it)
+all_countries(unemployment_world, sorted(unemp_panel.country.unique()), ["United States"])
+```
+
+Click a country in the legend to add it, or choose a region in the menu. The shaded bands are U.S. recessions.
+
+**What to notice.**
+
+- Add Spain and Greece: their unemployment rates rose above 26 and 28 percent in 2013, during the euro crisis, far
+  above the U.S. peak of 10.0 percent in 2009. The euro area as a whole peaked at 12.3 percent in 2013.
+- Add Germany: its unemployment rate *fell* through the Great Recession, from 11.2 percent in 2005 to below 4 percent.
+  In 2020 it hardly moved (at most 3.9 percent), while the U.S. rate jumped to 14.8 and Canada's to 14.2.
+- Unemployment is not the only measure of a slump: countries that paid firms to keep workers (Figure 7) kept their
+  unemployment low, while the U.S. let it jump and then fall quickly.
+
 **Your turn.** Which of the nine earlier recessions had the largest fall in GDP? And in which of them did
 consumption fall?
 
@@ -1273,6 +1860,84 @@ euro area during 2022": 8.67 percent in June 2022 and 10.09 percent in October 2
 in April 2021 in the U.S., in September 2021 in the euro area and in October 2021 in the U.K. That is a year after
 the pandemic began, so the pandemic did not raise inflation at once.
 
+<!-- cell -->
+
+### Beyond the U.S., U.K. and euro area: inflation around the world
+
+Was the inflation of 2021–23 a rich-country story? The file `inflation_panel.csv` has 12-month inflation (log
+changes, as above) for 61 economies, monthly from 2015. It combines three sources, named in its `source` column:
+the textbook's three series exactly as in `fig10-10.csv`, Eurostat's harmonised index (HICP) for the other European
+countries, and the IMF's national consumer price indexes for the rest. It also holds the **core** inflation of
+Figure 11.
+
+```{python}
+world_cpi = pd.read_csv(DATA_URL + "inflation_panel.csv", parse_dates=["date"])
+world_cpi.groupby("source").country.nunique()
+```
+
+The y-axis keeps the textbook's range up to 12 percent and widens in a few fixed steps only when a chosen
+country needs it, so the chart does not jump around with every country you add.
+
+> **Python note.** `axis_top` walks through a short list of possible tops and returns the first one that is not
+> below the highest value. Fixed steps keep the axis still while you add countries with similar inflation.
+
+```{python}
+def axis_top(value, tops=(12, 25, 50, 100, 150)):
+    """The smallest of a few fixed axis tops that is at least `value`."""
+    for top in tops:
+        if value <= top:
+            return top
+    return tops[-1]
+
+
+BOOK_THREE = ("Euro area", "United Kingdom", "United States")
+```
+
+```{python}
+def inflation_world(names=BOOK_THREE):
+    """Figure 10.10 beyond the textbook's economies: 12-month CPI inflation in the chosen countries."""
+    chosen, missing = pick(world_cpi, names, "inflation")
+    fig = px.line(chosen, x="date", y="inflation", color="country", hover_name="country",
+                  color_discrete_map=COUNTRY_COLORS,
+                  labels={"date": "Year", "inflation": "Inflation (percent)", "country": "Country"})
+    recent = chosen[chosen.date.dt.year.between(2021, 2023)]
+    title = "No data for 2021–23"
+    if len(recent) > 0:
+        top = recent.loc[recent.inflation.idxmax()]
+        title = f"Highest inflation in 2021–23: {top.country}, {top.inflation:.1f}% ({top.date:%b %Y})"
+    fig.add_hline(y=0, line_dash="dash", line_color="black", line_width=1)
+    fig.update_xaxes(range=["2014-10-01", "2026-12-01"])
+    top = axis_top(chosen.inflation.max())
+    fig.update_yaxes(range=[min(-1.5 * top / 12, chosen.inflation.min() - 0.5), top])   # room for deflation too
+    fig.update_layout(title=title + no_data_note(missing))
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(inflation_world, names=SelectMultiple(options=sorted(world_cpi.country.unique()), value=BOOK_THREE,
+                                               rows=8, description="countries"));
+```
+
+```{python}
+#| kind: website
+# @title Website version: inflation in every country (click a country in the legend to add it)
+all_countries(inflation_world, sorted(world_cpi.country.unique()), list(BOOK_THREE))
+```
+
+Click a country in the legend to add it, or choose a region in the menu.
+
+**What to notice.**
+
+- The inflation wave was almost everywhere. Add Germany and Brazil: 10.9 percent in October 2022 and 11.5 percent in
+  April 2022. Add Estonia and Hungary: above 22 percent.
+- Add China, Japan and Switzerland: inflation stayed below 4.5 percent all through 2021–23. Not every economy had the
+  same shock, or the same policy.
+- Add Türkiye or Argentina: the axis widens to 100 or 150 percent. Their inflation was high before the pandemic
+  and has other causes, which Chapter 8 discusses.
+- **Data hygiene.** Australia starts only in 2025: for decades it published its consumer price index once a
+  quarter, and its monthly index in these data begins in April 2024, so the first 12-month change is April 2025.
+
 **Your turn.** In which months of 2020 was euro-area inflation negative (falling prices)?
 
 <details><summary>Hint</summary>
@@ -1302,11 +1967,17 @@ both.tail(3)
 ```
 
 The menu shows the core rates of all three economies, as in the textbook, or the headline and core rates of one
-economy.
+economy. Besides the textbook's three, it offers every economy of `world_cpi` (the panel of Figure 10) that has a core
+inflation series: 46 in all, with the textbook's three.
+
+> **Python note.** `world_cpi.dropna(subset=["core_inflation"])` drops the rows without core inflation, and
+> `.country.unique()` lists the countries that remain. `pd.isna(gap)` is true when `gap` is missing, for a country
+> with no 2022 data.
 
 ```{python}
 CORE = {"U.S.": "core_inflation_us", "U.K.": "core_inflation_uk", "Euro area": "core_inflation_euro_area"}
 HEADLINE = {"U.S.": "inflation_us", "U.K.": "inflation_uk", "Euro area": "inflation_euro_area"}
+VIEWS = ["core, all three"] + sorted(world_cpi.dropna(subset=["core_inflation"]).country.unique())
 
 
 def core_chart(view="core, all three"):
@@ -1316,31 +1987,52 @@ def core_chart(view="core, all three"):
         series, colors = ["U.S.", "U.K.", "Euro area"], AREA_COLORS
         title = f"Core inflation peaked at {both[CORE['U.S.']].max():.1f}% in the U.S., the highest of the three"
     else:
-        data = both.rename(columns={HEADLINE[view]: "Headline", CORE[view]: "Core"})
-        series, colors = ["Headline", "Core"], {"Headline": GRAY, "Core": AREA_COLORS[view]}
+        data = world_cpi[world_cpi.country == view].rename(columns={"inflation": "Headline", "core_inflation": "Core"})
+        series, colors = ["Headline", "Core"], {"Headline": GRAY, "Core": COUNTRY_COLORS[view]}
         gap = (data.Headline - data.Core)[data.date.dt.year == 2022].max()
         title = f"{view}: in 2022, food and energy added up to {gap:.1f} points to inflation"
+        if pd.isna(gap):
+            title = f"{view}: no headline and core inflation for 2022"
     fig = px.line(data, x="date", y=series, color_discrete_map=colors, title=title,
                   labels={"date": "Year", "value": "Percent", "variable": "Inflation"})
     fig.update_traces(line_width=3)
     fig.add_hline(y=0, line_dash="dash", line_color="black", line_width=1)
     fig.update_xaxes(range=["2014-10-01", "2026-12-01"])
-    fig.update_yaxes(range=[-1.5, 12], tickvals=[0, 2, 4, 6, 8, 10, 12])
+    top = axis_top(data[series].max().max())                # 12, or wider for high-inflation countries
+    fig.update_yaxes(range=[min(-1.5 * top / 12, data[series].min().min() - 0.5), top])
     fig.update_layout(legend=dict(x=0.01, y=0.99, xanchor="left", yanchor="top", bgcolor="rgba(255,255,255,0.8)"))
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(core_chart, view=Dropdown(options=["core, all three", "U.S.", "U.K.", "Euro area"], value="core, all three",
-                                   description="show", style=WIDE));
+interact(core_chart, view=Dropdown(options=VIEWS, value="core, all three", description="show", style=WIDE));
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: Figure 11 with a precomputed slider for the view
-slider_figure(core_chart, "view", ["core, all three", "U.S.", "U.K.", "Euro area"], start="core, all three",
-              label="show")
+# @title Website version: Figure 11 with a menu of the views (the textbook's three and every country)
+figures = []
+for view in VIEWS:
+    figures.append(core_chart(view))
+fig = go.Figure(layout=figures[0].layout)
+owner = []                                      # which view each trace belongs to
+for i, f in enumerate(figures):
+    for trace in f.data:
+        trace.visible = (i == 0)
+        trace.x = [d.strftime("%Y-%m") for d in pd.to_datetime(trace.x)]      # a lighter page: months only
+        trace.y = np.round(np.asarray(trace.y, dtype=float), 2)
+        fig.add_trace(trace)
+        owner.append(i)
+buttons = []
+for i, f in enumerate(figures):
+    visible = [o == i for o in owner]
+    buttons.append(dict(label=VIEWS[i], method="update",
+                        args=[{"visible": visible}, {"title.text": f.layout.title.text,
+                                                     "yaxis.range": list(f.layout.yaxis.range)}]))
+fig.update_layout(margin=dict(t=120), updatemenus=[dict(type="dropdown", direction="down", x=0, y=1.02,
+                                                        xanchor="left", yanchor="bottom", buttons=buttons)])
+fig
 ```
 
 **What to notice.**
@@ -1351,6 +2043,11 @@ slider_figure(core_chart, "view", ["core, all three", "U.S.", "U.K.", "Euro area
   inflation. Choose the euro area: the gap between headline and core is largest there, because energy prices
   soared after Russia invaded Ukraine.
 - After 2022 core inflation in the U.K. and the euro area kept rising for a while: it peaked only in 2023.
+- Choose Estonia: in 2022 food and energy added up to 11.3 points to its inflation, more than twice as much as in
+  the euro area as a whole. Choose Türkiye: its core inflation peaked at 55.9 percent in April 2024, and the axis
+  widens to show it.
+- **Data hygiene.** Choose Japan: the title says there are no data for 2022, because the OECD's monthly Japanese
+  core index stops in June 2021. Always check the last date of a series before comparing countries.
 
 <!-- cell -->
 

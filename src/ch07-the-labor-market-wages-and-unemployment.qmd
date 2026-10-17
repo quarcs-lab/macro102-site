@@ -24,7 +24,9 @@ of this chapter you will be able to:
 - compute **present discounted values**, and use them to value a working life and a college degree;
 - explain why the college wage premium rose while the supply of college graduates grew;
 - load monthly data with pandas, shade recessions, recompute textbook tables, and build interactive
-  Plotly figures with sliders, toggles, menus and buttons.
+  Plotly figures with sliders, toggles, menus and buttons;
+- go beyond the textbook's countries: compare up to 187 countries with a country picker, and spot breaks,
+  gaps and implausible values in the data.
 
 <!-- cell -->
 
@@ -35,18 +37,18 @@ figure each notebook figure replicates.
 
 | Figure | Textbook figure | Type | What you can change |
 |---|---|---|---|
-| Figure 1 | 7.1 The U.S. employment-population ratio | data | — (zoom with the range slider; men and women in a second chart) |
-| Figure 2 | 7.2 The U.S. unemployment rate | data | — (zoom with the range slider; Table 7.1 recomputed) |
+| Figure 1 | 7.1 The U.S. employment-population ratio | data | zoom with the range slider; men and women; any of 187 countries (picker, region menu) |
+| Figure 2 | 7.2 The U.S. unemployment rate | data | zoom with the range slider; Table 7.1 recomputed; any of 34 OECD countries (picker) |
 | Figure 3 | 7.3 The labor market | model | intercepts and slopes of labor demand and labor supply |
 | Figure 4 | 7.4 An income tax at rate τ | model | tax rate τ, slope of labor supply |
 | Figure 5 | 7.5 A reduction in labor demand | model | size of the fall in demand, slope of labor supply |
 | Figure 6 | 7.6 A reduction in labor demand with wage rigidity | model | size of the fall in demand, rigid or flexible wage; bathtub model with a "Run" button |
-| Figure 7 | 7.7 Unemployment in the U.S., Europe and Japan | data | the year shown in the title (Table 7.2 recomputed) |
-| Figure 8 | 7.8 College versus high school wages and employment | data | — (click a line in the legend to hide it; present values computed) |
+| Figure 7 | 7.7 Unemployment in the U.S., Europe and Japan | data | the year shown in the title; any of 43 economies (picker); Table 7.2 recomputed |
+| Figure 8 | 7.8 College versus high school wages and employment | data | click a line in the legend; the premium in 38 countries (picker); present values computed |
 | Figure 9 | 7.9 Understanding the rising return to education | model | shifts of college labor demand and college labor supply |
-| Figure 10 | 7.10 U.S. employment in manufacturing | data | — (zoom with the range slider) |
-| Figure 11 | 7.11 Income inequality in the U.S. and France | data | — (hover to read values, click the legend) |
-| Figure 12 | 7.12 Economic growth by income percentile | data | — (click a period in the legend to hide it) |
+| Figure 10 | 7.10 U.S. employment in manufacturing | data | zoom with the range slider; any of 187 countries, share or millions (picker, toggle, region menu) |
+| Figure 11 | 7.11 Income inequality in the U.S. and France | data | hover, click the legend; any of 58 countries (picker, region menu) |
+| Figure 12 | 7.12 Economic growth by income percentile | data | click a period in the legend; any of 58 countries and two periods (picker, toggle, region menu) |
 | Figure 13 | 7.13 The declining college wage premium of the 1970s | model | shifts of college labor demand and college labor supply |
 
 <!-- cell -->
@@ -68,7 +70,7 @@ import plotly.express as px           # quick charts from data tables
 import plotly.graph_objects as go     # charts built piece by piece (model figures)
 import plotly.io as pio
 from plotly.subplots import make_subplots       # several panels in one figure
-from ipywidgets import interact, interact_manual, FloatSlider, ToggleButtons, Dropdown
+from ipywidgets import interact, interact_manual, FloatSlider, ToggleButtons, Dropdown, SelectMultiple
 
 # One light blue/green look for every chart
 BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
@@ -116,6 +118,63 @@ def slider_figure(make_figure, name, values, start, label=None):
         steps.append(dict(method="update", label=str(values[i]), args=[{"visible": visible}, layout]))
     fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
                                     currentvalue=dict(prefix=(label or name) + " = "))])
+    return fig
+```
+
+The multi-country charts have three more website helpers. `region_menu` adds a menu of world regions to a
+chart that holds many countries, because a legend with 180 names would be unreadable. `region_groups` lists
+the countries that each view of that menu shows together, so that we can give them different colors.
+`legend_menu` keeps the textbook's lines on, puts the others in the legend, and adds two reset buttons.
+
+```{python}
+#| kind: helper
+# @title Helper for the website versions of the multi-country charts (run this cell; you do not need to read it)
+def region_menu(fig, regions, shown, label=None):
+    """Add a region menu: the countries in `shown` stay on, the chosen region's countries go into the legend.
+
+    `regions` maps each country (trace name) to its region. The website cannot run Python, so this menu
+    replaces the Colab country picker: pick a region, then click a country in the legend to add it.
+    """
+    names = [trace.name for trace in fig.data]
+    groups = sorted(set(regions[n] for n in names if n in regions))
+    buttons = []
+    for group in [label or "Textbook: " + ", ".join(shown)] + groups:
+        visible = []
+        for n in names:
+            if n in shown:
+                visible.append(True)
+            elif regions.get(n) == group:
+                visible.append("legendonly")
+            else:
+                visible.append(False)
+        buttons.append(dict(label=group, method="restyle", args=[{"visible": visible}]))
+    for trace in fig.data:
+        trace.visible = True if trace.name in shown else False
+    fig.update_layout(updatemenus=[dict(buttons=buttons, active=0, direction="down", showactive=True,
+                                        x=0, xanchor="left", y=1.02, yanchor="bottom")],
+                      margin=dict(t=120), legend_title_text="")
+    return fig
+
+
+def region_groups(regions, shown):
+    """The views of `region_menu`, for `group_colors`: `shown` alone, then `shown` plus each region's countries."""
+    groups = [list(shown)]
+    for region in sorted(set(regions.values())):
+        groups.append(list(shown) + [n for n in regions if regions[n] == region])
+    return groups
+
+
+def legend_menu(fig, shown, label="Textbook view"):
+    """For a chart with up to 40 lines: `shown` stay on, the others wait in the legend; two reset buttons."""
+    book = [True if t.name in shown else "legendonly" for t in fig.data]
+    everything = [True for t in fig.data]
+    for trace, v in zip(fig.data, book):
+        trace.visible = v
+    fig.update_layout(updatemenus=[dict(type="buttons", direction="right", x=0, xanchor="left", y=1.02,
+                                        yanchor="bottom", buttons=[
+                                            dict(label=label, method="restyle", args=[{"visible": book}]),
+                                            dict(label="All lines", method="restyle", args=[{"visible": everything}])])],
+                      margin=dict(t=120), legend_title_text="")
     return fig
 ```
 
@@ -270,6 +329,68 @@ def shade_recessions(fig, start):
 recessions.tail(3)
 ```
 
+<!-- cell -->
+
+### Fixed colors for many countries
+
+Most data figures of this chapter end with a section that goes beyond the textbook's countries, where you
+can add any country to the chart. A line should keep its color when you add or remove others, so we give
+every country one fixed color. The textbook's countries keep the colors of `BOOK_COLORS`. Two countries that
+can appear together (in the same menu view) should not share a color, so each country takes the first color
+that its neighbors do not use.
+
+> **Python note.** `PALETTE` starts as a list of Plotly's 24 dark colors, and the loop appends the colors of a
+> second palette that are dark enough to read on white. `first_free` returns as soon as it finds a color. If every
+> color is already used next to this country, the second loop picks the one used least often (`.count`).
+
+```{python}
+LIGHT = {"#F7E1A0", "#E2E2E2", "#FBE426", "#16FF32", "#1CFFCE", "#2ED9FF"}      # too pale on white
+PALETTE = list(px.colors.qualitative.Dark24)
+for color in px.colors.qualitative.Alphabet:
+    if color not in LIGHT:
+        PALETTE.append(color)                       # 24 + 20 = 44 distinct colors
+PALETTE.remove("#2E91E5")
+PALETTE.append("#2E91E5")                          # this blue is close to the U.S. navy: use it last
+BOOK_COLORS = {"United States": BLUE, "France": TEAL, "Japan": GREEN, "Euro area (12 countries)": "#e0a33b"}
+
+
+def first_free(used, taken):
+    """The first PALETTE color not in `used`, if possible one that no country has `taken` yet."""
+    for color in PALETTE:
+        if color not in used and color not in taken:
+            return color
+    best = PALETTE[0]                               # every color is used: share the least-used one,
+    for color in PALETTE:                           # from the end of the palette (far from the default view)
+        if used.count(color) <= used.count(best):
+            best = color
+    return best
+```
+
+> **Python note.** `fixed or {}` is `fixed` when it is given and an empty dictionary when it is `None`, and
+> `dict(...)` copies it, so the original stays unchanged. `continue` skips to the next name. The inner loops
+> collect `used`, the colors of every country that shares a group with `name`. Each figure below lists the
+> countries of its website's default view first, so they get the first colors.
+
+```{python}
+def group_colors(names, groups, fixed=None):
+    """Give each country a color that no other country in its groups uses, as far as the palette allows.
+
+    names: every country; groups: the lists of countries shown together (menu views); fixed: {country: color}
+    for the textbook's countries, so the default view keeps the book's colors."""
+    colors = dict(fixed or {})
+    for name in names:
+        if name in colors:
+            continue
+        used = []                                   # colors of the countries shown together with `name`
+        for group in groups:
+            if name in group:
+                for other in group:
+                    if other in colors:
+                        used.append(colors[other])
+        colors[name] = first_free(used, list(colors.values()))
+    return colors
+```
+
 ## Figure 1: The U.S. employment-population ratio
 
 **Goal.** See the long-run trend and the recessions in the share of adults who work.
@@ -360,6 +481,93 @@ print(f"Women's peak: {emp_sex.women.max():.1f}% in {emp_sex.date[emp_sex.women.
 
 Women's ratio rose from 35.5 percent in 1960 to a peak of 58.0 percent in April 2000. Men's fell from
 78.9 percent in 1960 to 66.6 percent in 2019 and 64.9 percent in 2025. Both numbers match the textbook.
+
+<!-- cell -->
+
+### Beyond the United States
+
+The International Labour Organization (ILO) estimates the employment-population ratio of almost every
+country in the same way, for people aged 15 and over. The World Bank publishes these estimates, which start
+in 1991. A wider file holds them, one row per country and year.
+
+```{python}
+world_emp = pd.read_csv(DATA_URL + "emp_pop_countries.csv")
+world_emp.head()
+```
+
+These are annual *model estimates*: where a country has no labor survey in a year, the ILO fills the gap
+with a statistical model. For the United States they run about 0.7 points below the BLS ratio above,
+because the ILO counts people from age 15 (the BLS from 16).
+
+> **Python note.** `.isin(names)` keeps the rows of the chosen countries. `color_discrete_map` gives each
+> line its fixed color. A `SelectMultiple` is a list in which you can pick several items: hold Ctrl (Cmd on
+> a Mac) while you click. In the check below, `.dropna()` drops the empty cells and `.iloc[[0, 1, -1]]`
+> picks rows by position (`-1` is the last row).
+
+```{python}
+EMP_COUNTRIES = sorted(world_emp.country.unique())
+EMP_REGIONS = dict(zip(world_emp.country, world_emp.region))
+EMP_SHOWN = ["United States", "Germany", "Japan"]           # the website's default view
+EMP_COLORS = group_colors(EMP_SHOWN + EMP_COUNTRIES, region_groups(EMP_REGIONS, EMP_SHOWN), BOOK_COLORS)
+
+
+def emp_pop_countries(names=("United States",)):
+    """Figure 7.1 for any countries: employment-population ratio, ages 15+ (ILO estimates)."""
+    chosen = world_emp[world_emp.country.isin(names)]
+    if len(chosen) == 0:
+        return go.Figure(layout=dict(title="Pick at least one country"))
+    last = chosen.year.max()
+    latest = chosen[chosen.year == last].set_index("country").emp_pop_ratio
+    title = f"Share of adults with a job in {last}: {latest.idxmax()} {latest.max():.1f}%"
+    if len(latest) > 1:
+        title = title + f", {latest.idxmin()} {latest.min():.1f}%"       # highest first, lowest second
+    fig = px.line(chosen, x="year", y="emp_pop_ratio", color="country", hover_name="country",
+                  color_discrete_map=EMP_COLORS, title=title,
+                  labels={"year": "Year", "emp_pop_ratio": "Employed, % of population 15+", "country": "Country"})
+    low, high = 50, 66
+    if chosen.emp_pop_ratio.min() < low or chosen.emp_pop_ratio.max() > high:
+        low, high = 15, 90                       # one wider range for countries far from the U.S.
+    fig.update_yaxes(range=[low, high])
+    fig.update_xaxes(range=[1990, 2026], tickvals=[1995, 2000, 2005, 2010, 2015, 2020, 2025])      # no label at the bottom-left corner
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(emp_pop_countries,
+         names=SelectMultiple(options=EMP_COUNTRIES, value=("United States", "Germany", "Japan"), rows=10,
+                              description="countries", style=WIDE));
+```
+
+On the website, the chart below holds every country. **Pick a region in the menu, then click a country in
+the legend to add it.**
+
+```{python}
+#| kind: website
+# @title Website version: Figure 1 for every country (pick a region, then click a country in the legend)
+fig = emp_pop_countries(tuple(EMP_COUNTRIES))
+region_menu(fig, EMP_REGIONS, shown=EMP_SHOWN, label="U.S., Germany, Japan")
+fig.update_layout(title="Since 2000 the U.S. ratio has fallen, while Germany's and Japan's have risen")
+fig.update_yaxes(autorange=True)              # the axis adapts to the countries you add
+fig
+```
+
+```{python}
+ratios = world_emp.pivot(index="year", columns="country", values="emp_pop_ratio")
+print(ratios.loc[[2000, 2025], ["United States", "Germany", "Japan", "France", "Italy"]])
+print(ratios.loc[2025].dropna().sort_values().iloc[[0, 1, 2, -3, -2, -1]])
+```
+
+**What to notice.**
+
+- Add **Germany** and **Japan**. Between 2000 and 2025 the U.S. ratio fell from 63.5 to 59.1 percent, while
+  Germany's rose from 53.4 to 58.3 and Japan's from 59.5 to 61.9. Japan now employs a larger share of its
+  adults than the United States.
+- Add **France** and **Italy**: 51.2 and 46.2 percent in 2025, far below the U.S. ratio throughout.
+- **Look at your data.** The highest ratios (above 82 percent) are in Qatar, whose residents are mostly
+  migrant workers, and in poor countries such as Madagascar and Tanzania, where few people can afford not to
+  work. The lowest (21 to 27 percent) are in São Tomé and Príncipe, Djibouti, Yemen and Somalia. Where
+  surveys are rare, these numbers come mostly from the ILO's model, so treat them with care.
 
 **Your turn.** By how many points did women's employment-population ratio rise between 1960 and 2000,
 and by how many did men's fall? Use the `yearly` table.
@@ -452,6 +660,84 @@ employment-population ratio is 2.7 million jobs:
 print(f"1% of the population 16+, January 2023: {0.01 * force.loc['2023-01-01', 'population']:.2f} million people")
 print(f"1% of the population 16+, {last:%B %Y}:  {0.01 * force.loc[last, 'population']:.2f} million people")
 ```
+
+<!-- cell -->
+
+### Beyond the United States
+
+The OECD publishes *harmonised* unemployment rates: every country counts the unemployed with the same
+definition as the United States (no job, looking for one, available to work). A wider file holds the monthly
+rates of 34 OECD countries, from the FRED database.
+
+```{python}
+monthly = pd.read_csv(DATA_URL + "unemployment_countries_monthly.csv", parse_dates=["date"])
+monthly.groupby("country").date.min().sort_values().tail()
+```
+
+The series start at different dates: Canada, Japan and the United States in 1955, most of Europe in the
+1980s, Germany in 1991 (after reunification), Turkey in 2005 and Israel in 2012. New Zealand and Switzerland
+publish only quarterly rates. The U.S. rows are the BLS rate of the chart above.
+
+> **Python note.** `.idxmax()` gives the row label of the largest value, and `.loc[...]` then picks that
+> whole row, so `peak.country` and `peak.date` tell us where and when unemployment was highest. `:%B %Y`
+> prints a date as "April 2020".
+
+```{python}
+MONTHLY_COUNTRIES = sorted(monthly.country.unique())
+MONTHLY_SHOWN = ["United States", "Germany"]                # the website's default view
+MONTHLY_COLORS = group_colors(MONTHLY_SHOWN + MONTHLY_COUNTRIES, [MONTHLY_SHOWN, MONTHLY_COUNTRIES], BOOK_COLORS)
+
+
+def unemployment_countries(names=("United States",)):
+    """Figure 7.2 for OECD countries: monthly harmonised unemployment rates, with the highest one in the title."""
+    chosen = monthly[monthly.country.isin(names)]
+    if len(chosen) == 0:
+        return go.Figure(layout=dict(title="Pick at least one country"))
+    peak = chosen.loc[chosen.unemployment_rate.idxmax()]
+    fig = px.line(chosen, x="date", y="unemployment_rate", color="country", hover_name="country",
+                  color_discrete_map=MONTHLY_COLORS,
+                  title=f"Highest rate: {peak.country}, {peak.unemployment_rate:.1f}% in {peak.date:%B %Y}",
+                  labels={"date": "Year", "unemployment_rate": "Unemployment rate (%)", "country": "Country"})
+    high = 16 if chosen.unemployment_rate.max() <= 16 else 30     # widen only for very high rates
+    fig.update_yaxes(range=[0, high])
+    fig.update_xaxes(rangeslider_visible=True)
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(unemployment_countries,
+         names=SelectMultiple(options=MONTHLY_COUNTRIES, value=("United States",), rows=10,
+                              description="countries", style=WIDE));
+```
+
+On the website, the chart below holds all 34 countries. **Click a country in the legend to add it**, and
+double-click one to show it alone.
+
+```{python}
+#| kind: website
+# @title Website version: Figure 2 for 34 OECD countries (click a country in the legend to add it)
+fig = unemployment_countries(tuple(MONTHLY_COUNTRIES))
+legend_menu(fig, MONTHLY_SHOWN, label="U.S. and Germany")
+fig.update_layout(title="Covid-19 sent U.S. unemployment to 14.8%; Germany's barely moved")
+fig.update_yaxes(autorange=True)              # the axis adapts to the countries you add
+fig
+```
+
+```{python}
+rates = monthly.pivot(index="date", columns="country", values="unemployment_rate")
+print(rates.loc["2020-02-01":"2020-05-01", ["United States", "Canada", "Germany", "Japan"]])
+print(rates[["Spain", "Greece"]].max(), rates[["Spain", "Greece"]].idxmax(), sep="\n")
+```
+
+**What to notice.**
+
+- Add **Canada**, **Germany** and **Japan**. From February to April 2020, U.S. unemployment jumped from 3.5
+  to 14.8 percent and Canada's from 5.8 to 13.7 percent. Germany's rose only from 3.3 to 3.5 percent and
+  Japan's from 2.4 to 2.6: both countries subsidized firms that kept their workers on shorter hours instead
+  of laying them off.
+- Add **Spain** and **Greece**. After the euro crisis their rates passed 26 percent: 26.4 percent in Spain
+  (February 2013) and 28.3 percent in Greece (July 2013), almost twice the U.S. peak of April 2020.
 
 **Your turn.** Suppose that in the latest month the unemployment rate had been 10 percent, with the
 same labor force. How many fewer people would have had a job?
@@ -887,6 +1173,90 @@ unemployment high once it had risen. In the bathtub model, both work through a l
 
 <!-- cell -->
 
+### Beyond three economies
+
+"Europe" in the textbook's figure is an average. A wider file holds the annual unemployment rates of 42
+countries from the same European Commission database (AMECO), for the EU members, other European
+countries, and the United States, Japan, Canada, Australia, New Zealand and South Korea, plus the euro area
+of 12 countries, the "Europe" line above.
+
+```{python}
+ameco = pd.read_csv(DATA_URL + "unemployment_countries.csv")
+ameco[ameco.country == "Germany"].iloc[29:33]
+```
+
+The rows show a **splice**: up to 1990 "Germany" is West Germany, and from 1991 the reunified country. Many
+Central and Eastern European series start only in the 1990s or 2000s, after the end of communism.
+
+> **Python note.** `.loc[1985:2025]` keeps the rows from 1985 to 2025, and `.mean()` averages each column.
+> `.sort_values()` sorts the averages, so `.index[0]` and `.index[-1]` are the lowest and the highest.
+
+```{python}
+AMECO_COUNTRIES = sorted(ameco.country.unique())
+BOOK_ECONOMIES = ("Euro area (12 countries)", "Japan", "United States")
+AMECO_SHOWN = list(BOOK_ECONOMIES) + ["Spain", "South Korea"]       # the website's default view
+AMECO_COLORS = group_colors(AMECO_SHOWN + AMECO_COUNTRIES, [AMECO_SHOWN, AMECO_COUNTRIES], BOOK_COLORS)
+
+
+def unemployment_long_run(names=BOOK_ECONOMIES):
+    """Figure 7.7 for any of 42 countries: annual unemployment, with the averages since 1985 in the title."""
+    chosen = ameco[ameco.country.isin(names)]
+    if len(chosen) == 0:
+        return go.Figure(layout=dict(title="Pick at least one country"))
+    wide = chosen.pivot(index="year", columns="country", values="unemployment_rate")
+    average = wide.loc[1985:2025].mean().sort_values()
+    title = f"Average 1985–2025: {average.index[-1]} {average.iloc[-1]:.1f}%"
+    if len(average) > 1:
+        title = title + f" (highest), {average.index[0]} {average.iloc[0]:.1f}% (lowest)"
+    fig = px.line(chosen, x="year", y="unemployment_rate", color="country", hover_name="country",
+                  color_discrete_map=AMECO_COLORS, title=title,
+                  labels={"year": "Year", "unemployment_rate": "Unemployment rate (percent)", "country": "Economy"})
+    high = 14 if chosen.unemployment_rate.max() <= 14 else 40     # widen only for very high rates
+    fig.update_yaxes(range=[0, high])
+    fig.update_xaxes(tickvals=[1970, 1980, 1990, 2000, 2010, 2020])      # no label at the bottom-left corner
+    fig.update_layout(hovermode="x unified")
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(unemployment_long_run,
+         names=SelectMultiple(options=AMECO_COUNTRIES, value=BOOK_ECONOMIES, rows=10,
+                              description="economies", style=WIDE));
+```
+
+On the website, the chart below holds all 43 economies. The textbook's three are shown; **click a country in
+the legend to add it**.
+
+```{python}
+#| kind: website
+# @title Website version: Figure 7 for 43 economies (click a country in the legend to add it)
+fig = unemployment_long_run(tuple(AMECO_COUNTRIES))
+legend_menu(fig, AMECO_SHOWN, label="Textbook view + Spain, South Korea")
+fig.update_layout(title="Since 1985 unemployment averaged 16.6% in Spain, 3.5% in Japan and South Korea",
+                  hovermode="closest")
+fig.update_yaxes(autorange=True)              # the axis adapts to the countries you add
+fig
+```
+
+```{python}
+yearly_rates = ameco.pivot(index="year", columns="country", values="unemployment_rate")
+print(yearly_rates.loc[[1975, 1985, 1994, 2013, 2025], ["Spain", "Switzerland", "Norway"]])
+print(yearly_rates.loc[1985:2025].mean().sort_values().round(1).iloc[[0, 1, 2, 3, 4, -3, -2, -1]])
+```
+
+**What to notice.**
+
+- Add **Spain**: 4.5 percent in 1975, 17.8 in 1985, 24.1 in 1994 and 26.1 in 2013. Its average since 1985,
+  16.6 percent, is the highest of all the large economies in the file.
+- Add **Switzerland** and **Norway**: averages of 3.6 and 4.0 percent since 1985, close to Japan's 3.5. "European
+  unemployment" is not one number: labor market institutions differ a lot across Europe.
+- **Look at your data.** Some values are exactly 0: Luxembourg in 1960–1974, Switzerland in 1970–1973 and
+  Lithuania in 1990. An exact 0 usually means that unemployment was barely measured, or rounded down, not that
+  nobody was looking for work. Check such values before you average them.
+
+<!-- cell -->
+
 ### Table 7.2: hours worked per person
 
 Hours worked per person combine three things: how many people work, how many weeks they work, and how
@@ -995,6 +1365,100 @@ The premium is 48.1 log points in 2020, "nearly 50 percent" as the textbook says
 2016 and is 44.0 in 2025. (The chapter summary of the textbook speaks of 50 and 100 percent, which does
 not fit its own figure.) The share of employment with a college degree rose from 18.3 percent in 1979 to
 40.9 percent in 2020.
+
+<!-- cell -->
+
+### Beyond the United States
+
+EPI's adjusted premium exists only for the United States. For other countries, the OECD publishes a
+simpler measure every year: the earnings of full-time workers aged 25–64 with a bachelor's or higher degree,
+relative to those with only upper secondary (high school) education, which counts as 100. It also publishes
+the share of adults with such a degree. A wider file holds both for 48 countries, mostly from 2013.
+
+```{python}
+oecd_college = pd.read_csv(DATA_URL + "college_premium_countries.csv")
+oecd_college[oecd_college.country == "United States"].tail(4)
+```
+
+`premium_log_points` turns the relative earnings into log points, $100 \ln(\text{relative earnings}/100)$,
+the unit of the chart above. This measure is not adjusted for age, gender or region, so for the United States
+it is about 14 log points above EPI's (61 against 46 in 2024). Compare countries with one measure at a time.
+One value was dropped when the file was built: Slovakia's 3.5 for 2013, a unit error in the source.
+
+> **Python note.** `.dropna(subset=[...])` drops the rows where that column is empty.
+> `.groupby("country").last()` keeps the last row of each country, its latest year. `pd.concat([...],
+> axis=1)` puts columns side by side, matching the rows by their label (here, the country).
+
+```{python}
+PREMIUM_COUNTRIES = sorted(oecd_college.dropna(subset=["premium_log_points"]).country.unique())
+PREMIUM_COLORS = group_colors(PREMIUM_COUNTRIES, [PREMIUM_COUNTRIES], BOOK_COLORS)   # "All lines" view
+
+
+def premium_countries(names=("United States",)):
+    """Figure 7.8 for OECD countries: the college premium (log points, full-time workers 25-64)."""
+    chosen = oecd_college[oecd_college.country.isin(names)].dropna(subset=["premium_log_points"])
+    if len(chosen) == 0:
+        return go.Figure(layout=dict(title="Pick at least one country"))
+    latest = chosen.groupby("country").last().premium_log_points.sort_values()
+    title = f"College premium, latest year: {latest.index[-1]} {latest.iloc[-1]:.0f} log points"
+    if len(latest) > 1:
+        title = title + f", {latest.index[0]} {latest.iloc[0]:.0f}"
+    fig = px.line(chosen, x="year", y="premium_log_points", color="country", hover_name="country",
+                  markers=True, color_discrete_map=PREMIUM_COLORS, title=title,
+                  labels={"year": "Year", "premium_log_points": "College premium (log points)", "country": "Country"})
+    high = 70 if chosen.premium_log_points.max() <= 70 else 130     # widen only for very high premiums
+    fig.update_yaxes(range=[0, high])
+    fig.update_xaxes(range=[1999, 2026], tickvals=[2005, 2010, 2015, 2020, 2025])      # no label at the bottom-left corner
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(premium_countries,
+         names=SelectMultiple(options=PREMIUM_COUNTRIES, value=("United States",), rows=10,
+                              description="countries", style=WIDE));
+```
+
+On the website, the chart below holds all 38 countries with earnings data. **Click a country in the legend to
+add it.**
+
+```{python}
+#| kind: website
+# @title Website version: Figure 8 for 38 countries (click a country in the legend to add it)
+fig = premium_countries(tuple(PREMIUM_COUNTRIES))
+legend_menu(fig, ["United States"], label="United States only")
+fig.update_layout(title="The U.S. college premium is among the highest of the rich countries")
+fig.update_yaxes(autorange=True)              # the axis adapts to the countries you add
+fig
+```
+
+Does a country with more graduates pay them less, as supply and demand suggest? Each point below is one
+country: its latest premium against its latest share of adults with a degree.
+
+```{python}
+premium = oecd_college.dropna(subset=["premium_log_points"]).groupby("country").last()
+share = oecd_college.dropna(subset=["bachelor_share"]).groupby("country").last()
+latest_both = pd.concat([premium.premium_log_points, share.bachelor_share], axis=1).dropna().reset_index()
+fig = px.scatter(latest_both, x="bachelor_share", y="premium_log_points", hover_name="country",
+                 color_discrete_sequence=[TEAL],
+                 labels={"bachelor_share": "Adults 25-64 with a bachelor's or higher degree (%)",
+                         "premium_log_points": "College premium (log points)"},
+                 title="Where graduates are scarce, they earn much more")
+fig.update_traces(marker=dict(size=10))
+fig.show()
+print(f"{len(latest_both)} countries; correlation: {latest_both.bachelor_share.corr(latest_both.premium_log_points):.2f}")
+```
+
+**What to notice.**
+
+- Add **Norway**, **Denmark** and **Sweden**: the lowest premiums, 16 to 26 log points. The U.S. premium,
+  61 log points in 2024, is higher than in every other country of the file except Costa Rica, Chile, Brazil
+  and South Africa.
+- In the scatter, countries with more graduates tend to pay them less (a correlation of −0.58 across 38
+  countries). Most of that comes from four countries where graduates are scarce (8 to 26 percent of adults)
+  and earn 2.2 to 3.1 times as much as high school graduates: South Africa, Brazil, Chile and Costa Rica.
+  Among the other 34 countries the link is weak (−0.20): demand for skills differs as much as supply, as
+  Figure 9 explains.
 
 <!-- cell -->
 
@@ -1196,6 +1660,93 @@ print(f"Latest: {m.iloc[-1]:.2f} million in {m.index[-1]:%B %Y}")
 Between January 2000 and February 2010 the sector lost 5.84 million jobs, 34 percent of its employment.
 A quarter of that, the share linked to Chinese imports, is about 1.5 million jobs.
 
+<!-- cell -->
+
+### Beyond the United States
+
+The ILO estimates employment in manufacturing for almost every country since 1991, from labor surveys. A
+wider file holds the number of manufacturing workers (millions) and their share of all employed people.
+
+```{python}
+manuf_world = pd.read_csv(DATA_URL + "manufacturing_countries.csv")
+manuf_world[manuf_world.country == "United States"].tail(3)
+```
+
+The ILO counts 16.2 million U.S. manufacturing workers in 2025, about 3.5 million more than the payroll
+count above, because household surveys also count the self-employed and people whose employer is classified
+elsewhere. Different sources, different levels: compare **shares** across countries, and compare levels
+only within one source. A few series end before 2025 (Ukraine in 2021, Sudan in 2022).
+
+> **Python note.** `MEASURES` is a dictionary of lists: for each choice of the `ToggleButtons`, the column
+> to plot, its axis title, the usual and the wider axis top, and the unit. `column, label, high, wider, unit
+> = MEASURES[measure]` unpacks the five items of one list into five variables in one line.
+
+```{python}
+MANUF_COUNTRIES = sorted(manuf_world.country.unique())
+MANUF_REGIONS = dict(zip(manuf_world.country, manuf_world.region))
+MANUF_SHOWN = ["United States", "Germany", "Vietnam"]       # the website's default view
+MANUF_COLORS = group_colors(MANUF_SHOWN + MANUF_COUNTRIES, region_groups(MANUF_REGIONS, MANUF_SHOWN), BOOK_COLORS)
+MEASURES = {"share of jobs": ["manufacturing_share", "Manufacturing, % of all jobs", 30, 40, "points"],
+            "millions of workers": ["manufacturing_millions", "Manufacturing workers (millions)", 25, 180, "million"]}
+
+
+def manufacturing_countries(names=("United States",), measure="share of jobs"):
+    """Figure 7.10 for any countries: manufacturing employment (ILO), as a share of jobs or in millions."""
+    chosen = manuf_world[manuf_world.country.isin(names)]
+    if len(chosen) == 0:
+        return go.Figure(layout=dict(title="Pick at least one country"))
+    column, label, high, wider, unit = MEASURES[measure]
+    by_country = chosen.groupby("country")
+    change = (by_country.last()[column] - by_country.first()[column]).sort_values()
+    title = f"Change since 1991 ({unit}): {change.index[0]} {round(change.iloc[0], 1) + 0.0:+.1f}"
+    if len(change) > 1:
+        title = title + f", {change.index[-1]} {round(change.iloc[-1], 1) + 0.0:+.1f}"
+    fig = px.line(chosen, x="year", y=column, color="country", hover_name="country",
+                  color_discrete_map=MANUF_COLORS, title=title,
+                  labels={"year": "Year", column: label, "country": "Country"})
+    if chosen[column].max() > high:
+        high = wider                              # one wider range, only when a country needs it
+    fig.update_yaxes(range=[0, high])
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(manufacturing_countries,
+         names=SelectMultiple(options=MANUF_COUNTRIES, value=("United States",), rows=10,
+                              description="countries", style=WIDE),
+         measure=ToggleButtons(options=["share of jobs", "millions of workers"], value="share of jobs",
+                               description="measure", style=WIDE));
+```
+
+On the website, the chart below holds every country (shares of jobs). **Pick a region in the menu, then
+click a country in the legend to add it.**
+
+```{python}
+#| kind: website
+# @title Website version: Figure 10 for every country (pick a region, then click a country in the legend)
+fig = manufacturing_countries(tuple(MANUF_COUNTRIES), "share of jobs")
+region_menu(fig, MANUF_REGIONS, shown=MANUF_SHOWN, label="U.S., Germany, Vietnam")
+fig.update_layout(title="Manufacturing's share of jobs fell in rich countries and rose in Vietnam")
+fig.update_yaxes(autorange=True)              # the axis adapts to the countries you add
+fig
+```
+
+```{python}
+shares = manuf_world.pivot(index="year", columns="country", values="manufacturing_share")
+print(shares.loc[[1991, 2000, 2025], ["United States", "Germany", "Japan", "United Kingdom", "China", "Vietnam"]])
+print(manuf_world[manuf_world.year == 2025].sort_values("manufacturing_millions").tail(3)[["country", "manufacturing_millions"]])
+```
+
+**What to notice.**
+
+- Add **Germany**, **Japan** and the **United Kingdom**. Manufacturing's share of jobs fell in all of them
+  since 1991: from 27.9 to 18.0 percent in Germany, from 23.6 to 15.6 in Japan and from 21.8 to 8.0 in the
+  U.K. (the U.S.: 16.0 to 9.5). The decline is not only an American story.
+- Add **China** and **Vietnam**, and switch to millions of workers. China's factories employ about 155
+  million people, almost ten times as many as American ones, and Vietnam's share of jobs in manufacturing
+  rose from 5.6 to 24.0 percent.
+
 **Your turn.** How many manufacturing jobs were lost between the 1979 peak and January 2000? Compare it
 with the fall after 2000.
 
@@ -1258,6 +1809,85 @@ The 1950s average is 5.0 percent in the United States and 3.7 in France; the tex
 percent" fits the 1960s and 1970s better. Today's data also differ from the textbook's figure in two
 places: a U.S. spike in 1950 (7.25 percent) and a higher French share after 2015 (5.56 percent in 2021,
 against about 2.8 in the textbook). The database is revised as new tax records are added.
+
+<!-- cell -->
+
+### Beyond two countries
+
+The World Inequality Database (WID) publishes the same top income shares for many countries. A wider file
+holds the share of the top 0.1 percent for 58 countries: the 38 OECD members and 20 large emerging
+economies.
+
+```{python}
+top_world = pd.read_csv(DATA_URL + "top01_share_countries.csv")
+top_world[top_world.country == "Brazil"].head(12)
+```
+
+**Look at your data.** Every country has a value for every year since 1980. Before 1980, about 30 countries
+have long series from tax records, like the United States and France. The others, like Brazil above, have
+only a few *benchmark* years from WID's historical estimates (1820, 1850, 1880, 1900, 1910, ...), and a
+line chart joins them with straight segments that hide everything in between. In the latest year, WID
+repeats its previous estimate for 56 of the 58 countries. The chart starts in 1900 and marks each data point.
+
+```{python}
+TOP_COUNTRIES = sorted(top_world.country.unique())
+TOP_REGIONS = dict(zip(top_world.country, top_world.region))
+BOOK_PAIR = ("France", "United States")
+TOP_COLORS = group_colors(TOP_COUNTRIES, region_groups(TOP_REGIONS, BOOK_PAIR), BOOK_COLORS)
+
+
+def top_share_countries(names=BOOK_PAIR):
+    """Figure 7.11 for any of 58 countries: income share of the top 0.1% since 1900 (WID)."""
+    chosen = top_world[top_world.country.isin(names) & (top_world.year >= 1900)]
+    if len(chosen) == 0:
+        return go.Figure(layout=dict(title="Pick at least one country"))
+    last = chosen.year.max()
+    latest = chosen[chosen.year == last].set_index("country").top01_share.sort_values()
+    title = f"Top 0.1% income share in {last}: {latest.index[-1]} {latest.iloc[-1]:.1f}%"
+    if len(latest) > 1:
+        title = title + f" (highest), {latest.index[0]} {latest.iloc[0]:.1f}% (lowest)"
+    fig = px.line(chosen, x="year", y="top01_share", color="country", hover_name="country", markers=True,
+                  color_discrete_map=TOP_COLORS, title=title,
+                  labels={"year": "Year", "top01_share": "Income share of the top 0.1% (percent)", "country": "Country"})
+    fig.update_traces(marker=dict(size=4))
+    high = 16 if chosen.top01_share.max() <= 16 else 25           # widen only for very high shares
+    fig.update_yaxes(range=[0, high])
+    fig.update_xaxes(range=[1898, 2026], tickvals=[1920, 1940, 1960, 1980, 2000, 2020])      # no label at the bottom-left corner
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(top_share_countries,
+         names=SelectMultiple(options=TOP_COUNTRIES, value=BOOK_PAIR, rows=10, description="countries", style=WIDE));
+```
+
+On the website, the chart below holds all 58 countries. **Pick a region in the menu, then click a country in
+the legend to add it.**
+
+```{python}
+#| kind: website
+# @title Website version: Figure 11 for 58 countries (pick a region, then click a country in the legend)
+fig = top_share_countries(tuple(TOP_COUNTRIES))
+region_menu(fig, TOP_REGIONS, shown=list(BOOK_PAIR))
+fig.update_layout(title="Top 0.1% shares fell in most countries until 1980, and rose in 40 of 58 since")
+fig.update_yaxes(autorange=True)              # the axis adapts to the countries you add
+fig
+```
+
+```{python}
+top_wide = top_world.pivot(index="year", columns="country", values="top01_share")
+print(top_wide.loc[[1913, 1950, 1980, 2023], ["United Kingdom", "Japan", "China", "India", "Russia"]])
+```
+
+**What to notice.**
+
+- Add the **United Kingdom**: the same U-shape as the United States, from 14.1 percent in 1913 to 1.8 percent
+  in 1980 and 5.0 percent in 2023.
+- Add **Japan**: like France, no return to the old inequality. Its share fell from 7.6 percent in 1913 to 2.3
+  in 1980, and it was 1.9 percent in 2023.
+- Add **China**, **India** and **Russia**: their shares rose fastest after 1980, as markets opened (China from
+  2.4 to 7.9 percent, India from 2.1 to 9.8, Russia from 0.6 to 9.8).
 
 **Your turn.** In which year was the U.S. top 0.1 percent share lowest, and how high was it?
 
@@ -1342,6 +1972,105 @@ does not have the overall average, but the median tells the story: 1.93 percent 
 after. Only the bottom five percentiles lost income after 1980, and the 1980–2014 curve rises above the old
 one from the 96th percentile on. At the very top, growth reached 4 to 6 percent a year, as fast as the
 fastest-growing countries.
+
+<!-- cell -->
+
+### Beyond the United States
+
+WID estimates the whole income distribution of every country, so we can draw the same "growth by
+percentile" curve elsewhere. A wider file holds it for the 58 countries of Figure 11, for the textbook's
+34-year window, 1980–2014, and for the latest 34 years, 1990–2024.
+
+```{python}
+pct_world = pd.read_csv(DATA_URL + "percentile_growth_countries.csv")
+pct_world.head()
+```
+
+Two differences from the textbook's curve. First, WID measures income **before** taxes and transfers for
+every country, while the textbook's curve is after them. For the United States in 1980–2014, pre-tax income
+at the 10th percentile *fell* by 1.25 percent a year, while post-tax income rose by 0.26 percent: taxes and
+transfers lift the bottom. At the top the two measures agree. Second, WID's numbers for countries with poor
+tax data are partly model estimates, and its last year (2024) extends 2023 forward. Treat small differences
+between countries with care.
+
+**Look at your data.** In most countries WID gives the poorest 5 percent of adults no pre-tax income at all
+and fills the next few percentiles with a smooth model, so their "growth rates" are growth rates of tiny
+numbers. The chart therefore starts at the 10th percentile (the textbook's starts at the 5th).
+
+> **Python note.** `.isin(names) & (pct_world.period == period)` combines two conditions: both must be true.
+> The `for` loop tries the three axis ranges in turn and stops (`break`) at the first one that holds every
+> point.
+
+```{python}
+PCT_COUNTRIES = sorted(pct_world.country.unique())
+PCT_REGIONS = dict(zip(pct_world.country, pct_world.region))
+PCT_SHOWN = ["United States", "China"]                      # the website's default view
+PCT_COLORS = group_colors(PCT_SHOWN + PCT_COUNTRIES, region_groups(PCT_REGIONS, PCT_SHOWN), BOOK_COLORS)
+
+
+def growth_by_percentile(names=("United States",), period="1980–2014"):
+    """Figure 7.12 for any of 58 countries: growth of pre-tax income per adult at each percentile (WID)."""
+    chosen = pct_world[pct_world.country.isin(names) & (pct_world.period == period) & (pct_world.percentile >= 10)]
+    if len(chosen) == 0:
+        return go.Figure(layout=dict(title="Pick at least one country"))
+    median = chosen[chosen.percentile == 50].set_index("country").growth_pct.sort_values()
+    title = f"Growth of median income, {period}: {median.index[-1]} {round(median.iloc[-1], 1) + 0.0:.1f}% a year"
+    if len(median) > 1:
+        title = title + f", {median.index[0]} {round(median.iloc[0], 1) + 0.0:.1f}%"
+    fig = px.line(chosen, x="percentile", y="growth_pct", color="country", hover_name="country", markers=True,
+                  color_discrete_map=PCT_COLORS, title=title,
+                  labels={"percentile": "Income percentile", "growth_pct": "Average annual growth (percent)",
+                          "country": "Country"})
+    fig.update_traces(marker=dict(size=4))
+    for low, high in [(-2, 7), (-6, 12), (-14, 18)]:            # widen only when needed
+        if chosen.growth_pct.min() >= low and chosen.growth_pct.max() <= high:
+            break
+    fig.update_layout(yaxis_range=[low, high], xaxis_range=[0, 101])
+    fig.update_xaxes(tickvals=[10, 20, 30, 40, 50, 60, 70, 80, 90, 100])      # no label at the bottom-left corner
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(growth_by_percentile,
+         names=SelectMultiple(options=PCT_COUNTRIES, value=("United States",), rows=10,
+                              description="countries", style=WIDE),
+         period=ToggleButtons(options=["1980–2014", "1990–2024"], value="1980–2014", description="period", style=WIDE));
+```
+
+On the website, the chart below holds all 58 countries for the textbook's window, 1980–2014 (the Colab
+version also has 1990–2024). **Pick a region in the menu, then click a country in the legend to add it.**
+
+```{python}
+#| kind: website
+# @title Website version: Figure 12 for 58 countries, 1980-2014 (pick a region, then click a country)
+fig = growth_by_percentile(tuple(PCT_COUNTRIES), "1980–2014")
+region_menu(fig, PCT_REGIONS, shown=PCT_SHOWN, label="U.S. and China")
+fig.update_layout(title="1980–2014: in China every percentile grew at least 3% a year")
+fig.update_yaxes(autorange=True)              # the axis adapts to the countries you add
+fig
+```
+
+```{python}
+period_1980 = pct_world[pct_world.period == "1980–2014"].pivot(index="country", columns="percentile", values="growth_pct")
+period_1990 = pct_world[pct_world.period == "1990–2024"].pivot(index="country", columns="percentile", values="growth_pct")
+print(period_1980.loc[["United States", "France", "China", "India"], [10, 50, 90, 99, 99.99]])
+print(period_1990.loc[["United States", "Brazil"], [10, 13, 50, 99.99]])
+print("Colombia, 18th percentile, 1980-2014:", period_1980.loc["Colombia", 18])
+```
+
+**What to notice.**
+
+- Add **France**: in 1980–2014 its curve is almost flat, between 0.7 and 2.2 percent a year from the 5th
+  percentile to the very top. The steep U.S. curve is not the only possible pattern.
+- Add **China** and **India**: every percentile from the 10th up grew faster than in the United States, 3 to
+  9 percent a year in China, but the top still grew fastest. Fast growth can lift all incomes and raise inequality at the
+  same time.
+- Switch to **1990–2024**: the U.S. curve is flatter and positive everywhere (0.5 percent at the 10th
+  percentile, 2.7 at the 99.99th).
+- Add **Brazil** and **Colombia**: near the bottom their curves jump to −12.5 percent (Brazil, 13th
+  percentile, 1990–2024) or +17 percent a year (Colombia, 18th percentile, 1980–2014). Such jumps come from
+  very small incomes in the starting year, not from real booms or collapses.
 
 **Your turn.** Use the `groups` table: how fast did the average income of the bottom 50 percent grow in
 1980–2014, and how fast in 1985–2019?

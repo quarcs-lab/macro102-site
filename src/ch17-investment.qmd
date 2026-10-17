@@ -24,7 +24,8 @@ and in houses. By the end of this chapter you will be able to:
   and rebuild Table 17.1 for any year;
 - price a stock as the present value of its dividends, $\text{dividend}/(R-g)$, and use this formula
   to read the **price-earnings ratio** of the stock market;
-- describe the components of U.S. private investment and how they move in recessions;
+- describe the components of private investment, in the U.S. and in 34 other countries, and how they move in
+  recessions;
 - write Python functions with default values, draw Plotly figures with sliders and buttons, reshape
   tables with `rename`, `melt` and `merge`, and repeat steps with `for` and `while` loops.
 
@@ -40,7 +41,7 @@ figure each notebook figure replicates.
 | Figure 1 | 17.1 How much should a firm invest? | model | interest rate, depreciation rate, capital gain, productivity, starting capital |
 | Figure 2 | 17.2 An increase in the corporate income tax | model | tax rate, interest rate, depreciation rate, "Introduce the tax!" button; Table 17.1 for any year |
 | Figure 3 | 17.3 The price-earnings ratio in the stock market | data | interest rate, dividend growth and payout ratio of the model line |
-| Figure 4 | 17.4 Components of private investment (as a share of GDP) | data | annual or quarterly data, components on/off in the legend |
+| Figure 4 | 17.4 Components of private investment (as a share of GDP) | data | annual or quarterly data, components on/off in the legend; 35 countries (menu) |
 
 <!-- cell -->
 
@@ -581,6 +582,9 @@ real earnings of its companies over the previous ten years. Equation (17.17) say
 the textbook's numbers from the stock example, $R = 5$ percent and $g = 2$ percent, and a payout ratio
 of one half, the model ratio is $0.5/0.03 \approx 16.7$, close to the long-run average.
 
+This figure stays U.S.-only: Shiller's monthly data are the only free, long series of a ten-year P/E ratio. Ratios
+for other stock markets are sold by commercial data providers and cannot be shared here.
+
 ```{python}
 cape = pd.read_csv(DATA_URL + "fig17-3.csv", parse_dates=["date"])
 cape.tail(3)
@@ -793,6 +797,105 @@ slider_figure(components_chart, "frequency", ["annual", "quarterly"], start="ann
 
 <!-- cell -->
 
+### Beyond the United States: investment in 35 countries
+
+Do housing and inventories swing as much in other countries? The OECD's national accounts let us build the same
+three parts for 35 countries, from 1970 or 1995 to the latest year:
+
+- **private investment** (`total`) is all fixed investment minus that of the government, plus inventory investment;
+- **residential** investment is the investment in dwellings (it also includes a little public housing);
+- **nonresidential fixed** investment is the rest of private fixed investment.
+
+For the United States this gives the BEA's numbers of `fig17-4.csv` within 0.4 points of GDP in every year.
+
+```{python}
+world = pd.read_csv(DATA_URL + "investment_components.csv")
+world.head(3)
+```
+
+The chart function draws one country at a time, with the same names and colors as Figure 4. The vertical axis keeps
+the textbook's scale unless a country invests more than 25 percent of GDP; then it switches to a wider fixed scale.
+
+```{python}
+def components_by_country(country="United States"):
+    """Figure 17.4 for one country: private investment and its parts, percent of GDP (OECD, annual)."""
+    rows = world[world.country == country].rename(columns=NAMES)
+    long = rows.melt(id_vars=["iso3", "country", "year", "region"], var_name="component", value_name="share")
+    low, high = rows.loc[rows.Total.idxmin()], rows.loc[rows.Total.idxmax()]
+    top = 25
+    if high.Total > 25:
+        top = 55                                # a second, fixed scale for the high-investment countries
+    fig = px.line(long, x="year", y="share", color="component", color_discrete_map=COLORS, hover_name="country",
+                  labels={"year": "Year", "share": "Percent of GDP", "component": "Component"},
+                  title=f"{country}: investment from {low.Total:.1f}% ({low.year}) to {high.Total:.1f}% "
+                        f"({high.year}) of GDP")
+    fig.add_hline(y=0, line_color="black", line_width=1)
+    fig.update_layout(xaxis_range=[1969, 2026], yaxis=dict(range=[-5, top]),
+                      legend=dict(orientation="h", x=0.01, y=0.99, title=None))
+    return fig
+```
+
+> **Python note.** A `Dropdown` is a menu from which you pick one entry. `sorted(world.country.unique())` lists every
+> country once, in alphabetical order.
+
+```{python}
+#| kind: widget
+interact(components_by_country,
+         country=Dropdown(options=sorted(world.country.unique()), value="United States", description="country",
+                          style=WIDE));
+```
+
+The website version needs one precomputed chart per country, joined by a menu. The next helper does this.
+
+```{python}
+#| kind: helper
+# @title Helper for the website versions with a country menu (run this cell; you do not need to read it)
+def dropdown_figure(make_figure, options, start):
+    """Precompute make_figure(option) for every option and join the results with a dropdown menu.
+
+    The website cannot run Python, so a figure with a country menu gets this precomputed version."""
+    figures = [make_figure(o) for o in options]
+    first = options.index(start)
+    fig = go.Figure(layout=figures[first].layout)
+    owner = []                                  # which precomputed figure each trace comes from
+    for i, f in enumerate(figures):
+        for trace in f.data:
+            trace.visible = (i == first)
+            fig.add_trace(trace)
+            owner.append(i)
+    buttons = []
+    for i, f in enumerate(figures):
+        layout = {"title": f.layout.title.to_plotly_json(), "yaxis.range": f.layout.yaxis.range,
+                  "annotations": [a.to_plotly_json() for a in f.layout.annotations],
+                  "shapes": [s.to_plotly_json() for s in f.layout.shapes]}
+        buttons.append(dict(label=str(options[i]), method="update",
+                            args=[{"visible": [o == i for o in owner]}, layout]))
+    fig.update_layout(updatemenus=[dict(type="dropdown", active=first, buttons=buttons, x=0, y=1.02,
+                                        xanchor="left", yanchor="bottom")],
+                      margin=dict(t=110))
+    return fig
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 4 for 35 countries, with a country menu
+dropdown_figure(components_by_country, sorted(world.country.unique()), start="United States")
+```
+
+Pick a country in the menu above the chart.
+
+**What to notice.**
+
+- Housing booms were not only American. Choose Ireland: its residential investment reached 13.5 percent of GDP in
+  2006, twice the U.S. peak, and fell to 2.0 percent in 2011. Greece's reached 11.0 percent in 2007.
+- Germany had no housing boom in the 2000s. Its total still fell, to 15.1 percent of GDP in 2009, and inventories
+  fell by 1.1 percent of GDP that year, as in Japan (−1.0). The recession of 2009 was worldwide.
+- Look at your data: Ireland's investment jumps to 51.5 percent of GDP in 2019. Multinational firms moved their
+  patents and other intellectual property to Ireland, which counts as investment there. It is accounting, not new
+  factories.
+
+<!-- cell -->
+
 ### Key numbers: which part of investment falls in a recession?
 
 For four recessions we compute how much each part of investment changed, in percentage points of GDP,
@@ -844,12 +947,14 @@ themselves, which is how a housing bubble grows.
 
 **Your turn.** The textbook says private investment "has averaged about 17 percent of GDP in recent
 decades". Compute the average of the `Total` column of `invest` since 2000. Then compute the share of
-nonresidential fixed investment in total investment in 2025.
+nonresidential fixed investment in total investment in 2025. Finally, use `world` to find the country with the
+highest average private investment over all its years. Is the U.S. average high or low among the 35 countries?
 
 <details><summary>Hint</summary>
 
 Filter the years with `invest[invest.year >= 2000]` and use `.Total.mean()`. For the share, take the 2025
-row, `invest[invest.year == 2025]`, and divide its `"Nonresidential fixed"` column by its `Total` column.
+row, `invest[invest.year == 2025]`, and divide its `"Nonresidential fixed"` column by its `Total` column. For the
+countries, `world.groupby("country").total.mean()` averages each country's rows; add `.sort_values()` to rank them.
 
 </details>
 

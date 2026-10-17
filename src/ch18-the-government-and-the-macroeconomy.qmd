@@ -39,14 +39,14 @@ figure each notebook figure replicates.
 
 | Figure | Textbook figure | Type | What you can change |
 |---|---|---|---|
-| Figure 1 | 18.1 U.S. federal government revenue and spending | data | the period whose averages are drawn (menu); Table 18.1 for any fiscal year |
-| Figure 2 | 18.2 Federal debt and deficits in the United States | data | — (hover to read both scales) |
+| Figure 1 | 18.1 U.S. federal government revenue and spending | data | the period whose averages are drawn (menu); Table 18.1 for any fiscal year; 38 countries (menu) |
+| Figure 2 | 18.2 Federal debt and deficits in the United States | data | hover to read both scales; gross debt of 48 countries since 1800 (list, legend, buttons) |
 | Figure 3 | 18.3 Government spending around the world, 2019 | data | the year of the OECD-wide chart (play button and slider) |
-| Figure 4 | 18.4 Debt-GDP ratios around the world | data | — (click a country in the legend; double-click to show it alone) |
-| Figure 5 | 18.5 U.S. private investment and the budget deficit | data | the period whose averages are drawn (buttons); the saving identity line (legend) |
+| Figure 4 | 18.4 Debt-GDP ratios around the world | data | click a country in the legend; 39 countries (list, legend, buttons) |
+| Figure 5 | 18.5 U.S. private investment and the budget deficit | data | the period whose averages are drawn (buttons); the saving identity line (legend); 36 countries (menu) |
 | Figure 6 | 18.6 U.S. federal spending and revenues, 1950–2075 | data | interest rate, GDP growth and a deficit cut for the debt projection (sliders) |
 | Figure 7 | 18.7 Components of federal spending, 1950–2075 | data | — (click a component in the legend) |
-| Figure 8 | 18.8 Health spending as a share of GDP in five countries | data | — (click a country in the legend) |
+| Figure 8 | 18.8 Health spending as a share of GDP in five countries | data | click a country in the legend; 45 countries (list, legend, buttons) |
 
 <!-- cell -->
 
@@ -66,7 +66,7 @@ import pandas as pd                   # data tables
 import plotly.express as px           # quick charts from data tables
 import plotly.graph_objects as go     # charts built piece by piece
 import plotly.io as pio
-from ipywidgets import interact, Dropdown, ToggleButtons, FloatSlider
+from ipywidgets import interact, Dropdown, ToggleButtons, FloatSlider, SelectMultiple
 
 # One light blue/green look for every chart
 BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
@@ -446,6 +446,105 @@ a little smaller. Revenue reached 20 percent of GDP only twice, in FY1944 and FY
 
 <!-- cell -->
 
+### Beyond the United States: government budgets in 38 countries
+
+The federal budget is not the whole government: U.S. states and cities spend and tax, too. To compare countries we
+need **general government**, all levels together, which the OECD measures in the same way for every country. The file
+`gov_finance.csv` has, for 42 countries and calendar years, general government `revenue`, `spending` and the budget
+`balance` (revenue minus spending), and the `private_investment` that we use in Figure 5, all in percent of GDP.
+
+```{python}
+finance = pd.read_csv(DATA_URL + "gov_finance.csv")
+finance[finance.country == "United States"].tail(3)
+```
+
+The series start in 1970 for the United States, Korea and Sweden, but only in 1995 for most European countries. Brazil
+and Costa Rica have investment data only: their OECD government accounts are about 24 points of GDP above the IMF's
+numbers for the same concept, so we leave them out. China and South Africa report only the balance. That leaves 38
+countries with revenue and spending. The chart function draws one country at a time.
+
+> **Python note.** `.dropna(subset=["revenue", "spending"])` drops the rows in which one of these two columns is
+> missing, and `sorted(... .unique())` lists every remaining country once, in alphabetical order.
+
+```{python}
+FINANCE_COUNTRIES = sorted(finance.dropna(subset=["revenue"]).country.unique())
+
+
+def budget_by_country(country="United States"):
+    """Figure 18.1 for any country: general government spending and revenue (% of GDP, OECD)."""
+    rows = finance[finance.country == country].dropna(subset=["revenue", "spending"])
+    rows = rows.rename(columns={"spending": "Spending", "revenue": "Revenue"})
+    title = f"{country}: no OECD data on government revenue and spending"
+    if len(rows) > 0:
+        title = (f"{country}, {rows.year.min()}–{rows.year.max()}: spending averaged {rows.Spending.mean():.1f}%, "
+                 f"revenue {rows.Revenue.mean():.1f}% of GDP")
+    fig = px.line(rows, x="year", y=["Spending", "Revenue"], color_discrete_sequence=[BLUE, GREEN],
+                  labels={"year": "Year", "value": "Percentage of GDP", "variable": "Series"}, title=title)
+    fig.update_traces(line_width=3)
+    fig.update_xaxes(range=[1958, 2027])
+    fig.update_yaxes(range=[0, 70], tickvals=[10, 20, 30, 40, 50, 60, 70])
+    fig.update_layout(legend=dict(orientation="h", x=0.99, y=1.02, xanchor="right", yanchor="bottom"),
+                      legend_title_text="")
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(budget_by_country, country=Dropdown(options=FINANCE_COUNTRIES, value="United States", description="country",
+                                             style=WIDE));
+```
+
+The website version needs one precomputed chart per country, joined by a menu. The next helper does this.
+
+```{python}
+#| kind: helper
+# @title Helper for the website versions with a country menu (run this cell; you do not need to read it)
+def dropdown_figure(make_figure, options, start):
+    """Precompute make_figure(option) for every option and join the results with a dropdown menu.
+
+    The website cannot run Python, so a figure with a country menu gets this precomputed version."""
+    figures = [make_figure(o) for o in options]
+    first = options.index(start)
+    fig = go.Figure(layout=figures[first].layout)
+    owner = []                                  # which precomputed figure each trace comes from
+    for i, f in enumerate(figures):
+        for trace in f.data:
+            trace.visible = (i == first)
+            fig.add_trace(trace)
+            owner.append(i)
+    buttons = []
+    for i, f in enumerate(figures):
+        layout = {"title": f.layout.title.to_plotly_json(), "yaxis.range": f.layout.yaxis.range,
+                  "annotations": [a.to_plotly_json() for a in f.layout.annotations],
+                  "shapes": [s.to_plotly_json() for s in f.layout.shapes]}
+        buttons.append(dict(label=str(options[i]), method="update",
+                            args=[{"visible": [o == i for o in owner]}, layout]))
+    fig.update_layout(updatemenus=[dict(type="dropdown", active=first, buttons=buttons, x=0, y=1.02,
+                                        xanchor="left", yanchor="bottom")],
+                      margin=dict(t=110))
+    return fig
+```
+
+```{python}
+#| kind: website
+# @title Website version: general government budgets in 38 countries, with a country menu
+dropdown_figure(budget_by_country, FINANCE_COUNTRIES, start="United States")
+```
+
+Pick a country in the menu above the chart.
+
+**What to notice.**
+
+- The U.S. general government, federal plus state and local, spent 39.6 percent of GDP in 2024 and collected 31.5
+  percent: 16 and 15 points more than the federal budget alone (23.3 and 17.0 percent in FY2024). Figure 3 compares
+  countries with this general-government measure.
+- Choose France or Italy: spending was above revenue in every year since 1995. Sweden's budget was balanced on
+  average (14 surpluses in 31 years), at a much higher level of spending, about 52 percent of GDP.
+- Choose Norway: revenue above spending in 30 of 31 years, because the government collects the oil revenue. Choose
+  Ireland: spending jumps to 65.0 percent of GDP in 2010, when the government rescued its banks.
+
+<!-- cell -->
+
 ### Table 18.1: the federal budget in 2023 and 2025
 
 Table 18.1 splits the budget into its main parts. The wider file `federal_budget.csv` has the same lines for
@@ -615,6 +714,145 @@ The other 41.3 points came from the term $(i-g)\,b$: nominal GDP grew faster tha
 so the debt shrank relative to the economy. **Growth, not repayment, paid off most of the war debt.** In
 FY2007–2025, too, low interest rates and the inflation of 2021–23 offset 16.2 of the 80.5 points added by primary
 deficits.
+
+<!-- cell -->
+
+### Beyond the United States: two centuries of government debt
+
+The IMF's *Public Finances in Modern History* database collects the **gross** debt of the government, in percent of
+GDP, for 48 of our countries, in some cases back to 1800. Gross debt counts all government bonds and loans, also
+those held by other parts of the government, and it covers all levels of government where the data allow. So the U.S.
+line here lies above the federal debt held by the public of Figure 2: by 15.1 points in 1946 and 24.9 points in 2024.
+
+```{python}
+gross = pd.read_csv(DATA_URL + "gross_debt.csv")
+gross.head(3)
+```
+
+With many countries on one chart, each country needs its own color, and it should keep that color when we add or
+remove other countries. Two small tools do this for the multi-country charts of this notebook (Figures 2, 4 and 8).
+
+> **Python note.** `px.colors.qualitative.Dark24` is a list of 24 colors, and `+` joins two lists. `enumerate`
+> numbers the items of a list as the loop runs (0, 1, 2, ...), and `i % len(PALETTE)` is the remainder of the
+> division, which starts again at 0 when the colors run out. `colors.update(fixed)` overwrites some entries of the
+> dictionary. In `latest_text`, `.groupby("country").tail(1)` keeps the last row of each country,
+> `.iloc[[0, -1]]` keeps the first and the last row of a table, and `for i, (_, row) in enumerate(...)` numbers
+> the rows that `.iterrows()` hands over one at a time.
+
+```{python}
+PALETTE = px.colors.qualitative.Dark24 + px.colors.qualitative.Light24     # 48 distinct colors
+
+
+def country_colors(names, fixed):
+    """One fixed color per country, so that a country keeps its color when the selection changes."""
+    colors = {}
+    for i, name in enumerate(sorted(names)):
+        colors[name] = PALETTE[i % len(PALETTE)]
+    colors.update(fixed)                        # the textbook's countries keep the colors of the book
+    return colors
+
+
+def latest_text(data, column, time):
+    """The latest value of each chosen country, highest first; only the maximum and minimum for 3 or more."""
+    if len(data) == 0:
+        return "choose at least one country"
+    last = data.sort_values(time).groupby("country").tail(1).sort_values(column, ascending=False)
+    words = ["", ""]
+    if len(last) > 2:
+        last, words = last.iloc[[0, -1]], ["max ", "min "]
+    parts = []
+    for i, (_, row) in enumerate(last.iterrows()):
+        parts.append(f"{words[i]}{row.country} {row[column]:.1f}")
+    return "latest: " + ", ".join(parts)
+```
+
+The axes have two fixed sizes each: up to 150 percent of GDP, or up to 300 percent when a country above 150 percent
+is chosen; from 1900, or from 1800 when a chosen country's data start earlier. `list(range(50, top + 1, 50))` is the
+list of tick values 50, 100, ... up to `top`.
+
+```{python}
+GROSS_COLORS = country_colors(gross.country.unique(), {"United States": BLUE})
+
+
+def gross_debt_chart(countries=("United States",)):
+    """Figure 18.2 for any countries: general government gross debt, percent of GDP (IMF)."""
+    chosen = gross[gross.country.isin(countries)]
+    top, start = 150, 1900
+    if chosen.gross_debt.max() > 150:
+        top = 300                               # a second, fixed scale for the most indebted countries
+    if chosen.year.min() < 1900:
+        start = 1800                            # some series start in the 19th century
+    fig = px.line(chosen, x="year", y="gross_debt", color="country", hover_name="country",
+                  color_discrete_map=GROSS_COLORS, range_x=[start, 2027], range_y=[0, top],
+                  labels={"year": "Year", "gross_debt": "Percentage of GDP", "country": "Country"},
+                  title="Gross debt, % of GDP, " + latest_text(chosen, "gross_debt", "year"))
+    fig.update_yaxes(tickvals=list(range(50, top + 1, 50)))      # no 0 next to the first year
+    fig.update_layout(legend_title_text="")
+    return fig
+```
+
+> **Python note.** `SelectMultiple` is a list in which you can pick several entries: hold Ctrl (Cmd on a Mac) and
+> click. The function then receives a *tuple* of names, such as `("United States", "Japan")`.
+
+```{python}
+#| kind: widget
+interact(gross_debt_chart,
+         countries=SelectMultiple(options=sorted(gross.country.unique()), value=("United States",), rows=8,
+                                  description="countries", style=WIDE));
+```
+
+The website version draws all 48 countries at once, shows the United States, and keeps the others one click away. The
+next cell defines the helper that does this for every multi-country chart.
+
+```{python}
+#| kind: helper
+# @title Helper for the multi-country website figures (run this cell; you do not need to read it)
+G7 = ["Canada", "France", "Germany", "Italy", "Japan", "United Kingdom", "United States"]
+
+
+def legend_menu(fig, data, shown):
+    """Website version of a multi-country chart: the countries in `shown` are drawn, every other country is
+    one click away in the legend, and buttons show a group (the textbook's countries, the G7, a region, all).
+    Traces that are not countries, such as averages, always stay visible."""
+    countries = set(data.country)
+    groups = {"Textbook": list(shown), "G7": G7}
+    for region in sorted(data.region.unique()):
+        groups[region] = list(data[data.region == region].country.unique())
+    groups["All"] = list(countries)
+    for trace in fig.data:
+        if trace.name in countries and trace.name not in shown:
+            trace.visible = "legendonly"
+    buttons = []
+    for label, members in groups.items():
+        visible = []
+        for trace in fig.data:
+            visible.append(True if trace.name not in countries or trace.name in members else "legendonly")
+        buttons.append(dict(label=label, method="restyle", args=[{"visible": visible}]))
+    fig.update_layout(updatemenus=[dict(type="buttons", direction="right", buttons=buttons, x=0, y=1.02,
+                                        xanchor="left", yanchor="bottom", pad=dict(r=4, t=0))],
+                      margin=dict(t=120))
+    return fig
+```
+
+```{python}
+#| kind: website
+# @title Website version: gross government debt in 48 countries (buttons and legend)
+fig = gross_debt_chart(tuple(gross.country.unique()))
+fig.update_layout(title="Gross government debt in 48 countries, percent of GDP (IMF)", height=560)
+legend_menu(fig, gross, ["United States"])
+```
+
+Click a country in the legend to add or remove it, or a button to show a group of countries.
+
+**What to notice.**
+
+- Add the United Kingdom: its debt reached 260 percent of GDP after the Napoleonic wars (1821) and 270 percent after
+  World War II (1946). By 2007 it was down to 43 percent, mostly through growth, as in the United States.
+- Japan's debt rose to 258 percent of GDP in 2020 (237 percent in 2024), the highest of any rich country. Italy (135
+  percent) and Greece (155 percent) are also above the U.S. level of 122 percent in 2024.
+- Look at your data: the series start in different years (1929 for the U.S., 1984 for China), and some have holes.
+  Germany has no values for 1914–1924 and 1939–1949, the years of the two world wars and the hyperinflation, and
+  Plotly simply joins the points on either side of a hole with a straight line.
 
 **Your turn.** How much did the debt ratio change from FY1993 to FY2001, and how much of the change came from
 the primary surpluses of those years?
@@ -814,13 +1052,76 @@ The textbook says in one place that Japan's ratio rose to "more than 126 percent
 of GDP. (The gross debt, before subtracting the government's assets, is much higher, which may explain the
 second number.) **When two numbers in a text disagree, check them in the data.**
 
+<!-- cell -->
+
+### Beyond the five countries: net debt in 39 countries
+
+The file `net_debt.csv` has the same OECD measure for 39 countries, one row per country and year, from 1995. Japan
+starts in 2005 here, as in the balance sheets above, and the 2025 values are not yet in for every country. The chart
+starts with the textbook's five countries in the textbook's colors. The vertical axis keeps the textbook's scale
+unless a chosen country leaves it; then it switches to a wider fixed scale, and to a much wider one for Norway.
+
+```{python}
+world_debt = pd.read_csv(DATA_URL + "net_debt.csv")
+BOOK_FIVE = ("Germany", "Italy", "Japan", "United Kingdom", "United States")
+NET_COLORS = country_colors(world_debt.country.unique(), {"Italy": GREEN, "Japan": ORANGE, "United States": BLUE,
+                                                         "United Kingdom": LIGHT_BLUE, "Germany": DARK_TEAL})
+
+
+def net_debt_chart(countries=BOOK_FIVE):
+    """Figure 18.4 for any countries: net government debt, percent of GDP (OECD)."""
+    chosen = world_debt[world_debt.country.isin(countries)]
+    low, high = 0, 175
+    if chosen.net_debt.min() < 0 or chosen.net_debt.max() > 175:
+        low, high = -100, 200                   # a wider fixed scale for countries with negative net debt
+    if chosen.net_debt.min() < -100:
+        low = -450                              # Norway owns more than four years of GDP
+    fig = px.line(chosen, x="year", y="net_debt", color="country", hover_name="country",
+                  color_discrete_map=NET_COLORS, range_x=[1994, 2026.5], range_y=[low, high],
+                  labels={"year": "Year", "net_debt": "Percentage of GDP", "country": "Country"},
+                  title="Net debt, % of GDP, " + latest_text(chosen, "net_debt", "year"))
+    fig.update_traces(line_width=3)
+    fig.add_hline(y=0, line=dict(color="black", width=1))
+    fig.update_layout(legend_title_text="")
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(net_debt_chart,
+         countries=SelectMultiple(options=sorted(world_debt.country.unique()), value=BOOK_FIVE, rows=8,
+                                  description="countries", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: net government debt in 39 countries (buttons and legend)
+fig = net_debt_chart(tuple(world_debt.country.unique()))
+fig.update_layout(title="Net government debt in 39 countries, percent of GDP (OECD)", height=560)
+legend_menu(fig, world_debt, list(BOOK_FIVE))
+```
+
+Click a country in the legend to add or remove it, or a button to show a group of countries.
+
+**What to notice.**
+
+- In 2024 the United States had the third-highest net debt of the 36 countries with data (109.5 percent of GDP),
+  after Italy (122.8) and Greece (121.9).
+- Add Norway: its net debt is −414 percent of GDP in 2024. The government owns an oil fund worth more than four years
+  of GDP. Finland and Luxembourg also have negative net debt, from their pension funds.
+- Add Canada: its net debt fell from 96.5 percent of GDP in 1996 to 15.8 percent in 2025. Greece's peaked at 179
+  percent in 2020.
+
 **Your turn.** By how many points did each country's ratio change from 2007, just before the financial crisis,
-to 2021? Which country's ratio rose the most? And in which years was Italy's ratio above 120 percent?
+to 2021? Which country's ratio rose the most? And in which years was Italy's ratio above 120 percent? Finally, use
+`world_debt` to find the country whose net debt fell the most from 2020 to 2024.
 
 <details><summary>Hint</summary>
 
 `debt_table.loc[2021] - debt_table.loc[2007]` subtracts two rows, one value per country. For Italy, keep the
-years with `debt_table.index[debt_table.italy > 120]`.
+years with `debt_table.index[debt_table.italy > 120]`. For all countries, `world_debt.pivot_table(index="country",
+columns="year", values="net_debt")` puts the years side by side; subtract column `2020` from column `2024` and
+sort the result.
 
 </details>
 
@@ -886,8 +1187,8 @@ slider_figure(saving_chart, "period", ["1960–1979", "1980–2025"], start="198
 
 - Government saving fell: from −2.2 percent of GDP on average in 1960–1979 to −4.1 percent in 1980–2025. Yet
   investment did not fall. It averaged 17.3 percent before 1980 and 17.7 percent after.
-- From year to year the two lines move together: in the 1990s government saving rose from −5.1 to +1.6
-  percent of GDP, and investment from 15.3 to 19.9 percent. In 2009 both fell.
+- From year to year the two lines move together: from the early 1990s to 2000 government saving rose from −5.1
+  (1992) to +1.6 percent of GDP, and investment from 15.3 (1991) to 19.9 percent. In 2009 both fell.
 - Click "Private + foreign saving" in the legend. By equation (18.7) it is the gap between the two lines.
   It rose when deficits grew, to 31.4 percent of GDP in 2020: households, firms and foreigners filled most of
   the gap left by the government, so the crowding out was small.
@@ -917,12 +1218,72 @@ with lower investment. Over decades, private and foreign saving rose by 2.4 poin
 deficits. The textbook's estimate is that private saving offsets "no more than 50 cents" of each dollar of
 deficit; Chapter 19 looks at the foreign part.
 
+<!-- cell -->
+
+### Beyond the United States: investment and budget balances in 36 countries
+
+Do the two lines move together in other countries, too? `finance`, from Figure 1, has private investment and the
+general government budget balance (revenue minus spending, called *net lending* in the national accounts) for 36
+countries. Private investment is all fixed investment except the government's, plus inventories; for the United
+States it is within 0.4 points of GDP of the BEA series above. The budget balance is a little different from
+government saving: it also subtracts the government's own investment. The title reports the correlation of the yearly
+changes, as in the key numbers above.
+
+```{python}
+BALANCE_COUNTRIES = sorted(finance.dropna(subset=["balance", "private_investment"]).country.unique())
+
+
+def crowding_out_chart(country="United States"):
+    """Figure 18.5 for any country: private investment and the general government budget balance (% of GDP)."""
+    rows = finance[finance.country == country].dropna(subset=["balance", "private_investment"])
+    rows = rows.rename(columns={"private_investment": "Private investment", "balance": "Budget balance"})
+    corr = rows["Private investment"].diff().corr(rows["Budget balance"].diff())
+    low, high = -20, 35
+    if rows["Budget balance"].min() < -18 or rows["Private investment"].max() > 33:
+        low, high = -35, 55                     # a second, fixed scale for the extreme years
+    fig = px.line(rows, x="year", y=["Private investment", "Budget balance"], color_discrete_sequence=[BLUE, GREEN],
+                  range_x=[1968, 2027], range_y=[low, high],
+                  labels={"year": "Year", "value": "Percentage of GDP", "variable": "Series"},
+                  title=f"{country}, {rows.year.min()}–{rows.year.max()}: correlation of the yearly changes {corr:.2f}")
+    fig.update_traces(line_width=3)
+    fig.add_hline(y=0, line=dict(color="black", width=1, dash="dash"))
+    fig.update_layout(legend=dict(orientation="h", x=0.99, y=1.02, xanchor="right", yanchor="bottom"),
+                      legend_title_text="")
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(crowding_out_chart, country=Dropdown(options=BALANCE_COUNTRIES, value="United States", description="country",
+                                              style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: investment and the budget balance in 36 countries, with a country menu
+dropdown_figure(crowding_out_chart, BALANCE_COUNTRIES, start="United States")
+```
+
+Pick a country in the menu above the chart.
+
+**What to notice.**
+
+- With the general government balance, the U.S. correlation of the yearly changes is 0.62, close to the 0.55 of
+  the federal measure above.
+- The correlation is positive in all 36 countries (median 0.41), from 0.01 in Colombia to 0.75 in Japan. In a
+  recession investment falls, and so do tax revenues, while spending rises: both lines drop together. A positive
+  correlation therefore does not prove that deficits crowd out investment; the business cycle moves both.
+- Choose Ireland: the budget balance fell to −32.2 percent of GDP in 2010, when the government rescued its banks,
+  and investment jumped to 51.5 percent of GDP in 2019 for the accounting reason explained in Chapter 17.
+
 **Your turn.** Compute the averages for 2010–2019 and for 2020–2025. Did investment fall when the deficits of
-the pandemic years arrived?
+the pandemic years arrived? Then choose Germany in the menu: was its budget balance positive or negative on
+average from 2010 to 2019?
 
 <details><summary>Hint</summary>
 
-`period_mean(I, 2010, 2019)` and `period_mean(I, 2020, 2025)`, and the same with `S`.
+`period_mean(I, 2010, 2019)` and `period_mean(I, 2020, 2025)`, and the same with `S`. For Germany, keep its rows with
+`finance[finance.country == "Germany"]`, set the index to `"year"` and use `period_mean` on the `balance` column.
 
 </details>
 
@@ -938,7 +1299,8 @@ revenue stays near 18 percent of GDP.
 
 The textbook's figure combines actual data up to 2000 with projections that the Congressional Budget Office (CBO)
 made in 2002, up to 2075. Our file has OMB's actual numbers up to FY2025 and CBO's newest long-term projections,
-from February 2026, which end in 2056. The column `projection` is 1 for the projected years.
+from February 2026, which end in 2056. The column `projection` is 1 for the projected years. Figures 6 and 7 stay
+U.S.-only: they show the CBO's projections, which cover only the U.S. federal budget.
 
 ```{python}
 projections.tail(3)
@@ -1232,13 +1594,69 @@ adds less and less, but an extra year of life does not lose its value. So a risi
 health. That is why the fiscal problem is hard. If health spending is what people want, the government cannot
 simply cut it, and someone has to pay for it.
 
+<!-- cell -->
+
+### Beyond the five countries: health spending in 45 countries
+
+The OECD's health accounts cover all its members and, from 2000, some large emerging economies such as China, India
+and Brazil. The file `health_spending.csv` has one row per country and year. The chart starts with the textbook's five
+countries in the textbook's colors, and all countries fit on the textbook's scale.
+
+```{python}
+health_world = pd.read_csv(DATA_URL + "health_spending.csv")
+FIVE = ("France", "Germany", "Japan", "United Kingdom", "United States")
+HEALTH_COLORS = country_colors(health_world.country.unique(), {"United States": BLUE, "Germany": DARK_TEAL,
+                                                               "France": GREEN, "Japan": ORANGE,
+                                                               "United Kingdom": LIGHT_BLUE})
+
+
+def health_by_country(countries=FIVE):
+    """Figure 18.8 for any countries: current health expenditure, percent of GDP (OECD)."""
+    chosen = health_world[health_world.country.isin(countries)]
+    fig = px.line(chosen, x="year", y="health_share", color="country", hover_name="country",
+                  color_discrete_map=HEALTH_COLORS, range_x=[1968, 2027], range_y=[0, 20],
+                  labels={"year": "Year", "health_share": "Percent of GDP", "country": "Country"},
+                  title="Health spending, % of GDP, " + latest_text(chosen, "health_share", "year"))
+    fig.update_traces(line_width=3)
+    fig.update_yaxes(tickvals=[4, 8, 12, 16, 20])           # no 0 next to the first year
+    fig.update_layout(legend_title_text="")
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(health_by_country,
+         countries=SelectMultiple(options=sorted(health_world.country.unique()), value=FIVE, rows=8,
+                                  description="countries", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: health spending in 45 countries (buttons and legend)
+fig = health_by_country(tuple(health_world.country.unique()))
+fig.update_layout(title="Health spending in 45 countries, percent of GDP (OECD)", height=560)
+legend_menu(fig, health_world, list(FIVE))
+```
+
+Click a country in the legend to add or remove it, or a button to show a group of countries.
+
+**What to notice.**
+
+- Of the 43 countries with data for both years, 38 spent a larger share of GDP on health in 2023 than in 2000. The
+  rise is a rich-country pattern, not a U.S. one.
+- Add South Korea: its share tripled, from 2.6 percent of GDP in 1970 to 8.4 percent in 2023, as it grew rich and its
+  population aged. India (3.3 percent) and Indonesia (2.7 percent) spend much less.
+- The United States is far above everyone else: 16.9 percent of GDP in 2023, against 11.6 percent in Germany, the
+  second highest.
+
 **Your turn.** In which years was the U.K.'s health share above Japan's? In which year did the U.K. first pass
-Japan?
+Japan? Then use `health_world` to list the five countries with the lowest health share in 2023.
 
 <details><summary>Hint</summary>
 
 `health.year[health.uk > health.japan]` lists the years in which the U.K. was higher. The first of them is the
-answer to the second question.
+answer to the second question. For 2023, keep the rows with `health_world[health_world.year == 2023]`, sort them
+with `.sort_values("health_share")` and look at the first five rows with `.head()`.
 
 </details>
 

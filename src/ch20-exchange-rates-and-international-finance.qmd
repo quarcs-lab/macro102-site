@@ -24,7 +24,10 @@ Chapter 19 studied trade between countries. This chapter adds the price at which
 - explain the **policy trilemma** and read the history of exchange-rate regimes, currency crises and the euro crisis
   in the data;
 - in Python: build price levels from inflation rates with `cumprod`, plot two vertical scales in one figure, switch
-  views with Plotly buttons, rebase an index, and reshape tables with `melt` for grouped bar charts.
+  views with Plotly buttons, rebase an index, and reshape tables with `melt`;
+- go beyond the textbook's countries: pick any of up to 200 economies from a list (`SelectMultiple`), filter rows
+  with `isin`, compare data from the World Bank, the IMF, the OECD and the Penn World Table, and spot gaps, breaks
+  and differences in definitions.
 
 <!-- cell -->
 
@@ -35,20 +38,20 @@ figure each notebook figure replicates. Table 20.1 (the Big Mac index) is recomp
 
 | Figure | Textbook figure | Type | What you can change |
 |---|---|---|---|
-| Figure 1 | 20.1 The U.S. exchange rate versus the yen and the euro | data | hover to read both scales |
-| Figure 2 | 20.2 Inflation in the United States and Japan (with Table 20.1) | data | show or hide a country (legend), the Big Mac release |
-| Figure 3 | 20.3 The real exchange rate for Japan | data | show or hide each measure (legend), hover |
+| Figure 1 | 20.1 The U.S. exchange rate versus the yen and the euro | data | any of 25 currencies, base year, linear or ratio scale |
+| Figure 2 | 20.2 Inflation in the United States and Japan (with Table 20.1) | data | any of 194 countries (list or group menu), the Big Mac release |
+| Figure 3 | 20.3 The real exchange rate for Japan | data | any of 185 countries, index or level |
 | Figure 4 | 20.4 Increasing interest rates and the IS curve | model | new real interest rate R′, net-export sensitivity b̄ₙₓ, investment sensitivity b̄ᵢ |
 | Figure 5 | 20.5 An increase in foreign interest rates | model | foreign rate gap Rʷ − r̄, period t, b̄ₙₓ, policy response m̄ |
-| Figure 6 | 20.6 The U.K.-U.S. exchange rate | data | hover for each year |
+| Figure 6 | 20.6 The U.K.-U.S. exchange rate | data | 17 countries since 1870, base year |
 | Figure 7 | 20.7 The policy trilemma in open economies | model | exchange-rate regime, foreign rate rise, the rate the economy needs |
-| Figure 8 | 20.8 Depreciations during several currency crises | data | textbook span or latest data, linear or ratio scale (buttons) |
-| Figure 9 | 20.9 10-year government bond yields in Europe | data | show or hide a country (legend), hover |
-| Figure 10 | 20.10 Domestic bank lending in Europe | data | show or hide a year (legend) |
-| Figure 11 | 20.11 Current account balances in Europe | data | show or hide a period (legend) |
-| Figure 12 | 20.12 Government debt in Europe | data | show or hide a year (legend) |
-| Figure 13 | 20.13 Unit labor costs in Europe | data | base year of the index |
-| Figure 14 | 20.14 Total factor productivity in the United States and Europe | data | show or hide a country (legend) |
+| Figure 8 | 20.8 Depreciations during several currency crises | data | any of 210 currencies, base year, linear or ratio scale |
+| Figure 9 | 20.9 10-year government bond yields in Europe | data | any of 42 countries |
+| Figure 10 | 20.10 Domestic bank lending in Europe | data | any of 188 countries (list or group menu), show or hide a year |
+| Figure 11 | 20.11 Current account balances in Europe | data | any of 197 countries (list or group menu), show or hide a period |
+| Figure 12 | 20.12 Government debt in Europe | data | any of 195 countries, OECD or IMF measure |
+| Figure 13 | 20.13 Unit labor costs in Europe | data | base year of the index, any of 44 economies |
+| Figure 14 | 20.14 Total factor productivity in the United States and Europe | data | any of 120 countries (list or group menu) |
 
 <!-- cell -->
 
@@ -68,7 +71,7 @@ import pandas as pd                             # data tables
 import plotly.express as px                     # quick charts from data tables
 import plotly.graph_objects as go               # charts built piece by piece (model figures)
 import plotly.io as pio
-from ipywidgets import interact, FloatSlider, IntSlider, ToggleButtons, Dropdown
+from ipywidgets import interact, FloatSlider, IntSlider, ToggleButtons, Dropdown, SelectMultiple
 
 # One light blue/green look for every chart
 BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
@@ -116,6 +119,113 @@ def slider_figure(make_figure, name, values, start, label=None):
         steps.append(dict(method="update", label=str(values[i]), args=[{"visible": visible}, layout]))
     fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
                                     currentvalue=dict(prefix=(label or name) + " = "))])
+    return fig
+```
+
+The data figures can show many countries. On the website they use the helpers below: a legend you can click, a
+slider that changes the data of every line at once, and a menu of country groups.
+
+```{python}
+#| kind: helper
+# @title Helpers for the many-country website versions (run this cell; you do not need to read it)
+def compact(y):
+    """Round to 4 significant digits, so that the saved figure stays small."""
+    return [None if v is None or v != v else float(f"{v:.4g}") for v in y]
+
+
+def slim(trace):
+    """Make a line smaller: rounded y, and the hover label from the trace name instead of one text per point."""
+    trace.y = compact(trace.y)
+    if trace.hovertext is not None and len(trace.hovertext) > 0 and trace.hovertext[0] == trace.name:
+        trace.hovertext = None
+        trace.hovertemplate = trace.hovertemplate.replace("%{hovertext}", "%{fullData.name}")
+    return trace
+
+
+def legend_only(fig, keep):
+    """Show the traces named in keep; list the others in the legend only, so a click adds them."""
+    for trace in fig.data:
+        trace.visible = True if trace.name in keep else "legendonly"
+        slim(trace)
+    return fig
+
+
+def data_slider(make_figure, name, values, start, title, label=None, **fixed):
+    """A slider whose steps replace the y data of every line (matched by name), so legend clicks are kept.
+
+    Lines missing at the start value are added empty. title is a text with {} where the slider value goes."""
+    figures = {v: make_figure(**{name: v}, **fixed) for v in values}
+    fig = go.Figure(layout=figures[start].layout)
+    for v in [start] + list(values):
+        for t in figures[v].data:
+            if t.name not in [u.name for u in fig.data]:
+                t.y = t.y if v == start else [None] * len(t.y)
+                fig.add_trace(slim(t))
+    steps = []
+    for v in values:
+        ys = {t.name: compact(t.y) for t in figures[v].data}
+        new_y = [ys.get(t.name, [None] * len(t.y)) for t in fig.data]
+        steps.append(dict(method="update", label=str(v), args=[{"y": new_y}, {"title.text": title.format(v)}]))
+    fig.update_layout(title=title.format(start), sliders=[dict(
+        active=values.index(start), steps=steps, pad=dict(t=60), currentvalue=dict(prefix=(label or name) + " = "))])
+    return fig
+```
+
+```{python}
+#| kind: helper
+# @title Helper: groups of countries for the website menus (run this cell; you do not need to read it)
+G7 = ["Canada", "France", "Germany", "Italy", "Japan", "United Kingdom", "United States"]
+EMERGING = ["Argentina", "Brazil", "China", "India", "Indonesia", "Mexico", "Russia", "Saudi Arabia",
+            "South Africa", "Türkiye"]
+
+
+def country_groups(names, book, book_label, regions=True):
+    """Groups for the website menus: the textbook's countries, G7, euro area, large emerging, World Bank regions."""
+    info = country_info[country_info.country.isin(names)]
+    euro = list(info[info.euro_since.notna() | (info.country == "Euro area")].country)
+    groups = {book_label: list(book), "G7": [c for c in G7 if c in set(names)], "Euro area": euro,
+              "Large emerging economies": [c for c in EMERGING if c in set(names)]}
+    if regions:
+        for region in sorted(info.region.unique()):
+            if region != "Euro area":
+                groups[region] = list(info[info.region == region].country)
+    return {k: v for k, v in groups.items() if v}
+```
+
+```{python}
+#| kind: helper
+# @title Helper: a figure with a menu of country groups (run this cell; you do not need to read it)
+def menu_figure(make_figure, options, categories=False):
+    """Precompute make_figure for every menu option and join the figures with a dropdown menu.
+
+    options maps each menu label to a list of countries, or to a dict of keyword arguments.
+    With categories=True (bar charts) each option also sets the order and the range of the x-axis."""
+    labels = list(options)
+    figures = [make_figure(**options[g]) if isinstance(options[g], dict) else make_figure(tuple(options[g]))
+               for g in labels]
+    fig = go.Figure(layout=figures[0].layout)
+    owner = []
+    for i, f in enumerate(figures):
+        for trace in f.data:
+            trace.visible = (i == 0)
+            fig.add_trace(slim(trace))
+            owner.append(i)
+    buttons = []
+    for i, f in enumerate(figures):
+        layout = {"title.text": f.layout.title.text, "yaxis.type": f.layout.yaxis.type or "linear",
+                  "yaxis.range": f.layout.yaxis.range, "yaxis.tickvals": f.layout.yaxis.tickvals,
+                  "yaxis.autorange": f.layout.yaxis.range is None,
+                  "shapes": [s.to_plotly_json() for s in f.layout.shapes],
+                  "annotations": [a.to_plotly_json() for a in f.layout.annotations]}
+        if categories:
+            names = list(dict.fromkeys(x for t in f.data for x in t.x))
+            layout.update({"xaxis.categoryorder": "array", "xaxis.categoryarray": names,
+                           "xaxis.range": [-0.5, len(names) - 0.5]})
+            if i == 0:
+                fig.update_xaxes(categoryorder="array", categoryarray=names, range=[-0.5, len(names) - 0.5])
+        buttons.append(dict(label=labels[i], method="update", args=[{"visible": [o == i for o in owner]}, layout]))
+    fig.update_layout(margin=dict(t=110), updatemenus=[dict(buttons=buttons, active=0, x=0, y=1.02,
+                                                            xanchor="left", yanchor="bottom")])
     return fig
 ```
 
@@ -323,6 +433,134 @@ def add_arrow(fig, x0, y0, x1, y1, color="black"):
                            showarrow=True, arrowhead=3, arrowwidth=2, arrowcolor=color)
 ```
 
+<!-- cell -->
+
+### Tools for comparing countries
+
+The textbook's data figures show a few countries. Every one of them can show many more: the data files of this
+chapter hold the same series for up to 200 economies, from the World Bank, the IMF, the OECD, the Federal Reserve and
+the Penn World Table. The file `countries.csv` lists the economies with their World Bank region and income group, and
+says which are OECD members and since when each euro member uses the euro.
+
+```{python}
+country_info = pd.read_csv(DATA_URL + "countries.csv")
+country_info[country_info.country.isin(["Japan", "Germany", "Mexico", "Euro area"])]
+```
+
+Three small tools are shared by the data figures:
+
+- `group_colors` gives every country a fixed color, so a line keeps its color when you add or remove others. The
+  textbook's countries keep the textbook's colors, and the countries of one menu group (the G7, a region, ...) never
+  share a color, as far as Plotly's 44 dark enough colors allow;
+- `ratio_ticks` chooses round tick values for a ratio-scale axis that spans less than a factor of 10 (Plotly's own
+  ticks crowd there; over wider spans we let Plotly choose);
+- `missing_note` adds a note to a title when a chosen country has no data;
+- `high_low` names the countries with the highest and the lowest value, for the titles;
+- `book_order` puts the textbook's countries first in a bar chart.
+
+> **Python note.** `px.colors.qualitative.Dark24` and `.Alphabet` are lists of colors that Plotly provides; we drop
+> the pale ones. In `group_colors`, for each country, `score` gives every color a cost: 1 for each country that
+> already uses it, 10 for each one in a large group (Europe has more countries than there are colors) and 100 for
+> each one in a group small enough to avoid any clash. `a if test else b` gives `a` when the test is True.
+> `min(PALETTE, key=score.get)` picks the color with the lowest cost (the first one on ties). When no color is free,
+> `PALETTE[::-1]` (the list in reverse order) makes the search start from the end of the list, so that the leftovers
+> take the last, rarely used colors.
+
+```{python}
+LIGHT = ["#F7E1A0", "#E2E2E2", "#FBE426", "#16FF32", "#1CFFCE", "#2ED9FF"]     # too pale on a white background
+PALETTE = []
+for color in px.colors.qualitative.Dark24 + px.colors.qualitative.Alphabet:   # 24 + 26 colors, 44 of them kept
+    if color not in LIGHT and color != "#2E91E5":
+        PALETTE.append(color)
+PALETTE.append("#2E91E5")                       # Dark24's medium blue goes last: it is close to the book's navy
+```
+
+```{python}
+def group_colors(names, groups, fixed=None):
+    """A color for each country that no other country in its groups uses, as far as the palette allows.
+
+    groups: the lists of countries shown together (the menu views); fixed: the textbook countries' colors."""
+    colors = dict(fixed or {})
+    for name in sorted(names):
+        if name in colors:
+            continue
+        score = {}                                  # the cost of each color: lower is better
+        for color in PALETTE:
+            score[color] = list(colors.values()).count(color)            # 1 per country using it anywhere
+        for group in groups:
+            if name in group:
+                weight = 100 if len(group) <= len(PALETTE) else 10      # a clash in a small group costs most
+                for other in group:
+                    if colors.get(other) in score:
+                        score[colors[other]] += weight
+        best = min(PALETTE, key=score.get)                              # the cheapest color
+        if score[best] >= 10:                       # no free color: the least used one, searching from the end
+            best = min(PALETTE[::-1], key=score.get)
+        colors[name] = best
+    return colors
+```
+
+```{python}
+def ratio_ticks(low, high):
+    """Round tick values between low and high for a ratio-scale axis; None (Plotly's ticks) beyond a factor of 10."""
+    if high / low >= 10:
+        return None
+    ticks = []
+    for power in range(-3, 6):
+        for step in [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 7, 8, 9]:
+            if low <= step * 10 ** power <= high:
+                ticks.append(round(step * 10 ** power, 6))
+    return ticks
+```
+
+> **Python note.** `", ".join(missing)` glues a list of texts into one text, with `", "` between them. In
+> `f"{value:{fmt}}"` the format itself is a variable: `fmt=".0f"` shows no decimals, `".1f"` one. In a Plotly title,
+> `<br>` starts a new line and `<sup>...</sup>` writes smaller text.
+
+```{python}
+def missing_note(wanted, found):
+    """A second, smaller title line naming the chosen countries that have no data ('' if all have data)."""
+    missing = []
+    for name in wanted:
+        if name not in set(found):
+            missing.append(name)
+    if len(missing) == 0:
+        return ""
+    if len(missing) > 3:
+        return f"<br><sup>no data for {len(missing)} of the chosen countries</sup>"
+    return "<br><sup>no data: " + ", ".join(missing) + "</sup>"
+
+
+```
+
+```{python}
+def high_low(values, fmt=".0f"):
+    """'A 12, B 3': the countries with the highest and the lowest value (one name only for one country)."""
+    text = f"{values.idxmax()} {values.max():{fmt}}"
+    if len(values) > 1:
+        text = text + f", {values.idxmin()} {values.min():{fmt}}"
+    return text
+
+
+def book_order(countries, book):
+    """The textbook's countries in the textbook's order, then the others alphabetically (for bar charts)."""
+    order = []
+    for name in book:
+        if name in countries:
+            order.append(name)
+    for name in sorted(countries):
+        if name not in order:
+            order.append(name)
+    return order
+
+
+print(ratio_ticks(67, 142), ratio_ticks(1, 50), missing_note(("Japan", "Kosovo"), ["Japan"]))
+print(high_low(pd.Series({"Japan": 2.4, "Switzerland": 2.2, "United States": 4.0}), ".1f"))
+```
+
+In Colab each figure gets a list of countries: click a name to choose it, and hold Ctrl (Cmd on a Mac) while you
+click to choose several. On the website, click a country in the legend, or pick a group of countries in the menu.
+
 ## Figure 1: The U.S. exchange rate versus the yen and the euro
 
 **Goal.** See how the price of a dollar has moved since the end of fixed exchange rates in 1971.
@@ -407,6 +645,107 @@ euros.
 
 ```
 
+<!-- cell -->
+
+### Other currencies against the dollar
+
+The Federal Reserve publishes the same monthly rates for 20 other currencies, and until 2001 for the German mark, the
+French franc and the Italian lira, which the euro replaced. Their units differ enormously (in September 2026 a dollar
+bought 1,359 won but 0.82 Swiss francs), so to compare them we turn each one into an **index**: the price of a dollar divided
+by its average in a base year, times 100. An index of 120 means a dollar buys 20 percent more of that currency than in
+the base year: the dollar has appreciated by 20 percent.
+
+> **Python note.** `.str[:4]` keeps the first four characters of each text (the year of `"1999-01"`), and
+> `.astype(int)` turns them into numbers. Adding text columns with `+` glues the texts together.
+
+```{python}
+fx_all = pd.read_csv(DATA_URL + "fx_monthly.csv")
+fx_all["year"] = fx_all.date.str[:4].astype(int)
+fx_all["label"] = fx_all.country + " (" + fx_all.currency + ")"
+fx_all.tail(3)
+```
+
+> **Python note.** `isin(countries)` is true in the rows whose country is in the list. `groupby("country").mean()`
+> averages the base-year months of each country, and `.map(level)` looks up that average for every row. A currency
+> with no data in the base year gets `NaN`, and `dropna` removes it; `missing_note` then names it in the title.
+> `idxmax()` gives the label of the largest value. `log_y=True` draws a ratio scale.
+
+```{python}
+FX_COLORS = group_colors(fx_all.label.unique(), [list(fx_all.label.unique())],      # all in one legend
+                         {"Japan (yen)": BLUE, "Euro area (euro)": TEAL})
+
+
+def dollar_index(countries=("Japan", "Euro area"), base=1999, scale="linear"):
+    """Figure 20.1 for any currency: units of the currency per dollar, index = 100 in the base year."""
+    picked = fx_all[fx_all.country.isin(countries)].copy()
+    level = picked[picked.year == base].groupby("country").per_usd.mean()     # average of the base year
+    picked["index"] = (100 * picked.per_usd / picked.country.map(level)).round(1)
+    picked = picked.dropna(subset=["index"])
+    latest = picked.groupby("country")["index"].last()                        # each currency's last month
+    title = f"No data in {base} for these currencies"
+    if len(latest) > 0:
+        title = f"Price of a dollar ({base} = 100), latest: " + high_low(latest)
+    fig = px.line(picked, x="date", y="index", color="label", hover_name="label", color_discrete_map=FX_COLORS,
+                  log_y=(scale == "ratio"), title=title + missing_note(countries, level.index),
+                  labels={"date": "Year", "index": f"Price of a dollar ({base} = 100)"})
+    fig.add_hline(y=100, line_dash="dot", line_color=GRAY)
+    if scale == "ratio" and len(picked) > 0:
+        fig.update_yaxes(tickvals=ratio_ticks(picked["index"].min(), picked["index"].max()))
+    fig.update_layout(legend_title_text="", xaxis_range=["1965-01-01", "2027-06-01"])   # no tick label in the corner
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(dollar_index,
+         countries=SelectMultiple(options=sorted(fx_all.country.unique()), value=("Japan", "Euro area"), rows=8,
+                                  description="currencies", style=WIDE),
+         base=Dropdown(options=[1971, 1985, 1999, 2010, 2020], value=1999, description="base year", style=WIDE),
+         scale=ToggleButtons(options=["linear", "ratio"], value="linear", description="scale", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: all 25 currencies (click the legend) and scale buttons
+fig = dollar_index(tuple(fx_all.country.unique()), base=1999)
+legend_only(fig, ["Japan (yen)", "Euro area (euro)"])
+fig.update_layout(title="Price of a dollar in 25 currencies, 1999 = 100", margin=dict(t=110), updatemenus=[dict(
+    type="buttons", direction="right", x=0, y=1.02, xanchor="left", yanchor="bottom", buttons=[
+        dict(label="linear scale", method="relayout", args=[{"yaxis.type": "linear", "yaxis.autorange": True}]),
+        dict(label="ratio scale", method="relayout", args=[{"yaxis.type": "log", "yaxis.autorange": True}])])])
+fig
+```
+
+Click a currency in the legend to add it. The website fixes the base year at 1999, the euro's first year; in Colab
+you can choose it.
+
+**What to notice.**
+
+- Since 1999 the dollar has lost value against the Swiss franc (index 55 in September 2026), the Singapore dollar and
+  the yuan, and gained against the yen (138), the Mexican peso (181), the Brazilian real (283) and the Sri Lankan
+  rupee (465).
+- With 1971 as the base, the yen (45) and the Swiss franc (20) are the currencies that gained the most against the
+  dollar since the end of Bretton Woods. Switch to the ratio scale and add South Africa: a dollar buys 23 times as
+  many rand as in 1971 (index 2,275).
+- **Look at your data:** the lines of the mark, the franc and the lira stop in December 2001, when euro notes replaced
+  them, and many currencies start only in the 1980s or 1990s.
+
+**Your turn.** Choose Switzerland, Japan and the euro area with 1971 as the base year, on the ratio scale. Which
+currency gained the most against the dollar, and why does the euro drop out? Then compute the index of the Brazilian
+real with base 1999 in pandas.
+
+<details><summary>Hint</summary>
+
+In Colab, hold Ctrl (Cmd on a Mac) to choose several countries. For the real: `brazil = fx_all[fx_all.country ==
+"Brazil"]`, then divide the last `per_usd` by the mean of the 1999 rows and multiply by 100.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
 ## Figure 2: Inflation in the United States and Japan
 
 **Goal.** Check the law of one price's prediction: if the dollar depreciated against the yen for decades, U.S.
@@ -423,31 +762,85 @@ inflation = pd.read_csv(DATA_URL + "fig20-2.csv")
 inflation.tail()
 ```
 
-The columns are annual consumer-price inflation, in percent. The U.S. value for 2025 is not published yet (`NaN`).
-After `melt` we drop that empty row with `.dropna()`, so that it does not break the line.
+The columns are annual consumer-price inflation, in percent, one column per country: a **wide** table. The U.S. value
+for 2025 was not published when the file was made (`NaN`).
 
-> **Python note.** `rename(columns={...})` gives the columns readable names, which then appear in the legend.
-> `melt(id_vars="year")` turns the two country columns into rows: one row per year and country, with the old column
-> name in `country` and the value in `inflation`. That *long* shape is what `px.line(..., color="country")` needs.
+The World Bank publishes the same series for almost every country. The file `inflation_wdi.csv` holds it in the
+**long** shape: one row per country and year.
+
+> **Python note.** `melt(id_vars="year")` turns the country columns of a wide table into rows: one row per year and
+> country, with the old column name in `country` and the value in `inflation`. That long shape is what
+> `px.line(..., color="country")` needs, and it is the shape of `inflation_all`.
 
 ```{python}
-long = inflation.rename(columns={"inflation_us": "United States", "inflation_jpn": "Japan"})
-long = long.melt(id_vars="year", var_name="country", value_name="inflation").dropna()
-fig = px.line(long, x="year", y="inflation", color="country", hover_name="country",
-              color_discrete_map={"United States": BLUE, "Japan": TEAL},
-              labels={"year": "Year", "inflation": "Inflation (percent per year)", "country": ""},
-              title="Inflation was higher in the United States than in Japan in most years")
-fig.add_hline(y=0, line_dash="dash", line_color=GRAY)
-fig.update_layout(yaxis_range=[-3, 25], legend=dict(x=0.99, y=0.99, xanchor="right", yanchor="top"))
-fig.show()
+wide_to_long = inflation.rename(columns={"inflation_us": "United States", "inflation_jpn": "Japan"})
+wide_to_long = wide_to_long.melt(id_vars="year", var_name="country", value_name="inflation")
+wide_to_long.tail(3)
 ```
+
+```{python}
+inflation_all = pd.read_csv(DATA_URL + "inflation_wdi.csv")
+print(inflation_all.country.nunique(), "economies,", inflation_all.year.min(), "to", inflation_all.year.max())
+inflation_all[inflation_all.country == "Japan"].tail(3)
+```
+
+`inflation_chart` draws the textbook's figure for any list of countries. Hyperinflations reach thousands of percent,
+so the vertical axis stops at 100 percent, and the title says so when a line is cut.
+
+```{python}
+INFLATION_GROUPS = country_groups(inflation_all.country.unique(), ["United States", "Japan"],
+                                  "Textbook: U.S. and Japan")                  # the website menu
+INFLATION_COLORS = group_colors(inflation_all.country.unique(), INFLATION_GROUPS.values(),
+                                {"United States": BLUE, "Japan": TEAL})
+
+
+def inflation_chart(countries=("United States", "Japan")):
+    """Figure 20.2 for any countries: consumer-price inflation, percent per year."""
+    picked = inflation_all[inflation_all.country.isin(countries)]
+    means = picked[(picked.year >= 1971) & (picked.year <= 2024)].groupby("country").inflation.mean()
+    title = "No inflation data for these countries"
+    if len(means) > 0:
+        title = "Mean inflation 1971–2024 (%): " + high_low(means, ".1f")
+    top = 25.0
+    if len(picked) > 0:
+        top = min(max(25.0, 1.05 * picked.inflation.max()), 100.0)
+    if len(picked) > 0 and picked.inflation.max() > 100:
+        title = title + "; axis cut at 100"
+    fig = px.line(picked, x="year", y="inflation", color="country", hover_name="country",
+                  color_discrete_map=INFLATION_COLORS, title=title + missing_note(countries, means.index),
+                  labels={"year": "Year", "inflation": "Inflation (percent per year)"})
+    fig.add_hline(y=0, line_dash="dash", line_color=GRAY)
+    bottom = min(-3.0, picked.inflation.min() - 1) if len(picked) > 0 else -3.0
+    fig.update_layout(yaxis_range=[bottom, top], xaxis_range=[1955, 2026], legend_title_text="")   # 1960 off the corner
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(inflation_chart,
+         countries=SelectMultiple(options=sorted(inflation_all.country.unique()), value=("United States", "Japan"),
+                                  rows=8, description="countries", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 2 with a menu of country groups
+menu_figure(inflation_chart, INFLATION_GROUPS)
+```
+
+Pick a group in the menu, then click a country in the legend to hide or show it.
 
 **What to notice.**
 
 - Japan's inflation jumped to 23 percent in 1974, after the first oil shock; U.S. inflation peaked at 13.5 percent in 1980.
 - From the late 1990s Japan had **deflation** in many years (falling prices), while U.S. inflation stayed positive
   except in 2009.
-- Click a country in the legend to hide it, and hover over the lines to read the values.
+- Over 1971–2024 U.S. inflation averaged 4.0 percent a year and Japan's 2.4 percent. Add Switzerland (2.2 percent) and
+  Germany (2.7 percent): the countries with the lowest inflation are those whose currencies gained the most against
+  the dollar in Figure 1.
+- **Look at your data:** add Argentina and you get only seven points, 2018–2024. Argentina's official consumer price
+  index was discredited in 2007–2015 and restarted in 2016–2017, and the World Bank's series begins after that, so
+  even the hyperinflation of 1989–1990 is missing from this file.
 
 <!-- cell -->
 
@@ -672,6 +1065,80 @@ Hover over the fitted line to read its equation.
 
 ```
 
+<!-- cell -->
+
+### The real exchange rate of other countries
+
+The Penn World Table measures the price of GDP in 185 economies. Divided by the U.S. price in the same year, it is a
+real exchange rate against the United States: the column `rer` is 1 when a country's output costs as much as the same
+output in the U.S., and 0.5 when it costs half as much. The textbook shows it as an index (1971 = 100); the **level**
+(U.S. = 100) compares countries with each other, as the Big Mac index does.
+
+```{python}
+rer_all = pd.read_csv(DATA_URL + "rer_pwt.csv")
+rer_all[(rer_all.country == "Japan") & (rer_all.year.isin([1971, 1995, 2023]))]
+```
+
+Each country gets a fixed color. The website menu shows each group's countries with data in 1971 (the index needs a
+1971 value), so these smaller groups must not share colors either.
+
+```{python}
+RER_GROUPS = country_groups(rer_all.country.unique(), ["Japan"], "Textbook: Japan")     # the website menu
+in_1971 = rer_all[(rer_all.year == 1971) & rer_all.rer.notna()].country.unique()
+shown = country_groups(in_1971, ["Japan"], "Textbook: Japan")                          # what each menu view shows
+RER_COLORS = group_colors(rer_all.country.unique(), list(shown.values()) + list(RER_GROUPS.values()), {"Japan": BLUE})
+```
+
+```{python}
+def rer_chart(countries=("Japan",), measure="index, 1971 = 100"):
+    """Figure 20.3 for any countries: the price of a country's GDP relative to U.S. GDP (Penn World Table)."""
+    picked = rer_all[rer_all.country.isin(countries)].copy()
+    if measure == "index, 1971 = 100":
+        start = picked[picked.year == 1971].set_index("country").rer
+        picked["value"] = (100 * picked.rer / picked.country.map(start)).round(1)
+        picked = picked[picked.year >= 1971]
+    else:
+        picked["value"] = (100 * picked.rer).round(1)            # level: the U.S. = 100 in every year
+    picked = picked.dropna(subset=["value"])
+    last = picked[picked.year == 2023].set_index("country").value
+    title = "No data for these countries"
+    if len(last) > 0:
+        title = "Real exchange rate in 2023: " + high_low(last)
+    fig = px.line(picked, x="year", y="value", color="country", hover_name="country", color_discrete_map=RER_COLORS,
+                  title=title + missing_note(countries, picked.country.unique()),
+                  labels={"year": "Year", "value": f"Real exchange rate ({measure})"})
+    fig.add_hline(y=100, line_dash="dot", line_color=GRAY)
+    fig.update_layout(legend_title_text="", xaxis_range=[1945, 2025])            # 1950 off the corner
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(rer_chart,
+         countries=SelectMultiple(options=sorted(rer_all.country.unique()), value=("Japan",), rows=8,
+                                  description="countries", style=WIDE),
+         measure=ToggleButtons(options=["index, 1971 = 100", "level, U.S. = 100"], value="index, 1971 = 100",
+                               description="measure", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: the real exchange rate (index, 1971 = 100) with a menu of country groups
+menu_figure(rer_chart, RER_GROUPS)
+```
+
+Pick a group in the menu, then click a country in the legend to hide or show it. Colab also offers the level view.
+
+**What to notice.**
+
+- Germany (index 163) and Switzerland (262) followed Japan up until 1995: their currencies gained against the dollar
+  much faster than their inflation fell below U.S. inflation. By 2023 Japan (91) and Germany (87) were back below
+  their 1971 level, while Switzerland stayed at 150.
+- Switch to the level: in 2023 GDP cost about as much in Switzerland as in the U.S. (101), 69 percent of the U.S.
+  price in Japan, 52 percent in China and 25 percent in India. Poorer countries have lower price levels, as the
+  Balassa-Samuelson effect predicts.
+- **Look at your data:** Bermuda's price level in 2000 is more than 1,000 times the U.S. one, an obvious error in the
+  table. Check a surprising number before you build on it.
 <!-- cell -->
 
 ### Key numbers: the size of the foreign exchange market
@@ -982,6 +1449,98 @@ fall from 1860 to 1864, and in which year was it back at the gold parity?
 
 ```
 
+<!-- cell -->
+
+### The same history for 17 countries
+
+The Jordà-Schularick-Taylor *Macrohistory Database* collects the dollar exchange rate of 17 advanced economies from
+1870 to 2020. It writes each country's rate in one national unit throughout: the euro countries in their old
+currency, converted at the fixed euro rates, and older currencies converted at most currency reforms. That is why
+Germany's rate for 1913 is 0.0000000000042 marks per dollar: after the hyperinflation of 1923, one Reichsmark replaced
+a trillion old marks, and the database writes the old marks in Reichsmarks.
+
+```{python}
+fx_hist = pd.read_csv(DATA_URL + "fx_history.csv")
+fx_hist[fx_hist.year == 1913].head(8)
+```
+
+The units differ by factors of trillions, so we show an index (base year = 100) on a ratio scale. The dotted lines mark
+1914 (the gold standard breaks down), 1945 (the end of the war; Bretton Woods follows) and 1973 (floating).
+
+```{python}
+HIST_COLORS = group_colors(fx_hist.country.unique(), [list(fx_hist.country.unique())], {"United Kingdom": BLUE})
+
+
+def history_chart(countries=("United Kingdom",), base=1913):
+    """Figure 20.6 for 17 countries: currency units per dollar, index = 100 in the base year, ratio scale."""
+    picked = fx_hist[fx_hist.country.isin(countries)].copy()
+    start = picked[picked.year == base].set_index("country").per_usd
+    picked["index"] = 100 * picked.per_usd / picked.country.map(start)
+    picked = picked.dropna(subset=["index"])
+    last = picked[picked.year == 2020].set_index("country")["index"]
+    title = f"No data in {base} for these countries"
+    if len(last) > 0:
+        title = f"Price of a dollar ({base} = 100) in 2020: " + high_low(last, ".3g")
+    fig = px.line(picked, x="year", y="index", color="country", hover_name="country", color_discrete_map=HIST_COLORS,
+                  log_y=True, range_x=[1865, 2025], title=title + missing_note(countries, start.index),
+                  labels={"year": "Year", "index": f"Price of a dollar ({base} = 100, ratio scale)"})
+    for year in [1914, 1945, 1973]:
+        fig.add_vline(x=year, line_dash="dot", line_color=GRAY)
+    if len(picked) > 0:
+        fig.update_yaxes(tickvals=ratio_ticks(picked["index"].min(), picked["index"].max()))
+    fig.update_layout(legend_title_text="")
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(history_chart,
+         countries=SelectMultiple(options=sorted(fx_hist.country.unique()), value=("United Kingdom",), rows=8,
+                                  description="countries", style=WIDE),
+         base=Dropdown(options=[1880, 1913, 1950, 1973], value=1913, description="base year", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: 17 countries (click the legend) and a base-year slider
+fig = data_slider(history_chart, "base", [1880, 1913, 1950, 1973], start=1913, label="base year",
+                  title="Price of a dollar in 17 currencies, {} = 100 (ratio scale)",
+                  countries=tuple(fx_hist.country.unique()))
+legend_only(fig, ["United Kingdom"])
+fig.update_yaxes(autorange=True, tickvals=None)
+fig
+```
+
+Click a country in the legend to add it.
+
+**What to notice.**
+
+- Under the gold standard most lines are flat: from 1880 to 1913 the price of a dollar typically moved by less than
+  half a percent a year in the U.K., Germany, France and the Netherlands. Spain, Portugal and Japan (on silver until
+  1897) were not on gold, and their rates moved by about 6 percent a year.
+- Add Germany: its index rises a trillion-fold between 1913 and 1924, in the hyperinflation. Italy, Finland, France
+  and Japan lost most of their currency's value in the two world wars.
+- After 1973 all 17 currencies float, and their typical yearly change is 8 to 13 percent.
+- **Look at your data:** for 1946–1955 this database records the pound at 0.33–0.42 per dollar, well above the official
+  parity of 0.248 (to 1949) and 0.357 that MeasuringWorth reports, and from 1971 it uses end-of-year rates where
+  MeasuringWorth uses annual averages (2008: 0.69 against 0.54). Two careful sources can measure "the exchange rate"
+  differently.
+
+**Your turn.** Compute the typical yearly change of the Swiss franc and the Japanese yen under the gold standard
+(1880–1913), Bretton Woods (1951–1966) and floating rates (1974–2020), as in the Key numbers above.
+
+<details><summary>Hint</summary>
+
+`swiss = fx_hist[fx_hist.country == "Switzerland"].set_index("year").per_usd`, then
+`(100 * swiss.pct_change()).loc[1880:1913].std()`, and the same for the other periods and for Japan.
+
+</details>
+
+```{python}
+# Your turn: try it here
+
+```
+
 ## Figure 7: The policy trilemma in open economies
 
 **Goal.** See why an open economy can have at most two of three good things: a stable exchange rate, its own
@@ -1207,6 +1766,92 @@ and source; the IMF's current data record a less extreme rate than the vintage t
 
 ```
 
+<!-- cell -->
+
+### Currency crises everywhere
+
+The IMF publishes the same end-of-year exchange rates for about 200 economies since 1990. With them we can follow any
+currency crisis: choose the countries, and set the base year to the year before the crisis.
+
+```{python}
+fx_crisis = pd.read_csv(DATA_URL + "fx_crises.csv")
+fx_crisis[fx_crisis.country == "Thailand"].head(9)
+```
+
+Each country gets a fixed color. The website menu fixes the base at 1991, so its views show each group's countries
+with a 1991 exchange rate; these smaller groups must not share colors either.
+
+```{python}
+BOOK_CRISIS = ("Argentina", "South Korea", "Mexico", "Indonesia")
+CRISIS_GROUPS = country_groups(fx_crisis.country.unique(), BOOK_CRISIS, "Textbook: four crises")   # website menu
+in_1991 = fx_crisis[(fx_crisis.year == 1991) & fx_crisis.per_usd_eop.notna()].country.unique()
+shown = country_groups(in_1991, BOOK_CRISIS, "Textbook: four crises")                  # what each menu view shows
+CRISIS_COLORS = group_colors(fx_crisis.country.unique(), list(shown.values()) + list(CRISIS_GROUPS.values()),
+                             {"Argentina": BLUE, "South Korea": TEAL, "Mexico": GREEN, "Indonesia": "#5aa0d8"})
+```
+
+```{python}
+def crisis_chart(countries=BOOK_CRISIS, base=1991, scale="linear"):
+    """Figure 20.8 for any countries: the dollar value of each currency, index = 100 at the end of the base year."""
+    picked = fx_crisis[fx_crisis.country.isin(countries)].copy()
+    start = picked[picked.year == base].set_index("country").per_usd_eop
+    picked["index"] = 100 * picked.country.map(start) / picked.per_usd_eop
+    picked = picked.dropna(subset=["index"])
+    low = picked.sort_values("index").head(1)                    # the deepest fall among the chosen currencies
+    title = f"No data at the end of {base} for these countries"
+    if len(low) > 0:
+        title = (f"Currencies vs the dollar ({base} = 100): lowest {low.country.iloc[0]}, "
+                 f"{low['index'].iloc[0]:.3g} in {low.year.iloc[0]}")
+    fig = px.line(picked, x="year", y="index", color="country", hover_name="country", markers=True,
+                  color_discrete_map=CRISIS_COLORS, log_y=(scale == "ratio"), range_x=[1987.5, 2025.5],
+                  title=title + missing_note(countries, start.index),
+                  labels={"year": "Year", "index": f"Dollar value of the currency ({base} = 100)"})
+    fig.add_vline(x=base, line_dash="dot", line_color=GRAY)
+    if scale == "linear":
+        fig.update_yaxes(range=[0, max(120, 1.05 * picked["index"].max())] if len(picked) > 0 else [0, 120])
+    elif len(picked) > 0:
+        fig.update_yaxes(tickvals=ratio_ticks(picked["index"].min(), picked["index"].max()))
+    fig.update_layout(legend_title_text="")
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(crisis_chart,
+         countries=SelectMultiple(options=sorted(fx_crisis.country.unique()), rows=8, description="countries",
+                                  value=("Argentina", "Indonesia", "Mexico", "South Korea"), style=WIDE),
+         base=IntSlider(value=1991, min=1990, max=2024, step=1, description="base year", style=WIDE),
+         scale=ToggleButtons(options=["linear", "ratio"], value="linear", description="scale", style=WIDE));
+```
+
+> **Python note.** The website version below calls `crisis_chart` through a small function, `crisis_group`, that
+> fixes the base year at 1991 and uses the ratio scale for every group except the textbook's four countries.
+
+```{python}
+#| kind: website
+# @title Website version: Figure 8 (1991 = 100) with a menu of country groups
+def crisis_group(countries):
+    """Figure 8 for one group of countries: 1991 = 100, ratio scale beyond the textbook's four."""
+    return crisis_chart(countries, 1991, "linear" if countries == BOOK_CRISIS else "ratio")
+
+
+menu_figure(crisis_group, CRISIS_GROUPS)
+```
+
+Pick a group in the menu, then click a country in the legend to hide or show it.
+
+**What to notice.**
+
+- Choose Thailand, Malaysia and the Philippines with base 1996: in the Asian crisis the baht lost 46 percent of its
+  dollar value in 1997, and the ringgit and the peso about a third by 1998.
+- Other famous crises: Russia 1998 (base 1997: index 29 at the end of 1998), Türkiye 2001 (base 2000: 46) and 2018
+  (base 2017: 72, and 8.8 by 2025), Iceland 2008 (base 2007: 51), Ukraine 2014 (base 2013: 51) and Egypt 2016
+  (base 2015: 43). In 1992 even the pound (81) and the lira (78) fell, when they left the European exchange-rate
+  mechanism.
+- **Look at your data:** the euro countries' lines stop when they adopt the euro (the euro area has its own line from
+  1999). Venezuela's line shows the official rate, which stayed fixed for years while the market rate was many times
+  higher, and Zimbabwe's line joins three different currencies (to 2008, 2019–2023 and from 2024) without converting
+  them, so its jumps are not exchange-rate changes.
 ## Figure 9: 10-year government bond yields in Europe
 
 **Goal.** See the euro crisis in its most useful single graph: interest rates on government debt in Germany, Italy and
@@ -1221,22 +1866,72 @@ yields = pd.read_csv(DATA_URL + "fig20-9.csv", parse_dates=["date"])
 yields.tail(3)
 ```
 
-The last Italian value (September 2026) is not published yet, so we drop it after `melt`.
+The last Italian value (September 2026) is not published yet (`NaN`). This wide file holds the textbook's three
+countries; `yields_monthly.csv` holds the same OECD series for 34 countries, plus eight EU members from Eurostat, in
+the long shape.
 
 ```{python}
-long = yields.rename(columns={"yield_de": "Germany", "yield_es": "Spain", "yield_it": "Italy"})
-long = long.melt(id_vars="date", var_name="country", value_name="yield").dropna()
-fig = px.line(long, x="date", y="yield", color="country", hover_name="country", range_y=[-2, 14.5],
-              color_discrete_map={"Germany": BLUE, "Spain": TEAL, "Italy": GREEN},
-              labels={"date": "Year", "yield": "10-year government bond yield (percent)", "country": ""},
-              title="Bond yields converged with the euro in 1999 and diverged in 2010–2012")
-fig.add_hline(y=0, line_dash="dash", line_color=GRAY)
-for date, text in [("1999-01-01", "euro"), ("2012-07-01", "Draghi")]:
-    fig.add_shape(type="line", x0=date, x1=date, y0=0, y1=1, yref="paper", line=dict(color=GRAY, dash="dot"))
-    fig.add_annotation(x=date, y=13, text=text, showarrow=False, xanchor="left", font=dict(color=GRAY))
-fig.update_layout(legend=dict(x=0.99, y=0.99, xanchor="right", yanchor="top"), yaxis_tickvals=list(range(0, 15, 2)))
-fig.show()
+yields_all = pd.read_csv(DATA_URL + "yields_monthly.csv")
+yields_all.groupby("source").country.unique()
 ```
+
+> **Python note.** Dates written as text, such as `"2011-11"`, sort and compare like dates, so
+> `yields_all.date >= "1995-01"` keeps the months from January 1995. `range(0, int(top), 2)` counts 0, 2, 4, ...
+> below `top` (`int` cuts off the decimals). `yref="paper"` places a label relative to the plot area (0 = bottom,
+> 1 = top), so it stays at the top whatever the axis range.
+
+```{python}
+YIELD_COLORS = group_colors(yields_all.country.unique(), [list(yields_all.country.unique())],   # one legend
+                            {"Germany": BLUE, "Spain": TEAL, "Italy": GREEN})
+
+
+def yield_chart(countries=("Germany", "Spain", "Italy")):
+    """Figure 20.9 for any countries: 10-year government bond yields, monthly, percent."""
+    picked = yields_all[yields_all.country.isin(countries) & (yields_all.date >= "1995-01")]
+    peak = picked[picked.date >= "2008-01"].sort_values("yield").tail(1)       # the highest yield since 2008
+    title = "No bond yields for these countries"
+    if len(peak) > 0:
+        title = (f"10-year bond yields: highest since 2008 {peak.country.iloc[0]}, "
+                 f"{peak['yield'].iloc[0]:.1f}% in {peak.date.iloc[0]}")
+    top = max(14.5, picked["yield"].max() + 1.5) if len(picked) > 0 else 14.5
+    bottom = min(-2.0, picked["yield"].min() - 0.5) if len(picked) > 0 else -2.0
+    fig = px.line(picked, x="date", y="yield", color="country", hover_name="country", color_discrete_map=YIELD_COLORS,
+                  title=title + missing_note(countries, picked.country.unique()), range_y=[bottom, top],
+                  labels={"date": "Year", "yield": "10-year government bond yield (percent)"})
+    fig.add_hline(y=0, line_dash="dash", line_color=GRAY)
+    for date, text in [("1999-01", "euro"), ("2012-07", "Draghi")]:
+        fig.add_vline(x=date, line_dash="dot", line_color=GRAY)
+        fig.add_annotation(x=date, y=0.97, yref="paper", text=text, showarrow=False, xanchor="left",
+                           font=dict(color=GRAY))
+    ticks = list(range(0, int(top), 2)) if top <= 20 else None
+    fig.update_layout(legend_title_text="", yaxis_tickvals=ticks, xaxis_range=["1992-07", "2027-01"])
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(yield_chart,
+         countries=SelectMultiple(options=sorted(yields_all.country.unique()), value=("Germany", "Italy", "Spain"),
+                                  rows=8, description="countries", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 9 with all 42 countries (click the legend)
+fig = yield_chart(tuple(yields_all.country.unique()))
+legend_only(fig, ["Germany", "Spain", "Italy"])
+textbook = {"yaxis.range": [-2, 14.5], "yaxis.tickvals": list(range(0, 15, 2))}
+fit = {"yaxis.autorange": True, "yaxis.tickvals": None}
+fig.update_layout(title="10-year government bond yields (click a country in the legend to add it)",
+                  yaxis_range=[-2, 14.5], yaxis_tickvals=list(range(0, 15, 2)), margin=dict(t=110),
+                  updatemenus=[dict(type="buttons", direction="right", x=0, y=1.02, xanchor="left", yanchor="bottom",
+                                    buttons=[dict(label="textbook range", method="relayout", args=[textbook]),
+                                             dict(label="fit the lines shown", method="relayout", args=[fit])])])
+fig
+```
+
+Click a country in the legend to add it. The vertical axis starts at the textbook's range; press "fit the lines shown"
+after you add Greece or Russia.
 
 **What to notice.**
 
@@ -1244,7 +1939,12 @@ fig.show()
   4 percent, and they moved together until 2008.
 - In 2011–2012 the Italian yield rose above 7 percent and the Spanish one to 6.8 percent, while Germany's fell. After
   Mario Draghi promised in July 2012 that the ECB would do "whatever it takes", the gaps closed again.
-- German yields were negative in 2016 and in 2019–2021: investors paid the German government to hold their money.
+- German yields were negative in mid-2016 and from April 2019 to January 2022: investors paid the German government
+  to hold their money.
+- Add Greece, Portugal and Ireland, the three euro countries that needed rescue loans: Greece's yield reached
+  29.2 percent in February 2012, Portugal's 13.9 percent in January 2012 and Ireland's 12.4 percent in July 2011.
+- **Look at your data:** the lines start and stop at different dates. Greece's starts in mid-1997, Estonia's only in
+  2020 (its government has almost no long-term debt), and Russia's ends in 2018.
 
 <!-- cell -->
 
@@ -1285,28 +1985,70 @@ lending = pd.read_csv(DATA_URL + "fig20-10.csv")
 lending
 ```
 
-> **Python note.** `melt` stacks the four year columns into one column of values, with a new column that says which
-> year each value belongs to. `.map(YEARS)` replaces the column names by readable labels. `barmode="group"` puts the
-> bars of the four years side by side.
+The World Bank publishes both series for about 190 economies. `credit_wdi.csv` holds them for every year since 1990:
+`bank_credit` is lending by banks (the textbook's series, which the World Bank stopped updating after 2021) and
+`private_credit` is all domestic credit to the private sector, the series behind the 2023 bars.
 
 ```{python}
-YEARS = {"credit_gdp_1998": "1998", "credit_gdp_2002": "2002", "credit_gdp_2007": "2007",
-         "credit_gdp_2023": "2023 (latest)"}
-bars = lending.melt(id_vars=["iso3", "country"], value_vars=list(YEARS), var_name="year", value_name="credit")
-bars["year"] = bars.year.map(YEARS)
-fig = px.bar(bars, x="country", y="credit", color="year", barmode="group", hover_name="country",
-             color_discrete_sequence=[BLUE, TEAL, GREEN, "#5aa0d8"], range_y=[0, 200],
-             labels={"country": "", "credit": "Domestic bank lending (percent of GDP)", "year": ""},
-             title="Bank lending boomed in southern Europe after the euro, and has shrunk since")
-fig.update_layout(legend=dict(x=0.99, y=0.99, xanchor="right", yanchor="top"))
-fig.show()
+credit_all = pd.read_csv(DATA_URL + "credit_wdi.csv")
+credit_all[(credit_all.country == "Spain") & credit_all.year.isin([1998, 2007, 2021, 2023])]
 ```
+
+> **Python note.** `credit_all.year.isin(LENDING_YEARS)` keeps the four years (the keys of the dictionary).
+> `picked.loc[latest, "credit"] = ...` replaces the values in the 2023 rows only. `barmode="group"` puts the bars of the
+> four years side by side, and `category_orders` fixes the order of the countries and of the years.
+
+```{python}
+BOOK_LENDING = ("Greece", "Ireland", "Portugal", "Spain", "Italy", "Germany")
+LENDING_YEARS = {1998: "1998", 2002: "2002", 2007: "2007", 2023: "2023 (latest)"}
+
+
+def lending_chart(countries=BOOK_LENDING):
+    """Figure 20.10 for any countries: bank lending to the private sector, percent of GDP, in four years."""
+    picked = credit_all[credit_all.country.isin(countries) & credit_all.year.isin(LENDING_YEARS)].copy()
+    picked["credit"] = picked.bank_credit                                   # the textbook's series, to 2021
+    latest = picked.year == 2023
+    picked.loc[latest, "credit"] = picked.loc[latest, "private_credit"]     # all private credit in 2023
+    picked = picked.dropna(subset=["credit"])
+    wide = picked.pivot(index="country", columns="year", values="credit")
+    title = "Bank lending in percent of GDP"
+    if 1998 in wide.columns and 2007 in wide.columns and (wide[2007] - wide[1998]).notna().any():
+        rise = (wide[2007] - wide[1998]).dropna()
+        title = f"Bank lending, 1998–2007: largest rise {rise.idxmax()}, {round(rise.max()):+d} points of GDP"
+    picked["year"] = picked.year.map(LENDING_YEARS)
+    fig = px.bar(picked, x="country", y="credit", color="year", barmode="group", hover_name="country",
+                 color_discrete_sequence=[BLUE, TEAL, GREEN, "#5aa0d8"],
+                 title=title + missing_note(countries, wide.index),
+                 category_orders={"country": book_order(countries, BOOK_LENDING), "year": list(LENDING_YEARS.values())},
+                 labels={"country": "", "credit": "Domestic bank lending (percent of GDP)"})
+    top = max(200, 1.05 * picked.credit.max()) if len(picked) > 0 else 200
+    fig.update_layout(yaxis_range=[0, top], legend_title_text="")
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(lending_chart,
+         countries=SelectMultiple(options=sorted(credit_all.country.unique()), value=BOOK_LENDING, rows=8,
+                                  description="countries", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 10 with a menu of country groups
+groups = country_groups(credit_all.country.unique(), BOOK_LENDING, "Textbook: six countries", regions=False)
+menu_figure(lending_chart, groups, categories=True)
+```
+
+Pick a group of countries in the menu; click a year in the legend to hide or show it.
 
 **What to notice.**
 
 - From 1998 to 2007 bank lending rose from 32 to 84 percent of GDP in Greece and from 83 to 168 percent in Spain.
   In Germany it fell.
 - The 2023 bars show the hangover: after the crisis, lending fell back, to 25 percent of GDP in Ireland.
+- The boom was not only southern: add Iceland, whose banks lent 247 percent of GDP in 2007 (62 percent in 1998) just
+  before they collapsed in 2008, and Denmark (from 142 percent in 2002 to 197 percent in 2007).
 
 <!-- cell -->
 
@@ -1350,18 +2092,75 @@ average over a period, in percent of GDP.
 
 ```{python}
 current = pd.read_csv(DATA_URL + "fig20-11.csv")
-PERIODS = {"ca_gdp_1993_1997": "1993–1997", "ca_gdp_2003_2007": "2003–2007", "ca_gdp_2008_2011": "2008–2011",
-           "ca_gdp_2021_2025": "2021–2025 (latest)"}
-bars = current.melt(id_vars=["iso3", "country"], value_vars=list(PERIODS), var_name="period", value_name="balance")
-bars["period"] = bars.period.map(PERIODS)
-fig = px.bar(bars, x="country", y="balance", color="period", barmode="group", hover_name="country",
-             color_discrete_sequence=[BLUE, TEAL, GREEN, "#5aa0d8"], range_y=[-14, 14],
-             labels={"country": "", "balance": "Current account balance (percent of GDP)", "period": ""},
-             title="Current accounts: the south borrowed abroad after the euro, Germany lent")
-fig.add_hline(y=0, line_color="black", line_width=1)
-fig.update_layout(legend=dict(x=0.99, y=0.99, xanchor="right", yanchor="top"))
-fig.show()
+current
 ```
+
+The IMF publishes the current account of almost every economy, year by year since 1980 (`current_account_imf.csv`).
+`period_means` turns the yearly numbers into the textbook's period averages, for any countries.
+
+> **Python note.** `groupby("country").ca_gdp.mean()` averages the years of each country. `rows.append({...})` collects one dictionary per country and period, and `pd.DataFrame(rows)` turns the list
+> into a table.
+
+```{python}
+ca_all = pd.read_csv(DATA_URL + "current_account_imf.csv")
+CA_PERIODS = {"1993–1997": (1993, 1997), "2003–2007": (2003, 2007), "2008–2011": (2008, 2011),
+              "2021–2025 (latest)": (2021, 2025)}
+
+
+def period_means(countries):
+    """The current account of each country averaged over each textbook period (one row per country and period)."""
+    rows = []
+    for label in CA_PERIODS:
+        first, last = CA_PERIODS[label]
+        span = ca_all[ca_all.country.isin(countries) & (ca_all.year >= first) & (ca_all.year <= last)]
+        means = span.groupby("country").ca_gdp.mean()
+        for country in means.index:
+            rows.append({"country": country, "period": label, "balance": means[country]})
+    return pd.DataFrame(rows, columns=["country", "period", "balance"])
+
+
+period_means(["Greece", "Germany"]).round(2)
+```
+
+```{python}
+BOOK_CA = ("Greece", "Ireland", "Italy", "Portugal", "Spain", "Germany")
+
+
+def current_chart(countries=BOOK_CA):
+    """Figure 20.11 for any countries: current account balances, percent of GDP, averages over four periods."""
+    bars = period_means(countries)
+    boom = bars[bars.period == "2003–2007"].set_index("country").balance
+    title = "Current account balances, percent of GDP"
+    if len(boom) > 1:
+        title = (f"Current accounts 2003–07: lowest {boom.idxmin()} {boom.min():.1f}%, "
+                 f"highest {boom.idxmax()} {boom.max():+.1f}%")
+    fig = px.bar(bars, x="country", y="balance", color="period", barmode="group", hover_name="country",
+                 color_discrete_sequence=[BLUE, TEAL, GREEN, "#5aa0d8"],
+                 title=title + missing_note(countries, bars.country),
+                 category_orders={"country": book_order(countries, BOOK_CA), "period": list(CA_PERIODS)},
+                 labels={"country": "", "balance": "Current account balance (percent of GDP)"})
+    fig.add_hline(y=0, line_color="black", line_width=1)
+    low = min(-14, 1.1 * bars.balance.min()) if len(bars) > 0 else -14
+    high = max(14, 1.1 * bars.balance.max()) if len(bars) > 0 else 14
+    fig.update_layout(yaxis_range=[low, high], legend_title_text="")
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(current_chart,
+         countries=SelectMultiple(options=sorted(ca_all.country.unique()), value=BOOK_CA, rows=8,
+                                  description="countries", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 11 with a menu of country groups
+groups = country_groups(ca_all.country.unique(), BOOK_CA, "Textbook: six countries", regions=False)
+menu_figure(current_chart, groups, categories=True)
+```
+
+Pick a group of countries in the menu; click a period in the legend to hide or show it.
 
 **What to notice.**
 
@@ -1371,6 +2170,9 @@ fig.show()
 - **A data warning:** Ireland's surplus of 10.8 percent in 2021–25 does not mean the Irish lend a lot abroad. The
   profits of large multinational firms registered in Ireland pass through its accounts and inflate both GDP and the
   current account.
+- The south was not alone. Add Latvia, Estonia and Bulgaria, which tied their currencies to the euro before they
+  adopted it: in 2003–2007 they borrowed 15.4, 12.7 and 11.3 percent of GDP a year, more than Greece. On the lending
+  side, the Netherlands ran a surplus of 6.5 percent, more than Germany.
 
 **Your turn.** For each country, compute the change in the current account from 1993–1997 to 2003–2007. Which country
 changed the most?
@@ -1393,24 +2195,77 @@ self-fulfilling.
 
 ```{python}
 debt = pd.read_csv(DATA_URL + "fig20-12.csv")
-DEBT_YEARS = {"debt_gdp_2007": "2007", "debt_gdp_2012": "2012", "debt_gdp_2017": "2017",
-              "debt_gdp_2025": "2025 (latest)"}
-bars = debt.melt(id_vars=["iso3", "country"], value_vars=list(DEBT_YEARS), var_name="year", value_name="debt")
-bars["year"] = bars.year.map(DEBT_YEARS)
-fig = px.bar(bars, x="country", y="debt", color="year", barmode="group", hover_name="country",
-             color_discrete_sequence=[BLUE, TEAL, GREEN, "#5aa0d8"], range_y=[0, 210],
-             labels={"country": "", "debt": "Government debt (percent of GDP)", "year": ""},
-             title="Government debt jumped after the financial crisis, most in Ireland and Greece")
-fig.update_layout(legend=dict(x=0.01, y=0.99, xanchor="left", yanchor="top"))
-fig.show()
+debt
 ```
+
+The textbook uses the OECD's measure of government debt, gross financial liabilities, which exists for about 40
+mostly rich countries. The IMF measures gross debt for almost every country. `debt.csv` holds both, year by year:
+
+```{python}
+debt_all = pd.read_csv(DATA_URL + "debt.csv")
+debt_all[(debt_all.country == "France") & debt_all.year.isin([2007, 2017, 2025])]
+```
+
+The two measures differ. For France in 2017 the OECD counts 125 percent of GDP and the IMF 99 percent: the OECD
+measure also counts trade credits and other accounts payable, and values bonds at market prices. Always check which
+definition a number uses before you compare countries.
+
+```{python}
+BOOK_DEBT = ("France", "Germany", "Greece", "Ireland", "Italy", "Spain")
+DEBT_YEARS = {2007: "2007", 2012: "2012", 2017: "2017", 2025: "2025 (latest)"}
+
+
+def debt_chart(countries=BOOK_DEBT, source="OECD"):
+    """Figure 20.12 for any countries: government debt, percent of GDP, in four years (OECD or IMF measure)."""
+    column = "debt_oecd" if source == "OECD" else "debt_imf"
+    picked = debt_all[debt_all.country.isin(countries) & debt_all.year.isin(DEBT_YEARS)].dropna(subset=[column])
+    wide = picked.pivot(index="country", columns="year", values=column)
+    title = f"Government debt ({source} measure), percent of GDP"
+    if 2007 in wide.columns and 2012 in wide.columns and (wide[2012] - wide[2007]).notna().any():
+        rise = (wide[2012] - wide[2007]).dropna()
+        title = f"Government debt ({source}): largest rise 2007–2012 {rise.idxmax()}, {round(rise.max()):+d} points"
+    picked = picked.assign(year=picked.year.map(DEBT_YEARS))
+    fig = px.bar(picked, x="country", y=column, color="year", barmode="group", hover_name="country",
+                 color_discrete_sequence=[BLUE, TEAL, GREEN, "#5aa0d8"],
+                 title=title + missing_note(countries, wide.index),
+                 category_orders={"country": book_order(countries, BOOK_DEBT), "year": list(DEBT_YEARS.values())},
+                 labels={"country": "", column: f"Government debt, {source} (percent of GDP)"})
+    top = max(210, 1.05 * picked[column].max()) if len(picked) > 0 else 210
+    fig.update_layout(yaxis_range=[0, top], legend_title_text="")
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(debt_chart,
+         countries=SelectMultiple(options=sorted(debt_all.country.unique()), value=BOOK_DEBT, rows=8,
+                                  description="countries", style=WIDE),
+         source=ToggleButtons(options=["OECD", "IMF"], value="OECD", description="measure", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 12 with a menu of country groups and measures
+groups = country_groups(debt_all.country.unique(), BOOK_DEBT, "Textbook six", regions=False)
+options = {}
+for label in groups:
+    options[label + ", OECD"] = {"countries": tuple(groups[label]), "source": "OECD"}
+    options[label + ", IMF"] = {"countries": tuple(groups[label]), "source": "IMF"}
+del options["Large emerging economies, OECD"]                  # the OECD measure misses most of them
+menu_figure(debt_chart, options, categories=True)
+```
+
+Pick a group and a measure in the menu; click a year in the legend to hide or show it.
 
 **What to notice.**
 
 - Ireland's debt rose from 28 percent of GDP in 2007 to 131 percent in 2012, when the government took over the debts of
   its banks.
-- By 2017 the debt of Italy, Greece and Spain was well above 100 percent of GDP; Greece's peaked at 195 percent.
+- By 2017 the debt of Italy, Greece and Spain was well above 100 percent of GDP; Greece's reached 195 percent (and
+  239 percent in the Covid year 2020, which the bars skip).
 - By 2025 debt was below its 2017 level in all six countries; Germany's (63 percent) is even below its 2007 level.
+- Add Japan and the United States: Japan's debt was already 151 percent of GDP in 2007 and 198 percent in 2025, and
+  U.S. debt rose from 65 to 126 percent, still rising after 2017 while the European countries' debt fell.
 
 <!-- cell -->
 
@@ -1464,40 +2319,63 @@ The **unit labor cost** is the nominal wage divided by real output per worker: t
 output. The data are an index, here with 1995 = 100. An index can start from any **base year**, and the choice changes
 the picture: with the base in 2008, the lines show what happened *since* the crisis.
 
-> **Python note.** Dividing a whole table by one of its rows, `table / table.loc[base]`, divides each column by its
-> own value in the base year, so every line passes through 100 there. `color_discrete_map` fixes each country's
+The textbook shows five countries. The OECD publishes the same index for 43 countries and the euro area as a whole,
+with 2020 = 100; `ulc_oecd.csv` holds it in the long shape.
+
+```{python}
+ulc = pd.read_csv(DATA_URL + "fig20-13.csv")                 # the textbook's five countries, 1995 = 100
+ulc_all = pd.read_csv(DATA_URL + "ulc_oecd.csv")             # 44 economies, 2020 = 100
+ulc_all[(ulc_all.country == "Greece") & ulc_all.year.isin([1995, 2020, 2025])]
+```
+
+> **Python note.** To move an index to a new base year we divide each country's values by its own value in that
+> year: `.map(start)` looks up the base-year value of each row's country. `color_discrete_map` fixes each country's
 > color, so that a country keeps its color when the base changes.
 
 ```{python}
-ulc = pd.read_csv(DATA_URL + "fig20-13.csv")
-ULC_NAMES = {"ulc_grc": "Greece", "ulc_ita": "Italy", "ulc_esp": "Spain", "ulc_fra": "France", "ulc_deu": "Germany"}
-ULC_COLORS = {"Greece": GREEN, "Italy": "#0b4f47", "Spain": TEAL, "France": "#5aa0d8", "Germany": BLUE}
+BOOK_ULC = ("Greece", "Italy", "Spain", "France", "Germany")
+ULC_COLORS = group_colors(ulc_all.country.unique(), [list(ulc_all.country.unique())],      # all in one legend
+                          {"Greece": GREEN, "Italy": "#0b4f47", "Spain": TEAL, "France": "#5aa0d8", "Germany": BLUE})
 
 
-def ulc_chart(base=1995):
-    """Figure 20.13: unit labor costs, each country's index = 100 in the base year."""
-    table = ulc.set_index("year").rename(columns=ULC_NAMES)
-    table = 100 * table / table.loc[base]
-    long = table.reset_index().melt(id_vars="year", var_name="country", value_name="ulc")
-    fig = px.line(long, x="year", y="ulc", color="country", hover_name="country", color_discrete_map=ULC_COLORS,
-                  range_y=[40, 220], labels={"year": "Year", "ulc": f"Unit labor costs ({base} = 100)", "country": ""},
-                  title=f"Unit labor costs, {base} = 100: in 2025 Greece {table.loc[2025, 'Greece']:.0f}, "
-                        f"Germany {table.loc[2025, 'Germany']:.0f}")
+def ulc_chart(base=1995, countries=BOOK_ULC):
+    """Figure 20.13 for any countries: unit labor costs, each country's index = 100 in the base year."""
+    picked = ulc_all[ulc_all.country.isin(countries)].copy()
+    start = picked[picked.year == base].set_index("country").ulc
+    picked["index"] = (100 * picked.ulc / picked.country.map(start)).round(1)
+    picked = picked.dropna(subset=["index"])
+    last = picked[picked.year == 2025].set_index("country")["index"]
+    title = f"No unit labor costs in {base} for these countries"
+    if len(last) > 0:
+        title = f"Unit labor costs, {base} = 100, in 2025: " + high_low(last)
+    fig = px.line(picked, x="year", y="index", color="country", hover_name="country", color_discrete_map=ULC_COLORS,
+                  title=title + missing_note(countries, start.index),
+                  labels={"year": "Year", "index": f"Unit labor costs ({base} = 100)"})
     fig.add_hline(y=100, line_dash="dot", line_color=GRAY)
-    fig.update_layout(legend=dict(x=0.01, y=0.99, xanchor="left", yanchor="top"), yaxis_tickvals=list(range(60, 221, 40)))
+    if len(picked) > 0 and picked["index"].min() >= 40 and picked["index"].max() <= 220:
+        fig.update_layout(yaxis_range=[40, 220], yaxis_tickvals=list(range(60, 221, 40)))   # the textbook's axis
+    fig.update_layout(legend_title_text="", xaxis_range=[1987, 2026])            # 1990 off the corner
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(ulc_chart, base=Dropdown(options=[1995, 1999, 2008, 2015], value=1995, description="base year", style=WIDE));
+interact(ulc_chart, base=Dropdown(options=[1995, 1999, 2008, 2015], value=1995, description="base year", style=WIDE),
+         countries=SelectMultiple(options=sorted(ulc_all.country.unique()), value=BOOK_ULC, rows=8,
+                                  description="countries", style=WIDE));
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: Figure 13 with a precomputed slider for the base year
-slider_figure(ulc_chart, "base", [1995, 1999, 2008, 2015], start=1995, label="base year")
+# @title Website version: Figure 13 with all economies (click the legend) and a base-year slider
+fig = data_slider(ulc_chart, "base", [1995, 1999, 2008, 2015], start=1995, label="base year",
+                  title="Unit labor costs, {} = 100", countries=tuple(ulc_all.country.unique()))
+legend_only(fig, list(BOOK_ULC))
+fig.update_yaxes(autorange=True, tickvals=None)
+fig
 ```
+
+Click a country in the legend to add it; the slider changes the base year of every line.
 
 **What to notice.**
 
@@ -1507,6 +2385,9 @@ slider_figure(ulc_chart, "base", [1995, 1999, 2008, 2015], start=1995, label="ba
   slowly, even with very high unemployment.
 - Switch the base year to 2008. Since the crisis, Germany's costs have risen the most and Greece's the least: the gap
   has been closing, slowly.
+- Add Portugal, Ireland and Latvia: with 1995 = 100, Portugal's costs reached 144 and Ireland's 149 by 2007, and
+  Latvia's (on a fixed exchange rate to the euro) 235. With 2008 as the base, Ireland is the one economy whose costs
+  are lower in 2025 (80) than before the crisis.
 
 **Your turn.** With the base year 1999 (the start of the euro), which country had the highest unit labor costs in
 2007, and by how much did they exceed Germany's?
@@ -1530,31 +2411,74 @@ Total factor productivity (TFP) is the $\bar{A}$ of the production model of Chap
 from its capital and labor. The index is 100 in 2000 for every country, so the lines show growth, not levels.
 
 ```{python}
-tfp = pd.read_csv(DATA_URL + "fig20-14.csv")
-TFP_NAMES = {"tfp_usa": "United States", "tfp_deu": "Germany", "tfp_jpn": "Japan", "tfp_fra": "France",
-             "tfp_esp": "Spain", "tfp_ita": "Italy"}
-TFP_COLORS = {"United States": BLUE, "Germany": TEAL, "Japan": GRAY, "France": "#5aa0d8", "Spain": GREEN,
-              "Italy": "#0b4f47"}
-long = tfp.rename(columns=TFP_NAMES).melt(id_vars="year", var_name="country", value_name="tfp")
-fig = px.line(long, x="year", y="tfp", color="country", hover_name="country", color_discrete_map=TFP_COLORS,
-              range_y=[75, 120], labels={"year": "Year", "tfp": "Total factor productivity (2000 = 100)", "country": ""},
-              title="TFP since 2000: up in the U.S. and Germany, down in France, Spain and Italy")
-fig.add_hline(y=100, line_dash="dot", line_color=GRAY)
-fig.update_layout(legend=dict(x=1.02, y=1.0, xanchor="left", yanchor="top"))
-fig.show()
+tfp = pd.read_csv(DATA_URL + "fig20-14.csv")                 # the textbook's six countries, 2000 = 100
+tfp_all = pd.read_csv(DATA_URL + "tfp_pwt.csv")              # TFP at constant national prices, 120 economies
+tfp_all[(tfp_all.country == "Italy") & tfp_all.year.isin([1990, 2000, 2023])]
 ```
+
+In `tfp_pwt.csv` the column `rtfpna` is the Penn World Table's TFP index with 2021 = 1. As in Figure 13, we move the
+base to 2000 by dividing each country's values by its value in 2000.
+
+```{python}
+BOOK_TFP = ("United States", "Germany", "Japan", "France", "Spain", "Italy")
+TFP_GROUPS = country_groups(tfp_all.country.unique(), BOOK_TFP, "Textbook: U.S. and Europe")   # the website menu
+TFP_COLORS = group_colors(tfp_all.country.unique(), TFP_GROUPS.values(), {"United States": BLUE, "Germany": TEAL,
+                          "Japan": GRAY, "France": "#5aa0d8", "Spain": GREEN, "Italy": "#0b4f47"})
+
+
+def tfp_chart(countries=BOOK_TFP):
+    """Figure 20.14 for any countries: total factor productivity, index 2000 = 100, 1990-2023."""
+    picked = tfp_all[tfp_all.country.isin(countries) & (tfp_all.year >= 1990)].copy()
+    start = picked[picked.year == 2000].set_index("country").rtfpna
+    picked["tfp"] = (100 * picked.rtfpna / picked.country.map(start)).round(1)
+    picked = picked.dropna(subset=["tfp"])
+    last = picked[picked.year == 2023].set_index("country").tfp
+    title = "No TFP data for these countries"
+    if len(last) > 0:
+        title = "TFP, 2000 = 100, in 2023: " + high_low(last)
+    fig = px.line(picked, x="year", y="tfp", color="country", hover_name="country", color_discrete_map=TFP_COLORS,
+                  title=title + missing_note(countries, start.index),
+                  labels={"year": "Year", "tfp": "Total factor productivity (2000 = 100)"})
+    fig.add_hline(y=100, line_dash="dot", line_color=GRAY)
+    if len(picked) > 0 and picked.tfp.min() >= 75 and picked.tfp.max() <= 120:
+        fig.update_layout(yaxis_range=[75, 120])                                # the textbook's axis
+    fig.update_layout(legend_title_text="", xaxis_range=[1987, 2024])            # 1990 off the corner
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(tfp_chart,
+         countries=SelectMultiple(options=sorted(tfp_all.country.unique()), value=BOOK_TFP, rows=8,
+                                  description="countries", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 14 with a menu of country groups
+menu_figure(tfp_chart, TFP_GROUPS)
+```
+
+Pick a group in the menu, then click a country in the legend to hide or show it.
 
 **What to notice.**
 
 - TFP in France, Spain and Italy was lower in 2019 than in 2000, and it is lower still in 2023. In Italy and Spain the
   decline started in the 1990s; in France it began after 2006.
 - Germany kept up with the United States until 2019. The Covid year 2020 shows up as a dip everywhere except the U.S.
+- Add South Korea, China and India: their TFP rose by about 20 percent (Korea, India) and almost doubled (China, 198)
+  between 2000 and 2023. Productivity can still grow fast where an economy is catching up.
+- **Look at your data:** Ireland's TFP rises by 15 percent from 2019 to 2023, much faster than in any other EU
+  country. The profits of multinational firms registered in Ireland inflate its GDP, the same accounting effect as in its
+  current account (Figure 11), so this is not a productivity miracle.
 
 <!-- cell -->
 
 ### Key numbers: average TFP growth
 
 ```{python}
+TFP_NAMES = {"tfp_usa": "United States", "tfp_deu": "Germany", "tfp_jpn": "Japan", "tfp_fra": "France",
+             "tfp_esp": "Spain", "tfp_ita": "Italy"}
 levels = tfp.set_index("year").rename(columns=TFP_NAMES)
 for first, last in [(1990, 2003), (2003, 2019), (2000, 2019), (2000, 2023)]:
     growth = 100 * ((levels.loc[last] / levels.loc[first]) ** (1 / (last - first)) - 1)

@@ -18,8 +18,8 @@ models. This chapter looks at where they came from and solves their most importa
 labor market. By the end of it you will be able to:
 
 - explain the letters D, S and GE, and how **real business cycle** models grew into DSGE models;
-- read U.S. data on total factor productivity (TFP) growth, and see why the way TFP is measured changes the
-  answer to "do TFP shocks cause recessions?";
+- read data on total factor productivity (TFP) growth, for the United States and 120 other countries, and see
+  why the way TFP is measured changes the answer to "do TFP shocks cause recessions?";
 - solve the labor market of a DSGE model, with labor demand from the marginal product of labor and labor supply
   $L^s = \bar{\ell}\,w/c$, and use it to study a TFP shock, a sales tax, government purchases and good news;
 - show how **sticky wages** and **sticky prices** change the effects of monetary policy on employment and the
@@ -38,7 +38,7 @@ model; they are not recomputed, and a short note in the section named in the las
 
 | Figure | Textbook figure | Type | What you can change |
 |---|---|---|---|
-| Figure 1 | 15.1 U.S. total factor productivity growth | data | — (hover for each year; raw and adjusted TFP compared in a second chart) |
+| Figure 1 | 15.1 U.S. total factor productivity growth | data | country (PWT, 120 countries); raw and adjusted TFP compared in a second chart |
 | Figure 2 | 15.2 The labor market in the DSGE model | model | TFP Ā, consumption c, labor-supply scale ℓ̄ |
 | Figure 3 | 15.3 A negative TFP shock in the DSGE model | model | TFP after the shock Ā′, sales tax τ, consumption c′ |
 | Figure 4 | 15.4 The imposition of a sales tax in the DSGE model | model | sales tax τ, TFP Ā′, consumption c′ |
@@ -72,7 +72,7 @@ import pandas as pd                   # data tables
 import plotly.express as px           # quick charts from data tables
 import plotly.graph_objects as go     # charts built piece by piece (model figures)
 import plotly.io as pio
-from ipywidgets import interact, FloatSlider, IntSlider, ToggleButtons
+from ipywidgets import interact, FloatSlider, IntSlider, ToggleButtons, Dropdown
 
 # One light blue/green look for every chart
 BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
@@ -404,6 +404,113 @@ fig.show()
 **What to notice.** The raw Solow residual rises and falls with GDP: this strong co-movement was the original
 evidence for RBC models. After the utilization adjustment the correlation is about zero. Measured TFP falls in
 recessions partly *because* firms use their workers and machines less, not the other way around.
+
+<!-- cell -->
+
+### Beyond the United States: TFP growth in 120 countries
+
+Fernald's utilization-adjusted series exists only for the United States: it needs detailed data on hours per
+worker and industry inputs that few countries publish. The **Penn World Table** (PWT 11.0) measures TFP for 120
+countries with plain growth accounting, so its TFP is a **raw Solow residual**, like `tfp_solow` above. For the
+United States, PWT's TFP growth has a correlation of 0.93 with Fernald's raw residual and only 0.29 with the
+adjusted series.
+
+```{python}
+world = pd.read_csv(DATA_URL + "pwt_growth.csv")
+world[world.country == "Japan"].tail(3)
+```
+
+Each row is one country in one year: `tfp_growth` and `gdp_growth` are the growth rates of TFP and of real GDP
+in percent (100 times the change in the log), and `region` is the World Bank region. The chart marks the years in
+which real GDP fell, so you can check the RBC story country by country: does TFP fall when GDP falls?
+
+> **Python note.** `world[world.country == country]` keeps the rows of one country. `(fell.tfp_growth < 0).sum()`
+> counts the true values. `go.Scatter(..., mode="markers")` adds points without a line. The `for top in [...]`
+> loop tries wider and wider axes and `return`s the first one that holds every point, so the axis only widens
+> when a country needs it. `"year" if n == 1 else "years"` picks the right word.
+
+```{python}
+def growth_axis(low, high):
+    """A y-axis range that holds every point: +-6, +-12, +-25, +-60 or +-110 percent, the narrowest that fits."""
+    for top in [6, 12, 25, 60, 110]:
+        if -top <= low and high <= top:
+            return [-1.05 * top, 1.05 * top]
+
+
+def tfp_country_chart(country="United States"):
+    """Figure 15.1 for any country: raw TFP growth (PWT 11.0), with the years in which real GDP fell marked."""
+    data = world[world.country == country]
+    fell = data[data.gdp_growth < 0]
+    hit = (fell.tfp_growth < 0).sum()
+    years = "year" if len(fell) == 1 else "years"
+    fig = px.line(data, x="year", y="tfp_growth", markers=True, color_discrete_sequence=[BLUE],
+                  labels={"year": "Year", "tfp_growth": "TFP growth (percent per year)"},
+                  title=f"{country}: TFP also fell in {hit} of the {len(fell)} {years} in which GDP fell")
+    fig.update_traces(name="TFP growth (PWT, raw)", showlegend=True, line_width=2, marker_size=5)
+    fig.add_trace(go.Scatter(x=fell.year, y=fell.tfp_growth, mode="markers", name="A year in which GDP fell",
+                             marker=dict(color=GREEN, size=11, symbol="diamond")))
+    fig.add_hline(y=0, line_dash="dash", line_color=GRAY)
+    fig.update_xaxes(range=[1953, 2025])
+    fig.update_yaxes(range=growth_axis(data.tfp_growth.min(), data.tfp_growth.max()))
+    fig.update_layout(legend=dict(x=0.01, y=0.01, xanchor="left", yanchor="bottom"))
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(tfp_country_chart, country=Dropdown(options=sorted(world.country.unique()), value="United States",
+                                             description="country", style=WIDE));
+```
+
+The website cannot run Python, so the next helper precomputes the chart for every country and joins them with a
+menu.
+
+```{python}
+#| kind: helper
+# @title Helper for the website country menu (run this cell; you do not need to read it)
+def dropdown_figure(make_figure, name, values, start):
+    """Precompute make_figure(name=value) for every value and join the results with a dropdown menu.
+
+    Like slider_figure, but each choice also sets its own axis ranges.
+    """
+    figures = [make_figure(**{name: v}) for v in values]
+    first = values.index(start)
+    fig = go.Figure(layout=figures[first].layout)
+    owner = []
+    for i, f in enumerate(figures):
+        for trace in f.data:
+            trace.visible = (i == first)
+            fig.add_trace(trace)
+            owner.append(i)
+    buttons = []
+    for i, f in enumerate(figures):
+        layout = {"title": f.layout.title.to_plotly_json(), "xaxis.range": f.layout.xaxis.range,
+                  "yaxis.range": f.layout.yaxis.range}
+        buttons.append(dict(method="update", label=str(values[i]), args=[{"visible": [o == i for o in owner]}, layout]))
+    fig.update_layout(updatemenus=[dict(buttons=buttons, active=first, direction="down", x=1, y=1.02,
+                                        xanchor="right", yanchor="bottom")], margin=dict(t=110))
+    return fig
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 1 for any country, with a country menu
+dropdown_figure(tfp_country_chart, "country", sorted(world.country.unique()), start="United States")
+```
+
+On the website, pick a country in the menu above the chart.
+
+**What to notice.**
+
+- In most countries the raw Solow residual falls almost every time GDP falls: in Japan, Italy and Mexico in every
+  such year, and in 930 of the 990 country-years with falling GDP in the whole table. That is the co-movement RBC
+  models were built on, and Fernald's adjustment suggests much of it is a change in utilization.
+- The United States is an exception: PWT's TFP fell in only 4 of its 8 years of falling GDP, and it grew in 2009.
+- Germany, Japan, Italy and the United Kingdom all show TFP falls of 3.8 to 4.5 percent in 2009, when their GDP
+  fell by 4.7 to 5.9 percent.
+- **Look at your data.** Pick Iraq or Kuwait: in 1991, the year of the Gulf War, their TFP growth is −105 and −51
+  percent (log changes, which can go below −100). Macao's is −80 in 2020, when its casinos closed. These are
+  collapses of output, not TFP shocks in the RBC sense, and they are why the axis widens for some countries.
 
 <!-- cell -->
 

@@ -24,7 +24,8 @@ numbers that describe a whole economy. By the end of it you will be able to:
   measure **inflation** with the GDP deflator;
 - compare GDP across countries with exchange rates and **purchasing power parity**;
 - read CSV files with pandas, compute new columns, work with dates, and draw area and line charts
-  with Plotly Express.
+  with Plotly Express;
+- compare countries, and check that two data sources use the same definitions before you compare them.
 
 <!-- cell -->
 
@@ -35,11 +36,11 @@ figure each notebook figure replicates.
 
 | Figure | Textbook figure | Type | What you can change |
 |---|---|---|---|
-| Figure 1 | 2.1 Composition of U.S. GDP | data | stacked areas or separate lines |
-| Figure 2 | 2.2 Expenditure shares of U.S. GDP | data | the base year of the changes |
-| Figure 3 | 2.3 Labor's share of GDP | data | the first year of the trend line |
-| Figure 4 | 2.4 The level of the GDP deflator | data | linear or ratio scale |
-| Figure 5 | 2.5 The annual inflation rate using the GDP deflator | data | yearly or quarterly inflation |
+| Figure 1 | 2.1 Composition of U.S. GDP | data | stacked areas or separate lines; the country (World Bank data) |
+| Figure 2 | 2.2 Expenditure shares of U.S. GDP | data | the country; the base year of the U.S. changes |
+| Figure 3 | 2.3 Labor's share of GDP | data | the first year of the trend line; other countries (Penn World Table) |
+| Figure 4 | 2.4 The level of the GDP deflator | data | linear or ratio scale; other countries (yearly) |
+| Figure 5 | 2.5 The annual inflation rate using the GDP deflator | data | yearly or quarterly inflation; other countries (yearly) |
 
 The textbook's tables are rebuilt where they belong: Table 2.4 (real GDP in a two-good economy)
 in "The model in code", Table 2.1 (the expenditure approach) in Figure 1, and Table 2.2 (the
@@ -64,7 +65,7 @@ import pandas as pd                   # data tables
 import plotly.express as px           # quick charts from data tables
 import plotly.graph_objects as go     # charts built piece by piece
 import plotly.io as pio
-from ipywidgets import interact, ToggleButtons, Dropdown
+from ipywidgets import interact, ToggleButtons, Dropdown, SelectMultiple
 
 # One light blue/green look for every chart
 BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
@@ -112,6 +113,78 @@ def slider_figure(make_figure, name, values, start, label=None):
         steps.append(dict(method="update", label=str(values[i]), args=[{"visible": visible}, layout]))
     fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
                                     currentvalue=dict(prefix=(label or name) + " = "))])
+    return fig
+```
+
+The data figures of this chapter let you add other countries. On the website, a menu above each of
+these figures adds a group of countries (the G7, a world region, ...); the next cell builds those menus.
+
+```{python}
+#| kind: helper
+# @title Helpers for the website's country menus (run this cell; you do not need to read it)
+def country_traces(data, y, skip, x="year", fmt=".1f", markers=False):
+    """One line per country of a long table (country, x, y), leaving out the countries in skip."""
+    extra = {}
+    for name, part in data.groupby("country"):
+        if name not in skip:
+            extra[name] = [go.Scatter(x=part[x], y=part[y], name=name, mode="lines+markers" if markers else "lines",
+                                      line=dict(color=COLORS[name], width=2),
+                                      hovertemplate=f"<b>{name}</b><br>%{{x}}: %{{y:{fmt}}}<extra></extra>")]
+    return extra
+
+
+def country_menu(fig, extra, countries):
+    """Add the extra countries' traces hidden, and a menu that shows one group of them (G7, a region, ...).
+
+    The traces already in fig (the textbook's) stay as they are, and slider steps only switch those."""
+    n = len(fig.data)
+    owner = []
+    for name, traces in extra.items():
+        for trace in traces:
+            trace.visible = False
+            fig.add_trace(trace)
+            owner.append(name)
+    groups = {"G7": countries.country[countries.g7], "G20": countries.country[countries.g20],
+              "OECD": countries.country[countries.oecd]}
+    for region in sorted(countries.region.unique()):
+        groups[region] = countries.country[countries.region == region]
+    rest, autoscale = list(range(n, len(fig.data))), {"yaxis.autorange": True}
+    buttons = [dict(label="Textbook only", method="update", args=[{"visible": [False] * len(owner)}, autoscale, rest])]
+    for label, members in groups.items():
+        visible = [o in set(members) for o in owner]
+        if any(visible):
+            buttons.append(dict(label=f"+ {label} ({sum(visible)})", method="update", args=[{"visible": visible}, autoscale, rest]))
+    menu = dict(type="dropdown", buttons=buttons, active=0, x=1, xanchor="right", y=1.02, yanchor="bottom")
+    fig.update_layout(updatemenus=list(fig.layout.updatemenus) + [menu], margin=dict(t=110))
+    for slider in fig.layout.sliders:
+        for step in slider.steps:
+            step.args = [{"visible": list(step.args[0]["visible"])}, step.args[1], list(range(n))]
+    return fig
+```
+
+```{python}
+#| kind: helper
+# @title Helper for the website's one-country menus (run this cell; you do not need to read it)
+def dropdown_figure(make_figure, name, values, start):
+    """Like slider_figure, but with a dropdown menu: one precomputed figure per value (e.g. per country)."""
+    figures = [make_figure(**{name: v}) for v in values]
+    fig = go.Figure(layout=figures[values.index(start)].layout)
+    owner = []
+    for i, f in enumerate(figures):
+        for trace in f.data:
+            trace.visible = (values[i] == start)
+            fig.add_trace(trace)
+            owner.append(i)
+    buttons = []
+    for i, f in enumerate(figures):
+        layout = {"title": f.layout.title.to_plotly_json(), "annotations": [a.to_plotly_json() for a in f.layout.annotations],
+                  "shapes": [s.to_plotly_json() for s in f.layout.shapes], "yaxis": f.layout.yaxis.to_plotly_json(),
+                  "xaxis": f.layout.xaxis.to_plotly_json()}
+        if "yaxis2" in f.layout.to_plotly_json():       # a second vertical axis (Figure 2)
+            layout["yaxis2"] = f.layout.yaxis2.to_plotly_json()
+        buttons.append(dict(label=str(values[i]), method="update", args=[{"visible": [o == i for o in owner]}, layout]))
+    menu = dict(type="dropdown", buttons=buttons, active=values.index(start), x=1, xanchor="right", y=1.02, yanchor="bottom")
+    fig.update_layout(updatemenus=[menu], margin=dict(t=110))
     return fig
 ```
 
@@ -261,46 +334,103 @@ long["component"] = long.series.map(NAMES)
 long.head()
 ```
 
+<!-- cell -->
+
+### The same accounts for other countries
+
+The World Bank publishes the same four shares for about 190 countries, in `expenditure_world.csv`
+(from 1960 for many). A second file, `countries.csv`, lists every economy with its world region and its
+membership of the G7, the G20 and the OECD; the website's country menus use it.
+
+```{python}
+world = pd.read_csv(DATA_URL + "expenditure_world.csv")
+countries = pd.read_csv(DATA_URL + "countries.csv")
+world[world.country == "China"].tail(3)
+```
+
+The World Bank follows the United Nations' *System of National Accounts*, which draws one line
+differently from the BEA: what governments spend on roads, buildings and equipment counts as
+**investment**, and government purchases cover only government *consumption*. Compare the U.S. numbers
+of the two sources.
+
+> **Python note.** `pd.DataFrame({...})` builds a table from several columns; their rows are matched by
+> year. `.loc[[1970, 2000, 2024]]` keeps three years.
+
+```{python}
+bea = shares.set_index("year")
+wb = world[world.country == "United States"].set_index("year")
+pd.DataFrame({"I, BEA": bea.investment_share, "I, World Bank": wb.investment,
+              "G, BEA": bea.government_share, "G, World Bank": wb.government}).loc[[1970, 2000, 2024]].round(1)
+```
+
+The World Bank's investment share is about 4 points higher and its government share about 4 points
+lower: the same spending sits in a different box. Consumption and net exports agree. **Before you compare
+countries, check that the numbers use the same definitions.**
+
 The textbook stacks the shares on top of each other: net exports at the bottom, then consumption,
 investment, and government purchases up to 100 percent. `px.area` stacks areas in the order of
-`category_orders`, and `color_discrete_map` gives each component a fixed color. Because net exports are negative in recent decades, consumption starts *below*
-zero in those years.
+`category_orders`, and `color_discrete_map` gives each component a fixed color. Because net exports are
+negative in recent decades, consumption starts *below* zero in those years. The function draws the BEA's
+U.S. data, or the World Bank's data for any other country.
+
+> **Python note.** `np.floor` and `np.ceil` round down and up, so `10 * np.ceil(x / 10)` is the next
+> multiple of 10 above `x`: the axes grow in steps of 10 points for countries with unusual shares.
+> `data.groupby("year").share.sum()` adds up the four shares within each year (the top of the stack),
+> and `max(a, b)` is the larger of two numbers.
 
 ```{python}
 ORDER = ["Net exports", "Consumption", "Investment", "Government purchases"]
-COLORS = {"Net exports": "#e0a33b", "Consumption": "#5aa0d8", "Investment": GREEN, "Government purchases": TEAL}
+COLORS_GDP = {"Net exports": "#e0a33b", "Consumption": "#5aa0d8", "Investment": GREEN, "Government purchases": TEAL}
 LABELS = {"year": "Year", "share": "Percent of GDP", "component": "Component"}
+WB_NAMES = {"consumption": "Consumption", "investment": "Investment", "government": "Government purchases",
+            "net_exports": "Net exports"}
+BEA = "United States (BEA)"
 
 
-def composition_chart(style="stacked areas"):
-    """Figure 2.1: the expenditure shares of U.S. GDP, 1929-2025, stacked or as separate lines."""
+def composition_chart(style="stacked areas", country=BEA):
+    """Figure 2.1: the expenditure shares of GDP, stacked or as separate lines (BEA, or World Bank data)."""
+    data = long
+    title = "Composition of U.S. GDP: stable shares, except during World War II"
+    if country != BEA:
+        data = world[world.country == country].melt(id_vars="year", value_vars=list(WB_NAMES), value_name="share")
+        data["component"] = data.variable.map(WB_NAMES)
+        title = f"Composition of GDP in {country} (World Bank definitions)"
     if style == "stacked areas":
-        fig = px.area(long, x="year", y="share", color="component", color_discrete_map=COLORS,
-                      category_orders={"component": ORDER}, labels=LABELS)
+        fig = px.area(data, x="year", y="share", color="component", color_discrete_map=COLORS_GDP,
+                      category_orders={"component": ORDER}, labels=LABELS, title=title)
     else:
-        fig = px.line(long, x="year", y="share", color="component", color_discrete_map=COLORS,
-                      category_orders={"component": ORDER}, labels=LABELS)
+        fig = px.line(data, x="year", y="share", color="component", color_discrete_map=COLORS_GDP,
+                      category_orders={"component": ORDER}, labels=LABELS, title=title)
     fig.add_hline(y=0, line_dash="dash", line_color="black", line_width=1)
-    fig.update_xaxes(range=[1929, 2025])
-    fig.update_yaxes(range=[-10, 100])
-    fig.update_layout(title="Composition of U.S. GDP: stable shares, except during World War II")
+    top = max(data.groupby("year").share.sum().max(), data.share.max())     # stacked total or largest share
+    fig.update_xaxes(range=[data.year.min(), 2025])
+    fig.update_yaxes(range=[min(-10, 10 * np.floor(data.share.min() / 10)), max(100, 10 * np.ceil(top / 10))])
     return fig
 ```
 
 > **Python note.** `interact` draws the figure again whenever you change a widget. `ToggleButtons`
-> is a row of buttons, one per option. The `;` at the end only hides an extra line of text.
+> is a row of buttons, one per option, and a `Dropdown` is a menu from which you choose one entry. The `;`
+> at the end only hides an extra line of text.
 
 ```{python}
 #| kind: widget
 interact(composition_chart,
-         style=ToggleButtons(options=["stacked areas", "separate lines"], description="chart", style=WIDE));
+         style=ToggleButtons(options=["stacked areas", "separate lines"], description="chart", style=WIDE),
+         country=Dropdown(options=[BEA] + sorted(world.country.unique()), value=BEA, description="country"));
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: Figure 1 with a precomputed slider for the chart style
-slider_figure(composition_chart, "style", ["stacked areas", "separate lines"], start="stacked areas", label="chart")
+# @title Website version: Figure 1 with buttons for the chart style and a menu of countries (G20 and OECD)
+members = countries[countries.g20 | countries.oecd].country
+fig = dropdown_figure(composition_chart, "country", [BEA] + sorted(set(members) & set(world.country)), start=BEA)
+fig.update_layout(updatemenus=list(fig.layout.updatemenus) + [dict(type="buttons", direction="right", x=0, xanchor="left",
+    y=1.02, yanchor="bottom", buttons=[dict(label="stacked areas", method="restyle", args=[{"stackgroup": "1"}]),
+                                       dict(label="separate lines", method="restyle", args=[{"stackgroup": None}])])])
+fig
 ```
+
+The website's menu lists the G20 and OECD members; in Colab you can choose any of the countries.
 
 **What to notice.**
 
@@ -313,6 +443,9 @@ slider_figure(composition_chart, "style", ["stacked areas", "separate lines"], s
 - Net exports were zero or slightly positive for most years before 1976, and negative in every year
   since. The deficit was deepest in 2006. Hover over the lines to read the values, and click a
   component in the legend to hide it.
+- Choose China: in 2024 consumption was only 40 percent of GDP and investment also 40 percent, about
+  twice the U.S. investment share. Choose Ireland: in 2025 its net exports were 40 percent of GDP,
+  because multinational firms book large exports there.
 
 > **Python note.** `.set_index("year")` uses the years as row labels, so `by_year.loc[1950:]` keeps the
 > rows from 1950 on. `.idxmax()` returns the row label (here the year) of the largest value, and
@@ -408,29 +541,55 @@ recent.head()
 ```
 
 As in the textbook, consumption is measured on its own axis on the right, because it is much larger
-than the other three shares.
+than the other three shares. The function draws the BEA's U.S. data, or the World Bank's data (from
+1970) for any other country; both axes widen in steps of 10 points when a country's shares do not fit.
 
 > **Python note.** `px.line` with a list of columns as `y` draws one line per column. We then add the
 > consumption line with `fig.add_trace(go.Scatter(...))`, and `yaxis="y2"` attaches it to a second
 > vertical axis. In `update_layout`, `overlaying="y"` puts that axis on top of the first one, and
-> `side="right"` puts its labels on the right.
+> `side="right"` puts its labels on the right. `.rename(columns=WB_NAMES)` gives the World Bank's
+> columns the same names as ours, `data.iloc[0]` is the first row and `data.iloc[-1]` the last, and
+> `"rose" if a > b else "fell"` picks one of two words.
 
 ```{python}
-first, last = recent.iloc[0], recent.iloc[-1]
-fig = px.line(recent, x="year", y=["Government purchases", "Investment", "Net exports"],
-              color_discrete_sequence=[TEAL, GREEN, "#e0a33b"],
-              labels={"year": "Year", "value": "Share of GDP (percent)", "variable": "Component"},
-              title=f"Consumption rose from {first.Consumption:.0f} to {last.Consumption:.0f} percent of GDP "
-                    f"between {first.year:.0f} and {last.year:.0f}")
-fig.add_trace(go.Scatter(x=recent.year, y=recent.Consumption, name="Consumption (right axis)",
-                         line=dict(color=BLUE, width=3), yaxis="y2"))
-fig.add_hline(y=0, line_dash="dash", line_color="black", line_width=1)
-fig.update_layout(yaxis=dict(range=[-6, 46], tickvals=[0, 5, 10, 15, 20, 25]),   # no label in the bottom-left corner
-                  yaxis2=dict(title="Consumption (percent of GDP)", overlaying="y", side="right",
-                              range=[36, 70], tickvals=[60, 64, 68], showgrid=False),
-                  legend=dict(x=1.1))                          # move the legend clear of the right axis
-fig.show()
+def shares_chart(country=BEA):
+    """Figure 2.2: expenditure shares since 1970, consumption on the right axis (BEA, or World Bank data)."""
+    data = recent
+    if country != BEA:
+        data = world[(world.country == country) & (world.year >= 1970)].rename(columns=WB_NAMES)
+    first, last = data.iloc[0], data.iloc[-1]
+    verb = "rose" if last.Consumption > first.Consumption else "fell"
+    fig = px.line(data, x="year", y=["Government purchases", "Investment", "Net exports"],
+                  color_discrete_sequence=[TEAL, GREEN, "#e0a33b"],
+                  labels={"year": "Year", "value": "Share of GDP (percent)", "variable": "Component"},
+                  title=f"{country}: consumption {verb} from {first.Consumption:.0f}% to {last.Consumption:.0f}% "
+                        f"of GDP, {first.year:.0f}–{last.year:.0f}")
+    fig.add_trace(go.Scatter(x=data.year, y=data.Consumption, name="Consumption (right axis)",
+                             line=dict(color=BLUE, width=3), yaxis="y2"))
+    fig.add_hline(y=0, line_dash="dash", line_color="black", line_width=1)
+    others = data[["Government purchases", "Investment", "Net exports"]]
+    low, high = min(-6, 10 * np.floor(others.min().min() / 10)), max(46, 10 * np.ceil(others.max().max() / 10) + 20)
+    c_low, c_high = min(36, 10 * np.floor(data.Consumption.min() / 10) - 30), max(70, 10 * np.ceil(data.Consumption.max() / 10))
+    fig.update_layout(yaxis=dict(range=[low, high], tickvals=[0, 5, 10, 15, 20, 25] if high == 46 else None),
+                      yaxis2=dict(title="Consumption (percent of GDP)", overlaying="y", side="right",
+                                  range=[c_low, c_high], tickvals=[60, 64, 68] if c_low == 36 else None, showgrid=False),
+                      legend=dict(x=1.1), xaxis=dict(range=[1969, 2026]))      # legend clear of the right axis
+    return fig
 ```
+
+```{python}
+#| kind: widget
+since_1970 = world[world.year >= 1970]                 # countries with data since 1970
+interact(shares_chart, country=Dropdown(options=[BEA] + sorted(since_1970.country.unique()), value=BEA, description="country"));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 2 with a menu of countries (the G20 and OECD members)
+dropdown_figure(shares_chart, "country", [BEA] + sorted(set(members) & set(world.country)), start=BEA)
+```
+
+The website's menu lists the G20 and OECD members; in Colab you can choose any of the countries.
 
 ```{python}
 wide = recent.set_index("year")
@@ -489,6 +648,9 @@ slider_figure(changes_chart, "base_year", [1970, 1980, 1990, 2000, 2010], start=
 - Choose 2000 as the base year: the big shift into consumption happened before 2000 (only +1.6 points
   since then). With 2010 as the base, investment rises and government purchases fall by 3.6 points
   each, because 2010 came just after the Great Recession, when investment was low.
+- In the first chart, choose China: its consumption share fell from 53 percent of GDP in 1970 to 35
+  percent in 2010, while investment boomed; by 2024 it was back at 40 percent. Choose Japan: its
+  consumption share rose from 45 to 53 percent.
 
 **Your turn.** Check the accounting yourself: compute the change in each share between 1980 and 2025,
 and add the four changes. Why is the sum (almost exactly) zero?
@@ -533,24 +695,62 @@ print(f"Labor share in 2022: {rebuilt[2022]:.4f} rebuilt from nipa, "
       f"{labor[labor.year == 2022].labor_share.iloc[0]:.4f} in the figure file")
 ```
 
-The textbook's figure shows a straight trend line fitted to the data. Pick the year where the line
-starts, and see how steep the decline is.
-
-> **Python note.** `np.polyfit(x, y, 1)` fits the best straight line $y = a + bx$ through the points
-> (by least squares) and returns the slope $b$ first and the intercept $a$ second.
+The labor share is a classic cross-country fact too. The Penn World Table, a database of national
+accounts for about 180 countries, estimates it for 140 of them from 1950 on (`labor_share_world.csv`).
+Its method differs a little from the textbook's: it treats the income of the self-employed in other
+ways, depending on the data each country has. For the United States its share is about 0.03 lower.
 
 ```{python}
-def labor_share_chart(start=1970):
-    """Figure 2.3: labor's share of GDP, 1950-2025, with a straight trend line fitted from `start`."""
+pwt = pd.read_csv(DATA_URL + "labor_share_world.csv")
+us_pwt = pwt[pwt.country == "United States"].set_index("year").labor_share
+print(f"{pwt.country.nunique()} countries, {pwt.year.min()}-{pwt.year.max()}")
+print(f"U.S. 2019: {us_pwt[2019]:.3f} in the Penn World Table, {labor.set_index('year').labor_share[2019]:.3f} in Figure 3")
+```
+
+Each country keeps one color in every chart: a few have fixed colors, and the others take one of 24
+distinct colors in turn.
+
+> **Python note.** `for i, name in enumerate(...)` hands over each name together with its position `i`
+> (0, 1, 2, ...). `i % 24` is the remainder after dividing by 24, so the 24 colors repeat in turn.
+> `if name not in COLORS:` skips the names that already have a color.
+
+```{python}
+COLORS = {"United States": BLUE, "Germany": TEAL, "Japan": GREEN, "China": "#e0a33b", "United Kingdom": "#5aa0d8"}
+OTHER = px.colors.qualitative.Dark24                 # 24 distinct colors for the other countries
+for i, name in enumerate(countries.country):
+    if name not in COLORS:
+        COLORS[name] = OTHER[i % len(OTHER)]
+```
+
+The textbook's figure shows a straight trend line fitted to the data. Pick the year where the line
+starts, and see how steep the decline is. You can also add other countries from the Penn World Table
+(including the United States, to compare the two measures).
+
+> **Python note.** `np.polyfit(x, y, 1)` fits the best straight line $y = a + bx$ through the points
+> (by least squares) and returns the slope $b$ first and the intercept $a$ second. `SelectMultiple` is a
+> list from which you can pick several entries: hold Ctrl (Cmd on a Mac) and click to add or remove one.
+> `.isin(chosen)` keeps the rows of the chosen countries, and `for name, part in extra.groupby("country"):`
+> hands over each country's name and rows in turn, so each gets its own line. `pd.concat([a, b])` stacks
+> two columns into one, and `x if condition else y` picks `x` when the condition is true.
+
+```{python}
+def labor_share_chart(start=1970, chosen=()):
+    """Figure 2.3: labor's share of GDP, 1950-2025, with a trend line from `start`; other countries from PWT."""
     after = labor[labor.year >= start]
     slope, intercept = np.polyfit(after.year, after.labor_share, 1)
     fig = px.line(labor, x="year", y="labor_share", labels={"year": "Year", "labor_share": "Labor share of GDP"})
     fig.update_traces(line=dict(color=BLUE, width=3), fill="tozeroy", fillcolor="rgba(22, 82, 140, 0.12)",
-                      name="Labor share", showlegend=True)
+                      name="Labor share (textbook)", showlegend=True)
     fig.add_trace(go.Scatter(x=after.year, y=intercept + slope * after.year, name=f"Trend since {start}",
                              line=dict(color=GREEN, width=3, dash="dash")))
+    extra = pwt[pwt.country.isin(chosen)]
+    for name, part in extra.groupby("country"):
+        fig.add_trace(go.Scatter(x=part.year, y=part.labor_share, name=f"{name} (PWT)", line=dict(color=COLORS[name])))
+    shown = pd.concat([labor.labor_share, extra.labor_share])      # every value on the chart
+    low = 0.55 if shown.min() >= 0.55 else 0.05 * np.floor(shown.min() / 0.05)      # widen in steps of 0.05
+    high = 0.75 if shown.max() <= 0.75 else 0.05 * np.ceil(shown.max() / 0.05)
     fig.update_xaxes(range=[1950, 2025])
-    fig.update_yaxes(range=[0.55, 0.75], tickvals=[0.6, 0.65, 0.7, 0.75])   # no label in the bottom-left corner
+    fig.update_yaxes(range=[low, high], tickvals=[0.6, 0.65, 0.7, 0.75] if low == 0.55 else None)  # no corner label
     # slope is per year, as a fraction: x 100 for percentage points, x 10 for a decade
     fig.update_layout(title=f"Labor share: trend since {start} is {1000 * slope:+.1f} percentage points per decade")
     return fig
@@ -560,14 +760,19 @@ def labor_share_chart(start=1970):
 #| kind: widget
 interact(labor_share_chart,
          start=Dropdown(options=[1950, 1960, 1970, 1980, 1990, 2000], value=1970, description="trend from",
-                        style=WIDE));
+                        style=WIDE),
+         chosen=SelectMultiple(options=sorted(pwt.country.unique()), value=(), rows=8, description="add (PWT)"));
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: Figure 3 with a precomputed slider for the first year of the trend
-slider_figure(labor_share_chart, "start", [1950, 1960, 1970, 1980, 1990, 2000], start=1970, label="trend from")
+# @title Website version: Figure 3 with a precomputed slider for the trend and a menu of countries
+fig = slider_figure(labor_share_chart, "start", [1950, 1960, 1970, 1980, 1990, 2000], start=1970, label="trend from")
+country_menu(fig, country_traces(pwt, "labor_share", [], fmt=".3f"), countries)
 ```
+
+On the website, the menu above the chart adds a group of countries from the Penn World Table; click a
+country in the legend to hide it.
 
 ```{python}
 share_by_year = labor.set_index("year").labor_share
@@ -588,6 +793,12 @@ print("Years below 0.60:", list(share_by_year[share_by_year < 0.60].index))
   for the last years in the textbook are slightly lower than the book's, because of the 2023 data
   revision. Part of the decline reflects how the national accounts treat software and R&D, which is
   still debated by researchers.
+- Add other countries. The labor share fell in Germany too (0.69 in 1970, 0.64 in 2023), but it rose in
+  Japan (0.51 to 0.59) and South Korea (0.42 to 0.55). Two-thirds is a rough rule for rich countries,
+  not a law of nature. Oil exporters such as Qatar (0.18) and Kuwait (0.25) have very low shares,
+  because most of their income is oil revenue. Some values are doubtful: the Penn World Table puts
+  Venezuela at exactly 0.0844 in every year from 2019 to 2023, a value carried forward, not measured. **Look at the extremes before you trust
+  a cross-country file.**
 
 ### Key numbers: Table 2.2, the income approach
 
@@ -679,18 +890,52 @@ def shade_recessions(fig):
     for i in range(len(recessions)):
         fig.add_vrect(x0=recessions.start[i], x1=recessions.end[i], fillcolor=GRAY, opacity=0.25, line_width=0)
     return fig
+```
 
+The World Bank publishes the GDP deflator of about 200 countries, once a year. Each country publishes
+its index with its own base year, so `deflator_world.csv` has been **rebased**: every country's deflator
+is divided by its 2012 value and multiplied by 100, like the U.S. series. The file also holds the
+yearly inflation rate of each deflator, which Figure 5 uses. We place each yearly value in the middle of
+its year.
 
-def deflator_chart(scale="linear"):
-    """Figure 2.4: the GDP deflator (2012 = 100), quarterly since 1947, on a linear or ratio scale."""
+> **Python note.** `.astype(str)` turns numbers into text, so `deflators.year.astype(str) + "-07-01"`
+> builds dates such as `"2012-07-01"`, and `pd.to_datetime` turns that text into real dates.
+
+```{python}
+deflators = pd.read_csv(DATA_URL + "deflator_world.csv")
+deflators["date"] = pd.to_datetime(deflators.year.astype(str) + "-07-01")   # mid-year
+print("Every country's deflator in 2012:", deflators[deflators.year == 2012].deflator_2012_100.dropna().unique())
+deflators[deflators.country == "Japan"].tail(3)
+```
+
+The chart draws the U.S. quarterly series and, if you choose them, other countries' yearly series. When a
+chosen country's prices were far lower or higher, the axis widens tenfold until every value fits.
+
+> **Python note.** A `while` loop repeats its indented lines as long as its condition is true: here it
+> multiplies the top of the axis by 10 until the largest value fits below it (and divides the bottom of
+> the ratio scale by 10 until the smallest value fits above it).
+
+```{python}
+def deflator_chart(scale="linear", chosen=()):
+    """Figure 2.4: the GDP deflator (2012 = 100), U.S. quarterly since 1947, other countries yearly."""
     fig = px.line(deflator, x="date", y="gdp_deflator_2012_100", log_y=(scale == "ratio"),
                   labels={"date": "Quarter", "gdp_deflator_2012_100": "GDP deflator (index, 2012 = 100)"})
-    fig.update_traces(line=dict(color=BLUE, width=3))
+    fig.update_traces(line=dict(color=BLUE, width=3), name="United States (quarterly)", showlegend=True)
+    extra = deflators[deflators.country.isin(chosen)].dropna(subset=["deflator_2012_100"])
+    for name, part in extra.groupby("country"):
+        fig.add_trace(go.Scatter(x=part.date, y=part.deflator_2012_100, name=name, line=dict(color=COLORS[name])))
     shade_recessions(fig)
+    shown = pd.concat([deflator.gdp_deflator_2012_100, extra.deflator_2012_100])
+    low, high = 9, (170 if scale == "ratio" else 150)
+    while low > shown.min():
+        low = low / 10                   # widen the axis tenfold at a time until every value fits
+    while high < shown.max():
+        high = high * 10
     if scale == "ratio":
-        fig.update_yaxes(tickvals=[10, 20, 40, 80, 160], range=[np.log10(9), np.log10(170)])
+        fig.update_yaxes(tickvals=[10, 20, 40, 80, 160] if (low, high) == (9, 170) else None,
+                         range=[np.log10(low), np.log10(high)])
     else:
-        fig.update_yaxes(range=[0, 150])
+        fig.update_yaxes(range=[0, high])
     factor = deflator.gdp_deflator_2012_100.iloc[-1] / deflator.gdp_deflator_2012_100.iloc[0]
     fig.update_layout(title=f"The U.S. price level rose about {factor:.0f}-fold from 1947 to 2026")
     return fig
@@ -699,21 +944,25 @@ def deflator_chart(scale="linear"):
 ```{python}
 #| kind: widget
 interact(deflator_chart,
-         scale=ToggleButtons(options=["linear", "ratio"], description="vertical scale", style=WIDE));
+         scale=ToggleButtons(options=["linear", "ratio"], description="vertical scale", style=WIDE),
+         chosen=SelectMultiple(options=sorted(deflators.dropna(subset=["deflator_2012_100"]).country.unique()), value=(),
+                               rows=8, description="add countries"));
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: Figure 4 with buttons for the vertical scale
+# @title Website version: Figure 4 with buttons for the vertical scale and a menu of countries
 fig = deflator_chart()
 fig.update_layout(updatemenus=[dict(type="buttons", direction="right", x=0.01, y=0.98, xanchor="left", yanchor="top", buttons=[
-    dict(label="linear scale", method="relayout", args=[{"yaxis.type": "linear", "yaxis.range": [0, 150],
-                                                         "yaxis.tickvals": None}]),
-    dict(label="ratio scale", method="relayout", args=[{"yaxis.type": "log",
-                                                        "yaxis.range": [np.log10(9), np.log10(170)],
-                                                        "yaxis.tickvals": [10, 20, 40, 80, 160]}])])])
-fig
+    dict(label="linear scale", method="relayout", args=[{"yaxis.type": "linear", "yaxis.autorange": True}]),
+    dict(label="ratio scale", method="relayout", args=[{"yaxis.type": "log", "yaxis.autorange": True,
+                                                        "yaxis.tickvals": None}])])])
+yearly_levels = deflators.dropna(subset=["deflator_2012_100"])
+country_menu(fig, country_traces(yearly_levels, "deflator_2012_100", [], x="date", fmt=",.4g"), countries)
 ```
+
+On the website, the menu above the chart adds a group of countries (yearly data); the buttons switch the
+scale. Use the ratio scale when you add countries: their price levels differ by many powers of ten.
 
 **What to notice.**
 
@@ -722,6 +971,8 @@ fig
 - On the linear scale the line rises about as steeply in the 2000s as in the 1970s, because the same
   percentage increase adds more index points when prices are already high. Switch to the ratio scale:
   there the slope is the *percentage* rate of change, and the 1970s clearly stand out.
+- Add Japan: its deflator *fell* from 119 in 1994 to 100 in 2013, two decades of deflation. Add Turkey on the
+  ratio scale: its price level in 2025 was more than 30,000 times its 1990 level.
 
 > **Python note.** With dates as row labels, `level["1965"]` picks the four quarters of 1965, and
 > `.mean()` averages them. The formula $(\text{end}/\text{start})^{1/\text{years}} - 1$ is the average
@@ -817,15 +1068,27 @@ print(f"Largest difference from FRED's numbers: {gap:.4f} percentage points")
 > **Python note.** `.dropna()` drops the rows that hold `NaN`, here the first quarters. A date knows its
 > parts: `last.date.year` is its year and `last.date.quarter` its quarter (1 to 4).
 
+Other countries can be added with their yearly GDP-deflator inflation from `deflators` (Figure 4). The
+vertical axis runs from −5 to 16 percent, and doubles at either end until every chosen value fits.
+
 ```{python}
-def inflation_chart(measure="change from a year ago"):
-    """Figure 2.5: inflation of the GDP deflator since 1947, with recession bands."""
+def inflation_chart(measure="change from a year ago", chosen=()):
+    """Figure 2.5: inflation of the GDP deflator since 1947, with recession bands; other countries yearly."""
     series = rates[measure].dropna().reset_index()
-    fig = px.line(series, x="date", y=measure, range_y=[-5, 16],
-                  labels={"date": "Quarter", measure: "Inflation (percent)"})
-    fig.update_traces(line=dict(color=BLUE, width=2))
+    fig = px.line(series, x="date", y=measure, labels={"date": "Quarter", measure: "Inflation (percent)"})
+    fig.update_traces(line=dict(color=BLUE, width=2), name="United States (quarterly)", showlegend=True)
+    extra = deflators[deflators.country.isin(chosen)].dropna(subset=["inflation"])
+    for name, part in extra.groupby("country"):
+        fig.add_trace(go.Scatter(x=part.date, y=part.inflation, name=name, line=dict(color=COLORS[name])))
     fig.add_hline(y=0, line_color="black", line_width=1)
     shade_recessions(fig)
+    shown = pd.concat([series[measure], extra.inflation])
+    low, high = -5, 16
+    while low > shown.min():
+        low = low * 2                    # widen the axis in steps until every value fits
+    while high < shown.max():
+        high = high * 2
+    fig.update_yaxes(range=[low, high])
     last = series.iloc[-1]
     fig.update_layout(title=f"Inflation, {measure}: {last[measure]:.1f}% in {last.date.year} Q{last.date.quarter}")
     return fig
@@ -835,15 +1098,22 @@ def inflation_chart(measure="change from a year ago"):
 #| kind: widget
 interact(inflation_chart,
          measure=ToggleButtons(options=["change from a year ago", "quarterly change, annual rate"],
-                               description="measure", style=WIDE));
+                               description="measure", style=WIDE),
+         chosen=SelectMultiple(options=sorted(deflators.dropna(subset=["inflation"]).country.unique()), value=(),
+                               rows=8, description="add countries"));
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: Figure 5 with a precomputed slider for the inflation measure
-slider_figure(inflation_chart, "measure", ["change from a year ago", "quarterly change, annual rate"],
-              start="change from a year ago", label="measure")
+# @title Website version: Figure 5 with a precomputed slider for the inflation measure and a menu of countries
+fig = slider_figure(inflation_chart, "measure", ["change from a year ago", "quarterly change, annual rate"],
+                    start="change from a year ago", label="measure")
+yearly_inflation = deflators.dropna(subset=["inflation"])
+country_menu(fig, country_traces(yearly_inflation, "inflation", [], x="date", fmt=",.1f"), countries)
 ```
+
+On the website, the menu above the chart adds a group of countries (yearly data); click a country in the
+legend to hide it.
 
 **What to notice.**
 
@@ -853,6 +1123,8 @@ slider_figure(inflation_chart, "measure", ["change from a year ago", "quarterly 
   Recession.
 - The quarterly measure is much noisier: a single unusual quarter moves it a lot. That is why FRED's
   default for inflation compares with a year ago.
+- Add Japan: its GDP deflator fell in 18 of the 20 years from 1994 to 2013. Add China: its prices fell in
+  2023, 2024 and 2025. Falling prices are not only a thing of the 1930s.
 
 ### Key numbers: peaks and troughs
 

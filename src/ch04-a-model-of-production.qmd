@@ -37,8 +37,8 @@ figure each notebook figure replicates.
 |---|---|---|---|
 | Figure 1 | 4.1 The diminishing marginal product of capital | model | productivity, labor, capital exponent |
 | Figure 2 | 4.2 Supply and demand for capital and labor | model | supplies of capital and labor, productivity, capital exponent |
-| Figure 3 | 4.3 The S&P 500 stock price index | data | the period shown, linear or ratio scale |
-| Figure 4 | 4.4 Predicted per capita GDP in the production model | data | the year |
+| Figure 3 | 4.3 The S&P 500 stock price index | data | the period shown, linear or ratio scale, other countries |
+| Figure 4 | 4.4 Predicted per capita GDP in the production model | data | the year, the countries |
 | Figure 5 | 4.5 The model's prediction for per capita GDP | data | the capital exponent |
 | Figure 6 | 4.6 The U.S. and Chinese production functions | data | the country compared with the United States |
 | Figure 7 | 4.7 Measuring TFP so the model fits exactly | data | the year (play button) |
@@ -115,6 +115,40 @@ def slider_figure(make_figure, name, values, start, label=None):
         steps.append(dict(method="update", label=str(values[i]), args=[{"visible": visible}, layout]))
     fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
                                     currentvalue=dict(prefix=(label or name) + " = "))])
+    return fig
+```
+
+```{python}
+#| kind: helper
+# @title Helper for the website versions with many countries (run this cell; you do not need to read it)
+def country_menu(fig, shown, regions, label="Textbook countries"):
+    """Draw the countries in `shown` and put every other country one click away in the legend.
+
+    `regions` maps each country to its region. With more than 40 countries, a menu above the plot
+    chooses the region whose countries the legend lists. Traces that are not countries stay as they are.
+    """
+    countries = [trace.name for trace in fig.data if trace.name in regions]
+    groups = [label] + sorted(set(regions[name] for name in countries))
+    if len(countries) <= 40:
+        groups = [None]                                 # a short legend lists every country at once
+    buttons = []
+    for group in groups:
+        visible = []
+        for trace in fig.data:
+            if trace.name in shown:
+                visible.append(True)
+            elif trace.name not in regions:
+                visible.append(True if trace.visible is None else trace.visible)
+            elif group is None or regions[trace.name] == group:
+                visible.append("legendonly")
+            else:
+                visible.append(False)
+        buttons.append(dict(label=group, method="restyle", args=[{"visible": visible}]))
+    for trace, v in zip(fig.data, buttons[0]["args"][0]["visible"]):
+        trace.visible = v
+    if len(groups) > 1:
+        menu = dict(type="dropdown", buttons=buttons, x=1, xanchor="right", y=1.02, yanchor="bottom")
+        fig.update_layout(updatemenus=list(fig.layout.updatemenus) + [menu], margin=dict(t=110))
     return fig
 ```
 
@@ -462,13 +496,192 @@ fig
   look large. For a series that grows a lot, the ratio scale is the honest picture.
 - Over the whole period, the real index has grown by a factor of about 50.
 
+### Share prices in other countries
+
+The S&P 500 exists only for the United States, but almost every stock market publishes an index of
+share prices. The OECD collects one for each of its members and a few large emerging economies, as an
+index equal to 100 in 2015. We deflate each by its country's consumer price index, so the file
+`share_prices.csv` holds **real** share prices for 40 countries, monthly, with 2015 = 100. We also load
+`regions.csv`, which gives each country of the chapter its World Bank region.
+
+```{python}
+shares = pd.read_csv(DATA_URL + "share_prices.csv", parse_dates=["date"])
+shares["year"] = shares.date.dt.year
+regions = pd.read_csv(DATA_URL + "regions.csv")
+shares.groupby("country").date.min().sort_values().head()
+```
+
+Most series start in the 1950s or later; several start only in the 1990s, when their stock markets
+opened or were rebuilt. To compare the S&P 500 with them, we express it in the same unit: real index,
+2015 = 100. Each country keeps one color in every chart of this notebook (the dictionary `COLORS`). On the
+website, countries are shown in groups: all 40 share-price countries at once here, and China and Russia with one
+region at a time in Figure 8. The function `group_colors` gives the countries of each group different colors.
+
+```{python}
+LIGHT = {"#F7E1A0", "#E2E2E2", "#FBE426", "#16FF32", "#1CFFCE", "#2ED9FF"}      # too pale on white
+PALETTE = []                                                                   # 44 colors
+for c in px.colors.qualitative.Dark24 + px.colors.qualitative.Alphabet:
+    if c not in LIGHT and c != "#2E91E5":
+        PALETTE.append(c)
+PALETTE.append("#2E91E5")                       # too close to the book's U.S. blue: used last
+```
+
+> **Python note.** `group_colors` gives the countries their colors one at a time. For each country, the list
+> `used` collects the colors already given to the countries shown together with it, and the country takes the
+> first palette color that is not in `used`, preferring one that no country has yet. If every color is taken, it
+> takes the one that `used` counts least often (`.count`), searching from the end of the palette (`reversed`).
+> `dict(fixed or {})` starts from a copy of the fixed colors (or an empty dictionary), and `continue` skips to
+> the next country.
+
+```{python}
+def group_colors(names, groups, fixed=None):
+    """Give each country a color that no other country in its groups uses, as far as the palette allows.
+
+    groups: the lists of countries shown together (menu views); fixed: {country: color} for the book's countries."""
+    colors = dict(fixed or {})
+    for name in names:
+        if name in colors:
+            continue
+        used = []                                       # the colors of the countries shown with `name`
+        for group in groups:
+            for other in group:
+                if name in group and other in colors:
+                    used.append(colors[other])
+        free, unused = [], []
+        for c in PALETTE:
+            if c not in used:
+                free.append(c)
+                if c not in colors.values():
+                    unused.append(c)                    # no country has this color yet: the best choice
+        least = PALETTE[-1]
+        for c in reversed(PALETTE):                     # no free color: the one used least, from the end
+            if used.count(c) < used.count(least):
+                least = c
+        colors[name] = (unused + free + [least])[0]
+    return colors
+```
+
+The S&P 500 is black, and China and Russia keep their colors of Figure 8. The share-price countries get their
+colors first, because each of them is also shown with its region. `short` shortens long official names for the titles.
+
+> **Python note.** `.assign(name=values)` adds a column. `set(a) - set(b)` keeps the names of `a` that are not
+> in `b`. In `short`, `name.split(" (")[0]` cuts the text at " (" and
+> keeps the first piece, and `SHORT_NAMES.get(name, name)` returns the name unchanged when it is not in the dictionary.
+
+```{python}
+sp500 = stocks.assign(country="S&P 500 (U.S.)",
+                      real_index=100 * stocks.sp500_real / stocks[stocks.year == 2015].sp500_real.mean())
+SHARE_COUNTRIES = sorted(shares.country.unique())
+region_of = regions.set_index("country").region
+COLOR_GROUPS = [SHARE_COUNTRIES]                                  # Figure 3 shows all 40 together
+for region in sorted(region_of.unique()):                         # Figure 8: China and Russia with one region
+    COLOR_GROUPS.append(["China", "Russian Federation"] + list(region_of[region_of == region].index))
+COLOR_ORDER = SHARE_COUNTRIES + sorted(set(region_of.index) - set(SHARE_COUNTRIES))
+COLORS = group_colors(COLOR_ORDER, COLOR_GROUPS, {"S&P 500 (U.S.)": "black", "China": BLUE, "Russian Federation": TEAL})
+SHORT_NAMES = {"Republic of Korea": "South Korea", "Russian Federation": "Russia", "D.R. of the Congo": "DR Congo",
+               "Taiwan, Province of China": "Taiwan", "China, Hong Kong SAR": "Hong Kong", "Lao People's DR": "Laos",
+               "U.R. of Tanzania": "Tanzania", "Syrian Arab Republic": "Syria", "Republic of Moldova": "Moldova"}
+
+
+def short(name):
+    """A short country name for titles, e.g. 'Bolivia (Plurinational State of)' -> 'Bolivia'."""
+    name = name.split(" (")[0].split(":")[0]                      # drop '(...)' and ': Mainland'
+    return SHORT_NAMES.get(name, name)
+```
+
+With no country chosen, the function below draws the textbook figure. Choose countries, and it draws the
+real S&P 500 and their real share prices, all equal to 100 in 2015, and reports in the title which grew fastest
+and slowest over the period. The helper `real_growth` computes each series' average growth a year. The
+menu below starts with Japan; click a country while holding Ctrl (or Cmd) to add or remove it.
+
+> **Python note.** `.groupby("country")` splits the table into one piece per country, and the loop
+> `for name, one in ...` visits each piece with its name. `pd.concat([a, b])` stacks two tables on top of
+> each other. `max(rates, key=rates.get)` returns the key of the
+> dictionary `rates` with the largest value: `key=` tells `max` to compare the values, not the names.
+
+```{python}
+def real_growth(chosen):
+    """Average real growth a year (percent) of each series, from its first to its last month (one year or more)."""
+    rates = {}
+    for name, one in chosen.groupby("country"):
+        years = (one.date.iloc[-1] - one.date.iloc[0]).days / 365.25
+        if years >= 1:
+            growth = 100 * ((one.real_index.iloc[-1] / one.real_index.iloc[0]) ** (1 / years) - 1)
+            rates[short(name)] = round(growth, 1) + 0.0          # + 0.0: no "-0.0"
+    return rates
+```
+
+```{python}
+def compare_share_prices(period=(1920, 2026), scale="ratio", countries=()):
+    """Figure 4.3 across countries: real share prices, 2015 = 100 (no country chosen: the textbook figure)."""
+    if not countries:
+        return stock_chart(period, scale)
+    start, end = period
+    chosen = pd.concat([sp500, shares[shares.country.isin(countries)]])
+    chosen = chosen[(chosen.year >= start) & (chosen.year <= end)]
+    fig = px.line(chosen, x="date", y="real_index", color="country", log_y=(scale == "ratio"),
+                  color_discrete_map=COLORS, labels={"date": "Year", "real_index": "Real share prices (2015 = 100)"})
+    rates = real_growth(chosen)
+    title = f"{start}–{end}: choose a period of at least one year"
+    if rates:
+        best, worst = max(rates, key=rates.get), min(rates, key=rates.get)
+        title = f"{start}–{end}, real growth a year: fastest {best} {rates[best]:+.1f}%, slowest {worst} {rates[worst]:+.1f}%"
+    missing = []
+    for name in countries:
+        if name not in set(chosen.country):
+            missing.append(short(name))
+    if missing:
+        title = f"No share price data for {', '.join(missing)} in {start}–{end}"
+    fig.update_layout(title=title, legend_title_text="")
+    if scale == "ratio":
+        fig.update_yaxes(tickvals=[1, 2, 5, 10, 20, 50, 100, 200, 500, 1000])
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(compare_share_prices,
+         period=IntRangeSlider(value=(1920, 2026), min=1920, max=2026, step=1, description="period", style=WIDE),
+         scale=ToggleButtons(options=["ratio", "linear"], description="vertical scale"),
+         countries=SelectMultiple(options=sorted(shares.country.unique()), value=("Japan",), rows=8,
+                                  description="other countries", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 3 with every country (click the legend), scale buttons and a range slider
+fig = compare_share_prices(countries=tuple(sorted(shares.country.unique())))
+fig.update_layout(title=stock_chart().layout.title.text)           # the title of the textbook view
+fig.update_xaxes(rangeslider_visible=True)
+fig.update_layout(updatemenus=[dict(type="buttons", direction="right", x=0.01, y=0.98, xanchor="left", yanchor="top", buttons=[
+    dict(label="ratio scale", method="relayout", args=[{"yaxis.type": "log", "yaxis.autorange": True,
+                                                        "yaxis.tickvals": [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000]}]),
+    dict(label="linear scale", method="relayout", args=[{"yaxis.type": "linear", "yaxis.autorange": True,
+                                                         "yaxis.tickvals": None}])])])
+country_menu(fig, [], regions.set_index("country").region)
+```
+
+*On the website: click a country in the legend to add it.*
+
+**What to notice (other countries).**
+
+- Japan: its real share prices rose about 11-fold from 1959 to the peak of its bubble in December 1989,
+  then lost about three-quarters of their value by 2011. Even in 2026 they are less than 10 percent above the 1989 peak.
+- Add the United States from the list. That is the OECD's index for all U.S. shares, which follows the New York
+  Stock Exchange. It moves with the S&P 500 month by month (a correlation of 0.97), but since 2015 it has grown
+  about 4 percent a year in real terms, against almost 9 percent for the S&P 500, whose largest companies are
+  the technology giants listed on Nasdaq. **Two indices of "the U.S. stock market" can tell different stories:
+  check what a series measures before you compare.**
+
 **Your turn.** The textbook asks two questions. By how much did the real index change between 1965 and
 1995? And by how much over your own lifetime? Use the period slider, and read the answer in the title.
+Then add Germany and the United Kingdom for the same period: which of the three markets did best?
 
 <details><summary>Hint</summary>
 
 Drag the left handle to 1965 and the right handle to 1995. Note the factor and the growth rate per year.
-Then set the left handle to the year you were born and the right handle to 2026.
+Then set the left handle to the year you were born and the right handle to 2026. For the comparison,
+hold Ctrl (or Cmd) and click Germany and the United Kingdom in the list; the title names the fastest and the slowest.
 
 </details>
 
@@ -504,49 +717,74 @@ pwt[pwt.year == 2023].head()
 The function below picks the eight countries of the textbook figure in a given year and places them on
 the curve $y^* = k^{1/3}$.
 
-> **Python note.** `.isin(EIGHT)` is true for the rows whose country appears in the list `EIGHT`.
-> `.copy()` makes a separate table, so that we can add a column to it safely. `.replace(SHORT)` swaps
-> long names for the short ones in the dictionary `SHORT`. `.map(POSITIONS)` looks up each country in
-> `POSITIONS`, and `.fillna("top left")` fills in the countries that are not in it. Below, a `Dropdown`
-> widget shows a menu of years to choose from.
+The function below picks the eight countries of the textbook figure, or any others you choose, in a given
+year and places them on the curve. All the other countries of the textbook's sample are one click away:
+click "Other countries" in the legend to show them as gray dots.
+
+> **Python note.** `.isin(countries)` is true for the rows whose country appears in the list `countries`,
+> and `~` means "not". `.copy()` makes a separate table, so that we can add a column to it safely.
+> `.replace(SHORT)` swaps long names for the short ones in the dictionary `SHORT`. `.map(POSITIONS)` looks
+> up each country in `POSITIONS`, and `.fillna("top left")` fills in the countries that are not in it.
+> `visible="legendonly"` hides a trace until you click its name in the legend. `a if condition else b` gives
+> `a` when the condition is true and `b` otherwise. Below, a `Dropdown` widget
+> shows a menu of years, and a `SelectMultiple` a list of countries (hold Ctrl or Cmd to pick several).
 
 ```{python}
 EIGHT = ["United States", "Switzerland", "Japan", "Italy", "United Kingdom", "China", "Brazil", "Burundi"]
 SHORT = {"United States": "U.S.", "United Kingdom": "U.K."}
 POSITIONS = {"Japan": "bottom right", "Italy": "bottom right", "Brazil": "bottom right",
              "Burundi": "middle right"}                                 # where to put labels that would overlap
+```
 
-
-def predicted_income_chart(year=2023):
-    """Figure 4.4: predicted income y* = k^(1/3) for eight countries (U.S. = 1)."""
-    chosen = pwt[(pwt.year == year) & pwt.country.isin(EIGHT)].copy()
+```{python}
+def predicted_income_chart(year=2023, countries=tuple(EIGHT)):
+    """Figure 4.4: predicted income y* = k^(1/3) for the chosen countries (U.S. = 1)."""
+    in_year = pwt[(pwt.year == year) & pwt.in_sample]
+    chosen = in_year[in_year.country.isin(countries)].copy()
     chosen["predicted"] = chosen.k_rel ** (1 / 3)
     chosen["label"] = chosen.country.replace(SHORT)
     chosen["position"] = chosen.country.map(POSITIONS).fillna("top left")
     fig = px.scatter(chosen, x="k_rel", y="predicted", text="label", hover_name="country",
-                     labels={"k_rel": "Capital per person, k (U.S. = 1)",
-                             "predicted": "Predicted income, y* (U.S. = 1)"})
-    fig.update_traces(textposition=list(chosen.position), marker=dict(color="black", size=11))
+                     labels={"k_rel": "Capital per person, k (U.S. = 1)", "predicted": "Predicted income, y* (U.S. = 1)"})
+    fig.update_traces(textposition=list(chosen.position), marker=dict(color="black", size=11), name="Chosen countries")
+    rest = in_year[~in_year.country.isin(countries)]
+    fig.add_trace(go.Scatter(x=rest.k_rel, y=rest.k_rel ** (1 / 3), mode="markers", name="Other countries",
+                             text=rest.country, hoverinfo="text", visible="legendonly", marker=dict(color=GRAY, size=8)))
     k = np.linspace(0, 2, 300)
-    fig.add_trace(go.Scatter(x=k, y=k ** (1 / 3), name="y* = k^(1/3)", line=dict(color=BLUE, width=3)))
-    china = chosen[chosen.country == "China"].iloc[0]
-    fig.update_layout(title=f"{year}: China has {china.k_rel:.0%} of U.S. capital per person "
-                            f"and a predicted {china.predicted:.0%} of U.S. income",
-                      xaxis_range=[0, 2], yaxis=dict(range=[0, 1.3], tickvals=[0.2, 0.4, 0.6, 0.8, 1.0, 1.2]))
+    fig.add_trace(go.Scatter(x=k, y=k ** (1 / 3), name="y* = k^(1/3)", mode="lines", line=dict(color=BLUE, width=3)))
+    others = chosen[chosen.country != "United States"]
+    title = f"{year}: choose a country to compare with the United States"
+    if len(others) > 0:
+        focus = others[others.country == "China"].iloc[0] if "China" in set(others.country) else others.iloc[0]
+        title = (f"{year}: {short(focus.country)} has {focus.k_rel:.0%} of U.S. capital per person, "
+                 f"predicted income {focus.predicted:.0%}")
+    fig.update_layout(title=title, xaxis_range=[0, 2], yaxis=dict(range=[0, 1.3], tickvals=[0.2, 0.4, 0.6, 0.8, 1.0, 1.2]))
     return fig
 ```
 
 ```{python}
 #| kind: widget
 interact(predicted_income_chart,
-         year=Dropdown(options=[1980, 1990, 2000, 2010, 2019, 2023], value=2023, description="year", style=WIDE));
+         year=Dropdown(options=[1980, 1990, 2000, 2010, 2019, 2023], value=2023, description="year", style=WIDE),
+         countries=SelectMultiple(options=sorted(pwt[pwt.in_sample & (pwt.year == 2023)].country), value=tuple(EIGHT),
+                                  rows=8, description="countries", style=WIDE));
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: Figure 4 with a precomputed slider for the year
-slider_figure(predicted_income_chart, "year", [1980, 1990, 2000, 2010, 2019, 2023], start=2023, label="year")
+# @title Website version: Figure 4 with a precomputed slider for the year ("Other countries" in the legend)
+fig = slider_figure(predicted_income_chart, "year", [1980, 1990, 2000, 2010, 2019, 2023], start=2023, label="year")
+others = [trace.name == "Other countries" for trace in fig.data]
+for trace, other in zip(fig.data, others):
+    if other and trace.visible:
+        trace.visible = "legendonly"                               # hidden until clicked in the legend
+for step in fig.layout.sliders[0].steps:                           # ... in every year of the slider
+    visible = step.args[0]["visible"]
+    step.args = [{"visible": ["legendonly" if v and other else v for v, other in zip(visible, others)]}, step.args[1]]
+fig
 ```
+
+*On the website: click "Other countries" in the legend to show the rest of the textbook's sample.*
 
 **What to notice.**
 
@@ -557,6 +795,8 @@ slider_figure(predicted_income_chart, "year", [1980, 1990, 2000, 2010, 2019, 202
   to be only about 30 percent richer.
 - Choose earlier years: China moves up along the curve as it accumulates capital, from about 3 percent of
   U.S. capital per person in 1980 to 35 percent in 2023.
+- Add South Korea and India. In 2023 Korea has about as much capital per person as the United States, a little
+  more than Japan. India has about 9 percent, so the model predicts India's income at about 45 percent of the U.S. level.
 
 ### Table 4.3: the model's prediction for per capita GDP
 
@@ -715,7 +955,7 @@ def compare_with_us(country="China"):
     """Figure 4.6: the U.S. production function (A = 1) and another country's (its implied TFP), 2023."""
     row = sample[sample.country == country].iloc[0]
     A, k, y = row.tfp, row.k_rel, row.y_rel
-    points = pd.DataFrame({"label": ["U.S.", f"{country} with U.S. TFP", country],
+    points = pd.DataFrame({"label": ["U.S.", f"{short(country)} with U.S. TFP", short(country)],
                            "k": [1.0, k, k], "y": [1.0, k ** (1 / 3), y]})
     fig = px.scatter(points, x="k", y="y", text="label", hover_name="label",
                      labels={"k": "Capital per person, k (U.S. = 1)", "y": "Output per person, y (U.S. = 1)"})
@@ -723,9 +963,9 @@ def compare_with_us(country="China"):
     grid = np.linspace(0, 2, 300)
     fig.add_trace(go.Scatter(x=grid, y=grid ** (1 / 3), name="U.S. production function, A = 1",
                              line=dict(color=BLUE, width=3)))
-    fig.add_trace(go.Scatter(x=grid, y=A * grid ** (1 / 3), name=f"{country}'s production function, A = {A:.2f}",
+    fig.add_trace(go.Scatter(x=grid, y=A * grid ** (1 / 3), name=f"{short(country)}'s production function, A = {A:.2f}",
                              line=dict(color=TEAL, width=3)))
-    fig.update_layout(title=f"{country}: {k ** (1 / 3):.0%} of U.S. income with U.S. TFP, {y:.0%} with its own (A = {A:.2f})",
+    fig.update_layout(title=f"{short(country)}: {k ** (1 / 3):.0%} of U.S. income with U.S. TFP, {y:.0%} with its own (A = {A:.2f})",
                       xaxis_range=[0, max(1.3, 1.2 * k)],
                       yaxis=dict(range=[0, 1.6], tickvals=[0.25, 0.5, 0.75, 1.0, 1.25, 1.5]))   # no tick in the corner
     return fig
@@ -886,19 +1126,36 @@ Russia reformed quickly, a "big bang" that swept away the old institutions at on
 gradually. The figure shows what happened to income per person.
 
 > **Python note.** A `SelectMultiple` widget is a list from which you can pick several entries:
-> hold Ctrl (or Cmd on a Mac) while clicking. It gives back a tuple of the chosen countries.
+> hold Ctrl (or Cmd on a Mac) while clicking. It gives back a tuple of the chosen countries, in the order of
+> the list. The loop computes each country's average growth from its first to its last year, and
+> `", ".join(parts[:2])` glues the first two results into the title.
 
 ```{python}
+RATIO_TICKS = [100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000, 100000, 200000]
+
+
 def income_paths(countries=("China", "Russian Federation"), scale="linear"):
     """Figure 4.9: GDP per person since 1990 for the chosen countries (2021 dollars)."""
-    chosen = pwt[pwt.country.isin(countries) & (pwt.year >= 1990)]
+    chosen = pwt[pwt.country.isin(countries) & (pwt.year >= 1990)].dropna(subset=["gdp_pc"])
     fig = px.line(chosen, x="year", y="gdp_pc", color="country", log_y=(scale == "ratio"),
-                  labels={"gdp_pc": "Per capita GDP (2021 dollars)", "year": "Year", "country": "Country"},
-                  title="Per capita GDP since 1990")
+                  color_discrete_map=COLORS, category_orders={"country": list(countries)},
+                  labels={"gdp_pc": "Per capita GDP (2021 dollars)", "year": "Year", "country": "Country"})
     fig.update_traces(line_width=3)
-    fig.update_layout(xaxis_range=[1990, 2023])
+    parts, missing = [], []
+    for name in countries:
+        one = chosen[chosen.country == name]
+        if len(one) > 1:
+            years = one.year.iloc[-1] - one.year.iloc[0]
+            growth = round(100 * ((one.gdp_pc.iloc[-1] / one.gdp_pc.iloc[0]) ** (1 / years) - 1), 1) + 0.0
+            parts.append(f"{short(name)} {growth:+.1f}%")
+        else:
+            missing.append(short(name))
+    title = "Growth of GDP per person a year since 1990: " + ", ".join(parts[:2])   # the first two countries
+    if missing or not parts:
+        title = f"No data since 1990 for {', '.join(missing) or 'the chosen countries'}"
+    fig.update_layout(title=title, xaxis=dict(range=[1990, 2023], tickvals=[1995, 2000, 2005, 2010, 2015, 2020]))
     if scale == "ratio":
-        fig.update_yaxes(tickvals=[1000, 2000, 5000, 10000, 20000, 40000, 80000])
+        fig.update_yaxes(tickvals=RATIO_TICKS)
     return fig
 ```
 
@@ -912,15 +1169,18 @@ interact(income_paths,
 
 ```{python}
 #| kind: website
-# @title Website version: Figure 8 with more countries (click the legend to hide one) and scale buttons
-fig = income_paths(countries=["China", "Russian Federation", "Poland", "Ukraine", "Viet Nam"])
+# @title Website version: Figure 8 with every country (region menu and legend) and scale buttons
+fig = income_paths(countries=("China", "Russian Federation") + tuple(sorted(set(pwt.country) - {"China", "Russian Federation"})))
+fig.update_layout(title=income_paths().layout.title.text)           # the title of the textbook view
 fig.update_layout(updatemenus=[dict(type="buttons", direction="right", x=0.01, y=0.98, xanchor="left", yanchor="top", buttons=[
     dict(label="linear scale", method="relayout", args=[{"yaxis.type": "linear", "yaxis.autorange": True,
                                                          "yaxis.tickvals": None}]),
     dict(label="ratio scale", method="relayout", args=[{"yaxis.type": "log", "yaxis.autorange": True,
-                                                        "yaxis.tickvals": [1000, 2000, 5000, 10000, 20000, 40000]}])])])
-fig
+                                                        "yaxis.tickvals": RATIO_TICKS}])])])
+country_menu(fig, ["China", "Russian Federation"], regions.set_index("country").region)
 ```
+
+*On the website: choose a region in the menu above the chart, then click a country in the legend to add it.*
 
 **What to notice.**
 

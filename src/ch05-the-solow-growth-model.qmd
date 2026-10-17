@@ -39,9 +39,9 @@ figure each notebook figure replicates.
 | Figure 5 | 5.5 Output after an increase in the investment rate | model | new investment rate, linear or ratio scale |
 | Figure 6 | 5.6 A rise in the depreciation rate | model | old and new depreciation rate |
 | Figure 7 | 5.7 Output after an increase in the depreciation rate | model | new depreciation rate, linear or ratio scale |
-| Figure 8 | 5.8 Growth rates in the OECD | data | starting year (play button) |
+| Figure 8 | 5.8 Growth rates in the OECD | data | starting year (play button), later OECD members on/off |
 | Figure 9 | 5.9 Growth rates around the world | data | starting year (play button), OECD on/off |
-| Figure 10 | 5.10 Investment in South Korea and the Philippines | data | the two countries compared with the United States |
+| Figure 10 | 5.10 Investment in South Korea and the Philippines | data | the two countries compared with the United States (any of 185) |
 | Figure 11 | 5.11 The Solow diagram with population growth | model | investment, population growth and depreciation rates |
 | Figure 12 | 5.12 The Solow diagram after an earthquake | model | share of capital destroyed, "Earthquake!" button |
 | Figure 13 | 5.13 Output per person after an earthquake | model | share of capital destroyed, linear or ratio scale |
@@ -113,6 +113,40 @@ def slider_figure(make_figure, name, values, start, label=None):
         steps.append(dict(method="update", label=str(values[i]), args=[{"visible": visible}, layout]))
     fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
                                     currentvalue=dict(prefix=(label or name) + " = "))])
+    return fig
+```
+
+```{python}
+#| kind: helper
+# @title Helper for the website versions with many countries (run this cell; you do not need to read it)
+def country_menu(fig, shown, regions, label="Textbook countries"):
+    """Draw the countries in `shown` and put every other country one click away in the legend.
+
+    `regions` maps each country to its region. With more than 40 countries, a menu above the plot
+    chooses the region whose countries the legend lists. Traces that are not countries stay as they are.
+    """
+    countries = [trace.name for trace in fig.data if trace.name in regions]
+    groups = [label] + sorted(set(regions[name] for name in countries))
+    if len(countries) <= 40:
+        groups = [None]                                 # a short legend lists every country at once
+    buttons = []
+    for group in groups:
+        visible = []
+        for trace in fig.data:
+            if trace.name in shown:
+                visible.append(True)
+            elif trace.name not in regions:
+                visible.append(True if trace.visible is None else trace.visible)
+            elif group is None or regions[trace.name] == group:
+                visible.append("legendonly")
+            else:
+                visible.append(False)
+        buttons.append(dict(label=group, method="restyle", args=[{"visible": visible}]))
+    for trace, v in zip(fig.data, buttons[0]["args"][0]["visible"]):
+        trace.visible = v
+    if len(groups) > 1:
+        menu = dict(type="dropdown", buttons=buttons, x=1, xanchor="right", y=1.02, yanchor="bottom")
+        fig.update_layout(updatemenus=list(fig.layout.updatemenus) + [menu], margin=dict(t=110))
     return fig
 ```
 
@@ -434,7 +468,7 @@ slider_figure(capital_output_chart, "d", [0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.
 **What to notice.**
 
 - The points slope upward, as the model predicts: countries that invest more have more capital relative to output.
-- Hover over the points. Singapore and South Korea invest the most and sit at the far right, and the United States lies in the middle.
+- Hover over the points. Singapore, China and South Korea invest the most and sit at the far right, and the United States lies in the middle.
 - A depreciation rate of about 7–9 percent makes the model line run through the middle of the cloud of points.
 
 **Your turn.** Use the slider to find the depreciation rate whose line fits the data best by eye.
@@ -877,20 +911,38 @@ growth = pd.concat(tables)
 growth.head()
 ```
 
+The textbook's 24 countries were OECD members by the 1970s. Fourteen more countries have joined since,
+from Mexico in 1994 to Costa Rica in 2021. The file `oecd_members.csv` lists all 38 members, the year each
+joined, and whether it is in the textbook's figure.
+
+```{python}
+members = pd.read_csv(DATA_URL + "oecd_members.csv")
+members[~members.in_textbook]
+```
+
 Plotly Express can show one chart per starting year and add a **play button** and a slider to move
 between them, using `animation_frame`. The option `trendline="ols"` adds a regression line, which
 is the best-fitting straight line through the points. Because the horizontal axis is on a ratio scale
 (`log_x=True`), we also fit the line to the logarithm of GDP with `trendline_options=dict(log_x=True)`.
-Hover over a point to see the country.
+With `color="group"`, each group gets its own points and its own line. The later members start hidden:
+click "Joined the OECD later" in the legend to add them. Hover over a point to see the country.
+
+> **Python note.** `growth.iso3.isin(members.iso3)` keeps the countries that are OECD members today.
+> `fig.update_traces(selector=dict(legendgroup=...), visible="legendonly")` hides the traces of one group
+> until you click its name in the legend.
 
 ```{python}
-oecd = growth[growth.oecd]
-fig = px.scatter(oecd, x="gdp_pc_start", y="growth", hover_name="country",
+oecd = growth[growth.iso3.isin(members.iso3)].copy()
+oecd["group"] = oecd.oecd.map({True: "OECD in the textbook (24)", False: "Joined the OECD later"})
+fig = px.scatter(oecd, x="gdp_pc_start", y="growth", hover_name="country", color="group",
+                 color_discrete_map={"OECD in the textbook (24)": BLUE, "Joined the OECD later": "#e0a33b"},
                  animation_frame="start_year", trendline="ols", trendline_options=dict(log_x=True), log_x=True,
-                 range_x=[2500, 120000], range_y=[-1, 7],
+                 range_x=[1000, 120000], range_y=[-1, 7],
                  labels={"gdp_pc_start": "GDP per person in the starting year (2021 dollars, ratio scale)",
                          "growth": "Average annual growth to 2023 (percent)", "start_year": "Starting year"},
                  title="Growth rates in the OECD: poorer countries grew faster")
+fig.update_traces(selector=dict(legendgroup="Joined the OECD later"), visible="legendonly")
+fig.update_layout(legend_title_text="")
 fig.show()
 ```
 
@@ -899,6 +951,12 @@ fig.show()
 - In 1960, Japan, Portugal, Spain and Ireland were relatively poor, and they grew fastest. Countries that were rich in 1960, such as the United States, Canada, New Zealand and Switzerland, grew slowly.
 - The regression line slopes down: the OECD countries **converged** toward similar income levels.
 - Press play. The line slopes down for every starting year, from 1960 to 2000: within the OECD, the countries that were poorer at the start kept growing faster.
+- Click "Joined the OECD later". For 1960, six of them have data. South Korea, the poorest of all in 1960,
+  grew fastest (6.0 percent a year). But Mexico, Colombia, Chile and Costa Rica, with 4,500 to 8,000 dollars
+  per person in 1960, were about as poor as Portugal, Greece and Türkiye. They grew only 1.5 to 2.4 percent a
+  year, against about 3 percent for those three. The textbook's 24 are
+  countries that joined early, when they were already rich or catching up fast. **Who is in the sample can
+  shape the answer.** Here the slope barely changes, but the cloud around the line is wider.
 
 **Your turn.** Compute the growth rate of Ireland from 1960 to 2023 yourself, from the two values of
 GDP per person in the `panel` table. Check that your number matches the chart.
@@ -967,21 +1025,120 @@ In 1960, South Korea was even poorer than the Philippines. Since then Korea's GD
 grown much faster. The Solow model points to investment: if Korea's investment rate rose sharply,
 its steady state moved up, and transition dynamics produced fast growth.
 
+The function below draws any two countries next to the United States. Its title uses short names
+(`short` drops the part of an official name in parentheses), and the vertical axis widens, in steps, when
+a country invests more than 60 percent of GDP, as a few tiny economies do (see the warning in Figure 3).
+
+> **Python note.** `name.split(" (")[0]` cuts the text at " (" and keeps the first piece, and
+> `SHORT_NAMES.get(name, name)` looks the name up in the dictionary, returning it unchanged when it is not there.
+
+```{python}
+SHORT_NAMES = {"Republic of Korea": "South Korea", "Russian Federation": "Russia", "D.R. of the Congo": "DR Congo",
+               "Taiwan, Province of China": "Taiwan", "China, Hong Kong SAR": "Hong Kong", "Lao People's DR": "Laos",
+               "U.R. of Tanzania": "Tanzania", "Syrian Arab Republic": "Syria", "Republic of Moldova": "Moldova"}
+
+
+def short(name):
+    """A short country name for titles, e.g. 'Bolivia (Plurinational State of)' -> 'Bolivia'."""
+    name = name.split(" (")[0].split(":")[0]                      # drop '(...)' and ': Mainland'
+    return SHORT_NAMES.get(name, name)
+```
+
+Each country keeps one color whatever you choose: South Korea blue, the Philippines teal and the United States
+green, as in the textbook, and every other country a color of its own. On the website, a menu shows these three
+with one region at a time, so the countries of each region need colors that differ from each other. The function
+`group_colors` hands them out.
+
+```{python}
+LIGHT = {"#F7E1A0", "#E2E2E2", "#FBE426", "#16FF32", "#1CFFCE", "#2ED9FF"}      # too pale on white
+PALETTE = []                                                                   # 44 colors
+for c in px.colors.qualitative.Dark24 + px.colors.qualitative.Alphabet:
+    if c not in LIGHT and c != "#2E91E5":
+        PALETTE.append(c)
+PALETTE.append("#2E91E5")                       # too close to the book's U.S. blue: used last
+```
+
+> **Python note.** `group_colors` gives the countries their colors one at a time. For each country, the list
+> `used` collects the colors already given to the countries shown together with it, and the country takes the
+> first palette color that is not in `used`, preferring one that no country has yet. If every color is taken, it
+> takes the one that `used` counts least often (`.count`), searching from the end of the palette (`reversed`).
+> `dict(fixed or {})` starts from a copy of the fixed colors (or an empty dictionary), and `continue` skips to
+> the next country.
+
+```{python}
+def group_colors(names, groups, fixed=None):
+    """Give each country a color that no other country in its groups uses, as far as the palette allows.
+
+    groups: the lists of countries shown together (menu views); fixed: {country: color} for the book's countries."""
+    colors = dict(fixed or {})
+    for name in names:
+        if name in colors:
+            continue
+        used = []                                       # the colors of the countries shown with `name`
+        for group in groups:
+            for other in group:
+                if name in group and other in colors:
+                    used.append(colors[other])
+        free, unused = [], []
+        for c in PALETTE:
+            if c not in used:
+                free.append(c)
+                if c not in colors.values():
+                    unused.append(c)                    # no country has this color yet: the best choice
+        least = PALETTE[-1]
+        for c in reversed(PALETTE):                     # no free color: the one used least, from the end
+            if used.count(c) < used.count(least):
+                least = c
+        colors[name] = (unused + free + [least])[0]
+    return colors
+```
+
+The file `regions.csv` gives each country its World Bank region. Each group lists the countries that one region
+view of the website shows together: the textbook's three, plus the countries of that region.
+
+> **Python note.** `.set_index("country").region` gives each country's region, with the countries as labels, so
+> `regions[regions == region].index` lists the countries of one region. `list(INV_BOOK)` lists the keys of the dictionary.
+
+```{python}
+regions = pd.read_csv(DATA_URL + "regions.csv").set_index("country").region
+INV_BOOK = {"Republic of Korea": BLUE, "Philippines": TEAL, "United States": GREEN}   # the textbook's colors
+INV_GROUPS = []                                                   # one group per region view
+for region in sorted(regions.unique()):
+    INV_GROUPS.append(list(INV_BOOK) + list(regions[regions == region].index))
+INV_COLORS = group_colors(sorted(panel.country.unique()), INV_GROUPS, INV_BOOK)
+```
+
 ```{python}
 def investment_chart(country_a="Republic of Korea", country_b="Philippines"):
     """Figure 5.10: investment rates of two countries and the United States, 1950-2023."""
-    chosen = panel[panel.country.isin([country_a, country_b, "United States"])]
-    fig = px.line(chosen, x="year", y="inv_rate", color="country",
-                  color_discrete_map={country_a: BLUE, country_b: TEAL, "United States": GREEN},
-                  labels={"inv_rate": "Investment rate (percent of GDP)", "year": "Year"},
-                  title=f"Investment rates: {country_a}, {country_b} and the United States")
-    fig.update_layout(yaxis_range=[0, 60], xaxis=dict(range=[1950, 2023], tickvals=[1960, 1980, 2000, 2020]),
-                      legend_title_text="")
+    names, title, missing = [], "Investment rates:", []
+    for name in [country_a, country_b]:
+        if name != "United States" and name not in names:        # each country once
+            names.append(name)
+            title = title + f" {short(name)},"
+    title = title.rstrip(",") + (" and" if names else "") + " the United States"
+    chosen = panel[panel.country.isin(names + ["United States"])].dropna(subset=["inv_rate"])
+    for name in names:
+        if name not in set(chosen.country):
+            missing.append(short(name))
+    if missing:
+        title = f"No investment data for {' and '.join(missing)}"
+    fig = px.line(chosen, x="year", y="inv_rate", color="country", category_orders={"country": names + ["United States"]},
+                  color_discrete_map=INV_COLORS,
+                  labels={"inv_rate": "Investment rate (percent of GDP)", "year": "Year"})
+    top = 60                                                      # the textbook's range ...
+    if chosen.inv_rate.max() > 57:
+        top = 100 if chosen.inv_rate.max() <= 95 else 100 * np.ceil(chosen.inv_rate.max() / 95)   # ... widened in steps
+    fig.update_layout(title=title, yaxis_range=[min(0, chosen.inv_rate.min() - 2), top],
+                      xaxis=dict(range=[1950, 2023], tickvals=[1960, 1980, 2000, 2020]), legend_title_text="")
     return fig
 ```
 
 > **Python note.** In `investment_chart`, `panel.country.isin([...])` keeps the rows whose country is in the
-> list. A `Dropdown` is a menu: here it lists every country in the data.
+> list. The first loop adds each chosen country once (you might pick the same country twice, or the United
+> States) and builds the title. `.rstrip(",")` removes the last comma, and `a if condition else b` gives `a`
+> when the condition is true and `b` otherwise. `np.ceil` rounds up. A `Dropdown` is a menu: here it lists
+> every country in the data.
 > `sorted(...)` puts the names in alphabetical order, and `.unique()` keeps each name only once.
 
 ```{python}
@@ -994,14 +1151,25 @@ interact(investment_chart,
 
 ```{python}
 #| kind: website
-# @title Website version: Figure 10 with a precomputed slider for the comparison country
-slider_figure(investment_chart, "country_b", ["Philippines", "China", "India", "Brazil", "Mexico", "Indonesia"],
-              start="Philippines", label="compared with")
+# @title Website version: Figure 10 with every country (region menu and legend)
+fig = px.line(panel.dropna(subset=["inv_rate"]), x="year", y="inv_rate", color="country",
+              color_discrete_map=INV_COLORS,
+              labels={"inv_rate": "Investment rate (percent of GDP)", "year": "Year"})
+fig.update_layout(title=investment_chart().layout.title.text, yaxis_range=[0, 60], legend_title_text="",
+                  xaxis=dict(range=[1950, 2023], tickvals=[1960, 1980, 2000, 2020]))
+country_menu(fig, ["Republic of Korea", "Philippines", "United States"], regions)
 ```
+
+*On the website: choose a region in the menu above the chart, then click a country in the legend to add it.
+The vertical axis stays at 0–60 percent; drag on the chart to zoom out for the few countries above it.*
 
 **What to notice.**
 
 - Korea's investment rate rose from about 13 percent in the 1950s to more than 40 percent in the 1990s. Investment in the United States and the Philippines stayed much flatter.
+- Choose Singapore and Botswana, two other fast growers of Figure 9. Singapore already invested about 40
+  percent of GDP around 1960 and peaked at 68 percent in 1982 (the vertical axis widens to show it).
+  Botswana's rate jumped from below 10 percent in 1965 to about 60 percent in the early 1970s, when its first
+  diamond mines were built. In small economies one large project can move the rate by 10 points or more in a year.
 - A permanently higher investment rate means a higher steady state, and Korea grew fast during its transition toward it.
 
 ### Key numbers: Korea relative to the United States

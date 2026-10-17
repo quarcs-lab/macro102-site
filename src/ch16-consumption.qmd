@@ -22,7 +22,8 @@ This chapter asks how a household *chooses* to spend over its lifetime. By the e
 - solve the two-period **neoclassical consumption model** with log utility, and check the **Euler equation**;
 - compute the **marginal propensity to consume** with and without **borrowing constraints**, and see why
   **Ricardian equivalence** can fail;
-- read U.S. data on household debt, the personal saving rate and household wealth;
+- read data on household debt, the personal saving rate and household wealth, for the U.S. and dozens of other
+  countries;
 - in Python: write functions with text options, find a maximum on a grid with `np.argmax`, turn monthly
   data into quarterly data with `resample`, join two tables with `merge`, and fit a line through a scatter.
 
@@ -37,9 +38,9 @@ figure each notebook figure replicates.
 |---|---|---|---|
 | Figure 1 | 16.1 Flow utility u(c) | model | consumption level c, log or square-root utility |
 | Figure 2 | 16.2 The desire to smooth consumption | model | consumption today c₁ and in the future c₂, log or square-root utility |
-| Figure 3 | 16.3 Household debt as a percentage of GDP | data | hover; current data and the 2023 vintage on/off |
-| Figure 4 | 16.4 The personal saving rate | data | quarterly or monthly data |
-| Figure 5 | 16.5 Household wealth (as a ratio to income) | data | hover; decades on/off in a wealth–saving scatter |
+| Figure 3 | 16.3 Household debt as a percentage of GDP | data | hover; current data and the 2023 vintage on/off; 43 countries (list, legend, buttons) |
+| Figure 4 | 16.4 The personal saving rate | data | quarterly or monthly data; 35 countries (list, legend, buttons) |
+| Figure 5 | 16.5 Household wealth (as a ratio to income) | data | hover; decades on/off in a wealth–saving scatter; 26 countries (list, legend, buttons) |
 
 <!-- cell -->
 
@@ -59,7 +60,7 @@ import pandas as pd                   # data tables
 import plotly.express as px           # quick charts from data tables
 import plotly.graph_objects as go     # charts built piece by piece (model figures)
 import plotly.io as pio
-from ipywidgets import interact, FloatSlider, ToggleButtons
+from ipywidgets import interact, FloatSlider, ToggleButtons, SelectMultiple
 
 # One light blue/green look for every chart
 BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
@@ -577,13 +578,153 @@ fig.update_yaxes(range=[40, 105], tickvals=[50, 60, 70, 80, 90, 100])
 fig.show()
 ```
 
+<!-- cell -->
+
+### Beyond the United States: household debt in 43 countries
+
+Did households borrow as much in other countries? The Bank for International Settlements (BIS) collects the same
+measure, the debt of households and nonprofit institutions as a percentage of GDP, for 43 countries. One row is one
+country and one quarter; `region` groups the countries by continent.
+
+```{python}
+debt_world = pd.read_csv(DATA_URL + "household_debt.csv", parse_dates=["date"])
+debt_world.head(3)
+```
+
+The series start in different years: in 1970 for the United States and Japan, but only in 2006 for China. With many
+countries on one chart, each country needs its own color, and it should keep that color when we add or remove other
+countries. Two small tools do this for all the multi-country charts of this notebook.
+
+> **Python note.** `px.colors.qualitative.Dark24` is a list of 24 colors, and `+` joins two lists. `enumerate`
+> numbers the items of a list as the loop runs (0, 1, 2, ...), and `i % len(PALETTE)` is the remainder of the
+> division, which starts again at 0 when the colors run out. `colors.update(fixed)` overwrites some entries of the
+> dictionary. In `latest_text`, `.groupby("country").tail(1)` keeps the last row of each country,
+> `.iloc[[0, -1]]` keeps the first and the last row of a table, and `for i, (_, row) in enumerate(...)` numbers
+> the rows that `.iterrows()` hands over one at a time.
+
+```{python}
+PALETTE = px.colors.qualitative.Dark24 + px.colors.qualitative.Light24     # 48 distinct colors
+
+
+def country_colors(names, fixed):
+    """One fixed color per country, so that a country keeps its color when the selection changes."""
+    colors = {}
+    for i, name in enumerate(sorted(names)):
+        colors[name] = PALETTE[i % len(PALETTE)]
+    colors.update(fixed)                        # the textbook's countries keep the colors of the book
+    return colors
+
+
+def latest_text(data, column, time):
+    """The latest value of each chosen country, highest first; only the maximum and minimum for 3 or more."""
+    if len(data) == 0:
+        return "choose at least one country"
+    last = data.sort_values(time).groupby("country").tail(1).sort_values(column, ascending=False)
+    words = ["", ""]
+    if len(last) > 2:
+        last, words = last.iloc[[0, -1]], ["max ", "min "]
+    parts = []
+    for i, (_, row) in enumerate(last.iterrows()):
+        parts.append(f"{words[i]}{row.country} {row[column]:.1f}")
+    return "latest: " + ", ".join(parts)
+```
+
+The chart function draws the countries in the tuple `countries`. The vertical axis has two fixed scales: up to 105
+percent, as in the textbook, and up to 140 percent when a country above 100 percent is chosen.
+`list(range(20, top, 20))` is the list of tick values 20, 40, 60, ... below `top`.
+
+```{python}
+DEBT_COLORS = country_colors(debt_world.country.unique(), {"United States": BLUE})
+
+
+def debt_by_country(countries=("United States",)):
+    """Figure 16.3 for any countries: household debt in percent of GDP (BIS data)."""
+    chosen = debt_world[debt_world.country.isin(countries)]
+    top = 105
+    if chosen.debt_gdp.max() > 100:
+        top = 140                               # a second, fixed scale for the most indebted countries
+    fig = px.line(chosen, x="date", y="debt_gdp", color="country", hover_name="country",
+                  color_discrete_map=DEBT_COLORS, range_x=["1969-07-01", "2027-01-01"], range_y=[0, top],
+                  labels={"date": "Year", "debt_gdp": "Percent of GDP", "country": "Country"},
+                  title="Household debt, % of GDP, " + latest_text(chosen, "debt_gdp", "date"))
+    fig.update_yaxes(tickvals=list(range(20, top, 20)))      # no 0 next to the first year
+    fig.update_layout(legend_title_text="")
+    return fig
+```
+
+> **Python note.** `SelectMultiple` is a list in which you can pick several entries: hold Ctrl (Cmd on a Mac) and
+> click. The function then receives a *tuple* of names, such as `("United States", "Canada")`.
+
+```{python}
+#| kind: widget
+interact(debt_by_country,
+         countries=SelectMultiple(options=sorted(debt_world.country.unique()), value=("United States",), rows=8,
+                                  description="countries", style=WIDE));
+```
+
+The website cannot run Python, so its version draws all 43 countries at once, shows the United States, and keeps the
+others one click away. The next cell defines the helper that does this for every multi-country chart.
+
+```{python}
+#| kind: helper
+# @title Helper for the multi-country website figures (run this cell; you do not need to read it)
+G7 = ["Canada", "France", "Germany", "Italy", "Japan", "United Kingdom", "United States"]
+
+
+def legend_menu(fig, data, shown):
+    """Website version of a multi-country chart: the countries in `shown` are drawn, every other country is
+    one click away in the legend, and buttons show a group (the textbook's countries, the G7, a region, all).
+    Traces that are not countries, such as averages, always stay visible."""
+    countries = set(data.country)
+    groups = {"Textbook": list(shown), "G7": G7}
+    for region in sorted(data.region.unique()):
+        groups[region] = list(data[data.region == region].country.unique())
+    groups["All"] = list(countries)
+    for trace in fig.data:
+        if trace.name in countries and trace.name not in shown:
+            trace.visible = "legendonly"
+    buttons = []
+    for label, members in groups.items():
+        visible = []
+        for trace in fig.data:
+            visible.append(True if trace.name not in countries or trace.name in members else "legendonly")
+        buttons.append(dict(label=label, method="restyle", args=[{"visible": visible}]))
+    fig.update_layout(updatemenus=[dict(type="buttons", direction="right", buttons=buttons, x=0, y=1.02,
+                                        xanchor="left", yanchor="bottom", pad=dict(r=4, t=0))],
+                      margin=dict(t=120))
+    return fig
+```
+
+```{python}
+#| kind: website
+# @title Website version: Figure 3 for all 43 countries (buttons and legend)
+fig = debt_by_country(tuple(debt_world.country.unique()))
+fig.update_layout(title="Household debt in 43 countries, percent of GDP (BIS)", height=560)
+legend_menu(fig, debt_world, ["United States"])
+```
+
+Click a country in the legend to add or remove it, or a button to show a group of countries.
+
+**What to notice.**
+
+- The BIS series for the United States peaks at 98.4 percent in 2007Q4 and is 67.2 percent in 2026Q1. It is on
+  average 1.3 points above our Federal Reserve ratio, because the BIS uses its own measures of debt and GDP.
+- Add the United Kingdom, Spain and Ireland: their households also borrowed heavily before 2008 and deleveraged after
+  it. Spain's ratio fell from 85.7 percent (2010Q2) to 42.5 percent, Ireland's from 117.4 percent (2009Q4) to 26.3.
+  Part of Ireland's fall is a GDP effect: the profits of multinational firms booked in Ireland have inflated its GDP
+  since 2015, so a ratio to GDP can mislead. **Look at the denominator, too.**
+- Not every country deleveraged. Click **All** and compare: in Australia (114.1), Switzerland (127.0) and Canada
+  (100.0) households owe more than a year of GDP today. In China the ratio rose from 11.3 percent in 2006 to 57.5.
+
 **Your turn.** The textbook says that in 2007 debt was "just under 100 percent" of GDP. Compute the 2007 average of
-the ratio in both vintages.
+the ratio in both vintages. Then use `debt_by_country` to compare the United States with Canada: since which
+quarter has Canada's household debt stayed above the U.S. ratio?
 
 <details><summary>Hint</summary>
 
 Keep the rows of 2007 with `levels[levels.date.dt.year == 2007]`, then take the `.mean()` of each of the two new
-columns.
+columns. For Canada, call `debt_by_country(("United States", "Canada"))` and hover, or `merge` the rows of the two
+countries on `date` and look at the last date on which Canada's value was not the larger one.
 
 </details>
 
@@ -705,13 +846,79 @@ print(f"Latest quarter ({when(rate_q.index[-1], 'quarterly')}): {rate_q.iloc[-1]
 The values after 2000 are up to about 2 points lower than in the textbook's figure, because the 2023 revision of
 the national accounts lowered measured saving. The low of "around 3 percent" in the mid-2000s is now closer to 2.5.
 
-**Your turn.** Find the *monthly* low point of the saving rate in 2022, and compare it with the lowest quarterly value
-in 2022.
+<!-- cell -->
+
+### Beyond the United States: household saving in 35 countries
+
+The OECD publishes household saving rates for its member countries and a few others, including China. They are
+**annual** and use **net** saving divided by **net** disposable income, close to the BEA's definition: for the United
+States the OECD's rate is on average 0.2 points above the yearly average of the monthly BEA data, and never more than
+0.7 points away.
+
+```{python}
+saving_world = pd.read_csv(DATA_URL + "saving_rates.csv")
+SAVING_COLORS = country_colors(saving_world.country.unique(), {"United States": BLUE})
+saving_world.head(3)
+```
+
+The chart reuses `country_colors` and `latest_text` from Figure 3. Saving rates can be negative, when households
+spend more than their income by drawing on their wealth or borrowing, so the axis has a zero line and a second, wider
+scale for the extreme countries.
+
+```{python}
+def saving_by_country(countries=("United States",)):
+    """Figure 16.4 for any countries: net household saving, percent of net disposable income (OECD, annual)."""
+    chosen = saving_world[saving_world.country.isin(countries)]
+    low, high = -5, 20
+    if chosen.saving_rate.min() < -5 or chosen.saving_rate.max() > 20:
+        low, high = -30, 45                     # a second, fixed scale for the extreme countries
+    fig = px.line(chosen, x="year", y="saving_rate", color="country", hover_name="country",
+                  color_discrete_map=SAVING_COLORS, range_x=[1969, 2026], range_y=[low, high],
+                  labels={"year": "Year", "saving_rate": "Percent of disposable income", "country": "Country"},
+                  title="Saving, % of income, " + latest_text(chosen, "saving_rate", "year"))
+    fig.add_hline(y=0, line=dict(color="black", width=1))
+    fig.update_layout(legend_title_text="")
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(saving_by_country,
+         countries=SelectMultiple(options=sorted(saving_world.country.unique()), value=("United States",), rows=8,
+                                  description="countries", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: household saving rates in 35 countries (buttons and legend)
+fig = saving_by_country(tuple(saving_world.country.unique()))
+fig.update_layout(title="Household saving rates in 35 countries, percent of disposable income (OECD)", height=560)
+legend_menu(fig, saving_world, ["United States"])
+```
+
+Click a country in the legend to add or remove it, or a button to show a group of countries.
+
+**What to notice.**
+
+- Add Germany and France: their households saved between 8 and 16 percent of disposable income in every year since
+  1995, while the U.S. rate fell to 2.3 percent in 2005. The fall of U.S. saving was not a worldwide trend.
+- Japan was a high-saving country (12.8 percent in 1994). Its households now save almost nothing (0.7 percent in
+  2024), as its population has aged: retirees spend their savings, as the life-cycle view of the chapter predicts.
+- China's households save more than a quarter of their income, 28 to 39 percent since 1992 (34.9 percent in 2023).
+  The chapter notes that the permanent-income hypothesis predicts *low* saving in such a fast-growing economy.
+- In 2020 saving rose in almost every country, by 8 to 12 points in the United States, Japan, the United Kingdom and
+  Canada: a pandemic effect, not just U.S. policy. In Greece saving has been negative since the debt crisis (−16.5
+  percent in 2013): households lived on their wealth.
+
+**Your turn.** Find the *monthly* low point of the U.S. saving rate in 2022, and compare it with the lowest quarterly
+value in 2022. Then use `saving_world` to find the country with the highest and the one with the lowest household
+saving rate in 2019, the last year before the pandemic.
 
 <details><summary>Hint</summary>
 
 `rate_m['2022']` keeps the months of 2022. Use `.min()` for the value and `.idxmin()` for the date, then do the same
-with `rate_q`.
+with `rate_q`. For 2019, keep the rows with `saving_world[saving_world.year == 2019]` and sort them with
+`.sort_values("saving_rate")`.
 
 </details>
 
@@ -807,13 +1014,75 @@ fig.show()
 - The permanent-income hypothesis offers a second explanation: households borrow against a higher *expected*
   future income. But it predicts low saving in fast-growing China, whose saving rate has in fact been rising.
 
+<!-- cell -->
+
+### Beyond the United States: household wealth in 26 countries
+
+The OECD publishes household balance sheets for its members. We add up what households own net of their debts, their
+**net financial worth**, and the value of their **dwellings** and the **land** under them, which together make up most
+of their wealth, and divide by a year of disposable income. For the United States this ratio is within 9 percent of
+the Federal Reserve's ratio of Figure 5 in every year since 1995. The data are annual and start in 1995 at the earliest.
+
+```{python}
+wealth_world = pd.read_csv(DATA_URL + "household_wealth.csv")
+WEALTH_COLORS = country_colors(wealth_world.country.unique(), {"United States": BLUE})
+wealth_world.head(3)
+```
+
+The chart keeps the textbook's scale, from 3 to 9 years of income, unless a chosen country leaves it.
+
+```{python}
+def wealth_by_country(countries=("United States",)):
+    """Figure 16.5 for any countries: household net worth in years of disposable income (OECD, annual)."""
+    chosen = wealth_world[wealth_world.country.isin(countries)]
+    low, high = 3, 9
+    if chosen.net_worth_ratio.min() < 3 or chosen.net_worth_ratio.max() > 9:
+        low, high = 0, 13                       # a second, fixed scale for the extreme countries
+    fig = px.line(chosen, x="year", y="net_worth_ratio", color="country", hover_name="country",
+                  color_discrete_map=WEALTH_COLORS, range_x=[1994, 2026], range_y=[low, high],
+                  labels={"year": "Year", "net_worth_ratio": "Net worth / disposable income", "country": "Country"},
+                  title="Net worth / income, " + latest_text(chosen, "net_worth_ratio", "year"))
+    fig.update_layout(legend_title_text="")
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(wealth_by_country,
+         countries=SelectMultiple(options=sorted(wealth_world.country.unique()), value=("United States",), rows=8,
+                                  description="countries", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: household wealth in 26 countries (buttons and legend)
+fig = wealth_by_country(tuple(wealth_world.country.unique()))
+fig.update_layout(title="Household net worth in 26 countries, in years of disposable income (OECD)", height=560)
+legend_menu(fig, wealth_world, ["United States"])
+```
+
+Click a country in the legend to add or remove it, or a button to show a group of countries.
+
+**What to notice.**
+
+- Add Spain: its housing boom raised household wealth from 6.0 years of income in 1995 to 11.6 in 2007, and the bust
+  brought it down to 8.9 by 2012. The U.S. ratio peaked at only 6.9 before the crisis.
+- Wealth rose relative to income almost everywhere, mostly with house prices: in Sweden from 2.8 years of income in
+  1995 to 10.2 in 2021, in Denmark to 12.3. In 2022, when interest rates jumped, these ratios fell.
+- Look at your data: in the United Kingdom the ratio fell from 8.8 in 2020 to 6.0 in 2024, much of it a lower value of
+  pension entitlements when interest rates rose. Balance sheets are measured at market prices, so they move with
+  interest rates and asset prices.
+
 **Your turn.** Compute the correlation again without the pandemic years 2020 and 2021. Does the relation become
-stronger or weaker?
+stronger or weaker? Then use `wealth_world` to count in how many countries households were wealthier, relative to
+income, in 2023 than in 2007.
 
 <details><summary>Hint</summary>
 
 Keep the rows with `both[(both.date.dt.year < 2020) | (both.date.dt.year > 2021)]` and apply `.corr` to its two
-columns, as above.
+columns, as above. For the countries, `wealth_world.pivot_table(index="country", columns="year",
+values="net_worth_ratio")` puts the years side by side; compare its columns `2023` and `2007` and `.sum()` the
+result.
 
 </details>
 

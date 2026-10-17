@@ -24,8 +24,11 @@ end of it you will be able to:
   turn a recession into a depression;
 - read the data on the crisis and its aftermath: interest-rate spreads, the Taylor rule, potential GDP, money growth,
   asset-price bubbles, the Fed's balance sheet, forward guidance and productivity;
+- compare the U.S. experience with other countries: euro-area bond spreads, Taylor rules and potential GDP abroad,
+  money growth, housing busts, central bank balance sheets and TFP in dozens of economies;
 - in Python: build a model step by step from small functions, compute peaks, troughs and growth rates, stack a
-  chart with `px.area`, rebuild a table from monthly data, and blank out data that cross a definition break.
+  chart with `px.area`, rebuild a table from monthly data, blank out data that cross a definition break, and pick
+  countries from a list (`SelectMultiple`) with a color that stays fixed for each country.
 
 <!-- cell -->
 
@@ -36,17 +39,17 @@ figure replicates.
 
 | Figure | Textbook figure | Type | What you can change |
 |---|---|---|---|
-| Figure 1 | 14.1 The spread between corporate bonds and 10-year Treasuries | data | show or hide series (legend), hover |
+| Figure 1 | 14.1 The spread between corporate bonds and 10-year Treasuries | data | show or hide series (legend), hover; euro-area countries (spreads over Germany) |
 | Figure 2 | 14.2 A housing bubble and a financial crisis | model | housing shock ā′, financial friction f̄ |
 | Figure 3 | 14.3 The financial crisis in the AS/AD framework | model | period t, shock ā, friction f̄, policy response m̄ |
-| Figure 4 | 14.4 The fed funds rate and the Taylor rule | data | r̄ and the output weight of the Taylor rule |
-| Figure 5 | 14.5 What happened to potential GDP? | data | show or hide series (legend), hover |
-| Figure 6 | 14.6 The growth rate of various money supply measures | data | show or hide series (legend), hover |
+| Figure 4 | 14.4 The fed funds rate and the Taylor rule | data | r̄ and the output weight of the Taylor rule; central bank (14 countries) |
+| Figure 5 | 14.5 What happened to potential GDP? | data | show or hide series (legend), hover; country (OECD) |
+| Figure 6 | 14.6 The growth rate of various money supply measures | data | show or hide series (legend), hover; countries (broad money, 166 economies) |
 | Figure 7 | 14.7 The price-earnings ratio in the stock market | data | first year of the long-run average |
-| Figure 8 | 14.8 Real home prices in the United States | data | boom and bust episode |
-| Figure 9 | 14.9 Financial assets of the Federal Reserve (with Table 14.1) | data | show or hide asset types (legend) |
+| Figure 8 | 14.8 Real home prices in the United States | data | boom and bust episode; countries (58 economies) |
+| Figure 9 | 14.9 Financial assets of the Federal Reserve (with Table 14.1) | data | show or hide asset types (legend); central banks (assets/GDP, 35 economies) |
 | Figure 10 | 14.10 The fed funds rate: actual and expected | data | year of the market forecast |
-| Figure 11 | 14.11 U.S. total factor productivity | data | first year of the average growth rate |
+| Figure 11 | 14.11 U.S. total factor productivity | data | first year of the average growth rate; countries (120) |
 | Figure 12 | 14.12 The Great Depression in the IS/MP framework | model | step A–D, Fed's hike, crash ā′, slope ν̄, diagram |
 | Figure 13 | 14.13 The Phillips curve and the Great Depression | model | step A–D, Fed's hike, crash ā′, slope ν̄, diagram |
 
@@ -69,7 +72,7 @@ import plotly.express as px                     # quick charts from data tables
 import plotly.graph_objects as go               # charts built piece by piece (model figures)
 import plotly.io as pio
 from plotly.subplots import make_subplots       # several panels in one figure
-from ipywidgets import interact, FloatSlider, IntSlider, ToggleButtons, Dropdown
+from ipywidgets import interact, FloatSlider, IntSlider, ToggleButtons, Dropdown, SelectMultiple
 
 # One light blue/green look for every chart
 BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
@@ -351,6 +354,120 @@ def peak_to_trough(data, column, start, end):
 recessions.tail(3)
 ```
 
+**Beyond the United States.** The textbook's data figures are about the United States, but most of their series
+exist for other countries too. Where they do, a subsection called *Beyond the United States* draws the same
+series for many countries, with the textbook's countries picked to start with. Two more tools serve those charts:
+`group_colors` gives every country a color that stays the same whichever countries you pick, and that no other
+country shown with it uses, and `fit_axis` chooses the narrowest of a few fixed axis ranges that still holds every
+point, so the axis only widens when a country needs it.
+
+> **Python note.** `px.colors.qualitative.Dark24` and `Alphabet` are lists of colors that Plotly ships with, and
+> `PALETTE.append(color)` adds a color at the end of a list. `group_colors` walks through the countries one by one.
+> `colors.get(other)` is the color of `other`, or `None` if it has none yet. `new + free + PALETTE` joins three lists
+> and `[0]` takes the first item: a color that no country uses yet if there is one, else one that no country of the
+> same groups uses.
+
+```{python}
+LIGHT = ["#F7E1A0", "#E2E2E2", "#FBE426", "#16FF32", "#1CFFCE", "#2ED9FF"]      # too pale on a white page
+PALETTE = list(px.colors.qualitative.Dark24)                                     # 24 dark colors ...
+for color in px.colors.qualitative.Alphabet:                                     # ... and 20 more
+    if color not in LIGHT:
+        PALETTE.append(color)
+PALETTE.remove("#2E91E5")
+PALETTE.append("#2E91E5")                          # this blue is close to the U.S. navy: use it last
+```
+
+```{python}
+def group_colors(names, groups, fixed=None):
+    """A color for each country that no other country of its groups uses, as far as the palette allows.
+    groups: lists of countries shown together (the website menus); fixed: {country: color} for the book's countries."""
+    colors = dict(fixed or {})
+    for name in names:
+        if name in colors:
+            continue
+        used = []                                    # colors of the countries already shown with this one
+        for group in groups:
+            if name in group:
+                for other in group:
+                    used.append(colors.get(other))
+        free, new = [], []                           # free: not used in its groups; new: not used by any country
+        for color in PALETTE:
+            if color not in used:
+                free.append(color)
+                if color not in colors.values():
+                    new.append(color)
+        colors[name] = (new + free + PALETTE)[0]
+    return colors
+```
+
+> **Python note.** `for bottom, top in ranges:` unpacks each pair of the list `ranges`.
+
+```{python}
+def fit_axis(low, high, ranges):
+    """The first range (bottom, top) in the list that holds every value from low to high; else a range that just fits."""
+    for bottom, top in ranges:
+        if bottom <= low and high <= top:
+            return [bottom, top]
+    pad = 0.05 * (high - low)
+    return [low - pad, high + pad]
+```
+
+The website cannot run Python, so its versions of these charts draw every country at once and let you switch
+them on in the legend. The next helper does that. Run it and move on.
+
+```{python}
+#| kind: helper
+# @title Helper for the multi-country website versions (run this cell; you do not need to read it)
+def legend_menu(fig, shown, groups=None):
+    """Website version of a country picker: the countries in `shown` are drawn, the others wait in the legend.
+
+    Without groups, every other country is in the legend ('legendonly'), one click away, and a menu offers
+    "Show all". With groups ({menu label: [countries]}), the menu puts one group at a time in the legend.
+    Traces that are not countries (showlegend=False) always stay visible. The y-axis rescales to what is shown.
+    """
+    def visibility(members):
+        out = []
+        for t in fig.data:
+            if t.showlegend is False or t.name in shown:
+                out.append(True)
+            elif members is None or t.name in members:
+                out.append("legendonly")
+            else:
+                out.append(False)
+        return out
+    if groups is None:
+        buttons = [dict(method="restyle", label="Textbook view", args=[{"visible": visibility(None)}]),
+                   dict(method="restyle", label="Show all", args=[{"visible": [True] * len(fig.data)}])]
+    else:
+        buttons = [dict(method="restyle", label="Textbook view", args=[{"visible": visibility([])}])]
+        for label, members in groups.items():
+            buttons.append(dict(method="restyle", label=label, args=[{"visible": visibility(members)}]))
+    for trace, visible in zip(fig.data, buttons[0]["args"][0]["visible"]):
+        trace.visible = visible
+        compact(trace)
+    fig.layout.yaxis.range = None
+    fig.update_yaxes(autorange=True)
+    fig.update_layout(updatemenus=[dict(buttons=buttons, active=0, direction="down", x=1, y=1.02, xanchor="right",
+                                        yanchor="bottom")], margin=dict(t=110))
+    return fig
+
+
+def compact(trace):
+    """Shorter website files: dates without the time of day, values rounded to 2 decimals."""
+    if trace.x is not None and len(trace.x) > 0 and hasattr(trace.x[0], "strftime"):
+        trace.x = pd.to_datetime(trace.x).strftime("%Y-%m-%d")
+    if trace.y is not None and np.asarray(trace.y).dtype.kind == "f":
+        trace.y = np.round(np.asarray(trace.y), 2)
+
+
+def region_groups(data):
+    """{region: [countries]} for the website menus of long country lists."""
+    groups = {}
+    for region, rows in data.groupby("region"):
+        groups["Add: " + region] = sorted(rows.country.unique())
+    return groups
+```
+
 ## Figure 1: The spread between corporate bonds and 10-year Treasuries
 
 **Goal.** See the financial friction $\bar{f}$ in the data: the gap between what companies and the government pay to
@@ -398,6 +515,76 @@ fig.show()
   Lower policy rates did not reach the companies that borrow.
 - Smaller spikes come with other moments of stress: 2002, after the 2001 recession and the dot-com crash; the oil-price
   collapse of early 2016; and the Covid-19 shock of spring 2020.
+
+<!-- cell -->
+
+### Beyond the United States: government bond spreads in the euro area
+
+Moody's BAA index covers U.S. companies, and long, free series of corporate bond yields exist only for the United
+States: indexes for other countries are sold by private data firms. But the euro area offers a clean risk premium
+of another kind. Its governments all borrow in euros, so when Italy pays more than Germany on a 10-year bond, the
+difference cannot come from the currency: it is the premium investors ask for the risk of default. The textbook
+notes that during the European debt crisis the rates on the debt of Greece, Ireland, Italy and Spain rose "as high
+as 7 percent" (Chapter 20 returns to that crisis). The file holds the OECD's 10-year government bond yields of 13
+euro-area countries and their spread over Germany, from the month each joined the euro.
+
+```{python}
+euro = pd.read_csv(DATA_URL + "sovereign_spreads.csv", parse_dates=["date"])
+euro[euro.country == "Greece"].head(3)
+```
+
+> **Python note.** `euro.country.isin(countries)` is true for the rows whose country is in the list. `SelectMultiple`
+> is a list in which you can pick several items: hold Ctrl (Cmd on a Mac) and click. It hands the function a
+> *tuple*, a list in round brackets. `data.empty` is true when no row is left.
+
+```{python}
+EURO_BOOK = ("Greece", "Ireland", "Italy", "Spain")              # the four countries the textbook names
+EURO_BOOK_COLORS = {"Greece": BLUE, "Ireland": TEAL, "Italy": GREEN, "Spain": PALETTE[0]}
+EURO_COLORS = group_colors(sorted(euro.country.unique()), [list(euro.country.unique())], EURO_BOOK_COLORS)
+
+
+def spread_chart(countries=EURO_BOOK):
+    """Figure 1 for the euro area: 10-year government bond spreads over Germany, in percentage points."""
+    data = euro[euro.country.isin(countries)]
+    if data.empty:
+        return go.Figure(layout=dict(title="Pick at least one country"))
+    top = data.loc[data.spread_germany.idxmax()]
+    fig = px.line(data, x="date", y="spread_germany", color="country", color_discrete_map=EURO_COLORS,
+                  labels={"date": "Year", "spread_germany": "Spread over Germany (points)", "country": "Country"},
+                  title=f"Largest spread over Germany: {top.country}, {top.spread_germany:.1f} points in {top.date:%b %Y}")
+    fig.add_hline(y=0, line_dash="dash", line_color=GRAY)
+    y_range = fit_axis(data.spread_germany.min(), data.spread_germany.max(), [(-1.5, 6.5), (-1.5, 13), (-1.5, 30)])
+    fig.update_layout(xaxis_range=["1998-07-01", "2026-12-31"], yaxis_range=y_range, legend_title_text="")
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(spread_chart, countries=SelectMultiple(options=sorted(euro.country.unique()), value=EURO_BOOK, rows=7,
+                                                description="countries", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: the euro-area spreads, with every country in the legend
+fig = spread_chart(tuple(euro.country.unique()))
+fig.update_layout(title=spread_chart().layout.title)
+fig.update_xaxes(tickvals=["2005-01-01", "2010-01-01", "2015-01-01", "2020-01-01", "2025-01-01"])  # no 2000 next to 0
+legend_menu(fig, shown=EURO_BOOK)
+```
+
+On the website, click a country in the legend to add it, or choose *Show all* in the menu.
+
+**What to notice.**
+
+- From 2001 to 2007 the market treated all these governments almost like Germany: every spread stayed below 0.7
+  points. The U.S. spread of Figure 1 jumped in 2008; the euro spreads exploded in 2010–2012.
+- Italy and Spain peaked at spreads of 5.2 and 5.6 points, with yields of 7.1 and 6.8 percent: the textbook's
+  "7 percent". Ireland (12.5 percent in July 2011), Portugal (13.9 percent) and above all Greece (29.2 percent in
+  February 2012, a spread of 27.4 points) went much higher; the axis widens to show them.
+- **Look at your data.** Add Luxembourg: its spread is *negative*, down to −1.3 points in 2004. Luxembourg had
+  almost no government debt, so its "10-year yield" comes from a few thin bonds; check how a series is measured
+  before you read it as a risk premium.
 
 <!-- cell -->
 
@@ -763,8 +950,120 @@ inputs.show()
   helping the housing boom.
 - Inflation was low after 2008 but did not keep falling, although output was far below potential. A credible 2 percent
   target may have held expectations up.
-- Move $\bar{r}$ down to 1: the rule is lower by 1 point in every quarter. From mid-2021 to 2022, with core inflation
+- Move $\bar{r}$ down to 1: the rule is lower by 1 point in every quarter. From late 2021 to 2022, with core inflation
   near or above 5 percent, even that rule called for rates far above the actual ones.
+
+<!-- cell -->
+
+### Beyond the United States: the Taylor rule for 14 central banks
+
+The same rule can be computed for any central bank, given its policy rate, inflation and an estimate of short-run
+output. The file `taylor_world.csv` holds them for 14 central banks with their own currency and an inflation target
+of 2 to 2.5 percent, as **annual averages** from 1999: the policy rate from the BIS, and core inflation, headline
+inflation and the output gap from the OECD's *Economic Outlook*. Two differences from the U.S. chart above: the
+data are annual, and the output gap is the OECD's estimate, not the CBO's. The rule keeps the 2 percent target.
+
+```{python}
+taylor_world = pd.read_csv(DATA_URL + "taylor_world.csv")
+taylor_world[taylor_world.country == "Euro area"].tail(3)
+```
+
+**A data-hygiene moment.** The OECD has no core inflation for some countries and years: those cells are empty. A
+rule needs an inflation rate in every year, so we take core inflation where it exists and headline inflation
+otherwise, and count how many years use the fallback.
+
+> **Python note.** `a.fillna(b)` keeps the values of `a` and fills its empty cells with the values of `b` in the same
+> rows. `.isna()` is true for the empty cells, and `.agg(["min", "max", "count"])` computes three summaries of each
+> group at once. In the chart function, `.dropna()` drops rows with an empty cell, so a year with no rule counts as
+> "no data".
+
+```{python}
+taylor_world["inflation"] = taylor_world.core_inflation.fillna(taylor_world.headline_inflation)
+fallback = taylor_world[taylor_world.core_inflation.isna()]
+print(f"Years that use headline inflation: {len(fallback)} of {len(taylor_world)}")
+print(fallback.groupby("country").year.agg(["min", "max", "count"]))
+```
+
+```{python}
+def taylor_world_chart(country="United States", r_bar=2.0):
+    """Figure 4 for other central banks: the policy rate and the Taylor rule, annual averages."""
+    data = taylor_world[taylor_world.country == country]
+    chart = pd.DataFrame({"year": data.year, "Policy rate": data.policy_rate,
+                          "Taylor rule": taylor_rule(data.inflation, data.output_gap, r_bar)})
+    late = chart[chart.year == 2022].dropna()
+    gap = "no data for 2022"
+    if not late.empty:
+        diff = round(late["Taylor rule"].iloc[0] - late["Policy rate"].iloc[0], 1) + 0.0      # + 0.0 avoids -0.0
+        gap = f"rule minus actual in 2022 = {diff:+.1f} points"
+    fig = px.line(chart, x="year", y=["Policy rate", "Taylor rule"], markers=True, color_discrete_sequence=[BLUE, GREEN],
+                  labels={"year": "Year", "value": "Percent", "variable": "Series"},
+                  title=f"{country}, r̄ = {r_bar:.1f}: {gap}")
+    fig.update_traces(line_width=3)
+    fig.add_hline(y=0, line_dash="dash", line_color=GRAY)
+    low = min(chart["Policy rate"].min(), chart["Taylor rule"].min())
+    high = max(chart["Policy rate"].max(), chart["Taylor rule"].max())
+    fig.update_layout(xaxis_range=[1998.5, 2025.5], yaxis_range=fit_axis(low, high, [(-5, 11.5), (-10, 20), (-15, 30)]),
+                      legend_title_text="", legend=dict(x=0.01, y=0.99, xanchor="left", yanchor="top"))
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(taylor_world_chart, country=Dropdown(options=sorted(taylor_world.country.unique()), value="United States",
+                                              description="central bank of", style=WIDE),
+         r_bar=FloatSlider(value=2.0, min=0.0, max=3.0, step=0.5, description="r̄ in the rule (%)", style=WIDE));
+```
+
+The website cannot run Python, so the next helper precomputes the chart for every country and joins them with a
+menu.
+
+```{python}
+#| kind: helper
+# @title Helper for the website country menus (run this cell; you do not need to read it)
+def dropdown_figure(make_figure, name, values, start):
+    """Precompute make_figure(name=value) for every value and join the results with a dropdown menu.
+
+    Like slider_figure, but each choice also sets its own axis ranges.
+    """
+    figures = [make_figure(**{name: v}) for v in values]
+    first = values.index(start)
+    fig = go.Figure(layout=figures[first].layout)
+    owner = []
+    for i, f in enumerate(figures):
+        for trace in f.data:
+            trace.visible = (i == first)
+            compact(trace)
+            fig.add_trace(trace)
+            owner.append(i)
+    buttons = []
+    for i, f in enumerate(figures):
+        layout = {"title": f.layout.title.to_plotly_json(), "xaxis.range": f.layout.xaxis.range,
+                  "yaxis.range": f.layout.yaxis.range}
+        buttons.append(dict(method="update", label=str(values[i]), args=[{"visible": [o == i for o in owner]}, layout]))
+    fig.update_layout(updatemenus=[dict(buttons=buttons, active=first, direction="down", x=1, y=1.02,
+                                        xanchor="right", yanchor="bottom")], margin=dict(t=110))
+    return fig
+```
+
+```{python}
+#| kind: website
+# @title Website version: the Taylor rule for 14 central banks (r̄ = 2), with a country menu
+dropdown_figure(taylor_world_chart, "country", sorted(taylor_world.country.unique()), start="United States")
+```
+
+On the website, pick a central bank in the menu above the chart.
+
+**What to notice.**
+
+- In 2022 every one of these central banks was far below its rule: by 6.8 points in the United States, 6.5 in the
+  euro area and 13.8 in the United Kingdom. Inflation surprised them all at the same time. Japan, with inflation still
+  near zero, was only 1.3 points below.
+- From 2002 to 2006 the rule was above the actual rate in the euro area too (by 1.4 points a year on average, 1.6 in
+  the United States with annual data): "too low for too long" was not only an American story.
+- **Look at your data.** The OECD has no core inflation for the United Kingdom, so its rule uses headline inflation
+  (the cell above counts those years). Pick Japan: the line has holes. From 1999 to 2006 and from 2013 to 2016 the
+  Bank of Japan targeted the quantity of money instead of an interest rate, so the BIS records no policy rate for
+  most of those years.
 
 <!-- cell -->
 
@@ -828,11 +1127,92 @@ fig.show()
 
 **What to notice.**
 
-- Until about 2004 the two estimates of potential almost coincide. After 2008 the 2007 estimate keeps rising along its
-  old trend, while the latest estimate bends down.
+- Until 2002 the two estimates of potential are within half a percent of each other. Then they drift apart: the
+  latest estimate is already 2.3 percent lower in 2007. After 2008 the 2007 estimate keeps rising along its old
+  trend, while the latest estimate bends down.
 - Measured against the latest estimate, actual GDP was back at potential by about 2018. Measured against the 2007
   estimate, it never came close.
 - Since 2018 actual GDP has been slightly above the latest estimate of potential, apart from the Covid-19 dip of 2020.
+
+<!-- cell -->
+
+### Beyond the United States: GDP, potential GDP and the old trend in OECD countries
+
+The CBO's estimates exist only for the United States, and old vintages of other countries' potential GDP are hard
+to find. The OECD's *Economic Outlook* publishes real GDP and potential GDP for its members, so we can draw the
+latest estimates; and we can build the "2007 view" ourselves, by extending each country's average growth of
+1997–2007 into the future. That **old trend** is what a forecaster who expected the pre-crisis growth to continue
+would have drawn. Both GDP and potential are set to 100 for actual GDP in 2007.
+
+```{python}
+potential_world = pd.read_csv(DATA_URL + "potential_world.csv")
+potential_world[potential_world.country == "Spain"].tail(3)
+```
+
+> **Python note.** `np.exp` undoes `np.log`: if GDP grows at the log rate `g` per year, after `t` years it is
+> `np.exp(g * t)` times larger. `rows.year - end` counts the years since 2007 (negative before it), and
+> `.where(rows.year >= end)` keeps the values from 2007 on and leaves the earlier cells empty. In the title,
+> `'below' if gap < 0 else 'above'` picks one of two words.
+
+```{python}
+TREND = "Trend of 1997–2007, extended"
+
+
+def old_trend(rows, start=1997, end=2007):
+    """GDP if it had kept growing at its average 1997-2007 rate after 2007 (a log-linear trend)."""
+    x = rows.set_index("year").gdp
+    g = np.log(x[end] / x[start]) / (end - start)
+    return (x[end] * np.exp(g * (rows.year - end))).where(rows.year >= end)
+```
+
+```{python}
+def potential_world_chart(country="United States"):
+    """Figure 5 for OECD countries: actual GDP, the OECD's potential GDP and the 1997-2007 trend (2007 GDP = 100)."""
+    rows = potential_world[(potential_world.country == country) & (potential_world.year >= 1995)]
+    chart = pd.DataFrame({"year": rows.year, "Actual GDP": rows.gdp, "Potential GDP (OECD, latest)": rows.potential_gdp})
+    title = f"{country}: no GDP data for 1997, so no trend"
+    if 1997 in rows.year.values:
+        chart[TREND] = old_trend(rows)
+        y2019 = chart[chart.year == 2019].iloc[0]
+        gap = 100 * (y2019["Actual GDP"] / y2019[TREND] - 1)
+        title = f"{country}: in 2019 GDP was {abs(gap):.1f}% {'below' if gap < 0 else 'above'} its 1997–2007 trend"
+    lines = list(chart.columns[1:])
+    fig = px.line(chart, x="year", y=lines, color_discrete_sequence=[BLUE, TEAL, GREEN], title=title,
+                  labels={"year": "Year", "value": "Index, actual GDP in 2007 = 100", "variable": "Series"})
+    fig.update_traces(line_width=3)
+    fig.update_traces(line_dash="dash", selector=dict(name=TREND))
+    y_range = fit_axis(chart[lines].min().min(), chart[lines].max().max(), [(60, 140), (40, 200), (20, 300), (20, 450)])
+    fig.update_layout(xaxis_range=[1994.5, 2025.5], yaxis_range=y_range, legend_title_text="",
+                      legend=dict(x=0.01, y=0.99, xanchor="left", yanchor="top"))
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(potential_world_chart, country=Dropdown(options=sorted(potential_world.country.unique()), value="United States",
+                                                 description="country", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: GDP, potential and the old trend for OECD countries, with a country menu
+dropdown_figure(potential_world_chart, "country", sorted(potential_world.country.unique()), start="United States")
+```
+
+On the website, pick a country in the menu above the chart.
+
+**What to notice.**
+
+- The United States did not lose more than others. Its GDP in 2019 was 14.2 percent below the 1997–2007 trend;
+  the euro area's was 16.9 percent below, Spain's 30.9 and Greece's 52.4 percent. Greece's GDP in 2025 was still
+  14 percent below its 2007 level.
+- Pick Germany, Japan or Israel: 5.1, 5.8 and 1.3 percent below trend. Their pre-crisis growth was slow or steady,
+  so the old trend was easier to keep up with.
+- The OECD, like the CBO, has revised potential down to where GDP went: for the United States its potential grew 1.9
+  percent a year from 2007 to 2019 (the CBO: 1.8), and both estimates sit almost on top of actual GDP since 2018.
+- **Look at your data.** The old trend is a counterfactual, not a fact. For fast-growing economies such as Latvia,
+  Estonia or Ireland, ten boom years extrapolated give absurd paths, and the axis widens. Ireland's GDP also jumped
+  25 percent in 2015, when multinational firms moved assets there: an accounting change, not a boom in production.
 
 <!-- cell -->
 
@@ -919,6 +1299,77 @@ fig.show()
   2024, for the first time since the series began in 1959.
 - Money growth swings a lot from year to year. A single year of fast growth does not mean inflation is coming.
 
+<!-- cell -->
+
+### Beyond the United States: broad money growth in 166 economies
+
+Did money collapse anywhere else after 2008? The World Bank's World Development Indicators report the growth of
+**broad money** for most countries: the growth of the end-of-year stock over the previous one. Broad money follows
+the IMF's definition: currency plus every kind of deposit, so it is close to M2 but not equal to it (for the United
+States its growth has a correlation of 0.8 with M2's December growth, and it even fell in 2010, when M2 grew). The
+euro-area countries share one money, so the file uses the European Central Bank's M3 for the euro area instead. The
+data are annual, from 1990.
+
+```{python}
+money_world = pd.read_csv(DATA_URL + "money_world.csv")
+money_world[money_world.country == "Euro area"].tail(3)
+```
+
+> **Python note.** `", ".join(parts)` glues a list of texts into one, with a comma between them, and `parts[:3]` keeps
+> its first three items. `rows.empty` is true when the filter finds no row, here when a country has no value for 2009.
+
+```{python}
+MONEY_COLORS = group_colors(sorted(money_world.country.unique()), list(region_groups(money_world).values()),
+                            {"United States": BLUE})          # no two countries of a region share a color
+
+
+def money_world_chart(countries=("United States",)):
+    """Figure 6 for other countries: growth of broad money over each year, in percent."""
+    data = money_world[money_world.country.isin(countries)]
+    if data.empty:
+        return go.Figure(layout=dict(title="Pick at least one country"))
+    parts = []
+    for name in countries:
+        rows = data[(data.country == name) & (data.year == 2009)]
+        parts.append(f"{name} no data" if rows.empty else f"{name} {round(rows.broad_money_growth.iloc[0], 1) + 0.0:.1f}%")
+    fig = px.line(data, x="year", y="broad_money_growth", color="country", color_discrete_map=MONEY_COLORS,
+                  markers=True, labels={"year": "Year", "broad_money_growth": "Growth over the year (%)",
+                                        "country": "Country"},
+                  title="Broad money growth in 2009: " + ", ".join(parts[:3]) + (" ..." if len(parts) > 3 else ""))
+    fig.add_hline(y=0, line_dash="dash", line_color=GRAY)
+    y_range = fit_axis(data.broad_money_growth.min(), data.broad_money_growth.max(), [(-15, 31), (-30, 62), (-100, 210)])
+    fig.update_layout(xaxis_range=[1989, 2026], yaxis_range=y_range, legend_title_text="")
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(money_world_chart, countries=SelectMultiple(options=sorted(money_world.country.unique()),
+                                                     value=("United States",), rows=8, description="countries",
+                                                     style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: broad money growth, one region at a time in the legend
+fig = money_world_chart(tuple(money_world.country.unique()))
+fig.update_layout(title=money_world_chart().layout.title)
+legend_menu(fig, shown=["United States"], groups=region_groups(money_world))
+```
+
+On the website, pick a region in the menu, then click a country in the legend to add it.
+
+**What to notice.**
+
+- Add the euro area and the United Kingdom: broad money **stopped growing** in 2009 (−0.3 and −0.1 percent),
+  after growing 11.5 and 15.8 percent in 2007. In the euro area it grew less than 4 percent a year until 2014.
+  Of the 160 economies with data for 2009, 13 saw broad money shrink.
+- Add China: broad money grew 28 percent in 2009, the year of its large stimulus.
+- **Look at your data.** Pick Sierra Leone: broad money "grew" 131,119 percent in 2001 and "fell" 99.9 percent in
+  2015. Grenada shows −91 percent in 2024 and +1,169 percent in 2025. These are breaks in how the stock was
+  recorded, not real changes in money, so the axis widens to absurd ranges. Hyperinflations, such as Brazil
+  (3,281 percent in 1993) or the DR Congo, are real; a fast check against inflation tells the two apart.
+
 **Your turn.** Find the month of fastest currency growth after 2008 and its growth rate.
 
 <details><summary>Hint</summary>
@@ -941,6 +1392,10 @@ In standard finance models, a stock is worth the present value of the profits it
 **price-earnings ratio** divides the stock price index by the average real earnings of the previous ten years (it is
 often called the CAPE). When the ratio climbs far above its long-run average, prices have usually come back down. The
 textbook marks the average with a dashed line; the slider lets you choose the years behind that average.
+
+*Why only the United States?* Shiller's monthly prices and earnings, back to 1871, are free only for the U.S. stock
+market. Price-earnings ratios of this kind for other markets are compiled by private index firms and are not open
+data, so this figure stays American.
 
 ```{python}
 cape = pd.read_csv(DATA_URL + "fig14-7.csv", parse_dates=["date"])
@@ -1066,6 +1521,78 @@ slider_figure(home_prices, "episode", ["1970s boom", "1980s boom", "2000s bubble
 - Earlier booms, around 1979 and 1989, were also followed by real declines. After 2020 prices rose again and have
   eased only a little.
 
+<!-- cell -->
+
+### Beyond the United States: real home prices in 58 economies
+
+Shiller's index is American. The Bank for International Settlements (BIS) collects home price indexes from
+national sources and divides them by consumer prices, so they also measure **real** home prices. Its index is set
+to 100 in 2010 and is quarterly. For the United States it tells the same story: real prices fell 38.9 percent from
+the first quarter of 2006 to the third quarter of 2011 (Shiller: 35.7 percent). The function `peak_to_trough` from
+the start of the notebook works on any country's rows, so the title reports the largest bust after a peak in
+2000–2015 among the countries you pick.
+
+```{python}
+homes_world = pd.read_csv(DATA_URL + "house_prices_world.csv", parse_dates=["date"])
+homes_world.head(3)
+```
+
+```{python}
+HOME_COLORS = group_colors(sorted(homes_world.country.unique()), list(region_groups(homes_world).values()),
+                           {"United States": BLUE})
+
+
+def home_prices_world(countries=("United States",)):
+    """Figure 8 for other countries: BIS real home prices (2010 = 100, ratio scale) and the largest 2000s bust."""
+    data = homes_world[homes_world.country.isin(countries)]
+    if data.empty:
+        return go.Figure(layout=dict(title="Pick at least one country"))
+    worst, title = 0, "No fall after a peak in 2000–2015"
+    for name in countries:
+        rows = data[(data.country == name) & (data.date >= "2000-01-01") & (data.date <= "2015-12-31")]
+        if not rows.empty:
+            peak, trough, fall = peak_to_trough(rows, "real_price", "2000-01-01", "2015-12-31")
+            if fall > worst:
+                worst = fall
+                title = f"Largest bust: {name}, real prices fell {fall:.1f}% ({peak.date:%Y} to {trough.date:%Y})"
+    fig = px.line(data, x="date", y="real_price", color="country", log_y=True, color_discrete_map=HOME_COLORS,
+                  labels={"date": "Year", "real_price": "Index, 2010 = 100 (ratio scale)", "country": "Country"},
+                  title=title)
+    low, high = fit_axis(data.real_price.min(), data.real_price.max(), [(50, 180), (20, 280)])
+    fig.update_yaxes(range=[np.log10(low), np.log10(high)], tickvals=[20, 30, 50, 70, 100, 150, 200, 250])
+    fig.update_layout(xaxis_range=["1969-01-01", "2026-12-31"], legend_title_text="")
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(home_prices_world, countries=SelectMultiple(options=sorted(homes_world.country.unique()),
+                                                     value=("United States",), rows=8, description="countries",
+                                                     style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: real home prices, one region at a time in the legend
+fig = home_prices_world(tuple(homes_world.country.unique()))
+fig.update_layout(title=home_prices_world().layout.title)
+legend_menu(fig, shown=["United States"], groups=region_groups(homes_world))
+```
+
+On the website, pick a region in the menu, then click a country in the legend to add it.
+
+**What to notice.**
+
+- The U.S. bust was large but not the largest. Add Ireland and Spain: real home prices fell 56.7 percent in Ireland
+  (2007 to 2013) and 44.5 percent in Spain (2007 to 2013). Latvia and Estonia lost more than half in under three
+  years. These are the housing busts behind the European debt crisis.
+- Add Canada: its real prices kept rising after 2007, so the title finds no bust for it in 2000–2015.
+- Add Japan: its real home prices peaked in 1991 and then fell for almost twenty years, to about half the peak, the
+  long hangover of its bubble of the late 1980s. The chapter asks whether the United States and Europe could repeat
+  Japan's experience.
+- **Look at your data.** The series start in different years: Ireland and Spain go back to the 1970s, Poland and
+  Turkey only to 2010. A country that starts after 2007 cannot show a 2000s bust.
+
 **Your turn.** Since 2000, in how many months was the real home price index above its pre-2000 maximum?
 
 <details><summary>Hint</summary>
@@ -1126,6 +1653,68 @@ fig.show()
   reached about 4.5 trillion dollars in 2015.
 - The Covid-19 purchases added more than 4 trillion dollars in two years. Since 2022 the Fed has let its holdings run
   off, to about 6.8 trillion dollars in 2026.
+
+<!-- cell -->
+
+### Beyond the United States: central bank balance sheets in 35 economies
+
+Other central banks bought assets too: the European Central Bank (ECB), the Bank of Japan and the Bank of England
+all ran large QE programs. Dollars, euros and yen cannot be compared directly, so we divide each central bank's
+total assets by its country's GDP. The BIS publishes this ratio, quarterly from 2000. For the United States it
+matches the Fed's assets of Figure 9 divided by U.S. GDP within 1.7 points (6.2 percent of GDP at the end of 2007,
+36.9 percent at the peak in 2021). The euro area appears once, for the whole Eurosystem.
+
+```{python}
+cb_world = pd.read_csv(DATA_URL + "cb_assets_world.csv", parse_dates=["date"])
+cb_world.tail(3)
+```
+
+```{python}
+CB_BOOK = ("United States",)
+CB_BOOK_COLORS = {"United States": BLUE, "Euro area": TEAL, "Japan": GREEN, "United Kingdom": PALETTE[0]}
+CB_COLORS = group_colors(sorted(cb_world.country.unique()), [list(cb_world.country.unique())], CB_BOOK_COLORS)
+
+
+def cb_assets_chart(countries=CB_BOOK):
+    """Figure 9 for other central banks: total assets in percent of GDP, and the largest peak among them."""
+    data = cb_world[cb_world.country.isin(countries)]
+    if data.empty:
+        return go.Figure(layout=dict(title="Pick at least one country"))
+    top = data.loc[data.assets_gdp.idxmax()]
+    fig = px.line(data, x="date", y="assets_gdp", color="country", color_discrete_map=CB_COLORS,
+                  labels={"date": "Year", "assets_gdp": "Central bank assets (% of GDP)", "country": "Country"},
+                  title=f"Largest balance sheet: {top.country}, {top.assets_gdp:.0f}% of GDP in {top.date:%Y}")
+    fig.update_traces(line_width=2.5)
+    fig.update_layout(xaxis_range=["1999-07-01", "2026-12-31"], legend_title_text="",
+                      yaxis_range=fit_axis(0, data.assets_gdp.max(), [(0, 41), (0, 75), (0, 150), (0, 180)]))
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(cb_assets_chart, countries=SelectMultiple(options=sorted(cb_world.country.unique()), value=CB_BOOK, rows=8,
+                                                   description="countries", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: central bank assets, with every economy in the legend
+fig = cb_assets_chart(tuple(cb_world.country.unique()))
+fig.update_layout(title=cb_assets_chart().layout.title)
+legend_menu(fig, shown=CB_BOOK)
+```
+
+On the website, click a country in the legend to add it, or choose *Show all* in the menu.
+
+**What to notice.**
+
+- Add the euro area, Japan and the United Kingdom: every one of them grew its balance sheet far more than the Fed,
+  relative to its economy. At their peaks in 2021, the Eurosystem held assets of 68 percent of GDP, the Bank of
+  England 48 percent and the Bank of Japan 129 percent, against 37 percent for the Fed.
+- The Bank of Japan's balance sheet was already 21 percent of GDP in 2007, three times the Fed's: Japan's
+  experiments with zero rates and asset purchases started a decade earlier.
+- Add Switzerland: its central bank's assets reached 145 percent of GDP, but for another reason. It bought foreign
+  currency to stop the Swiss franc from rising, so its assets are mostly foreign bonds.
 
 <!-- cell -->
 
@@ -1197,6 +1786,10 @@ through late 2014".
 Each dashed line is the path of the fed funds rate that markets expected in June of one year. The textbook uses futures
 contracts, which are not public; we read the expected path off the Treasury yield curve (forward rates), a close proxy
 that also contains a small term premium. The slider highlights one year's forecast.
+
+*Why only the United States?* Fed funds futures exist only for the Fed, and our proxy needs a full curve of yields
+at five maturities, every month; FRED has it free only for U.S. Treasuries. (The ECB publishes a similar yield curve
+for the euro area, if you want to try the method on another central bank.)
 
 ```{python}
 paths = pd.read_csv(DATA_URL + "fig14-10.csv", parse_dates=["date"])
@@ -1365,6 +1958,96 @@ slider_figure(tfp_chart, "start", [1987, 1995, 2000, 2004, 2010, 2015], start=20
   With the textbook's data (through 2022) the numbers were 0.5 and 0.2 percent. Revisions raised private-business TFP
   (today's data give 0.62 percent for 2004–2022), and the strong years since 2022 add the rest.
 - The slowdown began **before** the financial crisis, so the crisis cannot be its only cause.
+
+<!-- cell -->
+
+### Beyond the United States: TFP in 120 countries
+
+The BLS series is American. The **Penn World Table** (PWT 11.0) measures TFP for 120 countries, for the whole
+economy and with labor adjusted for schooling, so its U.S. numbers are lower than the BLS's private-business
+numbers: 1.19 percent a year in 1995–2004 and 0.39 percent in 2004–2023, against 1.64 and 0.67 for the BLS. The
+slowdown is the same. PWT's index equals 1 in 2017; we set it to 100 in 2009, as in the textbook figure.
+
+> **Python note.** `base` holds one number per country, the 2009 value, with the country names as row labels.
+> `tfp_world.country.map(base)` looks up each row's country in `base`, so every row is divided by its own country's
+> 2009 value. `start in rows.year.values` is true when the country has data for the year `start`. In the title
+> function, `growth` is a dictionary country → growth rate, and `max(growth, key=growth.get)` gives the country with
+> the largest value (`min` the smallest).
+
+```{python}
+tfp_world = pd.read_csv(DATA_URL + "tfp_world.csv")
+base = tfp_world[tfp_world.year == 2009].set_index("country").tfp
+tfp_world["tfp_2009"] = 100 * tfp_world.tfp / tfp_world.country.map(base)
+tfp_world = tfp_world[tfp_world.year >= 1980]                       # the years of the textbook figure, and more
+TFP_COLORS = group_colors(sorted(tfp_world.country.unique()), list(region_groups(tfp_world).values()),
+                          {"United States": BLUE})
+tfp_world.tail(3)
+```
+
+```{python}
+def tfp_title(data, countries, start):
+    """The title of Figure 11 for other countries: the fastest and slowest TFP growth from start to 2023."""
+    growth, missing = {}, []
+    for name in countries:
+        rows = data[data.country == name]
+        if start in rows.year.values:
+            growth[name] = round(growth_rate(rows, "tfp_2009", start, 2023), 2) + 0.0   # + 0.0 avoids -0.00
+        else:
+            missing.append(name)
+    title = f"TFP growth {start}–2023:"
+    if growth:
+        fast, slow = max(growth, key=growth.get), min(growth, key=growth.get)
+        title = title + f" {fast} {growth[fast]:.2f}% a year"
+        if slow != fast:
+            title = title + f", {slow} {growth[slow]:.2f}%"
+    if missing:
+        title = title + f" (no {start} data: " + ", ".join(missing) + ")"
+    return title
+```
+
+```{python}
+def tfp_world_chart(countries=("United States",), start=2004):
+    """Figure 11 for other countries: PWT TFP (2009 = 100, ratio scale) and its growth from start to 2023."""
+    data = tfp_world[tfp_world.country.isin(countries)]
+    if data.empty:
+        return go.Figure(layout=dict(title="Pick at least one country"))
+    fig = px.line(data, x="year", y="tfp_2009", color="country", log_y=True, color_discrete_map=TFP_COLORS,
+                  labels={"year": "Year", "tfp_2009": "TFP, 2009 = 100 (ratio scale)", "country": "Country"},
+                  title=tfp_title(data, countries, start))
+    fig.add_vrect(x0=start, x1=2023, fillcolor=GREEN, opacity=0.12, line_width=0)
+    low, high = fit_axis(data.tfp_2009.min(), data.tfp_2009.max(), [(70, 125), (50, 150), (30, 250)])
+    fig.update_yaxes(range=[np.log10(low), np.log10(high)], tickvals=[30, 40, 50, 70, 80, 90, 100, 110, 120, 150, 200, 250])
+    fig.update_layout(xaxis_range=[1979, 2024], legend_title_text="")
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(tfp_world_chart, countries=SelectMultiple(options=sorted(tfp_world.country.unique()), value=("United States",),
+                                                   rows=8, description="countries", style=WIDE),
+         start=IntSlider(value=2004, min=1987, max=2015, step=1, description="growth since", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: TFP since 1980, one region at a time in the legend (growth since 2004)
+fig = tfp_world_chart(tuple(tfp_world.country.unique()))
+fig.update_layout(title=tfp_world_chart().layout.title)
+legend_menu(fig, shown=["United States"], groups=region_groups(tfp_world))
+```
+
+On the website, pick a region in the menu, then click a country in the legend to add it.
+
+**What to notice.**
+
+- The slowdown is not only American. Add Germany, the United Kingdom, France and Italy: since 2004 TFP grew 0.32
+  percent a year in Germany, and it **fell** in the United Kingdom (−0.22), France (−0.42) and Italy (−0.80). In 56
+  of the 120 countries, TFP was lower in 2023 than in 2004.
+- Add China: 2.94 percent a year since 2004, still catching up with the frontier (Chapter 6).
+- **Look at your data.** The series start in different years: for the countries that came out of the Soviet Union,
+  Yugoslavia and Czechoslovakia, PWT begins in 1994. Add Russia and move the slider before 1994: the title says
+  "no data" for it. The steep TFP declines of oil producers such as Kuwait and Saudi Arabia (−5.2 and −3.9 percent a year
+  since 2004) reflect oil output and prices more than technology.
 
 **Your turn.** Compute TFP growth in private business for 1995–2004 and for 2004–2019 (before Covid-19). By how much did
 it slow down?

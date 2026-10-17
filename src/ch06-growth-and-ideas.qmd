@@ -23,7 +23,8 @@ engine: new **ideas**. By the end of the chapter you will be able to:
   combined Solow–Romer model;
 - read long-run data on commodity prices, U.S. growth and growth accounting;
 - simulate a model year by year with a `for` loop, draw ratio-scale charts in Plotly, and compute
-  growth rates over periods with pandas.
+  growth rates over periods with pandas;
+- go beyond the textbook's data: compare 40 commodities and 185 countries with a picker of your own.
 
 <!-- cell -->
 
@@ -38,8 +39,8 @@ figure each notebook figure replicates.
 | Figure 2 | 6.2 The balanced growth path in the Romer model | model | importance of ideas, population growth, linear or ratio scale |
 | Figure 3 | 6.3 A rise in research productivity | model | new research productivity, linear or ratio scale |
 | Figure 4 | 6.4 A rise in the research share | model | new research share, linear or ratio scale |
-| Figure 5 | 6.5 The real price of industrial commodities | data | the six commodities in the index (legend) |
-| Figure 6 | 6.6 A slowdown in U.S. economic growth? | data | number of years in the average |
+| Figure 5 | 6.5 The real price of industrial commodities | data | the six commodities in the index (legend); any of 40 commodities (picker) |
+| Figure 6 | 6.6 A slowdown in U.S. economic growth? | data | number of years in the average; any of 185 countries (picker, region menu) |
 | Figure 7 | 6.7 The word processor production function | model | fixed cost, price per copy |
 | Figure 8 | 6.8 Output after a rise in the investment rate | model | old and new investment rate, linear or ratio scale |
 
@@ -62,7 +63,7 @@ import plotly.express as px                     # quick charts from data tables
 import plotly.graph_objects as go               # charts built piece by piece (model figures)
 import plotly.io as pio
 from plotly.subplots import make_subplots       # several panels in one figure
-from ipywidgets import interact, FloatSlider, ToggleButtons, Dropdown
+from ipywidgets import interact, FloatSlider, ToggleButtons, Dropdown, SelectMultiple
 
 # One light blue/green look for every chart
 BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
@@ -110,6 +111,63 @@ def slider_figure(make_figure, name, values, start, label=None):
         steps.append(dict(method="update", label=str(values[i]), args=[{"visible": visible}, layout]))
     fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
                                     currentvalue=dict(prefix=(label or name) + " = "))])
+    return fig
+```
+
+The multi-country charts have three more website helpers. `region_menu` adds a menu of world regions to a
+chart that holds many countries, because a legend with 180 names would be unreadable. `region_groups` lists
+the countries that each view of that menu shows together, so that we can give them different colors.
+`legend_menu` keeps the textbook's lines on, puts the others in the legend, and adds two reset buttons.
+
+```{python}
+#| kind: helper
+# @title Helper for the website versions of the multi-country charts (run this cell; you do not need to read it)
+def region_menu(fig, regions, shown, label=None):
+    """Add a region menu: the countries in `shown` stay on, the chosen region's countries go into the legend.
+
+    `regions` maps each country (trace name) to its region. The website cannot run Python, so this menu
+    replaces the Colab country picker: pick a region, then click a country in the legend to add it.
+    """
+    names = [trace.name for trace in fig.data]
+    groups = sorted(set(regions[n] for n in names if n in regions))
+    buttons = []
+    for group in [label or "Textbook: " + ", ".join(shown)] + groups:
+        visible = []
+        for n in names:
+            if n in shown:
+                visible.append(True)
+            elif regions.get(n) == group:
+                visible.append("legendonly")
+            else:
+                visible.append(False)
+        buttons.append(dict(label=group, method="restyle", args=[{"visible": visible}]))
+    for trace in fig.data:
+        trace.visible = True if trace.name in shown else False
+    fig.update_layout(updatemenus=[dict(buttons=buttons, active=0, direction="down", showactive=True,
+                                        x=0, xanchor="left", y=1.02, yanchor="bottom")],
+                      margin=dict(t=120), legend_title_text="")
+    return fig
+
+
+def region_groups(regions, shown):
+    """The views of `region_menu`, for `group_colors`: `shown` alone, then `shown` plus each region's countries."""
+    groups = [list(shown)]
+    for region in sorted(set(regions.values())):
+        groups.append(list(shown) + [n for n in regions if regions[n] == region])
+    return groups
+
+
+def legend_menu(fig, shown, label="Textbook view"):
+    """For a chart with up to 40 lines: `shown` stay on, the others wait in the legend; two reset buttons."""
+    book = [True if t.name in shown else "legendonly" for t in fig.data]
+    everything = [True for t in fig.data]
+    for trace, v in zip(fig.data, book):
+        trace.visible = v
+    fig.update_layout(updatemenus=[dict(type="buttons", direction="right", x=0, xanchor="left", y=1.02,
+                                        yanchor="bottom", buttons=[
+                                            dict(label=label, method="restyle", args=[{"visible": book}]),
+                                            dict(label="All lines", method="restyle", args=[{"visible": everything}])])],
+                      margin=dict(t=120), legend_title_text="")
     return fig
 ```
 
@@ -267,6 +325,64 @@ def experiment_chart(years, y, y_old, y_new, scale):
     vertical_axis(fig, scale)
     fig.update_layout(showlegend=False)
     return fig
+```
+
+<!-- cell -->
+
+### Fixed colors for many lines
+
+Figures 5 and 6 let you add commodities or countries to a chart. A line should keep its color when you add
+or remove others, so we give every name one fixed color, once. Two lines that can appear together (in the
+same menu view) should not share a color, so each name takes the first color that its neighbors do not use.
+
+> **Python note.** `PALETTE` starts as a list of Plotly's 24 dark colors, and the loop appends the colors of a
+> second palette that are dark enough to read on white. `first_free` returns as soon as it finds a color. If every
+> color is already used next to this name, the second loop picks the one used least often (`.count`).
+
+```{python}
+LIGHT = {"#F7E1A0", "#E2E2E2", "#FBE426", "#16FF32", "#1CFFCE", "#2ED9FF"}      # too pale on white
+PALETTE = list(px.colors.qualitative.Dark24)
+for color in px.colors.qualitative.Alphabet:
+    if color not in LIGHT:
+        PALETTE.append(color)                       # 24 + 20 = 44 distinct colors
+PALETTE.remove("#2E91E5")
+PALETTE.append("#2E91E5")                          # this blue is close to the U.S. navy: use it last
+
+
+def first_free(used, taken):
+    """The first PALETTE color not in `used`, if possible one that no name has `taken` yet."""
+    for color in PALETTE:
+        if color not in used and color not in taken:
+            return color
+    best = PALETTE[0]                               # every color is used: share the least-used one,
+    for color in PALETTE:                           # from the end of the palette (far from the default view)
+        if used.count(color) <= used.count(best):
+            best = color
+    return best
+```
+
+> **Python note.** `fixed or {}` is `fixed` when it is given and an empty dictionary when it is `None`, and
+> `dict(...)` copies it, so the original stays unchanged. `continue` skips to the next name. The inner loops
+> collect `used`, the colors of every name that shares a group with `name`.
+
+```{python}
+def group_colors(names, groups, fixed=None):
+    """Give each country a color that no other country in its groups uses, as far as the palette allows.
+
+    names: every country; groups: the lists of countries shown together (menu views); fixed: {country: color}
+    for the textbook's countries, so the default view keeps the book's colors."""
+    colors = dict(fixed or {})
+    for name in names:
+        if name in colors:
+            continue
+        used = []                                   # colors of the names shown together with `name`
+        for group in groups:
+            if name in group:
+                for other in group:
+                    if other in colors:
+                        used.append(colors[other])
+        colors[name] = first_free(used, list(colors.values()))
+    return colors
 ```
 
 ## Figure 1: A fixed cost leads to increasing returns
@@ -740,6 +856,98 @@ print("Coal in 2022:", round(prices.set_index("year").loc[2022, "coal_real_1900_
   the energy crisis that followed Russia's invasion of Ukraine, and that single jump lifts the
   arithmetic mean far above the geometric one.
 
+<!-- cell -->
+
+### Beyond the six: 40 commodities
+
+The textbook picks six industrial commodities. Our source, Jacks (2019), covers 40: metals, energy,
+grains, "softs" such as coffee and cotton, animal products and minerals. A wider file holds all of them, in
+the same units.
+
+```{python}
+commodities = pd.read_csv(DATA_URL + "commodity_prices.csv")
+commodities.head()
+```
+
+The file is *long*: one row per commodity and year. `group` is the commodity's group, and
+`extended_with_world_bank` again marks the years after 2020 added from World Bank prices. Ten commodities
+(hides, pork, rye, chromium, manganese, steel, bauxite, sulfur, cottonseed and wool) have no matching World
+Bank price, so they stop in 2020. **Always check where each series ends before you compare "latest" values.**
+
+> **Python note.** `.isin(names)` keeps the rows whose commodity is in `names`. `.groupby("commodity").last()`
+> keeps the last row of each commodity, that is, its latest year. `color_discrete_map` gives each line its
+> fixed color from `group_colors`. A `SelectMultiple` is a list in which you can pick several items: hold Ctrl
+> (Cmd on a Mac) while you click.
+
+```{python}
+ALL_COMMODITIES = sorted(commodities.commodity.unique())
+SIX = ("Aluminum", "Coal", "Copper", "Iron ore", "Lead", "Zinc")
+COMMODITY_COLORS = group_colors(ALL_COMMODITIES, [SIX, ALL_COMMODITIES])   # the two website views
+
+
+def commodity_chart(names=SIX):
+    """Figure 6.5, extended: real prices of any of the 40 commodities (1900 = 100, ratio scale)."""
+    chosen = commodities[commodities.commodity.isin(names)]
+    if len(chosen) == 0:
+        return go.Figure(layout=dict(title="Pick at least one commodity"))
+    latest = chosen.groupby("commodity").last()
+    cheaper = (latest.real_price_1900_100 < 100).sum()
+    title = f"{cheaper} of these {len(latest)} commodities cost less in their latest year than in 1900"
+    if len(latest) == 1:
+        title = f"{names[0]}: {latest.real_price_1900_100.iloc[0]:.0f} in {latest.year.iloc[0]} (1900 = 100)"
+    fig = px.line(chosen, x="year", y="real_price_1900_100", color="commodity", log_y=True,
+                  hover_name="commodity", color_discrete_map=COMMODITY_COLORS, title=title,
+                  labels={"year": "Year", "real_price_1900_100": "Real price (1900 = 100, ratio scale)",
+                          "commodity": "Commodity"})
+    low = 10 ** np.floor(np.log10(chosen.real_price_1900_100.min()))     # whole powers of ten
+    high = 10 ** np.ceil(np.log10(chosen.real_price_1900_100.max()))
+    fig.add_hline(y=100, line_dash="dash", line_color=GRAY)
+    fig.update_yaxes(range=[np.log10(low), np.log10(high)],
+                     tickvals=[1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000])
+    fig.update_xaxes(range=[1900, 2026], tickvals=[1920, 1940, 1960, 1980, 2000, 2020])   # no corner label
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(commodity_chart,
+         names=SelectMultiple(options=ALL_COMMODITIES, value=SIX, rows=10, description="commodities", style=WIDE));
+```
+
+On the website, the chart below holds all 40 commodities. The textbook's six are shown; **click a name in
+the legend to add it**, and double-click a name to show it alone.
+
+```{python}
+#| kind: website
+# @title Website version: Figure 5 with all 40 commodities (click a name in the legend to add it)
+fig = commodity_chart(tuple(ALL_COMMODITIES))
+legend_menu(fig, SIX, label="The textbook's six")
+last_rows = commodities.groupby("commodity").last()
+cheaper_all = (last_rows.real_price_1900_100 < 100).sum()
+fig.update_layout(title=f"{cheaper_all} of the 40 commodities cost less in their latest year than in 1900")
+fig.update_yaxes(autorange=True)          # the axis adapts to the commodities you add
+fig
+```
+
+```{python}
+change = commodities.pivot(index="year", columns="commodity", values="real_price_1900_100")
+bet = change.loc[[1980, 1990], ["Chromium", "Copper", "Nickel", "Tin"]]
+print((100 * (bet.loc[1990] / bet.loc[1980] - 1)).round(1))
+print("Cheaper than in 1900:", (last_rows.real_price_1900_100 < 100).sum(), "of", len(last_rows))
+print(last_rows[last_rows.real_price_1900_100 > 100].real_price_1900_100.sort_values().round(1))
+```
+
+**What to notice.**
+
+- 28 of the 40 commodities cost less in real terms in their latest year than in 1900. Rubber (5 percent of
+  its 1900 price) and aluminum (8 percent) fell the most.
+- The exceptions are mostly energy and precious metals: oil, coal and natural gas, and gold, silver and
+  platinum, together with beef, lamb, tin, chromium, manganese and coffee. Gold is more than four times as
+  expensive as in 1900.
+- In 1980 the economist Julian Simon bet the biologist Paul Ehrlich that the real prices of five metals
+  would fall over the next ten years. Four of them are in the file, and all four fell between 1980 and
+  1990: chromium by 12 percent, copper by 23, nickel by 14 and tin by 77 percent. Simon won the bet.
+
 **Your turn.** Find the year in which the real price of copper was lowest, and its value in that year.
 
 <details><summary>Hint</summary>
@@ -882,6 +1090,109 @@ print(f"\nLargest gap between the sum of contributions and output per hour: {gap
 Only three cells differ, by 0.1 point each, because the BLS has revised its data since the book was
 written: TFP growth over 1948–2021, and output per hour and TFP over 2003–2021. The productivity slowdown after 1973 and the new slowdown after 2003 are both
 mostly slowdowns in **TFP growth**, the part that the Romer model attributes to new ideas.
+
+<!-- cell -->
+
+### Beyond the United States
+
+Was the slowdown an American story? The Penn World Table (PWT) measures real GDP per person for 185
+countries since 1950, in 2021 U.S. dollars. A wider file holds it, one row per country and year, with the
+country's World Bank region.
+
+```{python}
+world = pd.read_csv(DATA_URL + "gdp_pc_countries.csv")
+world.head()
+```
+
+Many series start later than 1950: in 1960, 1970, or 1990 for the former Soviet and Yugoslav republics. So
+a country's 10-year average appears only ten years after its data start. For the United States, the PWT
+growth rates differ from the BEA numbers above by at most 0.2 points.
+
+> **Python note.** `growth_table` loops over the chosen countries, computes each one's growth with
+> `.shift(window)` as before, and joins the pieces with `pd.concat`. `.groupby("country").last()` keeps
+> each country's latest row, and `.idxmax()` gives the country with the highest growth. `set(a) - set(b)`
+> lists the names in `a` that are not in `b`: here, the countries with no data. `round(x, 1) + 0.0` turns a
+> rounded −0.0 into 0.0.
+
+```{python}
+ALL_COUNTRIES = sorted(world.country.unique())
+GROWTH_REGIONS = dict(zip(world.country, world.region))
+GROWTH_SHOWN = ["United States", "China", "India"]          # the website's default view, colored first
+COUNTRY_COLORS = group_colors(GROWTH_SHOWN + ALL_COUNTRIES, region_groups(GROWTH_REGIONS, GROWTH_SHOWN),
+                              {"United States": BLUE})
+
+
+def growth_table(names, window):
+    """Average growth of GDP per person over the preceding `window` years, chosen countries, 1960 on."""
+    pieces = [world.head(0)]                    # an empty table to start with, so concat always works
+    for name in names:
+        one = world[world.country == name].copy()
+        one["growth"] = 100 * (np.log(one.gdp_pc) - np.log(one.gdp_pc.shift(window))) / window
+        pieces.append(one[one.year >= 1960].dropna(subset=["growth"]))
+    return pd.concat(pieces)
+```
+
+```{python}
+def growth_by_country(names=("United States",), window=10):
+    """Figure 6.6 for any countries: the latest highest and lowest growth in the title."""
+    table = growth_table(names, window)
+    if len(table) == 0:
+        return go.Figure(layout=dict(title=f"No {window}-year growth rates for: " + (", ".join(names) or "pick a country")))
+    latest = table.groupby("country").last()
+    fast, slow = latest.growth.idxmax(), latest.growth.idxmin()
+    title = f"{window}-year growth in {latest.year.max()}: {fast} {round(latest.growth[fast], 1) + 0.0:.1f}%"
+    if slow != fast:
+        title = title + f", {slow} {round(latest.growth[slow], 1) + 0.0:.1f}%"
+    missing = sorted(set(names) - set(table.country))
+    if missing:
+        title = title + " (no data: " + ", ".join(missing) + ")"
+    fig = px.line(table, x="year", y="growth", color="country", hover_name="country",
+                  color_discrete_map=COUNTRY_COLORS, title=title,
+                  labels={"year": "Year", "growth": f"{window}-year average growth (%)", "country": "Country"})
+    for low, high in [(-0.5, 4.5), (-2.5, 10.5), (-10.5, 20.5), (-40.5, 40.5)]:   # widen only when needed
+        if table.growth.min() >= low and table.growth.max() <= high:
+            break
+    fig.update_layout(yaxis_range=[low, high], xaxis_range=[1959, 2024])
+    fig.update_xaxes(tickvals=[1970, 1980, 1990, 2000, 2010, 2020])      # no label at the bottom-left corner
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(growth_by_country,
+         names=SelectMultiple(options=ALL_COUNTRIES, value=("United States",), rows=10,
+                              description="countries", style=WIDE),
+         window=Dropdown(options=[5, 10, 15, 20], value=10, description="years in the average", style=WIDE));
+```
+
+On the website, the chart below holds all 185 countries with a 10-year window. **Pick a region in the menu,
+then click a country in the legend to add it.**
+
+```{python}
+#| kind: website
+# @title Website version: Figure 6 for every country (pick a region, then click a country in the legend)
+fig = growth_by_country(tuple(ALL_COUNTRIES), window=10)
+region_menu(fig, GROWTH_REGIONS, shown=GROWTH_SHOWN, label="U.S., China, India")
+fig.update_layout(title="Growth slowed after 2007 in every G7 country, but rose in China and India")
+fig.update_yaxes(autorange=True)          # the axis adapts to the countries you add
+fig
+```
+
+```{python}
+for name in ["United States", "Japan", "Germany", "Italy", "China", "India"]:
+    one = world[world.country == name].set_index("year").gdp_pc
+    g10 = 100 * (np.log(one) - np.log(one.shift(10))) / 10
+    print(f"{name:14s} 1960-2006: {g10.loc[1960:2006].mean():4.1f}%   2009-2023: {g10.loc[2009:2023].mean():4.1f}%"
+          f"   1970: {g10.get(1970, np.nan):4.1f}%   2000: {g10.get(2000, np.nan):4.1f}%")
+```
+
+**What to notice.**
+
+- Add **Japan**: its 10-year growth fell from 8.6 percent a year in 1970 to 1.0 percent in 2000. Japan's
+  slowdown came decades before the American one and was much deeper.
+- Every G7 country grew more slowly in 2009–2023 than in 1960–2006; Italy's GDP per person even shrank.
+- Add **China** and **India**: they grew faster after 2009 than before. Countries far below the frontier can
+  grow fast for decades by catching up, a theme of Chapters 5 and 6.
 
 **Your turn.** Add a column for 2019–2025 to the growth-accounting table with `period_growth`. Did TFP grow
 faster or slower than in 2003–2021?

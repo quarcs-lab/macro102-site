@@ -23,9 +23,10 @@ you will be able to:
 - solve the AS/AD model for its steady state and for the path of inflation and output, period by period,
   after an inflation shock, a disinflation and an aggregate demand shock;
 - explain why expectations, credibility and inflation targets matter for the cost of fighting inflation;
-- test the model on U.S. data: the fed funds rate against the policy rule, and inflation-output loops;
+- test the model on U.S. data, and on data for dozens of other countries: policy rates against the policy rule,
+  inflation-output loops, and three centuries of inflation;
 - in Python: write one `simulate` loop and reuse it in many figures, build tables from lists of
-  dictionaries, reshape data with `melt`, and compare two vintages of the same data.
+  dictionaries, reshape data with `melt`, join tables with `merge`, and compare two vintages of the same data.
 
 <!-- cell -->
 
@@ -51,12 +52,12 @@ figure each notebook figure replicates.
 | Figure 13 | 13.13 Dynamics as the AS curve shifts | model | shock ā, period, m̄, ν̄ |
 | Figure 14 | 13.14 The unraveling after the AD shock ends | model | shock ā, period, m̄, ν̄ |
 | Figure 15 | 13.15 A positive aggregate demand shock: summary | model | shock ā, last period of the shock, m̄, ν̄ |
-| Figure 16 | 13.16 The fed funds rate, actual and predicted | data | r̄ and m̄ of the policy rule |
-| Figure 17 | 13.17 Inflation-output loops in the U.S. economy | data | years shown, data vintage |
+| Figure 16 | 13.16 The fed funds rate, actual and predicted | data | r̄ and m̄ of the policy rule; country (33 central banks) |
+| Figure 17 | 13.17 Inflation-output loops in the U.S. economy | data | years shown, data vintage; loops in 40 OECD economies (menu) |
 | Figure 18 | 13.18 Forecasting and the Great Recession | data | show or hide forecasts (legend) |
-| Figure 19 | 13.19 Inflation in the OECD | data | show or hide countries (legend) |
+| Figure 19 | 13.19 Inflation in the OECD | data | countries (194 economies; groups and legend on the website) |
 | Figure 20 | 13.20 Costless disinflation by coordinating expectations | model | credibility of the new target, π̄′, m̄, ν̄ |
-| Figure 21 | 13.21 Nearly 300 years of inflation in the United Kingdom | data | hover for each period |
+| Figure 21 | 13.21 Nearly 300 years of inflation in the United Kingdom | data | hover for each period; 17 more countries since 1871 (countries) |
 
 <!-- cell -->
 
@@ -77,7 +78,7 @@ import plotly.express as px                     # quick charts from data tables
 import plotly.graph_objects as go               # charts built piece by piece (model figures)
 import plotly.io as pio
 from plotly.subplots import make_subplots       # several panels in one figure
-from ipywidgets import interact, FloatSlider, IntSlider, ToggleButtons
+from ipywidgets import interact, FloatSlider, IntSlider, ToggleButtons, Dropdown, SelectMultiple
 
 # One light blue/green look for every chart
 BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
@@ -365,6 +366,168 @@ def asad_axes(fig, title, panels=1):
                          row=1, col=col)
     fig.update_layout(title=title, legend=dict(x=0.99, y=0.99, xanchor="right", yanchor="top",
                                                bgcolor="rgba(255,255,255,0.8)"))
+```
+
+<!-- cell -->
+
+### Countries and colors
+
+The data figures at the end of this chapter (Figures 16–21) can go beyond the textbook's economies: the same series
+exist for many other countries. The file `countries.csv` lists every economy in the chapter's multi-country files, with
+its region and whether it belongs to the OECD. We give each country a fixed color, so that it keeps its color when you
+add or remove others, and two countries that are shown together never share a color. The function `missing_or_off`
+writes a short note for a chart title when a chosen country has no data or leaves the chart.
+
+> **Python note.** `PALETTE.index(c)` finds the position of color `c`, `.pop(i)` removes the item at that position and returns it, and `.append` puts it at the end.
+> `group_colors` walks through the countries one by one. `colors.get(other)` is the color of `other`,
+> or `None` if it has none yet. `new + free + PALETTE` joins three lists and `[0]` takes the first item: a color that
+> no country uses yet if there is one, else one that no country of the same groups uses.
+
+```{python}
+LIGHT = ["#F7E1A0", "#E2E2E2", "#FBE426", "#16FF32", "#1CFFCE", "#2ED9FF"]      # too pale on a white page
+PALETTE = list(px.colors.qualitative.Dark24)                                     # 24 dark colors ...
+for color in px.colors.qualitative.Alphabet:                                     # ... and 20 more
+    if color not in LIGHT:
+        PALETTE.append(color)
+PALETTE.append(PALETTE.pop(PALETTE.index("#2E91E5")))   # this blue is close to the U.S. navy: move it to the end
+```
+
+```{python}
+def group_colors(names, groups, fixed=None):
+    """A color for each country that no other country of its groups uses, as far as the palette allows.
+    groups: lists of countries shown together (the website menus); fixed: {country: color} for the book's countries."""
+    colors = dict(fixed or {})
+    for name in names:
+        if name in colors:
+            continue
+        used = []                                    # colors of the countries already shown with this one
+        for group in groups:
+            if name in group:
+                for other in group:
+                    used.append(colors.get(other))
+        free, new = [], []                           # free: not used in its groups; new: not used by any country
+        for color in PALETTE:
+            if color not in used:
+                free.append(color)
+                if color not in colors.values():
+                    new.append(color)
+        colors[name] = (new + free + PALETTE)[0]
+    return colors
+```
+
+The website shows the OECD members and eight large emerging economies, so those countries get their colors first.
+
+> **Python note.** `countries.groupby("region")` hands over each region's name with its rows, so `regions` becomes a
+> list of country lists, one per region.
+
+```{python}
+countries = pd.read_csv(DATA_URL + "countries.csv")
+G7 = ["Canada", "France", "Germany", "Italy", "Japan", "United Kingdom", "United States"]
+EMERGING = ["Argentina", "Brazil", "China", "India", "Indonesia", "Russia", "Saudi Arabia", "South Africa"]
+BOOK_COLORS = {"United States": BLUE, "United Kingdom": TEAL, "Euro area": GREEN, "Japan": "#5aa0d8"}
+OECD_PLUS = list(BOOK_COLORS) + sorted(set(countries.country[countries.oecd]) - set(BOOK_COLORS)) + EMERGING
+regions = []
+for region, rows in countries.groupby("region"):
+    regions.append(list(rows.country))
+rest = sorted(set(countries.country) - set(OECD_PLUS))
+INFLATION_COLORS = group_colors(OECD_PLUS + rest, [OECD_PLUS] + regions, BOOK_COLORS)
+countries.head()
+```
+
+> **Python note.** `values.empty` is true when a selection has no rows. `", ".join(names)` glues a list of names into
+> one text, with a comma between them.
+
+```{python}
+def missing_or_off(part, column, countries, low, high):
+    """Title text naming the chosen countries with no data in `part`, and those whose values leave [low, high]."""
+    missing, off = [], []
+    for name in countries:
+        values = part[column][part.country == name]
+        if values.empty:
+            missing.append(name)
+        elif values.min() < low or values.max() > high:
+            off.append(name)
+    note = ""
+    if missing:
+        note += "; no data: " + ", ".join(missing)
+    if off:
+        note += "; off the chart: " + ", ".join(off)
+    return note
+```
+
+The website versions of the multi-country figures need two more helpers: a menu that switches between countries, and
+buttons that list one group of countries in the legend. Run the two cells and move on.
+
+```{python}
+#| kind: helper
+# @title Helpers for the website country menus (run this cell; you do not need to read it)
+def compact(fig):
+    """Shrink a website figure (short dates, 4 significant digits, a short hover), so the saved notebook stays small."""
+    for trace in fig.data:
+        x = pd.Series(trace.x if trace.x is not None else [], dtype=object).infer_objects()
+        if pd.api.types.is_datetime64_any_dtype(x):
+            trace.x = x.dt.strftime("%Y-%m-%d").tolist()
+        if trace.y is not None and np.asarray(trace.y).dtype.kind == "f":
+            trace.y = [float(f"{v:.4g}") for v in trace.y]
+        if "lines" in (trace.mode or "") and trace.hovertext is None:
+            trace.hovertemplate = "%{fullData.name}<br>%{x}: %{y}<extra></extra>"
+    return fig
+
+
+def menu_figure(make_figure, name, values, start):
+    """Precompute make_figure(name=value) for every value and join the results with one dropdown menu."""
+    figures = [make_figure(**{name: v}) for v in values]
+    first = values.index(start)
+    fig = go.Figure(layout=figures[first].layout)
+    owner, shown = [], []
+    for i, f in enumerate(figures):
+        for trace in f.data:
+            shown.append(True if trace.visible is None else trace.visible)
+            trace.visible = shown[-1] if i == first else False
+            fig.add_trace(trace)
+            owner.append(i)
+    buttons = []
+    for i, f in enumerate(figures):
+        layout = {"title": f.layout.title.to_plotly_json(), "annotations": [a.to_plotly_json() for a in f.layout.annotations],
+                  "shapes": [s.to_plotly_json() for s in f.layout.shapes], "legend.title.text": f.layout.legend.title.text,
+                  "xaxis.range": f.layout.xaxis.range, "yaxis.range": f.layout.yaxis.range}
+        visible = [shown[j] if o == i else False for j, o in enumerate(owner)]
+        buttons.append(dict(label=str(values[i]), method="update", args=[{"visible": visible}, layout]))
+    fig.update_layout(margin=dict(t=110), updatemenus=[dict(type="dropdown", buttons=buttons, active=first, x=0, y=1.02,
+                                                            xanchor="left", yanchor="bottom")])   # above the plot
+    return compact(fig)
+```
+
+```{python}
+#| kind: helper
+# @title Helper for the website group buttons (run this cell; you do not need to read it)
+def group_menu(fig, book, small=8):
+    """Buttons that list one group of countries in the legend (a small group is drawn at once); `book` is always drawn."""
+    names = [t.name for t in fig.data]
+    short = {"Europe and Central Asia": "Europe", "Asia and Pacific": "Asia-Pacific", "Middle East and Africa": "Africa, Mideast"}
+    groups = {"Textbook": list(book), "G7": G7, "Americas": [], "Europe": [], "Asia-Pacific": [], "Africa, Mideast": []}
+    for c, r in zip(countries.country, countries.region):
+        if c in names:
+            groups[short.get(r, r)].append(c)
+    first = ["legendonly" if len(names) <= 40 else False] * len(names)   # a short legend lists every country
+    buttons = []
+    for label, members in groups.items():
+        if not set(members) & set(names):
+            continue                                   # no country of this group in the figure
+        visible = []
+        for j, n in enumerate(names):
+            if n in book:
+                visible.append(True)
+            elif n in members:
+                visible.append(True if len(members) <= small else "legendonly")
+            else:
+                visible.append(first[j] if label == "Textbook" else False)
+        buttons.append(dict(label=label, method="restyle", args=[{"visible": visible}]))
+    for trace, v in zip(fig.data, buttons[0]["args"][0]["visible"]):
+        trace.visible = v
+    fig.update_layout(margin=dict(t=120), updatemenus=list(fig.layout.updatemenus) + [dict(
+        type="buttons", direction="right", x=0, y=1.02, xanchor="left", yanchor="bottom", buttons=buttons)])
+    return compact(fig)
 ```
 
 ## Figure 1: The aggregate demand curve
@@ -1370,43 +1533,77 @@ Each row is a quarter. `fed_funds` is the average fed funds rate in the quarter,
 PCE inflation rate over the last four quarters, both in percent. The last row has no inflation yet: the data for
 that quarter were not published when the file was made. The rule will simply stop one quarter earlier.
 
+The same test works for other central banks. The file `taylor_rule_countries.csv` has, for 33 economies, the quarterly
+average of the central bank's policy rate (from the Bank for International Settlements) and core inflation, the
+consumer price index without food and energy (from the OECD). For the United States it repeats the table above.
+
+```{python}
+rules = pd.read_csv(DATA_URL + "taylor_rule_countries.csv", parse_dates=["date"])
+rules.dropna().groupby("country").date.agg(["min", "max"]).head(8)      # quarters with both series
+```
+
+**Look at your data.** The coverage differs a lot. Germany, France, Italy and the other early euro members have their
+own policy rate only until 1998, and the euro area from 1999; core inflation starts in the 1970s or 1990s in many
+countries, and for Japan it stops in mid-2021. Israel and Mexico in the 1980s and Türkiye in the 1990s and 2020s had
+very high inflation, so the rule asks for rates far off the chart.
+
+> **Python note.** `px.line` with a list `y=[...]` draws one line per column. `selector=dict(name=...)` changes only the
+> trace with that name. `round(gap, 2) + 0.0` turns a rounded −0.00 into 0.00, and `np.isnan(gap)` is true when there
+> were no quarters to average.
+
 ```{python}
 def policy_rule(pi, r_bar=2.0, m=M_BAR, pi_bar=PI_BAR):
     """Equation 13.5: the nominal interest rate i = r_bar + pi + m (pi - pi_bar)."""
     return r_bar + pi + m * (pi - pi_bar)
-
-
-def fed_funds_chart(r_bar=2.0, m=M_BAR):
-    """Figure 13.16: the actual fed funds rate and the rate predicted by the policy rule."""
-    chart = pd.DataFrame({"date": taylor.date, "Actual fed funds rate": taylor.fed_funds,
-                          "Policy rule": policy_rule(taylor.core_inflation, r_bar, m)})
-    recent = chart[chart.date >= "2009-01-01"]
-    gap = (recent["Actual fed funds rate"] - recent["Policy rule"]).mean()
-    fig = px.line(chart, x="date", y=["Actual fed funds rate", "Policy rule"],
-                  color_discrete_sequence=[BLUE, GREEN],
-                  labels={"date": "Year", "value": "Percent", "variable": "Series"},
-                  title=f"Rule with r̄ = {r_bar:.1f}, m̄ = {m:.2f}: actual minus rule since 2009 = {gap:.2f} points")
-    fig.update_traces(line_width=2.5)
-    fig.update_traces(line_dash="dash", selector=dict(name="Policy rule"))
-    fig.update_layout(xaxis_range=["1958-01-01", "2027-12-31"], yaxis=dict(range=[-1, 22], tickvals=[0, 4, 8, 12, 16, 20]),
-                      legend=dict(x=0.99, y=0.99, xanchor="right", yanchor="top"), legend_title_text="")
-    return fig
 ```
 
-> **Python note.** `px.line` with a list `y=[...]` draws one line per column. `selector=dict(name=...)` changes only the
-> trace with that name.
+```{python}
+def fed_funds_chart(r_bar=2.0, m=M_BAR, country="United States"):
+    """Figure 13.16: the actual policy rate of one country and the rate predicted by the policy rule."""
+    part = rules[rules.country == country]
+    actual = "Actual fed funds rate" if country == "United States" else "Actual policy rate"
+    chart = pd.DataFrame({"date": part.date, actual: part.policy_rate,
+                          "Policy rule": policy_rule(part.core_inflation, r_bar, m)})
+    gap = round((chart[actual] - chart["Policy rule"])[chart.date >= "2009-01-01"].mean(), 2) + 0.0
+    lines = chart[[actual, "Policy rule"]]
+    low, high, ticks = -1, 22, [0, 4, 8, 12, 16, 20]
+    for wider_low, wider_high, wider_ticks in [(-5, 45, None), (-10, 110, None)]:   # only when a country needs it
+        if lines.min().min() < low or lines.max().max() > high:
+            low, high, ticks = wider_low, wider_high, wider_ticks
+    title = f"Rule with r̄ = {r_bar:.1f}, m̄ = {m:.2f}: actual minus rule since 2009 = {gap:.2f} points"
+    if np.isnan(gap):
+        title = f"Rule with r̄ = {r_bar:.1f}, m̄ = {m:.2f} (no data since 2009)"
+    legend = country + (" (off the chart)" if lines.min().min() < low or lines.max().max() > high else "")
+    fig = px.line(chart, x="date", y=[actual, "Policy rule"], color_discrete_sequence=[BLUE, GREEN], title=title,
+                  labels={"date": "Year", "value": "Percent", "variable": "Series"})
+    fig.update_traces(line_width=2.5)
+    fig.update_traces(line_dash="dash", selector=dict(name="Policy rule"))
+    fig.update_layout(xaxis_range=["1958-01-01", "2027-12-31"], yaxis=dict(range=[low, high], tickvals=ticks),
+                      legend=dict(x=0.99, y=0.99, xanchor="right", yanchor="top"), legend_title_text=legend)
+    return fig
+```
 
 ```{python}
 #| kind: widget
 interact(fed_funds_chart,
          r_bar=FloatSlider(value=2.0, min=0.0, max=3.0, step=0.5, description="r̄ in the rule (%)", style=WIDE),
-         m=FloatSlider(value=0.5, min=0.0, max=1.0, step=0.25, description="m̄ in the rule", style=WIDE));
+         m=FloatSlider(value=0.5, min=0.0, max=1.0, step=0.25, description="m̄ in the rule", style=WIDE),
+         country=Dropdown(options=sorted(rules.country.unique()), value="United States", description="country",
+                          style=WIDE));
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Figure 16 with a precomputed slider for r̄
-slider_figure(fed_funds_chart, "r_bar", [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0], start=2.0, label="r̄ in the rule (%)")
+compact(slider_figure(fed_funds_chart, "r_bar", [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0], start=2.0, label="r̄ in the rule (%)"))
+```
+
+On the website, a second version offers the 33 economies, with Taylor's numbers r̄ = 2 and m̄ = 1/2.
+
+```{python}
+#| kind: website
+# @title Website version: Figure 16 with a menu for the country
+menu_figure(fed_funds_chart, "country", sorted(rules.country.unique()), "United States")
 ```
 
 **What to notice.**
@@ -1419,6 +1616,9 @@ slider_figure(fed_funds_chart, "r_bar", [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0], sta
   Taylor rule also responds to output, which explains part of this.
 - Lower $\bar{r}$ to 1 or 0.5 percent, as many economists now do: the rule comes closer after 2008, but in 2021–2022 it
   still calls for rates far above the actual ones. The Fed raised rates late after the Covid-19 pandemic.
+- Choose the euro area, the United Kingdom or Canada: the same pattern. Their central banks also kept rates below the
+  rule after 2009 (by 2.2, 3.3 and 2.6 points on average from 2009 to 2020) and even more in 2021–2022 (by 4.7, 5.9 and
+  5.5 points). The rule uses core consumer prices for them, not the core PCE index of the U.S. line.
 
 <!-- cell -->
 
@@ -1444,12 +1644,13 @@ The actual rate was below the rule by 2.3 points on average from 1967 to 1980, b
 6.7 points in 2021–2022. The correlation of 0.75 says the two lines move together most of the time.
 
 **Your turn.** Repeat the averages with $\bar{r} = 1$ percent. Which periods does the lower $\bar{r}$ explain, and which
-not?
+not? Then compute the average gap from 2009 to 2020 for the United Kingdom.
 
 <details><summary>Hint</summary>
 
 Recompute the gap with `taylor.fed_funds - policy_rule(taylor.core_inflation, r_bar=1.0)` and rerun the loop. A lower
-$\bar{r}$ lowers the rule by the same amount in every quarter.
+$\bar{r}$ lowers the rule by the same amount in every quarter. For another country, start from
+`uk = rules[rules.country == "United Kingdom"]` and use `uk.policy_rate` and `uk.core_inflation`.
 
 </details>
 
@@ -1578,6 +1779,59 @@ print(f"Current minus textbook output gap, 1985-2022: {revision.mean():.2f} poin
 With the textbook's data the 2009 gap is −5.20 percent; with today's data it is −4.66 percent, so "more than 5 percent"
 is no longer true. Inflation did rise, from −0.32 to 3.14 percent, partly because of energy and commodity prices.
 
+<!-- cell -->
+
+### Loops in other countries
+
+The OECD estimates the output gap of 40 economies, most of them since 1985, with one method for all. The file
+`output_gaps_oecd.csv` has these estimates, and `inflation_annual.csv` has CPI inflation for 194 economies (the
+World Bank's numbers, and for the four economies of Figure 19 the numbers of that figure). We join them by country and
+year. For the United States the OECD's gap differs from the CBO's: it is 0.2 points higher on average since 1985, and
+−3.98 percent in 2009 instead of −4.66. Potential output cannot be observed, so every estimate of the gap is a model.
+
+> **Python note.** `merge` joins two tables on the columns they share, here `iso3`, `country` and `year`, and keeps
+> the rows found in both. `part.year % 5 == 0` is true for years that end in 0 or 5: we label those and the last year.
+
+```{python}
+gaps = pd.read_csv(DATA_URL + "output_gaps_oecd.csv")
+prices = pd.read_csv(DATA_URL + "inflation_annual.csv")
+eo_loops = gaps.merge(prices, on=["iso3", "country", "year"])
+eo_loops[eo_loops.country == "United Kingdom"].head(3)
+```
+
+```{python}
+def oecd_loops_chart(country="United States"):
+    """Figure 13.17, extended: annual (output gap, inflation) points of one country, OECD estimates of the gap."""
+    part = eo_loops[eo_loops.country == country]
+    label = part.year.astype(str).where((part.year % 5 == 0) | (part.year == part.year.max()), "")
+    x_range = [np.floor(part.output_gap.min()) - 1, np.ceil(part.output_gap.max()) + 1]
+    y_range = [np.floor(min(part.inflation.min(), 0)) - 1, np.ceil(part.inflation.max()) + 1]
+    fig = px.line(part.assign(label=label), x="output_gap", y="inflation", text="label", markers=True,
+                  hover_name="year", title=f"{country}: inflation and the output gap, {part.year.min()}–{part.year.max()}",
+                  labels={"output_gap": "Output gap, Ỹ (percent, OECD)", "inflation": "CPI inflation (percent)"})
+    fig.update_traces(line=dict(color=BLUE, width=2), marker=dict(color=TEAL, size=7), textposition="top center")
+    fig.update_layout(xaxis=dict(range=x_range, zeroline=True), yaxis=dict(range=y_range))
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(oecd_loops_chart, country=Dropdown(options=sorted(eo_loops.country.unique()), value="United States",
+                                            description="country", style=WIDE));
+```
+
+```{python}
+#| kind: website
+# @title Website version: inflation-output loops in 40 economies, with a menu for the country
+menu_figure(oecd_loops_chart, "country", sorted(eo_loops.country.unique()), "United States")
+```
+
+- Choose the United Kingdom: a textbook loop. The boom of 1987–1989 (output 5.7 percent above potential in 1988) raised
+  inflation to 8.0 percent in 1990; the recession that followed (−4.1 percent in 1993) brought it down to 2.6 percent.
+  Sweden shows a similar loop in the same years.
+- Choose Japan: from 1995 to 2013 inflation stayed between −1.4 and +1.8 percent whatever the output gap did (from −5.2
+  to +2.8 percent). In the model's language, the slope ν̄ of the Phillips curve was close to zero there.
+
 **Your turn.** Find the year with the largest boom (highest output gap) and the year with the deepest slump since 1960,
 in the current data.
 
@@ -1598,6 +1852,8 @@ in the current data.
 
 If economists understand fluctuations so well, can they forecast them? The **Survey of Professional Forecasters**,
 run by the Federal Reserve Bank of Philadelphia, asks experts every quarter for their forecast of U.S. employment.
+This figure stays U.S.-only: the survey covers only the U.S. economy, and the similar survey of the European Central
+Bank asks about growth, inflation and unemployment rates, not about the number of jobs.
 The economists James Stock and Mark Watson called this figure "the mother of all forecast errors".
 
 ```{python}
@@ -1688,16 +1944,53 @@ Each value is the CPI inflation rate of one year, in percent. A data note: the t
 percent in 2022, but the full-year value is 8.0 percent (as in the textbook's own Figure 13.17). The textbook probably
 used an early partial-year number.
 
+The table `prices` of Figure 17 has the same inflation rates for 194 economies (for these four it repeats this file),
+so the chart can show any set of countries. Pick them from the list; the four textbook economies come first.
+
+> **Python note.** `set(countries) != set(BOOK_FOUR)` compares the two groups of names without caring about their
+> order. `category_orders` fixes the order of the lines in the legend.
+
 ```{python}
-long_oecd = oecd.melt(id_vars="year", var_name="country", value_name="inflation")
-fig = px.line(long_oecd, x="year", y="inflation", color="country", hover_name="country",
-              color_discrete_sequence=[BLUE, TEAL, GREEN, "#5aa0d8"],
-              labels={"year": "Year", "inflation": "Inflation (percent)", "country": "Economy"},
-              title="Inflation was high everywhere in the 1970s and low after the 1980s")
-fig.update_traces(line_width=2.5)
-fig.update_layout(xaxis_range=[1958, 2027], yaxis=dict(range=[-3, 26], tickvals=[0, 5, 10, 15, 20, 25]),
-                  legend=dict(x=0.99, y=0.99, xanchor="right", yanchor="top"), legend_title_text="")
-fig.show()
+BOOK_FOUR = ("United States", "United Kingdom", "Euro area", "Japan")
+
+
+def oecd_chart(countries=BOOK_FOUR):
+    """Figure 13.19: annual CPI inflation in the chosen economies since 1960."""
+    part = prices[prices.country.isin(countries)]
+    low, high, ticks = -3, 26, [0, 5, 10, 15, 20, 25]
+    for wider_low, wider_high in [(-10, 60), (-20, 120)]:     # a wider axis only when a chosen country needs it
+        if part.inflation.min() < low or part.inflation.max() > high:
+            low, high, ticks = wider_low, wider_high, None
+    title = "Inflation was high everywhere in the 1970s and low after the 1980s"
+    if set(countries) != set(BOOK_FOUR):
+        title = "CPI inflation, percent a year" + missing_or_off(part, "inflation", countries, low, high)
+    fig = px.line(part, x="year", y="inflation", color="country", hover_name="country",
+                  color_discrete_map=INFLATION_COLORS, category_orders={"country": list(countries)}, title=title,
+                  labels={"year": "Year", "inflation": "Inflation (percent)", "country": "Economy"})
+    fig.update_traces(line_width=2.5)
+    fig.update_layout(xaxis=dict(range=[1958, 2027], tickvals=[1970, 1980, 1990, 2000, 2010, 2020]),  # no 1960 next to 0
+                      yaxis=dict(range=[low, high], tickvals=ticks),
+                      legend=dict(x=0.99, y=0.99, xanchor="right", yanchor="top"), legend_title_text="")
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(oecd_chart, countries=SelectMultiple(options=list(BOOK_FOUR) + sorted(set(prices.country) - set(BOOK_FOUR)),
+                                              value=list(BOOK_FOUR), rows=8, description="countries", style=WIDE));
+```
+
+On the website the chart offers the OECD members and eight large emerging economies: the buttons above the chart
+list a group of countries in the legend, and a click on a country adds it.
+
+```{python}
+#| kind: website
+# @title Website version: Figure 19 with buttons for groups of countries
+shown = OECD_PLUS                                          # the OECD and eight large emerging economies
+fig = oecd_chart(countries=shown)
+fig.update_layout(title=oecd_chart().layout.title.text, yaxis=dict(range=None, autorange=True, tickvals=None),
+                  legend=dict(x=1.02, xanchor="left"))
+group_menu(fig, BOOK_FOUR)                                 # the y-axis adapts to the countries shown
 ```
 
 **What to notice.**
@@ -1706,6 +1999,8 @@ fig.show()
 - From the 1990s on, all four stayed low and stable; Japan was close to zero or negative for almost two decades.
 - In 2021–2022 inflation returned in the U.S., the U.K. and the euro area, then fell back in 2023–2024. In Japan it
   came later, from 2022, and was still about 3 percent in 2025. Click the legend to compare two countries at a time.
+- Add Germany and Switzerland: their inflation peaked at only 7.0 and 9.8 percent in the 1970s. The Bundesbank and the
+  Swiss National Bank were known for putting low inflation first, which supports the "better policy" view.
 
 <!-- cell -->
 
@@ -1900,6 +2195,83 @@ uk.sort_values("distance")[["period", "n_years", "avg_inflation", "sd_inflation"
 
 1997–2016 is at a distance of 1.07 from the goal; the next-best full window, 1877–1896, is at 3.48, with deflation of
 about 1 percent a year. The partial window 2017–2025 sits at 3.16.
+
+<!-- cell -->
+
+### Other countries since 1871
+
+Long price series exist for other rich countries too. The Jordà–Schularick–Taylor *Macrohistory Database* has consumer
+prices for 17 more countries from 1870 to 2020; we extend them to 2025 with the World Bank's inflation rates. The file
+`inflation_long_annual.csv` has one row per country and year (for the United Kingdom, the series used above, from
+1737). We cut each country's years into the same 20-year windows as above and compute the mean and the standard
+deviation of each window. For the United Kingdom this gives exactly the points of the chart above.
+
+> **Python note.** `//` divides and drops the remainder, so `(year - 1737) // 20 * 20 + 1737` is the first year of the
+> 20-year window that contains `year` (1990 gives 1977). `.agg(["mean", "std", "count"])` computes three numbers for
+> each group, and `reset_index()` turns the group labels back into columns.
+
+```{python}
+history = pd.read_csv(DATA_URL + "inflation_long_annual.csv")
+history["start"] = (history.year - 1737) // 20 * 20 + 1737            # first year of the 20-year window
+windows = history.groupby(["country", "start"]).inflation.agg(["mean", "std", "count"]).reset_index()
+windows = windows[(windows["count"] == 20) | (windows.start == 2017)]  # full windows and the latest, partial one
+windows["period"] = windows.start.astype(str) + "–" + (windows.start + windows["count"] - 1).astype(str)
+windows["distance"] = np.sqrt((windows["mean"] - 2) ** 2 + windows["std"] ** 2)
+windows[windows.country == "United Kingdom"].tail(3).round(2)
+```
+
+**Look at your data.** Two windows are wildly off the chart. In Germany, prices rose about a billion-fold in 1923
+alone, so the average inflation of 1917–1936 is billions of percent. Japan's 1937–1956 window holds the war and the
+inflation that followed it (an average of 71 percent a year). Averages of yearly rates are fragile when one year is
+extreme: the chart counts such windows in its title instead of drawing them.
+
+```{python}
+def windows_chart(countries=("United Kingdom",)):
+    """Figure 13.21, extended: average and volatility of inflation in 20-year windows, chosen countries."""
+    part = windows[windows.country.isin(countries)]
+    x_range, y_range = [-3, 8.5], [-0.7, 13]
+    if part["mean"].max() > 8.5 or part["std"].max() > 13 or part["mean"].min() < -3:
+        x_range, y_range = [-5, 40], [-3, 80]           # one wider view, only when a chosen country needs it
+    off = part[(part["mean"] > x_range[1]) | (part["std"] > y_range[1])]
+    title = "No data for this choice"
+    if len(part) > 0:
+        best = part.loc[part.distance.idxmin()]
+        title = f"Closest to the goal: {best.country} {best.period} (distance {best.distance:.2f})"
+    if len(off) > 0:
+        title += f"; {len(off)} off the chart"
+    fig = px.scatter(part, x="mean", y="std", color="country", hover_name="period",
+                     color_discrete_map=INFLATION_COLORS, hover_data={"distance": ":.2f", "count": True}, title=title,
+                     labels={"mean": "Average inflation (percent)", "std": "Volatility of inflation (percent)",
+                             "country": "Country", "count": "years"})
+    fig.update_traces(marker_size=11)
+    fig.add_trace(go.Scatter(x=[2], y=[0], mode="markers", name="Goal", marker=dict(color="black", size=14, symbol="star")))
+    fig.update_layout(xaxis_range=x_range, yaxis_range=y_range, legend_title_text="")
+    return fig
+```
+
+```{python}
+#| kind: widget
+interact(windows_chart, countries=SelectMultiple(options=sorted(windows.country.unique()), value=["United Kingdom"],
+                                                 rows=8, description="countries", style=WIDE));
+```
+
+On the website, all 18 countries are in the legend: click a country to add it, and double-click the chart to rescale
+the axes.
+
+```{python}
+#| kind: website
+# @title Website version: 20-year windows of 18 countries, with buttons for groups of countries
+everyone = sorted(windows.country.unique())
+fig = windows_chart(countries=everyone)
+fig.update_layout(title=windows_chart().layout.title.text, xaxis_range=[-3, 8.5], yaxis_range=[-0.7, 13])
+group_menu(fig, ["United Kingdom", "Goal"])
+```
+
+- Add the other countries: in 16 of the 18, the window closest to the goal is 1997–2016, the years of inflation
+  targets and independent central banks. Canada's is even closer than the U.K.'s (1.86 percent average inflation with
+  a volatility of 0.68). In Japan and Switzerland, where inflation averaged close to zero in 1997–2016 (0.1 and 0.5 percent),
+  the partial window 2017–2025 comes closest.
+- The war years were volatile everywhere: Finland's 1917–1936 window has a volatility of 57 points.
 
 **Your turn.** Which window was the most volatile, and how far was it from the goal?
 
