@@ -10,8 +10,12 @@ Outputs (next to this script):
   recessions.csv   peak, trough      NBER recessions that start in 1953 or later (monthly dates)
   tfp_annual.csv   year, gdp_growth, tfp_solow, utilization, tfp_util
                    U.S. business sector, percent per year, 1950 to the latest year
+  tfp_inputs.csv   year, gdp_growth, hours_growth, capital_growth, labor_quality, capital_share, tfp_solow,
+                   utilization, tfp_util   (the growth-accounting inputs, for the Practice problems)
 Checks: tfp_util equals fig15-1.csv (copied from collect-data) in every year, and
-        tfp_util = tfp_solow - utilization (Fernald's definition) within 0.05 points (annual averages of quarterly logs make it approximate).
+        tfp_util = tfp_solow - utilization (Fernald's definition) within 0.05 points (annual averages of quarterly logs make it approximate);
+        tfp_inputs.csv repeats tfp_annual.csv's columns exactly, and tfp_solow = gdp_growth - capital_share * capital_growth
+        - (1 - capital_share) * (hours_growth + labor_quality) within 0.15 points.
 
 Multi-country file (conventions §6b), downloads cached in ../macro102/.work/ch15/notebook-raw/:
   pwt_growth.csv   iso3, country, region, year, tfp_growth, gdp_growth
@@ -79,6 +83,34 @@ def validate(out):
         raise SystemExit(f"tfp_util != tfp_solow - utilization (max gap {identity})")
     print(f"validation: tfp_util equals fig15-1.csv in all {len(both)} years (max gap {gap:.1e}); "
           f"tfp_util = tfp_solow - utilization (max gap {identity:.1e})")
+
+
+INPUTS = {"date": "year", "dY": "gdp_growth", "dhours": "hours_growth", "dk": "capital_growth",
+          "dLQ": "labor_quality", "alpha": "capital_share", "dtfp": "tfp_solow", "dutil": "utilization",
+          "dtfp_util": "tfp_util"}
+
+
+def tfp_inputs(raw_dir, annual):
+    """Fernald's growth-accounting inputs (Practice problems): output, hours, capital, labor quality, capital share."""
+    raw = pd.read_excel(os.path.join(raw_dir, "fernald_quarterly_tfp.xlsx"), sheet_name="annual")
+    out = raw[list(INPUTS)].rename(columns=INPUTS)
+    out = out[out.year >= 1950].dropna().copy()
+    out["year"] = out.year.astype(int)
+    out = out.round(4)
+    same = out.merge(annual, on="year", suffixes=("", "_a"))
+    if len(same) != len(annual) or len(out) != len(annual):
+        raise SystemExit("tfp_inputs.csv and tfp_annual.csv cover different years")
+    for col in ["gdp_growth", "tfp_solow", "utilization", "tfp_util"]:
+        if (same[col] - same[col + "_a"]).abs().max() > 1e-9:
+            raise SystemExit(f"tfp_inputs.csv column {col} differs from tfp_annual.csv")
+    a = out.capital_share
+    rebuilt = out.gdp_growth - a * out.capital_growth - (1 - a) * (out.hours_growth + out.labor_quality)
+    gap = (rebuilt - out.tfp_solow).abs().max()
+    if gap > 0.15:
+        raise SystemExit(f"Fernald's identity dtfp = dY - alpha dk - (1 - alpha)(dhours + dLQ) fails by {gap:.3f}")
+    out.to_csv(os.path.join(HERE, "tfp_inputs.csv"), index=False)
+    print(f"tfp_inputs.csv: {out.year.min()}-{out.year.max()}, {len(out)} rows; output, TFP and utilization equal "
+          f"tfp_annual.csv; growth-accounting identity holds within {gap:.3f} points")
 
 # readable names for the World Bank's formal ones (the same list as data/ch01/build_data.py)
 RENAME = {"Korea, Rep.": "South Korea", "Korea, Dem. People's Rep.": "North Korea", "Egypt, Arab Rep.": "Egypt",
@@ -162,6 +194,7 @@ def main():
     recessions(raw_dir)
     annual = tfp_annual(raw_dir)
     validate(annual)
+    tfp_inputs(raw_dir, annual)
     macro102 = os.path.abspath(parser.parse_args().macro102)
     cache = os.path.join(macro102, ".work", "ch15", "notebook-raw")
     os.makedirs(cache, exist_ok=True)

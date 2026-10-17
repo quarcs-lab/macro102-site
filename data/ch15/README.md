@@ -20,7 +20,7 @@ Full definitions, vintages and the validation against the textbook are in macro1
 
 ## Wider files built for the notebook
 
-Both files are made by `build_data.py` from the raw files saved by macro102's `/collect-data`
+These files are made by `build_data.py` from the raw files saved by macro102's `/collect-data`
 (`original-scanned-book/ch15-dsge-models-the-frontier-of-business-cycle-research/data/fig15-1/raw/`).
 Run it with `python build_data.py --macro102 PATH`.
 
@@ -41,6 +41,24 @@ Run it with `python build_data.py --macro102 PATH`.
   - Range check: `gdp_growth` runs from −3.75 (2009) to 9.40 (1950); `tfp_solow` from −3.72 (1974) to 7.17 (1950).
     These are real swings, not errors.
   - Used for the "Which TFP?" comparison in Figure 1.
+- `tfp_inputs.csv`: `year, gdp_growth, hours_growth, capital_growth, labor_quality, capital_share, tfp_solow,
+  utilization, tfp_util`. The growth-accounting inputs behind Fernald's TFP series, U.S. business sector, 1950 to 2025
+  (76 rows, no missing values), from the same Fernald file (sheet `annual`). Growth rates are in percent per year
+  (100 × change in the log of the annual-average level):
+  - `gdp_growth` = `dY`, `tfp_solow` = `dtfp`, `utilization` = `dutil` and `tfp_util` = `dtfp_util`, exactly as in
+    `tfp_annual.csv`;
+  - `hours_growth` = `dhours`, hours worked in the business sector (from the BLS productivity and costs release);
+  - `capital_growth` = `dk`, capital input (capital stocks weighted by their user costs);
+  - `labor_quality` = `dLQ`, growth of labor composition (the skill and experience mix of the hours worked; BLS
+    estimates before 1979:Q2, the Aaronson–Sullivan method after);
+  - `capital_share` = `alpha`, capital's share of income (a share, not a growth rate).
+  - Validation: the four shared columns equal `tfp_annual.csv` in every year, and Fernald's identity
+    `tfp_solow` = `gdp_growth` − `capital_share` × `capital_growth` − (1 − `capital_share`) × (`hours_growth` +
+    `labor_quality`) holds within 0.10 points (exact for quarterly data, approximate for annual averages).
+    `build_data.py` stops if either check fails.
+  - Range check: `hours_growth` runs from −7.74 (2009) to 5.68 (1984); `capital_growth` from 1.44 (2010) to 6.33
+    (2000); `labor_quality` from −0.42 (2021) to 1.63 (2020); `capital_share` from 0.295 (1970) to 0.418 (2025).
+  - Used in the Practice problems (growth accounting by hand, hours and TFP, the Frisch elasticity, the 2009 recession).
 
 ## Multi-country file (beyond the United States)
 
