@@ -39,6 +39,7 @@
 |---|---|---|
 | A | [Google Colab, Python Coding, and Data Science Libraries](notebooks/appA-google-colab-python-and-data-science-libraries.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/appA-google-colab-python-and-data-science-libraries.ipynb) |
 | B | [Accessing Macroeconomic Data with Python](notebooks/appB-accessing-macroeconomic-data-with-python.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/appB-accessing-macroeconomic-data-with-python.ipynb) |
+| C | [Math Review for Macroeconomics](notebooks/appC-math-review-for-macroeconomics.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/appC-math-review-for-macroeconomics.ipynb) |
 
 ## Repository layout
 
