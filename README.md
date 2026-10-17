@@ -56,4 +56,9 @@
 Notebooks are written, executed and checked by the `/write-notebook` skill of the companion
 `macro102` project. To publish the site: `quarto render` and then `quarto publish gh-pages`.
 
-© 2026 Carlos Mendez. All rights reserved.
+© 2026 Carlos Mendez. Licensed under [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/).
+
+You may share and adapt this material for non-commercial purposes, with attribution. The license covers
+the text, code and charts written for this book. It does not cover Jones (2024), *Macroeconomics*, whose
+figures and equations these notebooks adapt with attribution, nor third-party data, which keep their
+producers' terms (see each chapter's Sources notes).
