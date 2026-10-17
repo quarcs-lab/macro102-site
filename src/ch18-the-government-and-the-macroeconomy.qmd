@@ -1,4 +1,4 @@
-# Chapter 18: The Government and the Macroeconomy
+# 18. The Government and the Macroeconomy
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/ch18-the-government-and-the-macroeconomy.ipynb)
 
@@ -12,10 +12,16 @@ accounting rules that tie them together. By the end of it you will be able to:
 
 - read the U.S. federal budget: where the money goes, where it comes from, and how large the deficit
   is, in percent of GDP and in dollars per person (Table 18.1);
-- use the **flow budget constraint** and the **intertemporal budget constraint** to compute next year's
-  debt, the primary and total deficits, and the taxes a given path of spending requires;
-- explain why the **debt-GDP ratio** falls when GDP grows faster than the interest rate, and split the
+- derive the **flow budget constraint** from "uses equal sources", and use it to compute next year's
+  debt and the primary and total deficits;
+- derive the **intertemporal budget constraint** by substitution, for two and for more periods, and read
+  its comparative statics: how much a tax cut today raises the taxes of the future;
+- derive the law of motion of the **debt-GDP ratio** with the growth rules, solve for the primary surplus
+  that holds it constant and for its steady state, and state the **sustainability conditions** ($i$ below
+  or above $g$);
+- explain why the debt-GDP ratio falls when GDP grows faster than the interest rate, and split the
   changes in the U.S. ratio into deficits and growth;
+- derive the saving-investment identity and use it to measure **crowding out**;
 - compare government spending and debt across countries, and describe the fiscal problem of the
   twenty-first century: the rise of health spending;
 - in Python: write small accounting functions, reshape tables with `melt` and `merge`, draw a chart with
@@ -93,27 +99,318 @@ def slider_figure(make_figure, name, values, start, label=None):
 
 ## Model overview
 
-Governments buy goods and services, pay transfers such as pensions, and pay interest on their debt. They finance all this with taxes and, when taxes fall short, by borrowing. This chapter has no new model to solve: it describes government budgets with data. Behind the data, though, there are a few accounting equations that hold in every year and every country. They link each year's deficit to the change in the debt, and they tell us that what matters for a country's ability to borrow is its debt relative to GDP, which depends on the interest rate and on how fast the economy grows.
+A government spends on goods, services and transfers, and it pays interest on what it has borrowed. Taxes pay for most of it, and borrowing covers whatever taxes do not. This chapter does not build a model of behavior that we solve for an equilibrium. Instead it rests on a handful of **accounting relations** that must hold in every year and in every country, whatever people and politicians decide. They connect each year's deficit to the change in the debt, they force the budget to balance over time in present value, and they show why the debt **relative to GDP** depends on the interest rate and on growth.
 
-Below we turn each of these equations into a small Python function, together with a few tools for the charts. The sections that follow use them to look at U.S. spending, revenue and debt, compare them with other countries, ask whether deficits crowd out private investment, and study the long-run projections that make health spending the fiscal problem of this century.
+We build these relations in five blocks, each going from definitions to algebra to predictions. First the **flow budget constraint**, which holds year by year. Second, the **intertemporal budget constraint**, which we get by chaining the flow constraints together. Third, the **debt-GDP ratio**: how it moves over time, its long-run level, and the conditions under which a debt is sustainable. Fourth, the **saving-investment identity**, which says when a deficit crowds out private investment. Fifth, the growth arithmetic behind the rise of **health spending**, the fiscal problem of this century. At the end, `### The model in code` turns the relations into Python functions and checks every key result with numbers. The data sections reuse these functions.
+
+Notation: capital letters such as $G_t$, $T_t$ and $B_t$ are amounts in dollars in year $t$. Lowercase letters such as $b_t$ and $d_t$ are the same amounts divided by GDP. The nominal interest rate $i$ and the growth rate of nominal GDP $g$ are taken as constant, and in the code we write them as decimals, so 5 percent is `0.05`.
 
 <!-- cell -->
 
-### The flow budget constraint (equations 18.1 and 18.2)
+### The flow budget constraint
 
-In every period the government's **uses** of funds must equal its **sources** of funds:
+#### Definitions
 
-$$\underbrace{G_t + Tr_t + iB_t}_{\text{uses}} = \underbrace{T_t + \Delta B_{t+1} + \Delta M_{t+1}}_{\text{sources}}. \tag{18.1}$$
+Think of the government as a household with a bank account that can go negative. In each year $t$ it has three **uses** of funds:
 
-The government buys goods and services $G_t$, pays transfers $Tr_t$ (Social Security, unemployment
-insurance, welfare) and pays interest $i$ on its debt $B_t$. It gets the money from taxes $T_t$, from new
-borrowing $\Delta B_{t+1} = B_{t+1} - B_t$ and from printing money $\Delta M_{t+1}$. As in the textbook, we set
-$\Delta M_{t+1} = 0$ and count transfers inside $G_t$. Then the constraint says how the debt moves:
+- purchases of goods and services $G_t$ (soldiers, roads, schools);
+- **transfers** $Tr_t$, money paid to people without buying anything in return (Social Security, unemployment insurance, welfare);
+- interest on the debt it owes at the start of the year, $iB_t$. The stock of **government debt** $B_t$ is the value of the bonds sold in the past and not yet repaid.
 
-$$B_{t+1} = (1+i)B_t + \underbrace{G_t - T_t}_{\text{primary deficit}}. \tag{18.2}$$
+It also has three **sources** of funds:
 
-The **primary deficit** $G_t - T_t$ leaves out the interest payments. The **total deficit**
-$G_t + iB_t - T_t$ includes them, and it is the deficit that newspapers (and Table 18.1) report.
+- taxes $T_t$;
+- new borrowing $\Delta B_{t+1} \equiv B_{t+1} - B_t$, the value of the new bonds sold during the year;
+- new money printed by the central bank, $\Delta M_{t+1}$.
+
+Money cannot appear from nowhere, so the two sides must match every single year:
+
+$$\underbrace{G_t + Tr_t + iB_t}_{\text{uses}} = \underbrace{T_t + \Delta B_{t+1} + \Delta M_{t+1}}_{\text{sources}}. \tag{1}$$
+
+Two simplifications follow the textbook. We set $\Delta M_{t+1} = 0$: in the United States the Treasury does not pay its bills by printing money (the fiscal side of inflation is the topic of [Chapter 8](https://quarcs-lab.github.io/macro102-site/notebooks/ch08-inflation.html)). And we fold transfers into $G_t$, so from now on $G_t$ means all non-interest spending. Neither change affects the logic.
+
+The **budget balance** is taxes minus spending. It is a **surplus** when positive, a **deficit** when negative, and the budget is **balanced** when it is zero. Two versions matter, depending on whether interest is counted:
+
+| Measure | Formula | Includes interest? |
+|---|---|---|
+| primary deficit | $G_t - T_t$ | no |
+| total deficit | $G_t + iB_t - T_t$ | yes |
+
+Newspapers and Table 18.1 report the total deficit. The primary deficit measures what current policy adds to the debt, leaving aside the cost of past borrowing.
+
+#### Solving the model
+
+**Step 1: drop money and transfers.** With $\Delta M_{t+1} = 0$ and $Tr_t$ inside $G_t$, equation (1) becomes
+
+$$G_t + iB_t = T_t + \Delta B_{t+1}.$$
+
+**Step 2: borrowing covers the total deficit.** Move $T_t$ to the left:
+
+$$\Delta B_{t+1} = G_t + iB_t - T_t.$$
+
+Every dollar of total deficit is a dollar of new bonds sold.
+
+**Step 3: next year's debt.** Write $\Delta B_{t+1} = B_{t+1} - B_t$ and add $B_t$ to both sides:
+
+$$B_{t+1} = B_t + iB_t + G_t - T_t.$$
+
+Group the two terms in $B_t$, using $B_t + iB_t = (1+i)B_t$:
+
+$$B_{t+1} = (1+i)B_t + \underbrace{G_t - T_t}_{\text{primary deficit}}. \tag{2}$$
+
+*Intuition.* The debt rolls forward like an unpaid credit-card balance: last year's balance grows with interest, and this year's excess of spending over taxes is added on top.
+
+#### What the model predicts
+
+Equation (2) answers the question "how fast does the debt grow?" for any policy. Divide it by $B_t$:
+
+$$\frac{\Delta B_{t+1}}{B_t} = i + \frac{G_t - T_t}{B_t}.$$
+
+| Policy | Primary deficit | Total deficit | Growth rate of the debt |
+|---|---|---|---|
+| primary budget balanced, $T_t = G_t$ | $0$ | $iB_t$ | $i$ |
+| total budget balanced, $T_t = G_t + iB_t$ | $-iB_t$ (a surplus) | $0$ | $0$ |
+| primary deficit $G_t - T_t > 0$ | positive | larger than $iB_t$ | above $i$ |
+
+- A one-dollar rise in the primary deficit raises next year's debt by one dollar. A one-point rise in $i$ raises it by $0.01\,B_t$ dollars.
+- With a balanced primary budget, taxes cover current spending but not the interest, so the government borrows to pay the interest and the debt grows at the rate $i$.
+- To hold the dollar debt constant, the government must run a primary surplus as large as its interest bill.
+
+<!-- cell -->
+
+### The intertemporal budget constraint
+
+#### Assumptions
+
+- The economy lasts two periods, 1 and 2. Period 1 can stand for "today" and period 2 for "the whole future".
+- The government starts period 1 owing $B_1$, which may be positive (the United States starts with a large debt).
+- Equation (2) holds in each period, with a constant interest rate $i$.
+- Nobody will lend to the government after period 2, because there is no later period in which to be repaid. So the debt left at the start of period 3 must be zero: $B_3 = 0$.
+
+#### Solving the model
+
+**Step 1: the two flow constraints.** Equation (2) for $t = 1$ and for $t = 2$ reads
+
+$$B_2 = (1+i)B_1 + G_1 - T_1 \qquad\text{and}\qquad 0 = B_3 = (1+i)B_2 + G_2 - T_2.$$
+
+**Step 2: solve the second one for $B_2$.** Move $G_2 - T_2$ to the left and divide by $1+i$:
+
+$$B_2 = \frac{T_2 - G_2}{1+i}.$$
+
+The debt carried into period 2 must equal the period-2 surplus, valued in period-1 dollars.
+
+**Step 3: substitute into the first one.** Replace $B_2$ in the period-1 constraint:
+
+$$\frac{T_2 - G_2}{1+i} = (1+i)B_1 + G_1 - T_1.$$
+
+**Step 4: sort spending and taxes.** Split the fraction, $\frac{T_2 - G_2}{1+i} = \frac{T_2}{1+i} - \frac{G_2}{1+i}$. Then move every spending term and the debt to the left and every tax term to the right:
+
+$$\underbrace{G_1 + \frac{G_2}{1+i}}_{\text{pdv of spending}} + \underbrace{(1+i)B_1}_{\text{initial debt}} = \underbrace{T_1 + \frac{T_2}{1+i}}_{\text{pdv of taxes}}. \tag{3}$$
+
+Dividing an amount of period 2 by $1+i$ gives its **present discounted value** (pdv): the sum that, lent today at the rate $i$, would grow into that amount by period 2 ([Appendix C.12](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.12-present-value-and-discounting)). The initial debt carries the factor $1+i$ because the period-1 interest on it is also due.
+
+**Step 5: the same result in budget balances.** Move $G_1$ and $G_2/(1+i)$ to the right of equation (3) and combine the terms of each period:
+
+$$\underbrace{(T_1 - G_1)}_{\text{period-1 balance}} + \underbrace{\frac{T_2 - G_2}{1+i}}_{\text{period-2 balance}} = \underbrace{(1+i)B_1}_{\text{initial debt}}. \tag{4}$$
+
+*Intuition.* Equation (3) is "uses equal sources" again, but now each side is measured in present value over the whole life of the economy instead of within one year. Equation (4) says the same thing from the angle of the balances: the government may run a deficit in one period, but then it must run a surplus of equal present value in another. If it starts in debt, the surpluses must be larger still, large enough to pay the debt off. The budget has to balance in present value, not every period.
+
+**Step 6: more periods.** Nothing in the argument depends on there being two periods. With three periods and $B_4 = 0$, solve the period-3 constraint for $B_3 = (T_3 - G_3)/(1+i)$, put it into the period-2 constraint and solve that for $B_2$:
+
+$$B_2 = \frac{T_2 - G_2}{1+i} + \frac{T_3 - G_3}{(1+i)^2}.$$
+
+Putting this into the period-1 constraint and sorting terms as in step 4 gives
+
+$$G_1 + \frac{G_2}{1+i} + \frac{G_3}{(1+i)^2} + (1+i)B_1 = T_1 + \frac{T_2}{1+i} + \frac{T_3}{(1+i)^2}.$$
+
+Each extra period adds one more term, discounted once more. With $N$ periods, an amount of period $t$ is divided by $(1+i)^{t-1}$.
+
+#### What the model predicts
+
+Solve equation (3) for the period-2 taxes:
+
+$$T_2 = (1+i)\big[(1+i)B_1 + G_1 - T_1\big] + G_2.$$
+
+Holding the other terms fixed, this formula gives the comparative statics:
+
+| A one-dollar rise in ... | changes $T_2$ by | Why |
+|---|---|---|
+| period-1 taxes $T_1$ (a tax cut is a fall) | $-(1+i)$ | a dollar not taxed today is borrowed and repaid with interest |
+| period-1 spending $G_1$ | $+(1+i)$ | the same: it is financed by borrowing |
+| period-2 spending $G_2$ | $+1$ | paid in the same period |
+| the initial debt $B_1$ | $+(1+i)^2$ | it accumulates interest over two periods |
+
+- **Borrowing today means higher taxes tomorrow.** With $i = 5\%$, a tax cut of 100 dollars today, with spending unchanged, requires 105 dollars of extra taxes in period 2.
+- **The timing of taxes can change, their present value cannot.** Once spending and the initial debt are given, equation (3) fixes the pdv of taxes. A tax cut today only moves taxes into the future. If households look ahead and save the tax cut to pay the later taxes, their consumption does not change: this is **Ricardian equivalence**, from the permanent-income theory of consumption ([Chapter 16](https://quarcs-lab.github.io/macro102-site/notebooks/ch16-consumption.html)).
+- **Generational accounting.** When period 2 is far away, the people who pay the later taxes are not the ones who enjoyed the earlier spending. A growing debt shifts tax burdens toward future generations. That can be fair, for example when a war fought today also protects them, but it is a transfer between generations all the same.
+
+<!-- cell -->
+
+### The debt-GDP ratio and sustainability
+
+#### Definitions
+
+How much a government can borrow depends on how much it can later tax, and the best measure of the tax base is GDP. So we scale every amount by nominal GDP $Y_t$:
+
+- the **debt-GDP ratio** $b_t \equiv B_{t+1}/Y_t$: the debt at the end of year $t$ (which is the debt at the start of year $t+1$) relative to that year's GDP. Statistical tables, and the data in Figs. 2 and 4, report the ratio this way;
+- the **primary deficit ratio** $d_t \equiv (G_t - T_t)/Y_t$. A negative $d_t$ is a primary surplus;
+- the growth rate of nominal GDP, $g$, so that $Y_t = (1+g)Y_{t-1}$.
+
+The interest rate $i$ and the growth rate $g$ are both nominal: both include inflation.
+
+#### Solving the model
+
+**Step 1: divide the flow constraint by GDP.** Divide every term of equation (2) by $Y_t$:
+
+$$\frac{B_{t+1}}{Y_t} = (1+i)\frac{B_t}{Y_t} + \frac{G_t - T_t}{Y_t}.$$
+
+The left side is $b_t$ and the last term is $d_t$.
+
+**Step 2: rewrite the middle term.** $B_t$ is the debt at the end of year $t-1$, but it is divided by this year's GDP. Multiply and divide by $Y_{t-1}$:
+
+$$\frac{B_t}{Y_t} = \frac{B_t}{Y_{t-1}}\cdot\frac{Y_{t-1}}{Y_t} = b_{t-1}\cdot\frac{1}{1+g}.$$
+
+**Step 3: the law of motion of the ratio.** Put step 2 into step 1:
+
+$$b_t = \frac{1+i}{1+g}\,b_{t-1} + d_t. \tag{5}$$
+
+This is exact. It is a **difference equation**: it gives this year's ratio from last year's ratio ([Appendix C.10](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.10-difference-equations-how-macro-variables-move-over-time)).
+
+**Step 4: the change in the ratio.** Subtract $b_{t-1}$ from both sides of (5) and use $\frac{1+i}{1+g} - 1 = \frac{(1+i) - (1+g)}{1+g} = \frac{i-g}{1+g}$:
+
+$$b_t - b_{t-1} = \frac{i-g}{1+g}\,b_{t-1} + d_t \;\approx\; (i-g)\,b_{t-1} + d_t. \tag{6}$$
+
+The approximation drops the division by $1+g$, which is close to 1 when $g$ is a few percent ([Appendix C.6](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.6-approximations)).
+
+*Intuition.* Two forces move the ratio. The primary deficit adds new debt. And the old debt is pushed up by interest at the rate $i$ while GDP, the denominator, grows at $g$: when $g > i$ the economy outgrows its debt.
+
+The same result follows from the growth rule for a ratio, $g_b = g_B - g_Y$ ([Appendix C.5](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.5-growth-rates-and-the-growth-rules)). With a balanced primary budget the debt grows at $i$, so the ratio grows at about $i - g$. With a balanced total budget the debt is constant, so the ratio shrinks at about the rate $g$.
+
+**Step 5: the primary balance that holds the ratio constant.** Set $b_t = b_{t-1} = b$ in equation (6), using its exact form, and solve for the primary surplus $-d$:
+
+$$-d = \frac{i-g}{1+g}\,b. \tag{7}$$
+
+When $i > g$, a country must run a primary surplus just to keep its ratio where it is, and the surplus needed is proportional to the debt it already has. When $i < g$, it can run a primary deficit forever and still keep the ratio constant.
+
+**Step 6: the long-run ratio and the path toward it.** Suppose the primary deficit ratio stays at the same value $d$ every year, and write $a \equiv (1+i)/(1+g)$. A **steady state** $b^*$ is a ratio that reproduces itself, $b^* = a\,b^* + d$. Collect the $b^*$ terms, $b^*(1-a) = d$, and use $1 - a = \frac{g-i}{1+g}$:
+
+$$b^* = \frac{1+g}{g-i}\,d.$$
+
+Now subtract $b^* = a b^* + d$ from equation (5). The $d$ cancels, leaving $b_t - b^* = a\,(b_{t-1} - b^*)$: each year the gap to $b^*$ is multiplied by $a$. After $t$ years it has been multiplied by $a^t$:
+
+$$b_t = b^* + \left(\frac{1+i}{1+g}\right)^{t}\,(b_0 - b^*). \tag{8}$$
+
+#### What the model predicts
+
+**Sustainability conditions.** Everything depends on whether $a = (1+i)/(1+g)$ is below or above one, that is, on whether $i$ is below or above $g$:
+
+| Case | What $a^t$ does | What happens to the debt ratio |
+|---|---|---|
+| $i < g$ | shrinks to 0 | converges to $b^*$ from any start. A constant primary deficit gives a finite ratio, even though the dollar debt grows forever. |
+| $i = g$ | stays at 1 | $b_t = b_{t-1} + d_t$: the ratio is the starting ratio plus the sum of all later primary deficits. It is stable only if primary deficits and surpluses cancel. |
+| $i > g$ | grows without limit | $b^*$ is a tipping point, not a resting point. Above it the ratio explodes, below it the ratio falls. Only primary surpluses of at least equation (7) keep the ratio from rising. |
+
+With the debt at 99.5 percent of GDP (the U.S. ratio of FY2025), equation (7) asks for no primary surplus at all when $i = g = 4\%$, the starting values of the projection widget in Fig. 6. With $i = 5\%$ and $g = 4\%$ it asks for a primary surplus of $0.01/1.04 \times 99.5 \approx 0.96$ percent of GDP every year. With $i = 3\%$ and $g = 4\%$, a constant primary deficit of 2 percent of GDP would lead to $b^* = 1.04/0.01 \times 2 = 208$ percent of GDP, reached only very slowly: the gap shrinks by about 1 percent a year, since $a = 1.03/1.04 \approx 0.990$.
+
+**Comparative statics of equation (6).** Holding last year's ratio fixed:
+
+| A one-point rise in ... | changes this year's $b_t - b_{t-1}$ by about | With $b_{t-1} = 99.5\%$ |
+|---|---|---|
+| the primary deficit $d_t$ (% of GDP) | $+1$ point | $+1$ point |
+| the interest rate $i$ | $+b_{t-1}/100$ points | $+1$ point |
+| nominal GDP growth $g$ | $-b_{t-1}/100$ points | $-1$ point |
+
+At a debt ratio near 100 percent, one point of interest weighs as much as one point of GDP in primary deficit. The higher the debt, the more the ratio reacts to the interest rate and to growth.
+
+**Growth is a powerful remedy.** The ratio can fall a long way without any repayment, as long as GDP grows faster than the interest rate. The fall of the U.S. ratio after World War II worked mostly like this (Fig. 2).
+
+**Inflation, expected and unexpected.** Write $1+i = (1+r)(1+\pi)$ and $1+g = (1+g_{\text{real}})(1+\pi)$, with $r$ the real interest rate, $g_{\text{real}}$ real GDP growth and $\pi$ inflation (the Fisher equation, [Chapter 8](https://quarcs-lab.github.io/macro102-site/notebooks/ch08-inflation.html)). The inflation factor cancels in $a$:
+
+$$\frac{1+i}{1+g} = \frac{1+r}{1+g_{\text{real}}}.$$
+
+Inflation that lenders expect is already built into $i$, so it does not reduce the ratio. Inflation that comes as a surprise, after the bonds have been sold at a fixed $i$, lowers the real rate the government pays and erodes the debt. That is why very high debts raise fears of inflation.
+
+**Confidence and default.** If lenders start to doubt repayment, they ask for a higher $i$ on new bonds. A higher $i$ raises $a$, which raises the surplus required by equation (7) and can tip a stable ratio into an explosive one. The fear can fulfill itself, ending in high inflation or a **default**. No single ratio triggers a crisis: it depends on growth prospects, the ability to collect taxes and the credibility of the government.
+
+<!-- cell -->
+
+### Saving, investment and crowding out
+
+#### Definitions
+
+The **national income identity** of [Chapter 2](https://quarcs-lab.github.io/macro102-site/notebooks/ch02-measuring-the-macroeconomy.html) splits GDP by use: $Y = C + I + G + EX - IM$. Here $G$ is government purchases only; transfers are left out to keep the algebra short. With taxes $T$ we define three kinds of saving:
+
+- **private saving** $Y - T - C$: what households and firms do not consume out of their **disposable income**, $Y - T$;
+- **government saving** $T - G$: the budget balance;
+- **foreign saving** $IM - EX$: when a country buys more from abroad than it sells, foreigners lend it the difference.
+
+#### Solving the model
+
+**Step 1: solve the identity for investment.** Subtract $C$, $G$ and $EX - IM$ from both sides of $Y = C + I + G + EX - IM$:
+
+$$I = Y - C - G + (IM - EX).$$
+
+**Step 2: add and subtract taxes.** Adding $-T + T = 0$ changes nothing, but it lets us group the terms by who saves:
+
+$$I = (Y - T - C) + (T - G) + (IM - EX),$$
+
+or, with saving on the left,
+
+$$\underbrace{(Y-T-C)}_{\text{private saving}} + \underbrace{(T-G)}_{\text{government saving}} + \underbrace{(IM-EX)}_{\text{foreign saving}} = I. \tag{9}$$
+
+*Intuition.* Every machine and building that firms buy must be paid for by someone's saving: households and firms, the government, or foreigners. A deficit is negative government saving, a claim on the saving of the other two.
+
+#### What the model predicts
+
+Let the deficit rise by $\Delta$ dollars, so government saving falls by $\Delta$. Suppose private saving responds by $\theta\Delta$ and foreign saving by $\phi\Delta$. Taking changes of equation (9):
+
+$$\Delta I = \theta\Delta - \Delta + \phi\Delta = -(1 - \theta - \phi)\,\Delta. \tag{10}$$
+
+| Response of other saving | $\theta$ | $\phi$ | Change in investment |
+|---|---|---|---|
+| none (full **crowding out**) | 0 | 0 | $-\Delta$ |
+| Ricardian equivalence: households save the whole tax cut | 1 | 0 | $0$ |
+| private saving offsets half | 0.5 | 0 | $-0.5\Delta$ |
+| half from households, the rest from foreigners | 0.5 | 0.5 | $0$ |
+
+The evidence suggests that private saving rises by at most about half of a deficit, so without foreign saving at least half of a deficit would come out of investment. Foreign saving can fill the rest, as Fig. 5 suggests it did in the United States. The foreign side is the topic of [Chapter 19](https://quarcs-lab.github.io/macro102-site/notebooks/ch19-international-trade.html).
+
+<!-- cell -->
+
+### The arithmetic of rising health spending
+
+#### Definitions
+
+Long-run budget projections are driven by entitlement programs, above all public health spending. Break health spending into two parts and GDP into two parts:
+
+- health spending $H = N_r \times c$: the number of people who receive benefits, $N_r$, times the cost per recipient, $c$;
+- GDP $Y = N \times y$: the population $N$ times GDP per person $y$;
+- the **health share** $h \equiv H/Y$.
+
+#### Solving the model
+
+**Step 1: the share as a product of two ratios.** Divide and regroup:
+
+$$h = \frac{N_r\,c}{N\,y} = \frac{N_r}{N}\times\frac{c}{y}.$$
+
+The share is the fraction of the population that receives benefits, times the cost per recipient relative to income per person.
+
+**Step 2: take growth rates.** The growth rate of a product is the sum of the growth rates, and that of a ratio is the difference ([Appendix C.5](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.5-growth-rates-and-the-growth-rules)):
+
+$$g_h = g_{N_r/N} + (g_c - g_y). \tag{11}$$
+
+#### What the model predicts
+
+- **Aging** raises the share through $g_{N_r/N}$: fewer workers per retiree means more recipients per person.
+- **Costs that outpace income** raise it through $g_c - g_y$. If the cost per recipient grows just 1 point a year faster than income per person, the share grows by about 1 percent a year and doubles in about 70 years (the rule of 70). Add an aging effect of another 1 percent a year and it doubles in about 35 years.
+- **The budget link.** The primary deficit ratio is non-interest spending minus revenue, both in percent of GDP. If revenue stays near a constant share of GDP while $h$ keeps rising, $d_t$ rises year after year and equation (5) pushes the debt ratio up without limit. Taxes must rise or spending must fall.
+- **Why the share may keep rising.** As people get richer, an extra unit of consumption adds less and less to their well-being (diminishing marginal utility), while an extra year of life to enjoy that consumption does not lose its value in the same way. Standard models therefore predict that health spending should grow faster than income. The problem is then less about waste and more about how to finance spending that people want.
+
+<!-- cell -->
+
+### The model in code
+
+We now turn the key results into Python functions. Each function's description names the equation it computes. The cells after them check the algebra above with numbers.
 
 > **Python note.** `def` creates a *function*: a named recipe that takes inputs (the *arguments*) and gives
 > back a result with `return`. The text in triple quotes is a one-line description. We write the interest rate
@@ -121,7 +418,7 @@ $G_t + iB_t - T_t$ includes them, and it is the deficit that newspapers (and Tab
 
 ```{python}
 def next_debt(B, G, T, i):
-    """Equation (18.2): next period's debt, (1 + i) B + G - T."""
+    """Equation (2): next period's debt, (1 + i) B + G - T."""
     return (1 + i) * B + G - T
 
 
@@ -133,11 +430,62 @@ def primary_deficit(G, T):
 def total_deficit(G, T, i, B):
     """Total deficit: spending plus the interest on the debt, minus taxes."""
     return G + i * B - T
+
+
+def pdv(first, second, i):
+    """Present discounted value of an amount in period 1 and one in period 2 (equation 3)."""
+    return first + second / (1 + i)
 ```
 
-**A quick check: Exercise 5 of the textbook.** A government owes 5 trillion dollars at an interest rate of
-5 percent, and GDP (20 trillion dollars) grows by 4 percent a year. In case (a) it balances its **primary**
-budget ($G = T$). In case (b) it balances its **total** budget, so taxes also pay the interest.
+> **Python note.** `path = []` starts an empty list, and `path.append(b)` adds one value at its end. For a
+> pandas *Series* with years as row labels, `deficit.loc[1951:1974]` keeps the years 1951 to 1974 (both
+> included), and `.sum()` adds them up.
+
+```{python}
+def next_debt_ratio(b, i, g, d):
+    """Equation (5): next year's debt ratio, (1 + i) / (1 + g) b + d."""
+    return (1 + i) / (1 + g) * b + d
+
+
+def debt_ratio_path(b, i, g, deficits):
+    """The debt ratio after each year of a list of primary deficits (all in percent of GDP)."""
+    path = []
+    for d in deficits:
+        b = next_debt_ratio(b, i, g, d)
+        path.append(b)
+    return path
+
+
+def debt_change_parts(debt, deficit, start, end):
+    """Split the change in the debt ratio from start to end into primary deficits and the rest (equation 6)."""
+    change = debt[end] - debt[start]
+    from_deficits = deficit.loc[start + 1:end].sum()
+    return change, from_deficits, change - from_deficits
+```
+
+The part of a change that is not explained by primary deficits, `change - from_deficits`, is the effect of
+interest minus growth, the term $\frac{i-g}{1+g}\,b$ of equation (6), summed over the years. We use it on the
+U.S. data in Fig. 2. Three more functions give the long-run results of the debt ratio and the saving identity.
+
+```{python}
+def stabilizing_surplus(b, i, g):
+    """Equation (7): the primary surplus (% of GDP) that keeps the debt ratio b constant."""
+    return (i - g) / (1 + g) * b
+
+
+def steady_state_ratio(d, i, g):
+    """The steady-state debt ratio b* = (1 + g) / (g - i) d for a constant primary deficit d."""
+    return (1 + g) / (g - i) * d
+
+
+def private_and_foreign_saving(investment, government_saving):
+    """Equation (9) solved for the saving of households, firms and foreigners: I - (T - G)."""
+    return investment - government_saving
+```
+
+**Check 1: the flow constraint, with Exercise 5 of the textbook.** A government owes 5 trillion dollars at an
+interest rate of 5 percent, and GDP (20 trillion dollars) grows by 4 percent a year. In case (a) it balances its
+**primary** budget ($G = T$). In case (b) it balances its **total** budget, so taxes also pay the interest.
 
 > **Python note.** A `for` loop repeats the indented lines once for each value in the list `[1, 2, 3]`. In each
 > pass, `B_a = next_debt(B_a, ...)` replaces the old debt by the new one. An *f-string* such as
@@ -162,108 +510,122 @@ balanced primary budget the debt-GDP ratio
 rises from 25 percent by about 1 percent a year: 5 percent minus 4 percent. With a balanced total budget the
 ratio falls by about 4 percent a year, as GDP grows.
 
-<!-- cell -->
-
-### The intertemporal budget constraint (equations 18.5 and 18.6)
-
-In a world that lasts two periods, all debt must be repaid by the end: $B_3 = 0$. Combining the flow
-constraints of the two periods gives the **intertemporal budget constraint**:
-
-$$\underbrace{G_1 + \frac{G_2}{1+i}}_{\text{pdv of spending}} + \underbrace{(1+i)B_1}_{\text{initial debt}} = \underbrace{T_1 + \frac{T_2}{1+i}}_{\text{pdv of taxes}}. \tag{18.5}$$
-
-A future amount is worth less today, so we divide it by $1+i$: that is its **present discounted value**
-(pdv). Moving the taxes to the left gives equation (18.6): the pdv of the budget balances $T - G$ must pay off
-the initial debt $(1+i)B_1$. The budget must balance, not period by period, but in present value.
-
-Here is a two-period example with the textbook's initial debt of 25 trillion dollars. The government spends 7
-trillion in each period, collects 5 trillion of taxes in period 1, and must find the taxes of period 2.
+**Check 2: the intertemporal constraint, equations (3) and (4).** A two-period example with an initial debt of
+25 trillion dollars. The government spends 7 trillion in each period, collects 5 trillion of taxes in period 1,
+and must find the taxes of period 2. We run the flow constraint forward and check that both sides of
+equation (3) agree.
 
 ```{python}
-def pdv(first, second, i):
-    """Present discounted value of an amount in period 1 and one in period 2 (equation 18.5)."""
-    return first + second / (1 + i)
-
-
 B1, i = 25.0, 0.05                     # initial debt (trillions of dollars) and interest rate
 G1, G2, T1 = 7.0, 7.0, 5.0
-B2 = next_debt(B1, G1, T1, i)          # equation (18.3): the debt at the start of period 2
-T2 = (1 + i) * B2 + G2                 # equation (18.4) with B3 = 0: period-2 taxes repay everything
+B2 = next_debt(B1, G1, T1, i)          # equation (2) for period 1: the debt at the start of period 2
+T2 = (1 + i) * B2 + G2                 # equation (2) for period 2 with B3 = 0: period-2 taxes repay everything
 print(f"B2 = {B2:.2f}, so the period-2 taxes must be T2 = {T2:.2f} trillion dollars")
 print(f"Uses:    pdv of spending {pdv(G1, G2, i):.3f} + initial debt {(1 + i) * B1:.3f} = "
       f"{pdv(G1, G2, i) + (1 + i) * B1:.3f}")
 print(f"Sources: pdv of taxes {pdv(T1, T2, i):.3f}")
-print(f"Equation (18.6): pdv of the budget balances {pdv(T1 - G1, T2 - G2, i):.3f} = (1 + i) B1")
+print(f"Equation (4): pdv of the budget balances {pdv(T1 - G1, T2 - G2, i):.3f} = (1 + i) B1")
 ```
 
 The deficit of 2 trillion in period 1 and the inherited debt must both be paid with a large surplus in
 period 2: taxes of 36.66 trillion against spending of 7. **Borrowing today means higher taxes in the future.**
 
-<!-- cell -->
-
-### The debt-GDP ratio
-
-What matters for a country's ability to pay is not the debt in dollars but the debt relative to GDP, the tax
-base. Let nominal GDP grow at the rate $g$, and write $b = B/Y$ for the debt-GDP ratio and $d$ for the primary
-deficit as a share of GDP. Dividing equation (18.2) by GDP gives
-
-$$b_{\text{next}} = \frac{1+i}{1+g}\, b + d \quad\Longrightarrow\quad b_{\text{next}} - b \approx d + (i - g)\, b.$$
-
-The ratio rises with the primary deficit $d$. It also rises when the interest rate is above the growth rate,
-and **it falls when GDP grows faster than the interest rate**, even with a balanced primary budget.
-
-> **Python note.** `path = []` starts an empty list, and `path.append(b)` adds one value at its end. For a
-> pandas *Series* with years as row labels, `deficit.loc[1951:1974]` keeps the years 1951 to 1974 (both
-> included), and `.sum()` adds them up.
+**Check 3: the comparative statics and three periods.** Cut period-1 taxes by 1 trillion: the table above
+predicts period-2 taxes higher by $1+i = 1.05$ trillion. Then we add a third period with the same spending and
+check the three-period constraint of step 6.
 
 ```{python}
-def next_debt_ratio(b, i, g, d):
-    """Equation (18.2) divided by GDP: next year's debt ratio, (1 + i) / (1 + g) b + d."""
-    return (1 + i) / (1 + g) * b + d
+T2_cut = (1 + i) * next_debt(B1, G1, T1 - 1.0, i) + G2      # period-2 taxes after a tax cut of 1 in period 1
+print(f"A tax cut of 1.00 in period 1 raises T2 by {T2_cut - T2:.2f}")
 
-
-def debt_ratio_path(b, i, g, deficits):
-    """The debt ratio after each year of a list of primary deficits (all in percent of GDP)."""
-    path = []
-    for d in deficits:
-        b = next_debt_ratio(b, i, g, d)
-        path.append(b)
-    return path
-
-
-def debt_change_parts(debt, deficit, start, end):
-    """Split the change in the debt ratio from start to end into primary deficits and the rest."""
-    change = debt[end] - debt[start]
-    from_deficits = deficit.loc[start + 1:end].sum()
-    return change, from_deficits, change - from_deficits
+G3, T2_three = 7.0, 5.0                                      # three periods: taxes of 5 in periods 1 and 2
+B3 = next_debt(next_debt(B1, G1, T1, i), G2, T2_three, i)   # the debt at the start of period 3
+T3 = (1 + i) * B3 + G3                                       # with B4 = 0, period-3 taxes repay everything
+uses = G1 + G2 / (1 + i) + G3 / (1 + i) ** 2 + (1 + i) * B1
+sources = T1 + T2_three / (1 + i) + T3 / (1 + i) ** 2
+print(f"Three periods: T3 = {T3:.3f}, pdv of uses {uses:.3f}, pdv of taxes {sources:.3f}")
 ```
 
-The ratio tool repeats case (a) of Exercise 5 without computing the debt and GDP separately:
+**Check 4: the debt ratio, exactly and approximately.** The ratio tool repeats case (a) of Exercise 5 without
+computing the debt and GDP separately. Equation (6) says that the ratio grows at $\frac{i-g}{1+g}$, about $i - g$,
+with a balanced primary budget, and shrinks at about $g$ with a balanced total budget.
 
 ```{python}
 case_a = debt_ratio_path(25.0, 0.05, 0.04, [0, 0, 0])      # a balanced primary budget for three years
 print("Debt ratio, case (a):", np.round(case_a, 2))
 print(f"Growth of the ratio: {100 * (case_a[0] / 25.0 - 1):.2f}% a year = 1.05 / 1.04 - 1")
+print(f"Equation (6), exact: {100 * (0.05 - 0.04) / 1.04:.2f}%,  approximate i - g: {100 * (0.05 - 0.04):.2f}%")
+print(f"Balanced total budget: the ratio changes by {100 * (1 / 1.04 - 1):.2f}% a year (about -g = -4%)")
 ```
 
-The part of a change that is not explained by primary deficits, `change - from_deficits`, is the effect of
-interest minus growth, $(i-g)\,b$, summed over the years. We use it on the U.S. data in Fig. 2.
+**Check 5: the stabilizing surplus and the steady state.** Starting from 99.5 percent of GDP, the surplus of
+equation (7) should keep the ratio constant for 31 years. With $i = 3\%$, $g = 4\%$ and a constant primary
+deficit of 2 percent, the simulated path should match the closed form, equation (8), and head slowly to
+$b^* = 208$. With $i = 5\%$, $b^*$ becomes a tipping point.
 
-<!-- cell -->
-
-### Saving and investment (equation 18.7)
-
-Adding and subtracting taxes in the national income identity splits total saving into three parts:
-
-$$\underbrace{(Y - T - C)}_{\text{private saving}} + \underbrace{(T - G)}_{\text{government saving}} + \underbrace{(IM - EX)}_{\text{foreign saving}} = I. \tag{18.7}$$
-
-Investment is financed by households and firms, by the government and by foreigners. A budget deficit is
-negative government saving, so private or foreign saving must fill the gap, or investment falls. That fall is
-called **crowding out**.
+> **Python note.** `[-1.0] * 31` repeats the list 31 times: a primary surplus of 1 percent of GDP (a deficit of
+> −1) in every year. `path[-1]` is the last element of a list.
 
 ```{python}
-def private_and_foreign_saving(investment, government_saving):
-    """Equation (18.7) solved for the saving of households, firms and foreigners: I - (T - G)."""
-    return investment - government_saving
+s = stabilizing_surplus(99.5, 0.05, 0.04)
+print(f"i = 5%, g = 4%: stabilizing surplus {s:.3f}% of GDP; ratio after 31 years "
+      f"{debt_ratio_path(99.5, 0.05, 0.04, [-s] * 31)[-1]:.2f}%")
+
+b_star = steady_state_ratio(2.0, 0.03, 0.04)
+simulated = debt_ratio_path(99.5, 0.03, 0.04, [2.0] * 31)[-1]
+closed_form = b_star + (1.03 / 1.04) ** 31 * (99.5 - b_star)
+print(f"i = 3%, d = 2%: b* = {b_star:.1f}%; after 31 years {simulated:.2f}% (simulated), {closed_form:.2f}% (equation 8)")
+
+b_tip = steady_state_ratio(-1.0, 0.05, 0.04)                # i > g: a surplus of 1% of GDP
+print(f"i = 5%, surplus 1%: tipping point b* = {b_tip:.1f}%")
+for start in [99.5, 108.5]:
+    print(f"   start at {start}%: after 31 years {debt_ratio_path(start, 0.05, 0.04, [-1.0] * 31)[-1]:.1f}%")
+```
+
+**Check 6: the comparative statics and inflation.** A one-point rise in $i$, at a ratio of 99.5 percent, should
+raise the yearly change in the ratio by $b/(1+g)$ hundredths of a point, about one point. And expected inflation should leave the ratio unchanged:
+we compare $\pi = 0$ with $\pi = 4\%$ at the same real interest rate (1 percent) and real growth (2 percent).
+
+```{python}
+base = next_debt_ratio(99.5, 0.04, 0.04, 2.0)
+higher_i = next_debt_ratio(99.5, 0.05, 0.04, 2.0)
+print(f"One point more interest: the ratio rises by {higher_i - base:.3f} more points: b / (1 + g) / 100, about b / 100")
+
+for pi in [0.0, 0.04]:
+    i_nominal = (1 + 0.01) * (1 + pi) - 1                  # Fisher equation, exact
+    g_nominal = (1 + 0.02) * (1 + pi) - 1
+    print(f"inflation {100 * pi:.0f}%: i = {100 * i_nominal:.2f}%, g = {100 * g_nominal:.2f}%, ratio after 10 years "
+          f"{debt_ratio_path(99.5, i_nominal, g_nominal, [1.0] * 10)[-1]:.3f}%")
+```
+
+**Check 7: the saving identity and crowding out.** An example economy, in percent of its GDP: consumption 67,
+investment 18, government purchases 20, exports 11, imports 16 and taxes 17. Both sides of equation (9) must
+agree. Then a deficit 1 point larger, with private saving offsetting half of it and foreign saving unchanged,
+should lower investment by $1 - 0.5 = 0.5$ points (equation 10).
+
+```{python}
+Y, C, I, G, EX, IM, T = 100.0, 67.0, 18.0, 20.0, 11.0, 16.0, 17.0
+print(f"National income identity: C + I + G + EX - IM = {C + I + G + EX - IM:.1f} = Y")
+private, government, foreign = Y - T - C, T - G, IM - EX
+print(f"Saving: private {private:.1f} + government {government:.1f} + foreign {foreign:.1f} "
+      f"= {private + government + foreign:.1f} = I")
+print(f"Private + foreign saving from our function: {private_and_foreign_saving(I, government):.1f}")
+
+new_government, new_private = government - 1.0, private + 0.5      # a tax cut of 1, half of it saved
+print(f"After the tax cut: investment = {new_private + new_government + foreign:.1f} (change "
+      f"{new_private + new_government + foreign - I:+.1f})")
+```
+
+**Check 8: the health share.** Let the cost per recipient grow by 3 percent a year and income per person by
+2 percent, with a constant share of recipients. Equation (11) says the share grows by about 1 percent a year and
+doubles in about 70 years.
+
+```{python}
+h = 5.0                                          # a health share of 5 percent of GDP
+for year in range(70):
+    h = h * (1 + 0.03) / (1 + 0.02)              # equation (11): cost per recipient grows 1 point faster
+print(f"Health share after 70 years: {h:.2f}% of GDP ({h / 5.0:.2f} times the start)")
+print(f"Exact yearly growth of the share: {100 * (1.03 / 1.02 - 1):.3f}% (about g_c - g_y = 1%)")
 ```
 
 <!-- cell -->
@@ -1180,7 +1542,7 @@ When the government borrows, does it take saving away from private investment? H
 
 ### Fig. 5: U.S. private investment and the budget deficit
 
-**Goal.** Ask whether budget deficits **crowd out** investment, using equation (18.7).
+**Goal.** Ask whether budget deficits **crowd out** investment, using the saving-investment identity, equation (9).
 
 The data are gross private domestic investment and government saving (the federal budget balance, from the
 national accounts), both in percent of GDP, for calendar years.
@@ -1190,7 +1552,7 @@ saving = pd.read_csv(DATA_URL + "fig18-5.csv")
 saving.head(3)
 ```
 
-Equation (18.7) says that investment minus government saving is the saving of households, firms and
+Equation (9) says that investment minus government saving is the saving of households, firms and
 foreigners. Our function `private_and_foreign_saving` computes it, and the chart hides it until you click its
 name in the legend. The buttons compare the averages before and after 1980.
 
@@ -1244,7 +1606,7 @@ Chart: inspired by Fig. 18.5 in Jones (2024), [*Macroeconomics*, 6th ed.](https:
   investment did not fall. It averaged 17.3 percent before 1980 and 17.7 percent after.
 - From year to year the two lines move together: from the early 1990s to 2000 government saving rose from −5.1
   (1992) to +1.6 percent of GDP, and investment from 15.3 (1991) to 19.9 percent. In 2009 both fell.
-- Click "Private + foreign saving" in the legend. By equation (18.7) it is the gap between the two lines.
+- Click "Private + foreign saving" in the legend. By equation (9) it is the gap between the two lines.
   It rose when deficits grew, to 31.4 percent of GDP in 2020: households, firms and foreigners filled most of
   the gap left by the government, so the crowding out was small.
 
@@ -1776,13 +2138,17 @@ with `.sort_values("health_share")` and look at the first five rows with `.head(
 - The U.S. federal government spends about 23 percent of GDP and collects about 17 percent. The deficit, about
   6 percent of GDP in recent years, is financed by selling bonds, and the debt held by the public is back near
   100 percent of GDP, the level of 1946.
-- The **flow budget constraint** links each year's deficit to the change in the debt. The **intertemporal
-  budget constraint** says that the budget must balance in present value: borrowing today means surpluses, and
-  higher taxes, later.
-- What matters is the debt relative to GDP. When GDP grows faster than the interest rate, the ratio falls even
-  without surpluses: that is how the United States paid down its World War II debt.
+- The **flow budget constraint**, equations (1) and (2), links each year's deficit to the change in the debt.
+  The **intertemporal budget constraint**, equations (3) and (4), says that the budget must balance in present
+  value: borrowing today means surpluses, and higher taxes, later.
+- What matters is the debt relative to GDP. Its law of motion, equations (5) and (6), shows that when GDP grows
+  faster than the interest rate, the ratio falls even without surpluses: that is how the United States paid
+  down its World War II debt. When the interest rate is above growth, only primary surpluses as large as
+  equation (7) keep the ratio from rising, and the closed form, equation (8), shows the ratio exploding otherwise.
+- The saving-investment identity, equation (9), says that a deficit must be financed by private or foreign
+  saving, or it crowds out investment (equation 10).
 - U.S. government spending is low compared with other rich countries, and its debt ratio is typical. Large
   deficits have not lowered the U.S. investment rate, because private and foreign saving rose.
 - The fiscal problem of the twenty-first century is the rise of health spending, in the U.S. and in every rich
-  country. Chapter 19 turns to the international economy, including the foreign saving that has financed much
+  country: by equation (11), aging and costs that grow faster than income both raise its share of GDP. Chapter 19 turns to the international economy, including the foreign saving that has financed much
   of the U.S. deficit.

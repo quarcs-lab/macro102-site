@@ -1,4 +1,4 @@
-# Chapter 15: DSGE Models: The Frontier of Business Cycle Research
+# 15. DSGE Models: The Frontier of Business Cycle Research
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/ch15-dsge-models-the-frontier-of-business-cycle-research.ipynb)
 
@@ -10,11 +10,15 @@ Research on business cycles today uses **DSGE models**: *dynamic*, *stochastic*,
 models. This chapter looks at where they came from and solves their most important building block, the
 labor market. By the end of it you will be able to:
 
-- explain the letters D, S and GE, and how **real business cycle** models grew into DSGE models;
+- explain the letters D, S and GE, the building blocks of a DSGE model (agents, shocks, frictions), and how
+  **real business cycle** models grew into DSGE models;
+- derive the impulse response and the half-life of a persistent shock, and derive TFP growth as a **Solow
+  residual** from the production function, including how changes in utilization bias it;
 - read data on total factor productivity (TFP) growth, for the United States and 120 other countries, and see
   why the way TFP is measured changes the answer to "do TFP shocks cause recessions?";
-- solve the labor market of a DSGE model, with labor demand from the marginal product of labor and labor supply
-  $L^s = \bar{\ell}\,w/c$, and use it to study a TFP shock, a sales tax, government purchases and good news;
+- derive labor supply $L^s = \bar{\ell}\,w/c$ from a household's utility, solve the labor market for employment and
+  the real wage, read its **comparative statics** as elasticities, and use it to study a TFP shock, a sales tax,
+  government purchases and good news;
 - show how **sticky wages** and **sticky prices** change the effects of monetary policy on employment and the
   real wage;
 - say what an **impulse response function** shows and what the estimated Smets–Wouters model reports;
@@ -92,39 +96,305 @@ def slider_figure(make_figure, name, values, start, label=None):
 
 ## Model overview
 
-Modern research on business cycles uses **DSGE models**: models that follow the economy over time (*dynamic*), let random shocks hit it (*stochastic*), and let prices adjust until supply equals demand in every market (*general equilibrium*). A full DSGE model is too large to solve by hand, so this chapter works with its most useful building block, the **labor market**. Firms decide how many workers to hire, people decide how much to work, and the wage settles where the two plans agree. Recessions show up as falls in employment and output.
+How do economists model booms and recessions today? Their main tool is the **DSGE model**. *Dynamic*: it follows the economy quarter after quarter, and what people decide today shapes what is possible tomorrow. *Stochastic*: random shocks keep hitting it. *General equilibrium*: wages, interest rates and prices all adjust until supply equals demand in every market. A full DSGE model is solved on a computer, so this chapter has no single model to solve with a pencil. What it does have is a set of frameworks, and this section builds each one step by step.
 
-The inputs of this small model are productivity (TFP), the capital stock, a tax on firms' sales, people's taste for work and their consumption, which we take as given. Its outcomes are employment, output and the real wage. Below we write labor demand and labor supply, solve for the equilibrium, and choose one baseline that every diagram starts from. The sections then use these functions to look at TFP in the data, to shift the curves with real shocks, to add sticky wages and prices so that monetary policy matters, and to study good news about the future.
+The road map has four blocks. First come the **building blocks** that every DSGE model shares: who is in the economy, which shocks hit it, which frictions slow it down, and what an impulse response function is. Second comes the **real business cycle** idea: the Solow model of Chapter 5 with productivity shocks added, and the growth-accounting formula that measures those shocks as a **Solow residual**. Third comes the **labor market** of a DSGE model, which we solve completely for employment and the real wage. Fourth come the **new Keynesian** additions, sticky wages and sticky prices, which let monetary policy change employment. At the end, `### The model in code` turns the results into Python functions and checks each of them with numbers. Every later section of the notebook reuses these functions.
 
-A full DSGE model has markets for labor, capital and output, and people who plan how much to consume and work
-in every future quarter. That forward-looking planning is what makes these models hard to solve. The textbook
-keeps the most useful piece, the **labor market**, and treats consumption $c$ as given: the permanent-income
-hypothesis says consumption moves little over the business cycle, except after shocks that change people's
-lifetime income.
+A bar over a letter marks a **parameter**, a number we take as given, such as $\bar{A}$ or $\bar{\ell}$. Letters without a bar are **endogenous variables**, which the model determines. A growth rate is written $g$, so $g_Y$ is the growth rate of output. In the code we simply write `A`, `ell`, `c` and `tau`.
 
-**Labor demand.** Firms produce with the production function of Chapter 4,
+<!-- cell -->
 
-$$Y = \bar{A}K^{1/3}L^{2/3}, \qquad (15.1)$$
+### The building blocks of a DSGE model
 
-and hire workers until the marginal product of labor equals the real wage $w$. A tax $\tau$ on every dollar of
-sales leaves firms only the share $1-\tau$ of that product (with no tax, $\tau = 0$):
+#### Definitions
 
-$$\text{Labor demand:}\quad w = (1-\tau)\cdot\frac{2}{3}\cdot\frac{\bar{A}K^{1/3}}{L^{1/3}}. \qquad (15.2)$$
+Every DSGE model is put together from three kinds of pieces.
 
-**Labor supply.** People work more when the wage is high relative to their consumption:
+**1. Agents and the endogenous variables they decide.** The model is populated by decision makers, each with a clear objective:
 
-$$\text{Labor supply:}\quad L^s = \bar{\ell}\cdot\frac{w}{c}.$$
+| Agent | What it chooses | What it wants |
+|---|---|---|
+| households | consumption $c$, saving, hours of work $L$ | the highest lifetime utility |
+| firms | workers to hire, investment in capital | the highest profit |
+| government and central bank | purchases, taxes, the interest rate | follow a policy rule |
 
-**Equilibrium.** Write labor supply as a wage, $w = cL/\bar{\ell}$, and set it equal to labor demand. A little
-algebra gives employment and the wage directly:
+Together their choices determine the familiar endogenous variables: GDP, consumption, investment, employment and unemployment, capital, wages, interest rates and inflation. Larger models add trade, debt or exchange rates. The labor market is part of almost every DSGE model, because how much people work is a choice that directly changes how much is produced.
 
-$$L^* = \left[(1-\tau)\cdot\frac{2}{3}\cdot\frac{\bar{A}K^{1/3}\,\bar{\ell}}{c}\right]^{3/4}, \qquad w^* = \frac{c\,L^*}{\bar{\ell}}.$$
+**2. Shocks.** Endogenous variables move because shocks hit the economy: shocks to TFP, to monetary policy, to taxes and public spending, to oil and other energy prices, to financial conditions, or to the markups of prices over costs. A shock is described along three dimensions:
 
-**One baseline for every diagram.** The textbook draws its diagrams without numbers, and with straight lines.
-We draw the curves that the two equations really give, and every diagram starts from one illustrative set of
-values: TFP $\bar{A} = 1$, capital $K = 1$, $\bar{\ell} = 0.9$ and consumption $c = 0.6$. They are chosen so that
-the baseline is easy to read: employment $L^* = 1$, output $Y = 1$, and the real wage $w^* = 2/3$. Consumption is
-then 60 percent of output, close to its U.S. share of GDP, and labor earns $wL/Y = 2/3$ of output, as in Chapter 4.
+- *size and persistence*: it can be temporary or permanent, and a temporary shock can fade quickly or slowly;
+- *timing*: it can happen today, or people can learn today about a change that will happen later (**news**);
+- *uncertainty*: doubt about the future can itself hold back hiring and investment, because waiting until the doubt clears has value.
+
+**3. Features of the economy (frictions).** These decide *how* a shock spreads through the economy over time:
+
+- **nominal rigidities**: sticky wages or sticky prices. Without one of them, money cannot change real variables;
+- **adjustment costs**: large, fast changes in the capital stock are expensive, so variables respond gradually;
+- **heterogeneity**: households and firms differ, for example in the wage they need before they take a job, and the aggregate response depends on that spread;
+- **complete or incomplete markets**: with complete markets people can insure against every risk, such as losing their job; when some insurance markets are missing, shocks hit some people much harder than others.
+
+A model with a single household that stands for everyone is a **representative agent** model. Models that keep the differences between people, such as the *heterogeneous agent new Keynesian* (HANK) models, are on the research frontier.
+
+<!-- cell -->
+
+#### Solving the model
+
+**What solving a DSGE model means.** In the Solow model the saving rate and hours of work were fixed numbers. In a DSGE model they are choices, made again every period, and the choices are linked over time: saving today becomes investment, investment becomes tomorrow's capital, capital changes tomorrow's wage, and the wage in turn shapes tomorrow's choices of hours and consumption. A quarterly model of 50 years has $50 \times 4 = 200$ periods, and in each of them every household chooses both consumption and hours, so it makes 400 linked decisions. That is why these models are solved numerically. The chapter takes two shortcuts instead: it solves one block, the labor market, by hand (third block below), and it reads the numerical results of a large estimated model (the notes after Figs. 3, 5 and 8).
+
+**How a shock fades: the impulse response.** Let $x_t$ be the percentage deviation of a shocked variable from its normal level, for example TFP 1 percent above normal means $x_t = 1$. A simple and widely used way to describe a temporary shock is that each quarter it keeps the same fraction $\rho$ of its size, with $0 \le \rho < 1$, plus any new shock $\varepsilon_{t+1}$:
+
+$$x_{t+1} = \rho\,x_t + \varepsilon_{t+1}.$$
+
+This is a difference equation ([Appendix C.10](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.10-difference-equations-how-macro-variables-move-over-time)). Suppose one shock hits in quarter $t$ and no new shocks follow ($\varepsilon = 0$ afterward). Apply the equation one quarter at a time:
+
+$$x_{t+1} = \rho x_t, \qquad x_{t+2} = \rho x_{t+1} = \rho^2 x_t, \qquad x_{t+3} = \rho^3 x_t, \qquad\dots$$
+
+so after $h$ quarters
+
+$$x_{t+h} = \rho^h\,x_t. \tag{1}$$
+
+The path $x_t, x_{t+1}, x_{t+2}, \dots$ is the **impulse response function** of the shock: how it evolves after one impulse. The closer $\rho$ is to 1, the longer the shock lasts.
+
+**The half-life.** How many quarters $h$ does it take for the shock to shrink to half its size? Set $\rho^h = 1/2$ and take logs ([Appendix C.4](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.4-logarithms)):
+
+$$h\ln\rho = \ln\tfrac{1}{2} \quad\Longrightarrow\quad h = \frac{\ln(1/2)}{\ln\rho} = \frac{\ln 2}{-\ln\rho}.$$
+
+Going the other way, a shock with a half-life of $h$ quarters has $\rho = (1/2)^{1/h}$. The estimated TFP shock of the Smets–Wouters model, which loses half its size in about 4 years or 16 quarters, has $\rho = 0.5^{1/16} \approx 0.958$: it keeps about 96 percent of its size from one quarter to the next.
+
+**Why responses can peak late: adjustment costs.** In equation (1) the largest effect comes at once, in the quarter of the shock. Estimated models instead find that GDP reacts most to a monetary shock 3 to 4 quarters later. Adjustment costs produce this delay. As a simple illustration (not the Smets–Wouters model itself), suppose a variable $y_t$ closes only the fraction $\lambda$ of the gap to its target $x_t$ each quarter:
+
+$$y_t = y_{t-1} + \lambda\,(x_t - y_{t-1}), \qquad 0 < \lambda \le 1.$$
+
+With $\lambda = 1$ there is no adjustment cost, $y_t = x_t$, and $y$ peaks in the quarter of the shock. With $\lambda < 1$, $y$ keeps rising as long as the target is above it, $x_t > y_{t-1}$, and it peaks only when the fading target falls below it. With $\rho = 0.8$ and $\lambda = 0.3$ the peak arrives 3 quarters after the shock, as the check in `### The model in code` shows.
+
+<!-- cell -->
+
+#### What the model predicts
+
+- DSGE models are **quantitative**: their output is a set of impulse response functions that say by how much, and for how long, GDP, consumption, hours and inflation move after each shock. The parameters, such as $\rho$, are estimated so that the model matches U.S. data.
+- Persistence matters: by equation (1), a shock with $\rho = 0.958$ still has 84 percent of its size after one year ($0.958^4 \approx 0.84$), while a shock with $\rho = 0.5$ has only 6 percent left ($0.5^4 \approx 0.06$).
+- With adjustment costs, the largest effect of a shock comes after a lag, the "long and variable lags" of monetary policy that Milton Friedman described.
+- The same shock can have different effects in models with different frictions. The rest of this section shows that with the labor market.
+
+<!-- cell -->
+
+### Real business cycles: the Solow model with TFP shocks
+
+#### Assumptions
+
+The first DSGE models, the **real business cycle (RBC)** models of Finn Kydland and Edward Prescott, and of John Long and Charles Plosser, kept the Solow model of Chapter 5 and changed one thing: total factor productivity is no longer a constant $\bar{A}$ but a variable $A_t$ that is hit by shocks.
+
+- **Production.** Output is made with capital and labor:
+
+  $$Y_t = A_t K_t^{1/3} L_t^{2/3}. \tag{2}$$
+
+- **TFP shocks.** TFP moves around its normal level $\bar{A}$. Its percentage deviation $x_t$ follows the shock process of the first block, so a TFP shock fades according to equation (1).
+- **Capital accumulation** is as in [the Solow model (Chapter 5)](https://quarcs-lab.github.io/macro102-site/notebooks/ch05-the-solow-growth-model.html): $\Delta K_{t+1} = \bar{s}Y_t - \bar{d}K_t$. Capital is a stock: it is fixed within a period and changes only through investment.
+- **Choices.** In a full RBC model the saving rate and hours are chosen by households, but all wages and prices are **flexible**.
+
+The shocks are *real* (to technology, not to money), and they generate ups and downs that look like business cycles: hence the name. A negative TFP shock need not mean that people forget technology. TFP measures how well inputs are used, so a new tax, a bad regulation or a disruption of trade can lower it too (the sales tax of the labor-market block shows this).
+
+<!-- cell -->
+
+#### Solving the model
+
+**Step 1: output growth in terms of its sources.** Take logs of equation (2), using $\ln(ab) = \ln a + \ln b$ and $\ln a^b = b\ln a$ ([Appendix C.4](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.4-logarithms)):
+
+$$\ln Y_t = \ln A_t + \tfrac{1}{3}\ln K_t + \tfrac{2}{3}\ln L_t.$$
+
+Write the same equation for year $t-1$ and subtract. The change in the log of a variable is, approximately, its growth rate ([Appendix C.5](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.5-growth-rates-and-the-growth-rules)):
+
+$$g_Y = g_A + \tfrac{1}{3}g_K + \tfrac{2}{3}g_L.$$
+
+Output grows for three reasons: TFP grows, capital grows (with weight $1/3$, capital's share of income) and labor grows (with weight $2/3$, labor's share).
+
+**Step 2: the impact of a TFP shock.** Capital is fixed within the period, so $g_K = 0$ on impact. In the plain Solow model labor is fixed too, $g_L = 0$, and the formula gives $g_Y = g_A$: a 1 percent TFP shock raises output by 1 percent at once. When people also choose how much to work, a TFP shock moves employment in the same direction, and the labor-market block below shows that output then rises by about $3/2$ percent.
+
+**Step 3: propagation through capital.** Higher output means more investment, $\bar{s}Y_t$, so next period's capital is higher, and higher capital raises output again. A persistent TFP shock therefore raises GDP for longer, and at its peak by more, than the shock itself: the same capital-accumulation channel that drives transition dynamics in the Solow model.
+
+**Step 4: measuring TFP as a Solow residual.** We can measure output, capital and labor, but not TFP. Solve the growth equation of step 1 for $g_A$, by moving the capital and labor terms to the other side:
+
+$$g_A = g_Y - \tfrac{1}{3}g_K - \tfrac{2}{3}g_L. \tag{3}$$
+
+TFP growth is what remains of output growth after the growth of capital and labor is accounted for, the **Solow residual**. For example, if output grows by 3 percent, capital by 3 percent and hours by 1.5 percent, then $g_A = 3 - \tfrac{1}{3}\times 3 - \tfrac{2}{3}\times 1.5 = 3 - 1 - 1 = 1$ percent. This is the growth-accounting method of [Chapter 6](https://quarcs-lab.github.io/macro102-site/notebooks/ch06-growth-and-ideas.html), applied year by year.
+
+**Step 5: why the residual can mislead in recessions.** Equation (3) assumes that every measured worker and machine is used at the same intensity in every year. In a recession firms keep some workers and machines but use them less: shorter shifts, slower lines, idle capacity. Let $u_t$ be an index of this **utilization**, so the inputs actually used are $u_tK_t$ and $u_tL_t$. The production function is then
+
+$$Y_t = A_t (u_tK_t)^{1/3}(u_tL_t)^{2/3} = A_t\,u_t^{1/3+2/3}\,K_t^{1/3}L_t^{2/3} = A_t\,u_t\,K_t^{1/3}L_t^{2/3}.$$
+
+Taking logs and growth rates as in step 1, $g_Y = g_A + g_u + \tfrac{1}{3}g_K + \tfrac{2}{3}g_L$. The raw residual of equation (3), computed from measured inputs, is therefore
+
+$$\underbrace{g_Y - \tfrac{1}{3}g_K - \tfrac{2}{3}g_L}_{\text{raw Solow residual}} = \underbrace{g_A}_{\text{true TFP growth}} + \underbrace{g_u}_{\text{utilization growth}}. \tag{4}$$
+
+When utilization falls in a recession, $g_u < 0$, the raw residual falls even if true TFP does not change at all. John Fernald estimates $g_u$ from data on hours per worker and other indicators and subtracts it, which gives his **utilization-adjusted** TFP series.
+
+<!-- cell -->
+
+#### What the model predicts
+
+- **Booms and recessions follow TFP.** A positive TFP shock raises output, investment and (with a labor choice) employment and wages; a negative shock lowers them. With a persistent shock, output stays high for years and peaks above the size of the shock, because capital accumulates.
+- **The test.** If TFP shocks drive the cycle, measured TFP growth should be low or negative in recession years. Fig. 1 and its two follow-up charts test this with Fernald's data and the Penn World Table.
+- **The answer depends on the measure (equation 4).** The raw Solow residual falls in most recessions, which was the original evidence for RBC models. But part of that fall is utilization. In 2009, for example, the raw residual was −0.15 percent, while utilization fell by 3.68 percent, so true TFP growth was about $-0.15 - (-3.68) = +3.53$ percent. Once utilization is removed, TFP rises in some recessions, and TFP shocks cannot be the whole story.
+- **What survived.** The method of the RBC models survived: a growth model with optimizing agents, shocks and numerical answers. Adding other shocks, and frictions such as sticky prices, turned RBC models into a special case of today's DSGE models.
+
+<!-- cell -->
+
+### The labor market of a DSGE model
+
+#### Assumptions
+
+We now solve the most useful block of a DSGE model by hand. We look at a single period, so capital is fixed at $K$ and TFP sits at the level $\bar{A}$.
+
+**1. Production.** Firms use the production function of equation (2), without time subscripts: $Y = \bar{A}K^{1/3}L^{2/3}$.
+
+**2. Firms hire until the marginal product of labor equals the real wage.** The **marginal product of labor** (MPL) is the extra output from one more unit of labor. It is the derivative of output with respect to $L$, holding $\bar{A}$ and $K$ fixed ([Appendix C.7](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.7-derivatives-and-marginal-thinking)). The power rule brings down the exponent $2/3$ and lowers it by one, to $2/3 - 1 = -1/3$:
+
+$$\text{MPL} = \frac{\partial Y}{\partial L} = \frac{2}{3}\bar{A}K^{1/3}L^{-1/3} = \frac{2}{3}\cdot\frac{\bar{A}K^{1/3}}{L^{1/3}}.$$
+
+Firms may also pay a tax $\tau$ on each dollar of sales (a sales tax or value-added tax), so they keep the share $1-\tau$ of what an extra worker produces. Hiring stops where this after-tax marginal product equals the real wage $w$, which gives the **labor demand curve**:
+
+$$w = (1-\tau)\cdot\frac{2}{3}\cdot\frac{\bar{A}K^{1/3}}{L^{1/3}}. \tag{5}$$
+
+With no tax, $\tau = 0$. The curve slopes down, because $L$ sits in the denominator: diminishing returns lower the MPL as firms hire more.
+
+**3. Households supply labor.** The **labor supply curve** is
+
+$$L^s = \bar{\ell}\cdot\frac{w}{c}, \tag{6}$$
+
+where $c$ is consumption per person and $\bar{\ell}$ sets the overall amount of labor supplied (if $w = c$, then $L^s = \bar{\ell}$). People work more when the wage is high *relative to their consumption*. Over the long run wages and consumption grow at about the same rate, so $w/c$ and hours per person stay roughly constant, as they do in the data.
+
+*Where equation (6) comes from.* A household chooses consumption $c$ and hours $L$ to maximize utility
+
+$$U(c, L) = \ln c - \frac{1}{2}\cdot\frac{1}{\bar{\ell}}\cdot L^2 \qquad\text{subject to}\qquad c + \bar{S} = wL,$$
+
+where $\bar{S}$ is a given amount of saving. Utility rises with consumption and falls with hours, and each extra hour costs more utility than the last (the square). Substitute the budget, $c = wL - \bar{S}$, so that utility depends on $L$ alone, and set its derivative to zero ([Appendix C.8](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.8-optimization)). By the chain rule, the derivative of $\ln(wL - \bar{S})$ is $w/(wL-\bar{S}) = w/c$:
+
+$$\frac{dU}{dL} = \frac{w}{c} - \frac{L}{\bar{\ell}} = 0 \quad\Longrightarrow\quad L = \bar{\ell}\cdot\frac{w}{c}.$$
+
+The first term is the gain from working one more hour (the extra income $w$, valued at the marginal utility of consumption $1/c$); the second is the cost in lost leisure. A richer household, with higher $c$, values extra income less and so works less at any wage.
+
+**4. Consumption is taken as given.** In a full DSGE model $c$ is chosen by looking ahead over the whole future. Here we treat it as given. The permanent-income hypothesis (Chapter 16) justifies the shortcut: consumption depends on lifetime income, so temporary shocks barely move it. Shocks that change lifetime income, such as a lasting rise in government purchases or news about the future, act on the labor market *through* $c$. Consumption is the forward-looking variable of this block.
+
+<!-- cell -->
+
+#### Solving the model
+
+**Step 1: write labor supply as a wage.** Multiply equation (6) by $c/\bar{\ell}$: $w = cL/\bar{\ell}$.
+
+**Step 2: set the two wages equal.** In equilibrium the wage on the supply curve equals the wage on the demand curve:
+
+$$\frac{cL}{\bar{\ell}} = (1-\tau)\cdot\frac{2}{3}\cdot\frac{\bar{A}K^{1/3}}{L^{1/3}}.$$
+
+**Step 3: collect the powers of $L$.** Multiply both sides by $L^{1/3}$ and by $\bar{\ell}/c$. On the left, $L \cdot L^{1/3} = L^{1 + 1/3} = L^{4/3}$ ([Appendix C.3](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.3-exponents-and-exponential-growth)):
+
+$$L^{4/3} = (1-\tau)\cdot\frac{2}{3}\cdot\frac{\bar{A}K^{1/3}\,\bar{\ell}}{c}.$$
+
+**Step 4: solve for $L$.** Raise both sides to the power $3/4$, since $(L^{4/3})^{3/4} = L$. Then put $L^*$ back into the supply curve for the wage:
+
+$$L^* = \left[(1-\tau)\cdot\frac{2}{3}\cdot\frac{\bar{A}K^{1/3}\,\bar{\ell}}{c}\right]^{3/4}, \qquad w^* = \frac{c\,L^*}{\bar{\ell}}. \tag{7}$$
+
+Output then follows from the production function, $Y^* = \bar{A}K^{1/3}(L^*)^{2/3}$.
+
+**Step 5: the baseline.** The textbook draws its diagrams without numbers. Every diagram of this notebook starts from one illustrative set of values: $\bar{A} = 1$, $K = 1$, $\bar{\ell} = 0.9$, $c = 0.6$ and no tax. Then the bracket in equation (7) is $\tfrac{2}{3}\times 0.9/0.6 = 1$, so $L^* = 1$, $w^* = 0.6/0.9 = 2/3$ and $Y^* = 1$. Consumption is 60 percent of output, close to its U.S. share of GDP. Labor's share of output is $w^*L^*/Y^* = 2/3$: along the labor demand curve with no tax, $w = \tfrac{2}{3}Y/L$, so labor always earns two thirds of output, as in Chapter 4.
+
+**Step 6: elasticities.** Take logs of equation (7). The bracket is a product of powers, so each factor contributes its own term:
+
+$$\ln L^* = \text{const} + \tfrac{3}{4}\ln(1-\tau) + \tfrac{3}{4}\ln\bar{A} + \tfrac{1}{4}\ln K + \tfrac{3}{4}\ln\bar{\ell} - \tfrac{3}{4}\ln c.$$
+
+For the wage, $\ln w^* = \ln c + \ln L^* - \ln\bar{\ell}$, so
+
+$$\ln w^* = \text{const} + \tfrac{3}{4}\ln(1-\tau) + \tfrac{3}{4}\ln\bar{A} + \tfrac{1}{4}\ln K - \tfrac{1}{4}\ln\bar{\ell} + \tfrac{1}{4}\ln c.$$
+
+And for output, $\ln Y^* = \ln\bar{A} + \tfrac{1}{3}\ln K + \tfrac{2}{3}\ln L^*$, so the elasticity of output with respect to TFP is $1 + \tfrac{2}{3}\cdot\tfrac{3}{4} = \tfrac{3}{2}$: TFP raises output directly, and again by drawing more people into work. This is the $3/2$ promised in the RBC block.
+
+How strongly does labor demand respond to the wage? Solve equation (5) for $L$: $L^{1/3} = (1-\tau)\tfrac{2}{3}\bar{A}K^{1/3}/w$, and cube both sides, $L^d = \left[(1-\tau)\tfrac{2}{3}\bar{A}K^{1/3}/w\right]^3$. The elasticity of labor demand with respect to the wage is $-3$: a 1 percent lower wage raises the labor firms want by about 3 percent. This flat demand curve explains why the wage moves little when labor supply shifts.
+
+<!-- cell -->
+
+#### What the model predicts
+
+**Comparative statics.** The coefficients of the logs above are elasticities: the percentage change in $L^*$ or $w^*$ when a variable rises by 1 percent.
+
+| A 1% rise in ... | changes $L^*$ by | changes $w^*$ by | Which curve moves | Example of the shock |
+|---|---|---|---|---|
+| TFP $\bar{A}$ | $+0.75\%$ | $+0.75\%$ | labor demand shifts up | a temporary TFP shock (Fig. 3) |
+| after-tax share $1-\tau$ | $+0.75\%$ | $+0.75\%$ | labor demand shifts up | a cut in the sales tax (Fig. 4, reversed) |
+| capital $K$ | $+0.25\%$ | $+0.25\%$ | labor demand shifts up | (fixed in the short run) |
+| consumption $c$ | $-0.75\%$ | $+0.25\%$ | labor supply shifts up and left | good news (Fig. 9); less government (Fig. 5, reversed) |
+| labor-supply scale $\bar{\ell}$ | $+0.75\%$ | $-0.25\%$ | labor supply shifts down and right | more willingness to work (Fig. 2) |
+
+Read the table in two halves:
+
+- **Shifts of labor demand move employment and the wage in the same direction.** A negative TFP shock, or a new sales tax, lowers both, which looks like a recession. With $\bar{A}' = 0.8$, equation (7) gives $L^* = 0.8^{3/4} \approx 0.85$, and $w^* = 0.6 \times 0.85/0.9 \approx 0.56$. A 20 percent sales tax gives *exactly* the same point, because only the product $(1-\tau)\bar{A}$ enters equation (7). This is why early DSGE models put TFP shocks at the center.
+- **Shifts of labor supply move them in opposite directions.** A permanent rise in government purchases of $0.1$ must be paid with taxes, so lifetime income and consumption fall by $0.1$, from 0.6 to 0.5. Employment rises to $(0.6/0.5)^{3/4} \approx 1.15$, but the wage falls to $0.5 \times 1.15/0.9 \approx 0.64$. Good news that raises consumption to 0.7 lowers employment to $(0.6/0.7)^{3/4} \approx 0.89$ and raises the wage to $0.7 \times 0.89/0.9 \approx 0.69$. Booms with falling wages and consumption do not look like normal business cycles, so these shocks are part of the story but not its main driver.
+
+**A permanent TFP rise** shifts both curves: labor demand up through $\bar{A}$ and labor supply up through a higher $c$. The effect on employment is ambiguous, because $\bar{A}$ and $c$ enter equation (7) as the ratio $\bar{A}/c$. If both rise by 10 percent, the ratio and employment do not change, and the wage $w^* = cL^*/\bar{\ell}$ rises by the full 10 percent.
+
+<!-- cell -->
+
+### New Keynesian additions: sticky wages and sticky prices
+
+#### Assumptions
+
+With flexible wages and prices the **classical dichotomy** holds: money changes nominal variables only, so monetary policy cannot change employment. New Keynesian models add a **nominal rigidity**. We need nominal variables to see it. Let $W$ be the nominal wage (dollars per hour) and $P$ the price level, so the real wage is
+
+$$w = \frac{W}{P}.$$
+
+We add the frictions one at a time.
+
+- **Sticky wages.** The nominal wage is stuck, $W = \bar{W}$, while other prices are flexible. A monetary expansion (a lower fed funds rate) raises spending and pushes the price level from $P_0$ to a higher $P'$.
+- **Trade is voluntary.** When the wage does not clear the market, the quantity traded is the smaller of the quantities demanded and supplied: the *short side* of the market decides.
+- **Sticky prices.** Now wages are flexible, but firms change their prices only slowly. At its posted price each firm produces whatever its customers demand, so total spending decides output $Y$. A monetary expansion raises the output demanded.
+
+<!-- cell -->
+
+#### Solving the model
+
+**Sticky wages.** The real wage is $\bar{W}/P$, fixed by the nominal wage and the price level instead of by the market. Firms demand $L^d(\bar{W}/P)$, from the inverted labor demand curve of the previous block, and households offer $L^s(\bar{W}/P) = \bar{\ell}\,(\bar{W}/P)/c$ from equation (6). With the short side deciding,
+
+$$L = \min\left\{L^d\!\left(\frac{\bar{W}}{P}\right),\ L^s\!\left(\frac{\bar{W}}{P}\right)\right\}. \tag{8}$$
+
+If the sticky real wage is above the market-clearing $w^*$, firms are the short side. The gap $L^s - L^d$ is **involuntary unemployment**: people who would accept a job at the going wage but cannot find one.
+
+*A monetary expansion.* A higher price level lowers the real wage $\bar{W}/P$, and firms hire more. In logs, along labor demand, $\ln L^d = \text{const} - 3\ln\bar{W} + 3\ln P$: the elasticity of employment with respect to the price level is $+3$, while the real wage falls one for one with $P$.
+
+*Worked example* (the values of Figs. 6–7). With $\bar{W} = 0.75$ and $P_0 = 1$, the real wage is 0.75, above $w^* = 2/3$. Firms hire $L^d = \left(\tfrac{2}{3}/0.75\right)^3 = (8/9)^3 \approx 0.70$, households offer $0.9 \times 0.75/0.6 = 1.125$, and unemployment is about $0.42$. When prices rise by 5 percent, to $P' = 1.05$, the real wage falls to $0.75/1.05 \approx 0.71$, employment rises by the factor $1.05^3 \approx 1.16$ to about $0.81$, and unemployment shrinks to about $0.26$. Later the nominal wage catches up, $W' = w^*P'$, the real wage is back at $w^*$ and the market clears: in the long run money is neutral again.
+
+**Sticky prices.** Output is set by demand, and firms hire exactly the labor needed to produce it. Invert the production function: $L^{2/3} = Y/(\bar{A}K^{1/3})$, and raise both sides to the power $3/2$:
+
+$$L = \left(\frac{Y}{\bar{A}K^{1/3}}\right)^{3/2}. \tag{9}$$
+
+The wage does not appear: labor demand is a **vertical line** in the labor-market diagram. Because the nominal wage is flexible, it adjusts until households are willing to supply exactly this $L$, so the real wage lies on the supply curve, $W/P = cL/\bar{\ell}$.
+
+*Elasticities.* Taking logs of equation (9) and of the supply curve: employment rises $3/2$ percent for each 1 percent of extra output demanded, and so does the real wage (with $c$ fixed). A rise in TFP with the output demanded unchanged *lowers* employment, with elasticity $-3/2$: firms need fewer workers to make the same goods.
+
+*Worked example* (the values of Fig. 8). Output demanded rises by 15 percent, from $Y_0 = 1$ to $Y' = 1.15$. Employment rises to $1.15^{3/2} \approx 1.23$, and the real wage to $0.6 \times 1.23/0.9 \approx 0.82$.
+
+<!-- cell -->
+
+#### What the model predicts
+
+**Which way do employment and the real wage move?** Over actual business cycles, employment and the real wage tend to rise together in booms. The table collects the answers of the four blocks:
+
+| Shock | Prices and wages | What moves in the diagram | Employment | Real wage | Looks like a business cycle? |
+|---|---|---|---|---|---|
+| TFP falls | flexible | labor demand shifts down | falls | falls | yes |
+| sales tax rises | flexible | labor demand shifts down | falls | falls | yes |
+| government purchases rise | flexible | labor supply shifts right ($c$ falls) | rises | falls | no |
+| monetary expansion | sticky wages | down along labor demand ($\bar{W}/P$ falls) | rises | falls | no |
+| monetary expansion | sticky prices | vertical labor demand shifts right | rises | rises | yes |
+| TFP rises, demand unchanged | sticky prices | vertical labor demand shifts left | falls | falls | no |
+
+- **Two flavors of DSGE models.** Shocks that move employment and wages together are TFP shocks with flexible prices (the RBC flavor) and monetary shocks with sticky prices (the **new Keynesian** flavor). Modern DSGE models combine both, with many other shocks and frictions.
+- **Sticky wages alone are not enough.** They let money matter and create unemployment, but they make the real wage *countercyclical*: it falls when employment rises.
+- **Frictions can flip a sign.** With sticky prices, a TFP rise can lower hours worked at first (equation 9), which is what the estimated Smets–Wouters model reports. Good news about the future lowers employment with flexible prices but raises it with sticky prices (Figs. 9–10). How sticky prices really are is therefore one of the big questions in macroeconomics.
+- **Money is neutral in the long run.** Once nominal wages and prices adjust, the economy returns to the flexible equilibrium of equation (7).
+
+<!-- cell -->
+
+### The model in code
+
+We now turn the key results into Python functions. Each function's description names the equation it computes. The cells after it check the algebra above with numbers.
 
 > **Python note.** `def` creates a *function*: a named recipe that takes inputs (the *arguments*) and gives
 > back a result with `return`. Writing `A=A_BAR` gives an argument a *default value*, used whenever we do not
@@ -136,43 +406,48 @@ A_BAR, K_BAR, ELL_BAR, C_BAR = 1.0, 1.0, 0.9, 0.6   # the baseline: TFP, capital
 
 
 def demand_wage(L, A=A_BAR, tau=0.0):
-    """Equation 15.2, the labor demand curve: w = (1 - tau) (2/3) A K^(1/3) / L^(1/3)."""
+    """Labor demand, equation (5): w = (1 - tau) (2/3) A K^(1/3) / L^(1/3)."""
     return (1 - tau) * (2 / 3) * A * K_BAR ** (1 / 3) / L ** (1 / 3)
 
 
 def supply_wage(L, c=C_BAR, ell=ELL_BAR):
-    """The labor supply curve L = ell w / c, written as a wage: w = c L / ell."""
+    """Labor supply, equation (6), written as a wage: w = c L / ell."""
     return c * L / ell
 
 
 def labor_demand(w, A=A_BAR, tau=0.0):
-    """Labor demanded at the real wage w (equation 15.2 solved for L)."""
+    """Labor demanded at the real wage w (equation 5 solved for L)."""
     return ((1 - tau) * (2 / 3) * A * K_BAR ** (1 / 3) / w) ** 3
 
 
 def labor_supply(w, c=C_BAR, ell=ELL_BAR):
-    """Labor supplied at the real wage w: L = ell w / c."""
+    """Labor supplied at the real wage w, equation (6): L = ell w / c."""
     return ell * w / c
 ```
 
 ```{python}
 def equilibrium(A=A_BAR, tau=0.0, c=C_BAR, ell=ELL_BAR):
-    """The labor market clears: employment L* and the real wage w* (formula above)."""
+    """The labor market clears, equation (7): employment L* and the real wage w*."""
     L = ((1 - tau) * (2 / 3) * A * K_BAR ** (1 / 3) * ell / c) ** 0.75
     return L, supply_wage(L, c, ell)
 
 
 def output(L, A=A_BAR):
-    """Equation 15.1, the production function: Y = A K^(1/3) L^(2/3)."""
+    """The production function, equation (2), with capital fixed: Y = A K^(1/3) L^(2/3)."""
     return A * K_BAR ** (1 / 3) * L ** (2 / 3)
 
 
 def labor_needed(Y, A=A_BAR):
-    """Sticky prices: the labor firms need to produce the output Y, L = (Y / (A K^(1/3)))^(3/2)."""
+    """Sticky prices, equation (9): the labor firms need to produce the output Y, L = (Y / (A K^(1/3)))^(3/2)."""
     return (Y / (A * K_BAR ** (1 / 3))) ** 1.5
+
+
+def solow_residual(g_Y, g_K, g_L):
+    """TFP growth as a Solow residual, equation (3): g_A = g_Y - (1/3) g_K - (2/3) g_L."""
+    return g_Y - g_K / 3 - 2 * g_L / 3
 ```
 
-A quick check of the baseline.
+A quick check of the baseline: the formula of equation (7), labor demand and labor supply must all agree.
 
 > **Python note.** `L0, w0 = equilibrium()` *unpacks* the two results into two variables. An *f-string* such as
 > `f"L* = {L0:.2f}"` inserts a value into text; `:.2f` means "show two decimals".
@@ -183,9 +458,108 @@ Y_0 = output(L0)
 print(f"Employment L* = {L0:.2f},  real wage w* = {w0:.3f},  output Y = {Y_0:.2f}")
 print(f"Consumption share c/Y = {C_BAR / Y_0:.2f},  labor share wL/Y = {w0 * L0 / Y_0:.3f}")
 print(f"Labor demand and labor supply at w*: {labor_demand(w0):.3f} and {labor_supply(w0):.3f}")
+print(f"Wage on the demand curve at L*: {demand_wage(L0):.3f},  on the supply curve: {supply_wage(L0):.3f}")
 ```
 
 Both curves pass through the same point, so the market clears at $L^* = 1$ and $w^* = 0.667$.
+
+**Check 1: the labor supply curve comes from utility maximization.** We let the computer try 200,001 values of hours $L$ for a household with the wage $w = 2/3$ and saving $\bar{S} = 2/3 - 0.6$, compute its utility for each, and pick the best. Equation (6) predicts $L = 0.9 \times (2/3)/0.6 = 1$ and consumption $c = 0.6$.
+
+> **Python note.** `np.linspace(0.5, 1.5, 200001)` creates 200,001 evenly spaced numbers from 0.5 to 1.5, and
+> arithmetic on it works on all of them at once. `np.log` is the natural logarithm. `np.argmax(U)` gives the
+> *position* of the largest value of `U`, and `hours[best]` the hours at that position.
+
+```{python}
+w, S = 2 / 3, 2 / 3 - 0.6                       # the wage and a given amount of saving
+hours = np.linspace(0.5, 1.5, 200001)           # candidate hours of work L
+cons = w * hours - S                            # the budget: c + S = w L
+U = np.log(cons) - 0.5 * hours ** 2 / ELL_BAR   # utility of each choice
+best = np.argmax(U)
+print(f"Best hours L = {hours[best]:.4f},  consumption c = {cons[best]:.4f}")
+print(f"Labor supply curve, equation (6): ell w / c = {labor_supply(w, cons[best]):.4f}")
+```
+
+**Check 2: the elasticities.** Raise each variable by 1 percent and see by what percentage $L^*$ and $w^*$ change. The comparative-statics table predicts $+0.75$ and $+0.75$ for $\bar{A}$, $-0.75$ and $+0.25$ for $c$, and $+0.75$ and $-0.25$ for $\bar{\ell}$. For output, the elasticity with respect to TFP should be $+1.5$.
+
+```{python}
+L1, w1 = equilibrium(A=1.01)
+print(f"1% higher A:   L* {100 * (L1 / L0 - 1):+.3f}%,  w* {100 * (w1 / w0 - 1):+.3f}%")
+L1, w1 = equilibrium(c=0.6 * 1.01)
+print(f"1% higher c:   L* {100 * (L1 / L0 - 1):+.3f}%,  w* {100 * (w1 / w0 - 1):+.3f}%")
+L1, w1 = equilibrium(ell=0.9 * 1.01)
+print(f"1% higher ell: L* {100 * (L1 / L0 - 1):+.3f}%,  w* {100 * (w1 / w0 - 1):+.3f}%")
+L1, w1 = equilibrium(A=1.01)
+print(f"1% higher A:   Y* {100 * (output(L1, 1.01) / Y_0 - 1):+.3f}%")
+print(f"1% lower wage: labor demanded {100 * (labor_demand(w0 * 0.99) / labor_demand(w0) - 1):+.3f}%")
+```
+
+The answers are close to the predicted elasticities but not exact, because an elasticity describes very small
+changes and 1 percent is small but not zero.
+
+**Check 3: sticky wages and sticky prices.** Equation (8) with $\bar{W} = 0.75$ should give employment of about 0.70 at $P_0 = 1$ and about 0.81 at $P' = 1.05$, a rise by the factor $1.05^3$. Equation (9) with $Y' = 1.15$ should give employment $1.15^{3/2}$ and a higher real wage.
+
+> **Python note.** `for P in (1.0, 1.05):` runs the indented lines once for each value in the brackets.
+> `min(a, b)` is the smaller of two numbers.
+
+```{python}
+W_bar = 0.75
+for P in (1.0, 1.05):
+    real_wage = W_bar / P
+    employed = min(labor_demand(real_wage), labor_supply(real_wage))     # equation (8)
+    unemployed = labor_supply(real_wage) - labor_demand(real_wage)
+    print(f"P = {P:.2f}: real wage {real_wage:.3f}, employment {employed:.3f}, unemployment {unemployed:.3f}")
+print(f"Ratio of employment {labor_demand(W_bar / 1.05) / labor_demand(W_bar):.4f}  vs  1.05^3 = {1.05 ** 3:.4f}")
+L_new = labor_needed(1.15)                                               # equation (9)
+print(f"Sticky prices, Y' = 1.15: employment {L_new:.3f} (1.15^1.5 = {1.15 ** 1.5:.3f}), "
+      f"real wage {supply_wage(L_new):.3f}")
+print(f"Sticky prices, TFP +10% with Y = 1: employment {labor_needed(1.0, A=1.1):.3f}")
+```
+
+**Check 4: the Solow residual.** First the example in the text: output grows by 3 percent, capital by 3 percent and hours by 1.5 percent. Then equation (4) in Fernald's data: in every year the raw residual should equal adjusted TFP growth plus the growth of utilization.
+
+> **Python note.** `pd.read_csv(...)` reads a data file into a *DataFrame*, a table with named columns, and
+> `annual.tfp_solow` is one of its columns. Subtracting columns works row by row. `.abs().max()` is the largest
+> absolute value of a column.
+
+```{python}
+print(f"Solow residual, equation (3): g_A = {solow_residual(3.0, 3.0, 1.5):.2f} percent")
+annual = pd.read_csv(DATA_URL + "tfp_annual.csv")
+gap = annual.tfp_solow - (annual.tfp_util + annual.utilization)          # equation (4)
+print(f"Largest gap between the two sides of equation (4), {annual.year.min()}-{annual.year.max()}: "
+      f"{gap.abs().max():.3f} percentage points")
+year_2009 = annual[annual.year == 2009]
+print(year_2009[["year", "gdp_growth", "tfp_solow", "utilization", "tfp_util"]].to_string(index=False))
+```
+
+The two sides of equation (4) agree to within a few hundredths of a percentage point in every year of the published data.
+
+**Check 5: impulse responses.** We simulate the shock process $x_{t+1} = \rho x_t$ one quarter at a time and compare it with equation (1), using the Smets–Wouters half-life of 16 quarters. Then we add the adjustment-cost rule $y_t = y_{t-1} + \lambda(x_t - y_{t-1})$ and find the quarter in which $y$ peaks, first with $\lambda = 1$ (no adjustment costs), then with $\lambda = 0.3$.
+
+> **Python note.** `range(17)` counts 0, 1, ..., 16, so the `for` loop runs its indented lines 17 times.
+> `x = rho * x` replaces the old value of `x` by the new one. `if year in (4, 16)` is true only in those quarters.
+
+```{python}
+rho = 0.5 ** (1 / 16)                          # the persistence that gives a half-life of 16 quarters
+x = 1.0                                        # a 1 percent shock in quarter 0
+for quarter in range(17):
+    if quarter in (4, 16):
+        print(f"Quarter {quarter:2d}: simulated {x:.4f},  equation (1): rho^h = {rho ** quarter:.4f}")
+    x = rho * x
+print(f"rho = {rho:.4f},  half-life ln(2) / (-ln rho) = {np.log(2) / -np.log(rho):.1f} quarters")
+```
+
+```{python}
+rho = 0.8                                      # a fast-fading shock
+for lam in (1.0, 0.3):                         # no adjustment costs, then slow adjustment
+    x, y = 1.0, 0.0
+    peak_quarter, peak = 0, 0.0
+    for quarter in range(20):
+        y = y + lam * (x - y)                  # close the fraction lam of the gap to the target x
+        if y > peak:
+            peak_quarter, peak = quarter, y
+        x = rho * x
+    print(f"lam = {lam}: the response peaks in quarter {peak_quarter}, at {peak:.3f}")
+```
 
 <!-- cell -->
 
@@ -264,7 +638,7 @@ The first DSGE models, the **real business cycle (RBC)** models of Finn Kydland 
 Solow model of Chapter 5 and let total factor productivity $\bar{A}$ jump up and down from year to year: these are
 **TFP shocks**. A good year for TFP brings a boom, a bad year a recession. Are TFP shocks big enough for that?
 Growth accounting (Chapter 6) measures TFP growth as the part of output growth that capital and labor do not
-explain. The data are John Fernald's series for the U.S. business sector (Federal Reserve Bank of San Francisco).
+explain (equation 3). The data are John Fernald's series for the U.S. business sector (Federal Reserve Bank of San Francisco).
 
 > **Python note.** `pd.read_csv(...)` reads a data file into a *DataFrame*, a table with named columns.
 > `.head()` shows its first five rows.
@@ -340,7 +714,7 @@ Chart: inspired by Fig. 15.1 in Jones (2024), [*Macroeconomics*, 6th ed.](https:
 The textbook caption says the series comes "from the Solow growth accounting formula". That is not quite
 right, and the difference matters. In a recession, firms keep some idle workers and machines, or use them less
 intensively. Plain growth accounting does not see this, so the slack shows up as a *fall in TFP*. Fernald
-estimates this change in **utilization** and removes it; the textbook's line is the *utilization-adjusted*
+estimates this change in **utilization** and removes it (equation 4); the textbook's line is the *utilization-adjusted*
 series. The wider file `tfp_annual.csv` holds both, with the growth of business output:
 
 ```{python}
@@ -568,7 +942,7 @@ Here is the diagram at the heart of the chapter: labor demand from firms, labor 
 
 The labor demand curve slopes down because the marginal product of labor falls as firms hire more workers.
 The labor supply curve slopes up because people work more when the wage is higher. They cross at employment
-$L_0$ and the real wage $w_0$:
+$L_0$ and the real wage $w_0$ (equations 5 and 6):
 
 $$L^d:\ w = \frac{2}{3}\cdot\frac{\bar{A}K^{1/3}}{L^{1/3}} \qquad\qquad L^s = \bar{\ell}\cdot\frac{w}{c}$$
 
@@ -701,7 +1075,7 @@ slider_figure(labor_shock, "A_new", [0.7, 0.8, 0.9, 1.0, 1.1, 1.2], start=0.8, l
 
 - With $\bar{A}' = 0.8$, employment falls from 1.00 to 0.85 and the real wage from 0.67 to 0.56. Both fall, just
   as in a recession.
-- Both fall by the same 15 percent. In the formula for $L^*$, TFP has the power $3/4$, so $0.8^{3/4} = 0.85$; and
+- Both fall by the same 15 percent. In equation (7), TFP has the power $3/4$, so $0.8^{3/4} = 0.85$; and
   the wage is proportional to employment along the unchanged supply curve.
 - Move $\bar{A}'$ above 1: a positive TFP shock raises employment *and* the wage, like a boom. This is why the
   first DSGE models focused on TFP shocks.
@@ -738,7 +1112,7 @@ prices firms need fewer workers to meet a demand that rises only slowly; and inf
 
 The one number we can check is the persistence of the shock. The textbook says that after 4 years (16 quarters)
 the TFP shock has decayed to about half its size. If a shock keeps the fraction $\rho$ of its size each quarter,
-then $\rho^{16} = 1/2$:
+then by equation (1) $\rho^{16} = 1/2$:
 
 ```{python}
 rho = 0.5 ** (1 / 16)
@@ -751,7 +1125,7 @@ print(f"Left after 1 year: {100 * rho ** 4:.0f}%,  after 4 years: {100 * rho ** 
 **Goal.** See that a tax on firms' sales works exactly like a fall in TFP.
 
 With a sales tax $\tau$, firms keep only $1-\tau$ of each dollar of sales, so they hire until the *after-tax*
-marginal product equals the wage:
+marginal product equals the wage (equation 5):
 
 $$w = (1-\tau)\cdot\frac{2}{3}\cdot\frac{\bar{A}K^{1/3}}{L^{1/3}}.$$
 
@@ -885,7 +1259,7 @@ it is stuck at $W = \bar{W}$. With the price level at $P_0 = 1$ and $\bar{W} = 0
 the market-clearing wage of 0.67.
 
 At that wage, people want to supply more labor than firms want to hire. Trade needs both sides, so the short
-side of the market decides: firms hire along their demand curve, at point $A$. The gap between the two curves is
+side of the market decides (equation 8): firms hire along their demand curve, at point $A$. The gap between the two curves is
 **involuntary unemployment**: people who would like to work at the going wage but cannot find a job. The unlabelled
 dot marks where the market would clear.
 
@@ -1054,7 +1428,7 @@ and the real wage.
 
 Now wages are flexible, but firms change their prices only slowly. At its sticky price, each firm agrees to
 supply whatever customers demand. So spending decides output $Y$, and the production function decides how much
-labor firms must hire to produce it:
+labor firms must hire to produce it (equation 9):
 
 $$Y = \bar{A}K^{1/3}L^{2/3} \quad\Longrightarrow\quad L = \left(\frac{Y}{\bar{A}K^{1/3}}\right)^{3/2}.$$
 
@@ -1220,7 +1594,7 @@ and to the real wage?
 
 <details><summary>Hint</summary>
 
-In the formula for $L^*$, $\bar{A}$ and $c$ enter as the ratio $\bar{A}/c$. What happens to that ratio when both
+In equation (7), $\bar{A}$ and $c$ enter as the ratio $\bar{A}/c$. What happens to that ratio when both
 rise by 10 percent?
 
 </details>
@@ -1282,15 +1656,18 @@ compare `supply_wage(labor_needed(0.95), 0.65)` with `w0`.
 ## Concluding remarks
 
 - **DSGE models** are *dynamic* (they trace the economy over time), *stochastic* (shocks hit it) and *general
-  equilibrium* (prices clear the markets). They grew out of **real business cycle** models, which added TFP shocks
-  to the Solow model; U.S. TFP growth swings a lot, but once utilization is measured it does not fall in most
-  recessions.
-- The **labor market** is a key block of every DSGE model. With consumption taken as given, a TFP fall or a sales
-  tax lowers employment and the wage together, like a recession; a rise in government purchases or good news acts
-  through consumption and labor supply instead.
-- **Nominal rigidities** decide how monetary policy works. With sticky wages, an expansion raises employment but
-  lowers the real wage; with sticky prices, labor demand is vertical and an expansion raises both.
-- Estimated DSGE models such as Smets–Wouters are **quantitative**: their impulse response functions say how much
-  and how fast GDP, consumption, hours and inflation respond to each shock.
+  equilibrium* (prices clear the markets). Their shocks fade as impulse responses, equation (1), and adjustment
+  costs delay their peak effects.
+- They grew out of **real business cycle** models, which added TFP shocks to the Solow model, equation (2). TFP is
+  measured as a Solow residual, equation (3); U.S. TFP growth swings a lot, but once utilization is removed,
+  equation (4), it does not fall in most recessions.
+- The **labor market** is a key block of every DSGE model. Labor demand and supply, equations (5) and (6), give
+  employment and the wage in equation (7). With consumption taken as given, a TFP fall or a sales tax lowers
+  employment and the wage together, like a recession; a rise in government purchases or good news acts through
+  consumption and labor supply instead.
+- **Nominal rigidities** decide how monetary policy works. With sticky wages, equation (8), an expansion raises
+  employment but lowers the real wage; with sticky prices, equation (9), labor demand is vertical and an expansion
+  raises both. Estimated DSGE models such as Smets–Wouters are **quantitative**: their impulse response functions
+  say how much and how fast GDP, consumption, hours and inflation respond to each shock.
 - The next chapter studies **consumption** itself: the permanent-income hypothesis and the microfoundations behind
   the consumption that this chapter took as given.

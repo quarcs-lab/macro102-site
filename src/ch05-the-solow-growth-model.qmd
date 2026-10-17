@@ -1,4 +1,4 @@
-# Chapter 5: The Solow Growth Model
+# 5. The Solow Growth Model
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/ch05-the-solow-growth-model.ipynb)
 
@@ -10,7 +10,10 @@ The Solow model explains where an economy's capital stock comes from. By the end
 chapter you will be able to:
 
 - draw the **Solow diagram** and explain why an economy moves toward a **steady state**;
-- compute the steady-state levels of capital and output per person from the model's parameters;
+- derive the model's two key equations from its five assumptions, and solve them step by step for the
+  steady-state levels of capital, output and consumption per person;
+- read the **comparative statics** of the steady state as elasticities, and explain why productivity matters more than investment;
+- derive how fast an economy grows on its way to the steady state, and how population growth changes the model;
 - run **experiments**: a higher investment rate, a higher depreciation rate, faster population
   growth, or an earthquake that destroys capital;
 - use the **principle of transition dynamics** to read cross-country data on growth and investment;
@@ -124,30 +127,206 @@ def country_menu(fig, shown, regions, label="Textbook countries"):
 
 The Solow model asks where an economy's capital comes from. Firms produce output with capital and labor, people save a fixed share of that output, and the savings become new machines and buildings. At the same time, part of the existing capital wears out every year. Capital per person grows as long as new investment is larger than depreciation, and it stops growing when the two are equal: that point is the **steady state**.
 
-The model takes three numbers as given, the investment rate, the depreciation rate and productivity, and it tells us the capital and output per person they lead to, both in the steady state and on the way there. Below we write the two key equations, solve for the steady state, and define the functions that every section of this notebook reuses: first to draw the Solow diagram, then to test it with data, and finally to run experiments such as a higher investment rate or an earthquake.
+The model takes a few numbers as given, the investment rate, the depreciation rate and productivity, and it tells us the capital and output per person they lead to, both in the steady state and on the way there. This section builds the model in three steps. First we write down its assumptions, then we solve it with algebra, and finally we read off its predictions. A second block adds population growth. At the end, `### The model in code` turns the key results into Python functions and checks each of them with numbers. Every later section of the notebook reuses these functions.
 
-The Solow model has two key equations. Output per person $y_t$ depends on capital per person
-$k_t$ with **diminishing returns**:
+A bar over a letter marks a **parameter**, a number we choose from outside the model, such as $\bar{s}$ or $\bar{A}$. Letters without a bar are **endogenous variables**: the model determines them. In the code we simply write `A`, `s`, `d` and `n`.
 
-$$y_t = \bar{A}\,k_t^{1/3} \qquad (5.6)$$
+<!-- cell -->
 
-and capital per person changes each year by **net investment**, which is new investment minus depreciation:
+### The basic Solow model
 
-$$\Delta k_{t+1} = \bar{s}\,y_t - \bar{d}\,k_t \qquad (5.7)$$
+#### Assumptions
 
-A bar over a letter marks a **parameter**, a number we choose from outside the model:
+The economy produces a single good. Time runs in years, $t = 0, 1, 2, \dots$, and five equations hold in every year.
 
-- $\bar{A}$ is productivity;
-- $\bar{s}$ is the investment rate, the share of output that is saved and invested;
-- $\bar{d}$ is the depreciation rate.
+**1. Production.** Output $Y_t$ is made with capital $K_t$ and labor $L_t$ using the Cobb-Douglas production function of Chapter 4:
 
-In the code we simply write `A`, `s` and `d`.
+$$Y_t = \bar{A}K_t^{1/3}L_t^{2/3}.$$
 
-The economy stops changing when investment exactly replaces the capital that wears out,
-$\bar{s}y^* = \bar{d}k^*$. Solving for $k^*$ gives the **steady state**:
+The exponents add up to one, so doubling both inputs doubles output (**constant returns to scale**). The exponent $1/3$ on capital matches the share of GDP that is paid to capital.
 
-$$k^* = \left(\frac{\bar{s}\bar{A}}{\bar{d}}\right)^{3/2} \quad (5.8) \qquad\qquad
-y^* = \left(\frac{\bar{s}}{\bar{d}}\right)^{1/2}\bar{A}^{3/2} \quad (5.9)$$
+**2. Using output.** What is produced is either consumed or invested. There is no government and no trade with other countries:
+
+$$C_t + I_t = Y_t.$$
+
+Economists call this a **resource constraint**. Subtracting $C_t$ from both sides gives $Y_t - C_t = I_t$: saving, income minus consumption, equals investment.
+
+**3. Capital accumulation.** Capital next year is the capital we have now, plus investment, minus the part that wears out. A constant fraction $\bar{d}$ of capital depreciates each year:
+
+$$K_{t+1} = K_t + I_t - \bar{d}K_t \quad\Longleftrightarrow\quad \Delta K_{t+1} = I_t - \bar{d}K_t,$$
+
+where $\Delta K_{t+1} \equiv K_{t+1} - K_t$ is the change in the capital stock. Capital is a **stock**: it carries over from one year to the next. Investment and depreciation are **flows** that happen during a year and change the stock. The model starts from a given capital stock $\bar{K}_0$.
+
+**4. Labor.** The number of workers is constant: $L_t = \bar{L}$. (The second block below lets it grow.)
+
+**5. Investment.** People invest a constant share $\bar{s}$ of output, between 0 and 1, and consume the rest:
+
+$$I_t = \bar{s}Y_t, \qquad\text{so that}\qquad C_t = (1-\bar{s})Y_t.$$
+
+The consumption equation is not a sixth assumption: it follows from assumptions 2 and 5.
+
+That gives five equations for the five endogenous variables $Y_t, K_t, L_t, C_t, I_t$, in every year:
+
+| Equation | Name | Parameters it uses |
+|---|---|---|
+| $Y_t = \bar{A}K_t^{1/3}L_t^{2/3}$ | production function | $\bar{A}$ |
+| $C_t + I_t = Y_t$ | resource constraint | none |
+| $\Delta K_{t+1} = I_t - \bar{d}K_t$ | capital accumulation | $\bar{d}$, and $\bar{K}_0$ to start |
+| $L_t = \bar{L}$ | labor force | $\bar{L}$ |
+| $I_t = \bar{s}Y_t$ | allocation of output | $\bar{s}$ |
+
+The model leaves out the markets for labor and capital. They are still there in the background: as in Chapter 4, the wage equals the marginal product of labor and the rental price of capital equals the marginal product of capital. We come back to the rental price when we look at the real interest rate.
+
+<!-- cell -->
+
+#### Solving the model
+
+**Step 1: from totals to per-person terms.** We care about living standards, so we work with output per person $y_t \equiv Y_t/L_t$ and capital per person $k_t \equiv K_t/L_t$. Divide the production function by $L_t$ and use the rules for exponents ([Appendix C.3](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.3-exponents-and-exponential-growth)):
+
+$$y_t = \frac{\bar{A}K_t^{1/3}L_t^{2/3}}{L_t} = \bar{A}K_t^{1/3}L_t^{2/3-1} = \bar{A}K_t^{1/3}L_t^{-1/3} = \bar{A}\left(\frac{K_t}{L_t}\right)^{1/3},$$
+
+so that
+
+$$y_t = \bar{A}k_t^{1/3}. \tag{1}$$
+
+Output per person depends only on capital per person, and with **diminishing returns**: each extra unit of $k$ adds less output than the one before, because the exponent $1/3$ is below one.
+
+**Step 2: one equation for capital.** Put the investment rule $I_t = \bar{s}Y_t$ into the capital accumulation equation:
+
+$$\underbrace{\Delta K_{t+1}}_{\text{change in capital}} = \underbrace{\bar{s}Y_t - \bar{d}K_t}_{\text{net investment}}.$$
+
+**Net investment** is investment minus depreciation. Labor is constant, so $\Delta k_{t+1} = k_{t+1} - k_t = (K_{t+1} - K_t)/\bar{L} = \Delta K_{t+1}/\bar{L}$. Dividing every term by $\bar{L}$ therefore gives the same equation per person:
+
+$$\Delta k_{t+1} = \bar{s}y_t - \bar{d}k_t. \tag{2}$$
+
+Equations (1) and (2) are the whole Solow model. Together they replace the five equations above with two equations in two unknowns, $y_t$ and $k_t$. Putting (1) into (2) leaves one equation that moves capital per person from one year to the next:
+
+$$\Delta k_{t+1} = \bar{s}\bar{A}k_t^{1/3} - \bar{d}k_t.$$
+
+There is no simple formula for $k_t$ in a given year. But we can do three things: draw the two terms on the right (the **Solow diagram** of Fig. 1), solve for the point where capital stops changing, and simulate the equation year by year on a computer (Fig. 5).
+
+**Step 3: the steady state.** The **steady state** $k^*$ is the level of capital at which net investment is zero, $\Delta k_{t+1} = 0$, so that investment exactly replaces the capital that wears out:
+
+$$\bar{s}y^* = \bar{d}k^* \quad\Longrightarrow\quad \bar{s}\bar{A}(k^*)^{1/3} = \bar{d}k^*.$$
+
+To solve for $k^*$, divide both sides by $\bar{d}$ and by $(k^*)^{1/3}$:
+
+$$\frac{\bar{s}\bar{A}}{\bar{d}} = \frac{k^*}{(k^*)^{1/3}} = (k^*)^{2/3}.$$
+
+Now raise both sides to the power $3/2$, because $\left((k^*)^{2/3}\right)^{3/2} = k^*$:
+
+$$k^* = \left(\frac{\bar{s}\bar{A}}{\bar{d}}\right)^{3/2}. \tag{3}$$
+
+Output per person in the steady state follows from the production function (1), $y^* = \bar{A}(k^*)^{1/3}$. The exponents multiply, $(3/2)\times(1/3) = 1/2$:
+
+$$y^* = \bar{A}\left(\frac{\bar{s}\bar{A}}{\bar{d}}\right)^{1/2} = \bar{A}\cdot\bar{A}^{1/2}\left(\frac{\bar{s}}{\bar{d}}\right)^{1/2},$$
+
+and since $\bar{A}\cdot\bar{A}^{1/2} = \bar{A}^{3/2}$,
+
+$$y^* = \left(\frac{\bar{s}}{\bar{d}}\right)^{1/2}\bar{A}^{3/2}. \tag{4}$$
+
+Consumption per person in the steady state is what is not invested, $c^* = (1-\bar{s})y^*$.
+
+With the values used throughout this notebook, $\bar{s} = 0.4$, $\bar{d} = 0.1$ and $\bar{A} = 1$: $\bar{s}\bar{A}/\bar{d} = 4$, so $k^* = 4^{3/2} = 8$, $y^* = 4^{1/2} = 2$ and $c^* = 0.6 \times 2 = 1.2$.
+
+*Why it settles down.* Investment $\bar{s}\bar{A}k^{1/3}$ grows more slowly than depreciation $\bar{d}k$ as capital rises. The reason is diminishing returns: each new machine adds less output, and so less investment, than the one before, but it adds the same amount $\bar{d}$ to depreciation. Sooner or later depreciation catches up with investment, and accumulation stops.
+
+**Step 4: the capital-output ratio.** Divide both sides of the steady-state condition $\bar{s}y^* = \bar{d}k^*$ by $\bar{d}y^*$. Since $k/y = (K/L)/(Y/L) = K/Y$,
+
+$$\frac{K^*}{Y^*} = \frac{k^*}{y^*} = \frac{\bar{s}}{\bar{d}}. \tag{5}$$
+
+This ratio does not depend on productivity at all. With $\bar{s} = 0.4$ and $\bar{d} = 0.1$, the economy holds capital worth 4 years of output. Fig. 3 tests this prediction with data.
+
+**Step 5: the speed of growth on the way to the steady state.** Divide equation (2) by $k_t$ to get the growth rate of capital per person, then use the production function:
+
+$$g_{k,t} \equiv \frac{\Delta k_{t+1}}{k_t} = \bar{s}\frac{y_t}{k_t} - \bar{d} = \bar{s}\bar{A}k_t^{-2/3} - \bar{d}.$$
+
+The steady-state condition from step 3 says $\bar{s}\bar{A} = \bar{d}(k^*)^{2/3}$. Substituting it gives a formula that depends only on how far the economy is from its steady state:
+
+$$g_{k,t} = \bar{d}\left[\left(\frac{k^*}{k_t}\right)^{2/3} - 1\right]. \tag{6}$$
+
+Output per person grows about a third as fast as capital per person, $g_{y,t} \approx \tfrac{1}{3}g_{k,t}$, by the growth rule for powers ([Appendix C.5](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.5-growth-rates-and-the-growth-rules)). Equation (6) is the algebra behind the **principle of transition dynamics**: an economy grows faster the larger the percentage gap between its capital and the steady state, and its growth turns negative once it is above the steady state. With $\bar{d} = 0.1$, an economy at half its steady-state capital grows its capital by $0.1\times(2^{2/3}-1) \approx 5.9\%$ a year. At 95 percent of the steady state the rate is only about $0.35\%$.
+
+**Step 6: comparing two countries.** Write equation (4) for two countries with the same depreciation rate and divide one by the other. The $\bar{d}$ terms cancel:
+
+$$\frac{y^*_1}{y^*_2} = \left(\frac{\bar{A}_1}{\bar{A}_2}\right)^{3/2}\times\left(\frac{\bar{s}_1}{\bar{s}_2}\right)^{1/2}. \tag{7}$$
+
+The gap in long-run incomes splits into a productivity part and an investment part. We use this formula for rich and poor countries in Fig. 3 and for Korea and the United States in Fig. 10.
+
+**Step 7: the real interest rate.** The **real interest rate** is what one unit of output earns when it is saved for a year. In this model saving becomes investment and investment becomes capital, so a saved unit earns the rental price of capital, which equals the marginal product of capital. With $y = \bar{A}k^{1/3}$, the marginal product of capital is $\frac{1}{3}\bar{A}k^{-2/3} = \frac{1}{3}\,y/k$ (Chapter 4). In the steady state, equation (5) gives $y^*/k^* = \bar{d}/\bar{s}$, so
+
+$$r^* = \frac{1}{3}\cdot\frac{\bar{d}}{\bar{s}}.$$
+
+With our values, $r^* = 0.1/(3\times0.4) \approx 8.3\%$. An economy that invests more ends up with more capital per unit of output, and so a lower return on the last unit of capital.
+
+<!-- cell -->
+
+#### What the model predicts
+
+**Comparative statics.** Take logs of equations (3) and (4) ([Appendix C.4](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.4-logarithms)):
+
+$$\ln k^* = \tfrac{3}{2}\ln\bar{s} + \tfrac{3}{2}\ln\bar{A} - \tfrac{3}{2}\ln\bar{d}, \qquad
+\ln y^* = \tfrac{1}{2}\ln\bar{s} + \tfrac{3}{2}\ln\bar{A} - \tfrac{1}{2}\ln\bar{d}.$$
+
+Each coefficient is an **elasticity**: the percentage change in $k^*$ or $y^*$ when that parameter rises by 1 percent.
+
+| A 1% rise in ... | changes $k^*$ by | changes $y^*$ by | Which curve of the Solow diagram moves |
+|---|---|---|---|
+| investment rate $\bar{s}$ | $+1.5\%$ | $+0.5\%$ | the investment curve rotates up |
+| productivity $\bar{A}$ | $+1.5\%$ | $+1.5\%$ | the investment curve (and the output curve) rotate up |
+| depreciation rate $\bar{d}$ | $-1.5\%$ | $-0.5\%$ | the depreciation line rotates up |
+| labor force $\bar{L}$ | $0$ | $0$ | none: per-person values do not depend on scale |
+
+These numbers hold for any parameter values, because the formulas are powers. For large changes, use the ratios directly: doubling $\bar{s}$ multiplies $y^*$ by $2^{1/2} \approx 1.41$, while doubling $\bar{A}$ multiplies it by $2^{3/2} \approx 2.83$. A larger labor force raises total capital $K^* = \bar{L}k^*$ and total output $Y^* = \bar{L}y^*$ one for one, but leaves the per-person values unchanged.
+
+**Why productivity matters more than investment.** In the production model of Chapter 4, with capital per person fixed at $\bar{k}$, output per person was $y^* = \bar{A}\bar{k}^{1/3}$: the exponent on $\bar{A}$ was 1. In the Solow model it is $3/2$. Writing $y^* = \bar{A}\times(k^*)^{1/3}$ shows why. Productivity raises output directly (the exponent 1), and the extra output means more investment and so more capital, which raises output again (another $1/2$, from $(k^*)^{1/3} = (\bar{s}\bar{A}/\bar{d})^{1/2}$). Investment rates work only through the second channel, with exponent $1/2$, because of diminishing returns. So differences in investment explain only a small part of the income gaps between countries, and differences in productivity explain most of them.
+
+**No long-run growth.** In the steady state $k$, $y$ and $c = (1-\bar{s})y$ are all constant. Capital accumulation raises output per person for a while, during the transition, but diminishing returns stop it. Capital accumulation alone cannot explain the steady growth in living standards that we see in the data. Chapter 6 adds new ideas to explain it.
+
+**Transition dynamics.** From any starting capital $\bar{k}_0 > 0$ the economy moves toward $k^*$. It grows when $k_t < k^*$ and shrinks when $k_t > k^*$, faster the farther away it is (equation 6). A permanent change in $\bar{s}$, $\bar{A}$ or $\bar{d}$ moves the steady state, and the economy grows or shrinks on its way to the new one (Figs. 4–7). A one-time loss of capital, such as an earthquake or a war, leaves the steady state unchanged: the economy simply grows back, fastest right after the shock (Figs. 12–13). Countries that are far below their steady states should grow faster than countries close to theirs (Figs. 8–9).
+
+<!-- cell -->
+
+### Adding population growth
+
+#### Assumptions
+
+Keep every assumption above except the labor force: now the population, and with it the number of workers, grows at a constant rate $\bar{n}$,
+
+$$\frac{\Delta L_{t+1}}{L_t} = \bar{n}.$$
+
+#### Solving the model
+
+The production function per person, equation (1), does not change: dividing by $L_t$ works in the same way in every year. What changes is the accumulation equation, because $k_t = K_t/L_t$ now changes for two reasons: capital changes and the number of people changes. The growth rate of a ratio is the growth rate of the numerator minus the growth rate of the denominator, $g_k = g_K - g_L$ ([Appendix C.5](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.5-growth-rates-and-the-growth-rules); the rule is exact in continuous time and a close approximation for yearly data). Step by step:
+
+$$\frac{\Delta k_{t+1}}{k_t} = \frac{\Delta K_{t+1}}{K_t} - \frac{\Delta L_{t+1}}{L_t} = \frac{\bar{s}Y_t - \bar{d}K_t}{K_t} - \bar{n} = \bar{s}\frac{Y_t}{K_t} - \bar{d} - \bar{n} = \bar{s}\frac{y_t}{k_t} - (\bar{n}+\bar{d}).$$
+
+The last step uses $Y/K = y/k$. Multiplying both sides by $k_t$:
+
+$$\Delta k_{t+1} = \bar{s}y_t - (\bar{n}+\bar{d})k_t. \tag{8}$$
+
+Compared with equation (2), the depreciation rate $\bar{d}$ is replaced by $\bar{n}+\bar{d}$. Investment must now do two jobs: replace the capital that wears out, and give each new person the same capital as everyone else. Only what is left after both raises capital per person.
+
+The steady state follows exactly as before, with $\bar{n}+\bar{d}$ in place of $\bar{d}$. Setting $\Delta k_{t+1} = 0$ in (8) gives $\bar{s}\bar{A}(k^*)^{1/3} = (\bar{n}+\bar{d})k^*$, so
+
+$$k^* = \left(\frac{\bar{s}\bar{A}}{\bar{n}+\bar{d}}\right)^{3/2}
+\qquad\text{and}\qquad
+y^* = \bar{A}^{3/2}\left(\frac{\bar{s}}{\bar{n}+\bar{d}}\right)^{1/2}. \tag{9}$$
+
+With $\bar{s} = 0.4$, $\bar{n} = 0.02$ and $\bar{d} = 0.08$ (the starting values of Fig. 11), $\bar{n}+\bar{d} = 0.10$, so $k^* = 8$ and $y^* = 2$ as before.
+
+#### What the model predicts
+
+- **Still no long-run growth per person.** The economy again converges to constant $k^*$ and $y^*$.
+- **Faster population growth lowers income per person.** In logs, $\ln y^* = \frac{3}{2}\ln\bar{A} + \frac{1}{2}\ln\bar{s} - \frac{1}{2}\ln(\bar{n}+\bar{d})$. A 1% rise in $\bar{n}+\bar{d}$ lowers $y^*$ by 0.5%. Raising $\bar{n}$ from 0.02 to 0.03 raises $\bar{n}+\bar{d}$ from 0.10 to 0.11 and lowers $y^*$ by the factor $(0.10/0.11)^{1/2} \approx 0.95$, about 5 percent.
+- **Total GDP grows.** $Y_t = y_tL_t$, so $g_Y = g_y + g_L$ by the growth rule for a product. In the steady state $g_y = 0$, so total output, total capital and population all grow at the rate $\bar{n}$.
+- **Size does not matter per person.** With constant returns to scale, an economy with 100 times more people and 100 times more capital has the same output per person. That is why population growth makes the economy bigger but not richer per person. Chapter 6 shows how ideas change this.
+
+<!-- cell -->
+
+### The model in code
+
+We now turn the key results into Python functions. Each function's description names the equation it computes. The cells after it check the algebra above with numbers.
 
 > **Python note.** `def` creates a *function*: a named recipe that takes inputs (the
 > *arguments*) and gives back a result with `return`. Writing `A=1.0` gives the argument a
@@ -156,16 +335,22 @@ y^* = \left(\frac{\bar{s}}{\bar{d}}\right)^{1/2}\bar{A}^{3/2} \quad (5.9)$$
 
 ```{python}
 def output(k, A=1.0):
-    """Output per person: y = A k^(1/3)   (equation 5.6)."""
+    """Output per person: y = A k^(1/3)   (equation 1)."""
     return A * k ** (1 / 3)
 
 
 def steady_state_k(s, d, A=1.0, n=0.0):
-    """Steady-state capital per person: k* = (s A / (n + d))^(3/2)   (equation 5.8; n is used in Fig. 11)."""
+    """Steady-state capital per person: k* = (s A / (n + d))^(3/2)   (equations 3 and 9; n is used in Fig. 11)."""
     return (s * A / (n + d)) ** (3 / 2)
+
+
+def steady_state_y(s, d, A=1.0, n=0.0):
+    """Steady-state output per person: y* = A^(3/2) (s / (n + d))^(1/2)   (equations 4 and 9)."""
+    return A ** (3 / 2) * (s / (n + d)) ** (1 / 2)
 ```
 
 Let us try the functions with the values used throughout this chapter: $\bar{s}=0.4$, $\bar{d}=0.1$, $\bar{A}=1$.
+The formula for $y^*$ and the production function applied to $k^*$ must give the same number.
 
 > **Python note.** An *f-string* such as `f"k* = {k_star:.2f}"` inserts the value of a variable
 > into a piece of text; `:.2f` means "show two decimals".
@@ -175,7 +360,63 @@ k_star = steady_state_k(s=0.4, d=0.1)
 y_star = output(k_star)
 print(f"Steady-state capital per person k* = {k_star:.2f}")
 print(f"Steady-state output per person  y* = {y_star:.2f}")
-print(f"Check with equation (5.9):      y* = {(0.4 / 0.1) ** 0.5 * 1.0 ** 1.5:.2f}")
+print(f"Check with equation (4):        y* = {steady_state_y(s=0.4, d=0.1):.2f}")
+print(f"Consumption per person          c* = {(1 - 0.4) * y_star:.2f}")
+print(f"Capital-output ratio, eq. (5): k*/y* = {k_star / y_star:.2f}   and s/d = {0.4 / 0.1:.2f}")
+print(f"Real interest rate (1/3)(d/s):   r* = {100 * 0.1 / (3 * 0.4):.1f}%")
+```
+
+**Check 1: the economy really converges to $k^*$.** The formula for $k^*$ came from algebra. Here we start
+from very little capital and apply equation (2) for 300 years, one year at a time.
+
+> **Python note.** `range(300)` counts 0, 1, ..., 299, so the `for` loop runs its indented lines 300 times.
+> `k = k + ...` replaces the old value of `k` by the new one. `if year in (10, 50, 100)` is true only in those years.
+
+```{python}
+k = 1.0                                          # start far below the steady state
+for year in range(300):
+    if year in (10, 50, 100):
+        print(f"Year {year:3d}: k = {k:.3f}")
+    k = k + 0.4 * output(k) - 0.1 * k            # equation (2)
+print(f"Year 300: k = {k:.3f}   (formula: k* = {steady_state_k(s=0.4, d=0.1):.3f})")
+```
+
+**Check 2: the elasticities.** Raise each parameter by 1 percent and see by what percentage $y^*$ changes. The
+table above predicts $+0.5\%$ for $\bar{s}$, $+1.5\%$ for $\bar{A}$ and $-0.5\%$ for $\bar{d}$.
+
+```{python}
+base = steady_state_y(s=0.4, d=0.1, A=1.0)
+change_s = steady_state_y(s=0.4 * 1.01, d=0.1, A=1.0) / base - 1
+change_A = steady_state_y(s=0.4, d=0.1, A=1.0 * 1.01) / base - 1
+change_d = steady_state_y(s=0.4, d=0.1 * 1.01, A=1.0) / base - 1
+print(f"1% higher s: y* changes by {100 * change_s:+.3f}%")
+print(f"1% higher A: y* changes by {100 * change_A:+.3f}%")
+print(f"1% higher d: y* changes by {100 * change_d:+.3f}%")
+```
+
+The answers are close to 0.5, 1.5 and −0.5 but not exact, because an elasticity describes very small
+changes and 1 percent is small but not zero.
+
+**Check 3: the speed of transition.** Equation (6) says that the growth rate of capital depends only on how far
+$k_t$ is from $k^*$. We compare it with the growth rate computed directly from equation (2).
+
+```{python}
+k_star = steady_state_k(s=0.4, d=0.1)
+for share in (0.5, 0.95, 1.5):                   # capital at 50%, 95% and 150% of the steady state
+    k = share * k_star
+    direct = (0.4 * output(k) - 0.1 * k) / k             # growth rate from equation (2)
+    formula = 0.1 * ((k_star / k) ** (2 / 3) - 1)        # equation (6)
+    print(f"k = {share:.0%} of k*: growth of k = {100 * direct:+.2f}% (direct), {100 * formula:+.2f}% (eq. 6)")
+```
+
+**Check 4: population growth.** With $\bar{n} = 0.02$ and $\bar{d} = 0.08$, equation (9) gives the same steady
+state as $\bar{n} = 0$ and $\bar{d} = 0.1$. A faster population growth of 3 percent lowers $y^*$ by about 5 percent.
+
+```{python}
+y_n2 = steady_state_y(s=0.4, d=0.08, n=0.02)
+y_n3 = steady_state_y(s=0.4, d=0.08, n=0.03)
+print(f"n = 2%: y* = {y_n2:.3f}")
+print(f"n = 3%: y* = {y_n3:.3f}   ({100 * (y_n3 / y_n2 - 1):+.1f}%)")
 ```
 
 ### Drawing the curves
@@ -248,7 +489,7 @@ We start with the diagram that solves the model: investment and depreciation aga
 
 **Goal.** See why the economy moves toward the steady state $k^*$ from any starting point $k_0$.
 
-The Solow diagram plots the two parts of equation (5.7) against capital per person $k$:
+The Solow diagram plots the two parts of equation (2) against capital per person $k$:
 
 - **investment** $\bar{s}y = \bar{s}\bar{A}k^{1/3}$, which is a curve because of diminishing returns;
 - **depreciation** $\bar{d}k$, which is a straight line.
@@ -323,7 +564,7 @@ default ($k^*=8$). Then check your answer with `steady_state_k` in the empty cel
 
 <details><summary>Hint</summary>
 
-Equation (5.8) shows that $k^*$ depends on $\bar{s}$ and $\bar{d}$ only through the ratio $\bar{s}/\bar{d}$ (with $\bar{A}=1$).
+Equation (3) shows that $k^*$ depends on $\bar{s}$ and $\bar{d}$ only through the ratio $\bar{s}/\bar{d}$ (with $\bar{A}=1$).
 
 </details>
 
@@ -384,7 +625,7 @@ slider_figure(solow_with_output, "s", [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7], start
 **What to notice.**
 
 - The black bar $c^*$ is steady-state consumption. A higher $\bar{s}$ raises $y^*$, but it also means a larger share of output is invested rather than consumed.
-- Productivity $\bar{A}$ moves *both* the output curve and the investment curve. That is why it has such a large effect on $y^*$: the exponent on $\bar{A}$ in equation (5.9) is $3/2$.
+- Productivity $\bar{A}$ moves *both* the output curve and the investment curve. That is why it has such a large effect on $y^*$: the exponent on $\bar{A}$ in equation (4) is $3/2$.
 
 **Your turn.** Move the investment rate up step by step from 0.1 and watch the consumption readout in the
 title. Which investment rate gives the *highest* steady-state consumption?
@@ -412,9 +653,9 @@ The steady state makes a simple prediction about capital and investment across c
 
 **Goal.** Test a prediction of the Solow model with real data.
 
-In the steady state $\bar{s}y^* = \bar{d}k^*$, so the **capital-output ratio** is simply
+In the steady state $\bar{s}y^* = \bar{d}k^*$, so the **capital-output ratio** is simply (equation 5)
 
-$$\frac{K^*}{Y^*} = \frac{k^*}{y^*} = \frac{\bar{s}}{\bar{d}} \qquad (5.11)$$
+$$\frac{K^*}{Y^*} = \frac{k^*}{y^*} = \frac{\bar{s}}{\bar{d}}$$
 
 If depreciation rates are similar across countries, countries that invest a larger share of their
 output should have more capital relative to output. Let us check this with the Penn World Table.
@@ -488,10 +729,10 @@ above the line have more capital than their investment rate alone would suggest.
 
 #### Key numbers: how much of the rich–poor gap is due to investment?
 
-Using equation (5.9), and assuming equal depreciation rates, the income ratio between rich and
-poor countries splits into a productivity part and an investment part:
+With equal depreciation rates, equation (7) splits the income ratio between rich and poor
+countries into a productivity part and an investment part:
 
-$$\frac{y^*_{rich}}{y^*_{poor}} = \left(\frac{\bar{A}_{rich}}{\bar{A}_{poor}}\right)^{3/2} \times \left(\frac{\bar{s}_{rich}}{\bar{s}_{poor}}\right)^{1/2} \qquad (5.12)$$
+$$\frac{y^*_{rich}}{y^*_{poor}} = \left(\frac{\bar{A}_{rich}}{\bar{A}_{poor}}\right)^{3/2} \times \left(\frac{\bar{s}_{rich}}{\bar{s}_{poor}}\right)^{1/2}$$
 
 In the textbook, the five richest countries are 75 times richer than the five poorest, and
 investment rates differ by a factor of about 4. Investment therefore explains a factor of $\sqrt{4}=2$,
@@ -620,11 +861,11 @@ slider_figure(increase_in_s, "s_new", [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8], start
 - Set $\bar{s}' < \bar{s}$ and the experiment runs in reverse: capital falls to a lower steady state.
 
 **Your turn.** By what factor does $k^*$ rise when $\bar{s}$ doubles from 0.3 to 0.6? Read it off the
-title, then confirm it with equation (5.8) in the cell below.
+title, then confirm it with equation (3) in the cell below.
 
 <details><summary>Hint</summary>
 
-From equation (5.8), $k^{**}/k^* = (\bar{s}'/\bar{s})^{3/2}$, whatever the values of $\bar{A}$ and $\bar{d}$.
+From equation (3), $k^{**}/k^* = (\bar{s}'/\bar{s})^{3/2}$, whatever the values of $\bar{A}$ and $\bar{d}$.
 
 </details>
 
@@ -638,7 +879,7 @@ From equation (5.8), $k^{**}/k^* = (\bar{s}'/\bar{s})^{3/2}$, whatever the value
 **Goal.** Follow output per person **year by year** after the investment rate rises in 2030.
 
 The Solow model cannot be solved with a formula for every year, but a computer can simply apply
-equation (5.7) one year at a time. This is called a **simulation**. The function below starts the
+equation (2) one year at a time. This is called a **simulation**. The function below starts the
 economy in its old steady state and changes the parameters in `change_year`. We will reuse it in
 Figs. 7 and 13.
 
@@ -665,7 +906,7 @@ def simulate(s_old=0.4, s_new=0.4, d_old=0.1, d_new=0.1, destroyed=0.0,
         if year == change_year:
             k = k * (1 - destroyed)                    # an earthquake or a war destroys capital
         y_path.append(output(k, A))
-        k = k + s * output(k, A) - d * k               # capital accumulation, equation (5.7)
+        k = k + s * output(k, A) - d * k               # capital accumulation, equation (2)
     return years, np.array(y_path)
 ```
 
@@ -811,7 +1052,7 @@ slider_figure(increase_in_d, "d_new", [0.06, 0.08, 0.1, 0.12, 0.15, 0.18, 0.2], 
 - Only the line that contains the changed parameter moves. This is the first step in every Solow experiment.
 
 **Your turn.** Which depreciation rate $\bar{d}'$ would cut steady-state capital exactly in half? Find it with
-the slider first, then solve equation (5.8) in the cell below.
+the slider first, then solve equation (3) in the cell below.
 
 <details><summary>Hint</summary>
 
@@ -1227,9 +1468,9 @@ The vertical axis stays at 0–60 percent; drag on the chart to zoom out for the
 
 #### Key numbers: Korea relative to the United States
 
-With equal depreciation rates, equation (5.9) gives the ratio of steady-state incomes:
+With equal depreciation rates, equation (7) gives the ratio of steady-state incomes:
 
-$$\frac{y^*_{Korea}}{y^*_{US}} = \left(\frac{\bar{A}_{Korea}}{\bar{A}_{US}}\right)^{3/2} \times \left(\frac{\bar{s}_{Korea}}{\bar{s}_{US}}\right)^{1/2} \qquad (5.13)$$
+$$\frac{y^*_{Korea}}{y^*_{US}} = \left(\frac{\bar{A}_{Korea}}{\bar{A}_{US}}\right)^{3/2} \times \left(\frac{\bar{s}_{Korea}}{\bar{s}_{US}}\right)^{1/2}$$
 
 We take the investment rates from the data, and then ask what productivity ratio would explain
 the actual income ratio in 2023.
@@ -1240,9 +1481,9 @@ y_kor = latest[latest.country == "Republic of Korea"].gdp_pc.iloc[0]
 y_usa = latest[latest.country == "United States"].gdp_pc.iloc[0]
 
 investment_part = (s_kor / s_usa) ** 0.5
-A_ratio = ((y_kor / y_usa) / investment_part) ** (2 / 3)      # solve (5.13) for A_Korea / A_US
+A_ratio = ((y_kor / y_usa) / investment_part) ** (2 / 3)      # solve equation (7) for A_Korea / A_US
 print(f"Investment rates since 1990: Korea {s_kor:.1f}%, United States {s_usa:.1f}%")
-print(f"Investment part of (5.13):   {investment_part:.2f}")
+print(f"Investment part of eq. (7):  {investment_part:.2f}")
 print(f"Actual income ratio, 2023:   {y_kor / y_usa:.2f}")
 print(f"Implied productivity ratio:  {A_ratio:.2f}")
 ```
@@ -1274,11 +1515,12 @@ Adding population growth gives a second reason why capital per person can fall, 
 
 Every year new workers arrive, and they must be equipped with capital too. Part of investment
 is therefore used up just to keep capital *per person* constant. The capital accumulation equation becomes
+equation (8):
 
-$$\Delta k_{t+1} = \bar{s}y_t - (\bar{n}+\bar{d})\,k_t \qquad (5.15)$$
+$$\Delta k_{t+1} = \bar{s}y_t - (\bar{n}+\bar{d})\,k_t$$
 
 so population growth works like extra depreciation. The steady state is
-$y^* = \bar{A}^{3/2}\left(\frac{\bar{s}}{\bar{n}+\bar{d}}\right)^{1/2}$ (5.16). In the figure, the dashed gray
+$y^* = \bar{A}^{3/2}\left(\frac{\bar{s}}{\bar{n}+\bar{d}}\right)^{1/2}$ (equation 9). In the figure, the dashed gray
 line $\bar{d}k$ shows the case without population growth. We keep $\bar{n}+\bar{d}=0.10$ at the start, so the
 baseline is the same as in Fig. 1.
 
@@ -1489,8 +1731,9 @@ The farther below the steady state, the faster the growth. A bigger shock starts
 
 ## Concluding remarks
 
-- The Solow model makes capital **endogenous**. Capital grows when investment $\bar{s}y$ exceeds depreciation $\bar{d}k$, and it stops growing at the **steady state** $k^* = (\bar{s}\bar{A}/\bar{d})^{3/2}$.
+- The Solow model makes capital **endogenous**. Its two key equations, the production function (1) and capital accumulation (2), say that capital grows when investment $\bar{s}y$ exceeds depreciation $\bar{d}k$. It stops growing at the **steady state**, equations (3) and (4): $k^* = (\bar{s}\bar{A}/\bar{d})^{3/2}$ and $y^* = (\bar{s}/\bar{d})^{1/2}\bar{A}^{3/2}$.
+- The elasticities of $y^*$ are $3/2$ for productivity and only $1/2$ for the investment rate, so productivity differences explain most income gaps between countries (equation 7).
 - Because of **diminishing returns** to capital, capital accumulation cannot be the engine of long-run growth: output per person settles at a constant $y^*$.
-- Changes in $\bar{s}$, $\bar{d}$ or $\bar{n}$ change the *level* of the steady state. The economy then grows or shrinks for a while, and fastest when it is farthest from the steady state (the **principle of transition dynamics**).
-- The data agree with the model on capital-output ratios and on catch-up within the OECD. But for the world as a whole, productivity differences, not investment, explain most of the gap between rich and poor countries.
+- Changes in $\bar{s}$, $\bar{d}$ or $\bar{n}$ change the *level* of the steady state. The economy then grows or shrinks for a while, and fastest when it is farthest from the steady state (the **principle of transition dynamics**, equation 6). Population growth works like extra depreciation, equations (8) and (9).
+- The data agree with the model on capital-output ratios (equation 5) and on catch-up within the OECD. But for the world as a whole, productivity differences, not investment, explain most of the gap between rich and poor countries.
 - The next chapter looks for the engine of long-run growth: new **ideas**.

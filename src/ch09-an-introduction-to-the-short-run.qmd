@@ -1,4 +1,4 @@
-# Chapter 9: An Introduction to the Short Run
+# 9. An Introduction to the Short Run
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/ch09-an-introduction-to-the-short-run.ipynb)
 
@@ -9,11 +9,13 @@
 The long-run model of Chapters 3–8 tells us where the economy is heading on average. This chapter
 looks at the ups and downs around that path. By the end of it you will be able to:
 
-- split actual output into **potential output** $\bar{Y}_t$ and **short-run output** $\tilde{Y}_t$, and
-  compute $\tilde{Y}_t$ from data;
+- split actual output into **potential output** $\bar{Y}_t$ and **short-run output** $\tilde{Y}_t$, derive
+  its percent, log and growth-rate forms, and compute $\tilde{Y}_t$ from data;
 - describe U.S. recessions with data on output, employment and inflation, and measure what they cost;
-- explain the **Phillips curve**: a booming economy raises inflation, a slump lowers it;
-- use **Okun's law** to move between short-run output and unemployment;
+- explain the **Phillips curve** and solve it forward in time, to derive the inflation path of a lasting boom
+  and the output cost of bringing inflation down;
+- use **Okun's law** to move between short-run output and unemployment, derive its growth-rate form, and read
+  the comparative statics of both relationships (sign and slope of each effect, and which line moves);
 - in Python: shade recessions on a chart, fit a straight line with `np.polyfit`, compare two vintages
   of the same data, and simulate inflation year by year with a loop.
 
@@ -111,41 +113,249 @@ def add_legend_traces(fig, traces, keep=()):
 
 ## Model overview
 
-So far the book has studied the long run: what sets income per person, growth and inflation over decades. But from year to year the economy does not follow its trend smoothly. It booms, it falls into recessions, jobs are lost and found, and inflation speeds up and slows down. This chapter is a first look at these **short-run fluctuations**, and at the tools economists use to measure them.
+From one year to the next, the economy does not glide along its long-run path. It overheats and it slumps, workers lose jobs and find new ones, and inflation drifts up and down. This chapter does not yet build a complete model of these movements. Instead it sets up the **frameworks** that the next chapters build on, and they answer three questions. How do we split output into a trend and a cycle? What does the cycle do to inflation? And what does it do to unemployment?
 
-The short-run model takes the long run as given: potential output and long-run inflation come from the earlier chapters. What it explains is how far actual output strays from potential, measured as **short-run output**, and what that gap does to inflation (the **Phillips curve**) and to unemployment (**Okun's law**). Below we write these three relationships as small functions and add the data helpers, such as recession shading and data for other countries, that the sections reuse: first to separate trend from cycle, then to document U.S. fluctuations, and finally to fit the Phillips curve and Okun's law and run a simple experiment.
+The road map follows those questions. The first block defines potential output and short-run output, and shows how to work with them as percentages, as log differences and as growth rates. The second block writes down the **Phillips curve** and solves it forward in time, which gives the inflation cost of a boom and the output cost of bringing inflation down. The third block adds **Okun's law**, which translates an output gap into an unemployment gap. The fourth block previews how the full short-run model of Chapters 11–13 connects these pieces. At the end, `### The model in code` turns the key results into Python functions and checks each of them with numbers.
 
-The short-run model takes the long run as given. **Potential output** $\bar{Y}_t$ and the long-run
-inflation rate $\bar{\pi}$ come from the long-run model, so they carry bars: they are exogenous here.
-The model explains how **actual output** $Y_t$ and **inflation** $\pi_t$ move around them.
+**Notation.** A bar marks a value that the short-run model takes as given: potential output $\bar{Y}_t$, the long-run inflation rate $\bar{\pi}$ and the natural rate of unemployment $\bar{u}$ come from the long-run model, and parameters such as the slope $\bar{\nu}$ (the Greek letter *nu*) are chosen from outside. A tilde marks a short-run deviation from the long run, as in $\tilde{Y}_t$. The symbol $\Delta$ is the change from the year before, for example $\Delta\pi_t \equiv \pi_t - \pi_{t-1}$. Short-run output is measured in percent and inflation in percent, so changes in inflation are in percentage points ("points"), as in the textbook's figures.
 
-Actual output is the long-run trend plus short-run fluctuations (equation 9.1). We measure the
-fluctuations in percent of potential output and call them **short-run output**:
-
-$$\tilde{Y}_t \equiv \frac{Y_t - \bar{Y}_t}{\bar{Y}_t} \qquad (9.2)$$
-
-When the economy booms, $Y_t > \bar{Y}_t$ and $\tilde{Y}_t > 0$. In a recession, $\tilde{Y}_t < 0$.
-Two more relationships complete this first look at the short run:
-
-- the **Phillips curve**: inflation rises when output is above potential and falls when it is below,
-  $\Delta\pi_t = \bar{\nu}\,\tilde{Y}_t$. Chapter 12 calls the slope $\bar{\nu}$ (the Greek letter *nu*);
-- **Okun's law**: unemployment is above its natural rate $\bar{u}$ when output is below potential,
-  $u_t - \bar{u} = -\tfrac{1}{2}\,\tilde{Y}_t$ (equation 9.3).
-
-In the code, $\tilde{Y}$, $\Delta\pi$ and $u-\bar{u}$ are all measured in percent (or percentage points),
-as in the textbook's figures.
-
-**One baseline for every diagram.** The textbook's diagrams 9.1 and 9.6 print no numbers, so all the
-model figures of this notebook share one illustrative baseline:
+**One baseline for every diagram.** The textbook's Figs. 9.1 and 9.6 print no numbers, so every model figure and every worked example below starts from one illustrative baseline:
 
 - potential output starts at $\bar{Y}_0 = 100$ and grows by $\bar{g} = 2$ percent a year;
-- short-run output swings between $+2$ and $-2$ percent (the $\pm 2\%$ marked in Fig. 9.1), in a
-  cycle that repeats every 8 years;
+- short-run output follows a wave between $+2$ and $-2$ percent (the $\pm 2\%$ marked in Fig. 9.1) that repeats every 8 years, $\tilde{Y}_t = 2\sin(2\pi t/8)$ percent. In whole years it takes the values $0, +1.41, +2, +1.41, 0, -1.41, -2, -1.41, 0$;
 - the slope of the Phillips curve is $\bar{\nu} = 0.33$, the textbook's "about 1/3" for the United States;
 - long-run inflation is $\bar{\pi} = 2$ percent, and Okun's slope is $-1/2$.
 
-Fig. 9 is the worked answer to a textbook exercise, which gives its own numbers ($\bar{\nu} = 1$,
-$\tilde{Y} = +3\%$), and we use those there.
+Fig. 9 is the worked answer to a textbook exercise, which gives its own numbers ($\bar{\nu} = 1$, $\tilde{Y} = +3\%$), and we use those there.
+
+<!-- cell -->
+
+### Trend and cycle: potential output and short-run output
+
+#### Definitions
+
+**Two models with two jobs.** The book uses two models side by side:
+
+| Model | What it determines | Built in |
+|---|---|---|
+| long-run model | potential output $\bar{Y}_t$ and long-run inflation $\bar{\pi}$ | Chapters 3–8 (the combined Solow–Romer model of [Chapter 6](https://quarcs-lab.github.io/macro102-site/notebooks/ch06-growth-and-ideas.html), the quantity theory of Chapter 8) |
+| short-run model | actual output $Y_t$ and actual inflation $\pi_t$, year by year or quarter by quarter | Chapters 9–15 |
+
+In the short-run model, $\bar{Y}_t$ and $\bar{\pi}$ are **exogenous**: they are handed over from the long-run model, which is why they wear bars. The **endogenous** variables are $Y_t$ and $\pi_t$. The long-run inflation rate has no time subscript, because in the end it is a stable target that policymakers pick (Chapter 13).
+
+**Potential output** $\bar{Y}_t$ is what the economy produces when capital, labor and ideas are used at rates it can keep up year after year. It is a sustainable level, not a ceiling: for a while, firms can produce more than potential by running overtime shifts or by putting off maintenance, and they can also produce less.
+
+**Shocks** push actual output away from potential: a jump in oil prices, a freeze in financial markets, a tax cut, a new technology that delivers or disappoints, a natural disaster, a boom or slump abroad. **The short run** is the stretch of time over which such deviations last, typically about two years.
+
+**Short-run output.** Any output level can be split into the trend and the deviation from it, $Y_t = \bar{Y}_t + (Y_t - \bar{Y}_t)$. A gap of 100 million dollars is large for a small economy and tiny for a big one, so we scale the deviation by potential output:
+
+$$\tilde{Y}_t \equiv \frac{Y_t - \bar{Y}_t}{\bar{Y}_t}. \tag{1}$$
+
+$\tilde{Y}_t$ is the **percentage gap** between actual and potential output. It is also called the **output gap** or **detrended output**, because it is what is left of output once the trend has been taken out. In a boom $Y_t > \bar{Y}_t$ and $\tilde{Y}_t > 0$; in a slump $\tilde{Y}_t < 0$; at potential $\tilde{Y}_t = 0$.
+
+**Recessions.** A **recession** starts when short-run output turns negative, and it is usually dated as over once short-run output reaches its low point and starts to climb, even though output is still below potential. In practice the U.S. dates of each peak and trough are set by a committee of the National Bureau of Economic Research (NBER), which looks at employment, sales and industrial production as well as GDP.
+
+#### Working with the definitions
+
+**Step 1: actual output as potential output times a factor.** Multiply both sides of equation (1) by $\bar{Y}_t$, then add $\bar{Y}_t$ to both sides:
+
+$$\tilde{Y}_t\bar{Y}_t = Y_t - \bar{Y}_t \quad\Longrightarrow\quad Y_t = \bar{Y}_t + \tilde{Y}_t\bar{Y}_t,$$
+
+and factor out $\bar{Y}_t$:
+
+$$Y_t = \bar{Y}_t\,(1 + \tilde{Y}_t). \tag{2}$$
+
+Actual output is the trend multiplied by a cycle factor that is a little above 1 in a boom and a little below 1 in a slump. This is exactly how the function `actual_output` builds the baseline: the trend $\bar{Y}_t = 100\times(1.02)^t$ (compound growth, [Appendix C.3](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.3-exponents-and-exponential-growth)) times the factor $1 + 0.02\sin(2\pi t/8)$. In year 2, at the top of the boom, potential output is $100\times1.02^2 = 104.04$ and $\tilde{Y}_2 = +2\%$, so actual output is $104.04\times1.02 = 106.12$. In year 6, at the bottom of the slump, potential is $100\times1.02^6 = 112.62$ and actual output is $112.62\times0.98 = 110.36$. Going back with equation (1): $(110.36 - 112.62)/112.62 = -0.02$, that is, $-2$ percent.
+
+**Step 2: the trend drops out.** In equation (1), the numerator and the denominator both contain the trend. In the baseline, $Y_t - \bar{Y}_t = \bar{Y}_t\times0.02\sin(2\pi t/8)$, so dividing by $\bar{Y}_t$ cancels the growth factor $(1.02)^t$ completely and leaves $\tilde{Y}_t = 2\sin(2\pi t/8)$ percent, whatever the growth rate of potential output. Faster trend growth makes the cycle harder to *see* in a chart of $Y_t$, but it does not change $\tilde{Y}_t$ (Fig. 1).
+
+**Step 3: short-run output as a log difference.** Take the natural log of equation (2). The log of a product is the sum of the logs ([Appendix C.4](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.4-logarithms)):
+
+$$\ln Y_t = \ln\bar{Y}_t + \ln(1 + \tilde{Y}_t).$$
+
+For a small number $x$, $\ln(1+x) \approx x$ ([Appendix C.6](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.6-approximations)). Using it with $x = \tilde{Y}_t$ and moving $\ln\bar{Y}_t$ to the left:
+
+$$\tilde{Y}_t \approx \ln Y_t - \ln\bar{Y}_t. \tag{3}$$
+
+The gap in percent is, to a close approximation, the difference between the logs of actual and potential output. The approximation is very good for the usual gaps: $\ln(1.02) = 0.0198$ and $\ln(0.98) = -0.0202$, both within 0.03 points of $\pm 2\%$. It gets worse for very deep slumps: a gap of $-10\%$ has a log difference of $\ln(0.90) = -0.105$, half a point off. Many statistical agencies report gaps in logs for exactly this reason: logs turn ratios into differences.
+
+**Step 4: growth rates.** Write equation (3) for year $t$ and for year $t-1$, and subtract the second from the first:
+
+$$\ln Y_t - \ln Y_{t-1} \approx \left(\ln\bar{Y}_t - \ln\bar{Y}_{t-1}\right) + \left(\tilde{Y}_t - \tilde{Y}_{t-1}\right).$$
+
+The change in the log of a variable is approximately its growth rate ([Appendix C.5](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.5-growth-rates-and-the-growth-rules)). With potential output growing at the rate $\bar{g}$:
+
+$$g_{Y,t} \approx \bar{g} + \Delta\tilde{Y}_t. \tag{4}$$
+
+The exact version comes from dividing equation (2) for year $t$ by equation (2) for year $t-1$: $Y_t/Y_{t-1} = (1+\bar{g})\times(1+\tilde{Y}_t)/(1+\tilde{Y}_{t-1})$.
+
+*Intuition.* Actual growth is trend growth plus the change in the gap. When the gap widens upward, output grows faster than its trend; when the gap shrinks or turns more negative, it grows more slowly. In the baseline, from year 1 to year 2 the gap rises from $+1.41$ to $+2$, so output grows by about $2 + 0.59 = 2.59$ percent. From year 4 to year 5 the gap falls from $0$ to $-1.41$, so output grows by only about $2 - 1.41 = 0.59$ percent: still growing, yet sliding into a slump.
+
+**Step 5: quarterly and annualized rates.** GDP is published every quarter, and quarterly growth rates are usually reported as **annualized rates**: the growth that would result if the quarter's pace lasted four quarters. Compounding gives $(1+g_q)^4 - 1$, which is close to $4g_q$ when $g_q$ is small. A quarter with 1 percent growth is reported as $1.01^4 - 1 = 4.06\%$, about 4 percent. Going the other way, potential output growing by 2 percent a year grows by $1.02^{1/4} - 1 = 0.496\%$ per quarter, just under a quarter of 2 percent.
+
+#### What the framework predicts
+
+**Growth alone does not reveal the state of the economy.** Equation (4) has one number we observe, $g_{Y,t}$, and two we do not, $\bar{g}$ and $\Delta\tilde{Y}_t$. Suppose GDP grows at an annualized 5 percent. That fits potential growth of 5 percent with an unchanged gap, but it equally fits potential growth of 2 percent with a gap that widened by 3 points. Potential output is never observed directly, so it must be estimated. The common methods are: fit a smooth trend through real GDP; average the actual GDP of the surrounding quarters; or, like the U.S. Congressional Budget Office (CBO), compute what a Solow-style production function gives when labor and capital are at their sustainable levels. Each method can be revised as new data arrive, and the measured gaps change with it (Fig. 3).
+
+**A slump does not require falling output.** In the baseline, actual output never shrinks: its slowest growth is about 0.6 percent a year. Yet the economy spends four years of every eight below potential. A recession is a matter of the gap, not of the sign of growth.
+
+**The cost of a slump.** Add up short-run output over the years below potential. The sum is the output lost, as a percent of one year's potential output. In the baseline the slump years 5, 6 and 7 give $-1.41 - 2 - 1.41 = -4.83$ percent of a year's potential output. Over the whole cycle, though, the boom years add $+4.83$, so the total is exactly zero. Removing fluctuations altogether would therefore gain much less than the cost of a recession on its own, because the booms would go too.
+
+**Comparative statics.**
+
+| Change | Path of $\bar{Y}_t$ | Short-run output $\tilde{Y}_t$ | Growth of actual output $g_Y$ |
+|---|---|---|---|
+| faster potential growth $\bar{g}$ | steeper trend | unchanged (step 2) | rises one for one, equation (4) |
+| bigger swings of the cycle | unchanged | larger booms and slumps | larger swings around $\bar{g}$ |
+| larger economy, higher $\bar{Y}_0$ | scaled up | unchanged | unchanged |
+
+In logs, equation (3) reads $\ln Y_t \approx \ln\bar{Y}_t + \tilde{Y}_t$: the elasticity of actual output with respect to potential output is 1, and one point of short-run output adds about one percent to actual output.
+
+<!-- cell -->
+
+### The Phillips curve
+
+#### Assumptions
+
+The short-run model rests on three premises. We state them in our own words:
+
+1. **Shocks never stop.** Something is always hitting the economy, pushing $Y_t$ away from $\bar{Y}_t$ or inflation away from $\bar{\pi}$.
+2. **Policy can move output in the short run.** Monetary and fiscal policy can raise or lower spending, and so output, for a while. In this chapter we go one step further and let policymakers choose $\tilde{Y}_t$ directly. Chapters 11 and 12 explain how they do it.
+3. **Output and inflation trade off over time.** A hot economy speeds up inflation and a cold one slows it down. This is the Phillips curve:
+
+$$\Delta\pi_t \equiv \pi_t - \pi_{t-1} = \bar{\nu}\,\tilde{Y}_t, \qquad \bar{\nu} > 0. \tag{5}$$
+
+The slope $\bar{\nu}$ is the number of points by which inflation rises in a year for each percent that output is above potential.
+
+*Why the curve slopes up.* When demand runs hot, firms are working beyond their sustainable level: overtime is paid at premium wages, machines run without a break, and goods are scarce. Each firm then raises its prices by more than the inflation everyone expected, and when all firms do so at once, inflation itself goes up. When demand is weak, firms with idle capacity hold back their price increases to win customers, and inflation comes down. The curve describes the *change* in inflation, not its level: in Chapter 12 a full version adds a term for price shocks such as oil.
+
+#### Solving the model
+
+**Step 1: a rule that moves inflation forward.** Add $\pi_{t-1}$ to both sides of equation (5):
+
+$$\pi_t = \pi_{t-1} + \bar{\nu}\,\tilde{Y}_t.$$
+
+This is a **difference equation** ([Appendix C.10](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.10-difference-equations-how-macro-variables-move-over-time)): given last year's inflation and this year's short-run output, it gives this year's inflation.
+
+**Step 2: apply it year after year.** Start from inflation $\pi_0$ in year 0:
+
+$$\pi_1 = \pi_0 + \bar{\nu}\tilde{Y}_1,$$
+$$\pi_2 = \pi_1 + \bar{\nu}\tilde{Y}_2 = \pi_0 + \bar{\nu}\left(\tilde{Y}_1 + \tilde{Y}_2\right),$$
+$$\pi_3 = \pi_2 + \bar{\nu}\tilde{Y}_3 = \pi_0 + \bar{\nu}\left(\tilde{Y}_1 + \tilde{Y}_2 + \tilde{Y}_3\right),$$
+
+and after $t$ years
+
+$$\pi_t = \pi_0 + \bar{\nu}\sum_{s=1}^{t}\tilde{Y}_s. \tag{6}$$
+
+*Intuition.* Inflation keeps a running total of every past gap. A boom that is over still leaves inflation higher, until a slump of the same total size brings it back.
+
+**Step 3: steady inflation.** Inflation stays constant, $\Delta\pi_t = 0$, if and only if $\tilde{Y}_t = 0$. Any inflation rate can persist as long as output sits at potential. That is why the level of long-run inflation $\bar{\pi}$ is not pinned down by the Phillips curve: it comes from the long run and from policy.
+
+**Step 4: a boom that lasts.** If policymakers hold output at the same gap $\tilde{Y}$ every year, the sum in equation (6) is $t$ copies of $\tilde{Y}$, so $\pi_t = \pi_0 + \bar{\nu}\tilde{Y}\,t$: inflation climbs in a straight line, by $\bar{\nu}\tilde{Y}$ points every year, without end. With the baseline slope $0.33$ and a gap held at $+2$ percent, inflation rises by $0.66$ points a year: $2 \to 2.66 \to 3.32 \to 3.98$ percent. Fig. 9 runs this experiment.
+
+**Step 5: the output cost of lowering inflation.** Set $t = T$ in equation (6), subtract $\pi_0$ from both sides and divide by $\bar{\nu}$:
+
+$$\sum_{s=1}^{T}\tilde{Y}_s = \frac{\pi_T - \pi_0}{\bar{\nu}}. \tag{7}$$
+
+To lower inflation, the gaps must add up to a negative number, and the required total is fixed by the slope alone. With $\bar{\nu} = 0.33$, cutting inflation by one point takes a cumulative gap of $-1/0.33 = -3.03$ percent-years: for example $-3.03$ percent for one year, or $-1.01$ percent in each of three years. Policy chooses how to spread the pain over time, not how much pain there is in total. The ratio $1/\bar{\nu}$, the output lost per point of disinflation, is often called the **sacrifice ratio**.
+
+#### What the model predicts
+
+| Short-run output | Change in inflation | Path of inflation |
+|---|---|---|
+| $\tilde{Y}_t > 0$ (boom) | $\Delta\pi_t = \bar{\nu}\tilde{Y}_t > 0$ | rising |
+| $\tilde{Y}_t = 0$ (at potential) | $\Delta\pi_t = 0$ | steady at any level |
+| $\tilde{Y}_t < 0$ (slump) | $\Delta\pi_t = \bar{\nu}\tilde{Y}_t < 0$ | falling |
+
+**Comparative statics.** The effect of one more percent of short-run output on the change in inflation is the slope, $\partial\Delta\pi_t/\partial\tilde{Y}_t = \bar{\nu}$. Both variables are already in percent, so the slope plays the role of an elasticity.
+
+- A **steeper curve** (higher $\bar{\nu}$) rotates the line counterclockwise around the origin. A boom then raises inflation faster, and a disinflation is cheaper: by equation (7), its output cost $1/\bar{\nu}$ falls.
+- A **price shock** (Chapter 12) shifts the whole line up: inflation rises even at potential.
+- A different long-run inflation rate $\bar{\pi}$ does not move the line at all, because the curve is about changes in inflation.
+
+**Inflation peaks as the slump begins.** By equation (6), inflation rises while $\tilde{Y}_t > 0$ and falls while $\tilde{Y}_t < 0$. Its highest point is therefore the moment the gap crosses zero from above, which is the start of a recession. In the baseline cycle, inflation goes $2 \to 2.47 \to 3.13 \to 3.59$ percent in years 1 to 3, stays at $3.59$ in year 4 (where $\tilde{Y} = 0$), and then falls back to 2 percent by year 8, because the gaps of a full cycle add up to zero. This is the pattern of Fig. 5: U.S. inflation tends to peak close to the start of each recession and to fall during it.
+
+**No free lunch from a permanent boom.** Holding output above potential buys ever-rising inflation (step 4). Lowering inflation that is too high requires a period of output below potential (equation 7), which is how the Volcker disinflation of the early 1980s worked (Fig. 6).
+
+<!-- cell -->
+
+### Okun's law
+
+#### Definitions
+
+The **unemployment rate** is $u_t$. The **natural rate of unemployment** $\bar{u}$ is the rate the economy settles at in the long run ([Chapter 7](https://quarcs-lab.github.io/macro102-site/notebooks/ch07-the-labor-market-wages-and-unemployment.html)), the labor-market cousin of potential output. Their difference $u_t - \bar{u}$ is **cyclical unemployment**. Okun's law is a rule of thumb fitted to U.S. data (Fig. 8):
+
+$$u_t - \bar{u} = -\tfrac{1}{2}\,\tilde{Y}_t. \tag{8}$$
+
+Each percent of output below potential comes with half a point of unemployment above the natural rate. The slope is smaller than 1 in size because firms do not adjust only through jobs: in a slump they also cut hours and keep some workers they do not fully need, and some people who lose jobs stop looking for work and so are not counted as unemployed.
+
+#### Working with the law
+
+**Step 1: going back from unemployment to output.** Multiply both sides of equation (8) by $-2$:
+
+$$\tilde{Y}_t = -2\,(u_t - \bar{u}).$$
+
+In the baseline slump, $\tilde{Y} = -2\%$ means unemployment 1 point above its natural rate, and 1 point of unemployment below the natural rate signals output 2 percent above potential.
+
+**Step 2: changes in unemployment.** Write equation (8) for years $t$ and $t-1$ and subtract. The natural rate is constant, so it cancels:
+
+$$\Delta u_t = -\tfrac{1}{2}\,\Delta\tilde{Y}_t.$$
+
+Now replace $\Delta\tilde{Y}_t$ with $g_{Y,t} - \bar{g}$ from equation (4):
+
+$$\Delta u_t \approx -\tfrac{1}{2}\left(g_{Y,t} - \bar{g}\right). \tag{9}$$
+
+*Intuition.* Unemployment rises whenever output grows more slowly than potential, even if output is still growing. Steady growth at the trend rate only holds unemployment where it is. In the baseline, from year 4 to year 5 output grows only about 0.6 percent, so unemployment rises by about $-\tfrac{1}{2}(0.6 - 2) = +0.7$ point.
+
+**Step 3: the Phillips curve in terms of unemployment.** Substitute $\tilde{Y}_t = -2(u_t - \bar{u})$ from step 1 into the Phillips curve, equation (5):
+
+$$\Delta\pi_t = \bar{\nu}\times\left[-2\,(u_t - \bar{u})\right] = -2\bar{\nu}\,(u_t - \bar{u}).$$
+
+Inflation rises when unemployment is below its natural rate and falls when it is above. With $\bar{\nu} = 0.33$, each point of unemployment above the natural rate lowers inflation by $0.66$ points a year. This is the form in which the trade-off was first found in the data, with unemployment on the horizontal axis (Chapter 12 tells that history).
+
+#### What the law predicts
+
+| Short-run output $\tilde{Y}_t$ | $+2\%$ | $0$ | $-2\%$ | $-4\%$ |
+|---|---|---|---|---|
+| Cyclical unemployment $u_t - \bar{u}$ (points) | $-1$ | $0$ | $+1$ | $+2$ |
+
+- Booms push unemployment below the natural rate, slumps push it above, and the two move together closely, as the tight cloud of Fig. 8 shows.
+- A steeper Okun slope (larger in size) would mean bigger swings in unemployment for the same output gap.
+- Combined with equation (7): cutting inflation by one point with $\bar{\nu} = 0.33$ costs $3.03$ percent-years of output, or $\tfrac{1}{2}\times 3.03 \approx 1.5$ point-years of extra unemployment.
+- Because the two gaps move together, the rest of the short-run chapters can work with output alone and translate to unemployment with equation (8) whenever needed.
+
+<!-- cell -->
+
+### A preview of the full short-run model
+
+#### Assumptions
+
+The full model keeps the long run as given ($\bar{Y}_t$, $\bar{\pi}$ and $\bar{u}$ come from outside) and keeps the three premises above. It adds households, firms that invest, a government that spends, trade with the rest of the world and a central bank that runs monetary policy.
+
+#### How the pieces fit together
+
+The chain of cause and effect, built over the next chapters, runs from the interest rate to output and then to inflation and unemployment:
+
+$$\underbrace{R_t}_{\text{real interest rate}} \;\xrightarrow{\ \text{IS curve}\ }\; \tilde{Y}_t \;\xrightarrow{\ \text{Phillips curve}\ }\; \Delta\pi_t, \qquad \tilde{Y}_t \;\xrightarrow{\ \text{Okun's law}\ }\; u_t - \bar{u}.$$
+
+- The **IS curve** ([Chapter 11](https://quarcs-lab.github.io/macro102-site/notebooks/ch11-the-is-curve.html)) says that a higher real interest rate $R_t$ lowers investment and other borrowing-financed spending, and so lowers short-run output.
+- The **MP curve** (Chapter 12) shows how the central bank, by setting a short-term nominal interest rate such as the federal funds rate, sets the real interest rate in the short run.
+- The **Phillips curve**, equation (5), then turns short-run output into a change in inflation, and Okun's law, equation (8), into unemployment.
+
+So the signs run: a higher $R_t$ means a lower $\tilde{Y}_t$, falling inflation and higher unemployment. This chapter skips the first link by letting policymakers pick $\tilde{Y}_t$ directly.
+
+#### What the model predicts
+
+- Policy can lean against shocks and keep $\tilde{Y}_t$ near zero, which keeps inflation steady (equation 5).
+- It cannot keep output above potential year after year without inflation climbing without limit (equation 6).
+- High inflation comes down only through a period of output below potential, with a total cost set by the slope (equation 7).
+- In practice the job is harder than in the model, because potential output is not observed (equation 4) and new shocks keep arriving.
+
+<!-- cell -->
+
+### The model in code
+
+We now turn the key results into Python functions. Each function's description names the equation it computes. The cells after them check the algebra above with numbers.
 
 > **Python note.** `def` creates a *function*: a named recipe that takes inputs (the
 > *arguments*) and gives back a result with `return`. Writing `g=2.0` gives the argument a
@@ -160,25 +370,148 @@ def potential_output(t, g=2.0, Y0=100.0):
 
 
 def actual_output(t, A=2.0, g=2.0, cycle=8):
-    """Actual output Y_t: potential output times (1 + a wave of +-A percent that repeats every `cycle` years)."""
+    """Actual output Y_t = Ybar_t (1 + Y~_t)   (equation 2), with a wave of +-A percent that repeats every `cycle` years."""
     return potential_output(t, g) * (1 + A / 100 * np.sin(2 * np.pi * t / cycle))
 
 
 def short_run_output(Y, Ybar):
-    """Short-run output in percent: 100 (Y - Ybar) / Ybar   (equation 9.2)."""
+    """Short-run output in percent: 100 (Y - Ybar) / Ybar   (equation 1)."""
     return 100 * (Y - Ybar) / Ybar
 ```
 
 ```{python}
 def phillips_curve(Y_tilde, nu=0.33):
-    """Change in inflation, percentage points: delta pi = nu * Y_tilde   (the Phillips curve, Fig. 9.6)."""
+    """Change in inflation, percentage points: delta pi = nu * Y_tilde   (the Phillips curve, equation 5)."""
     return nu * Y_tilde
 
 
 def okun_law(Y_tilde, slope=-0.5):
-    """Cyclical unemployment u - u_bar, percentage points: slope * Y_tilde   (Okun's law, equation 9.3)."""
+    """Cyclical unemployment u - u_bar, percentage points: slope * Y_tilde   (Okun's law, equation 8)."""
     return slope * Y_tilde
 ```
+
+**Check 1: equations (1) and (2), and the trend drops out.** At the top of the boom (year 2) and the bottom of the
+slump (year 6), we compute short-run output from the baseline and rebuild actual output from it. Then we change
+the growth of potential output and recompute short-run output in year 6.
+
+> **Python note.** An *f-string* such as `f"Y~ = {value:+.2f}%"` inserts the value of a variable
+> into a piece of text; `:.2f` means "show two decimals" and the `+` adds a sign. A `for` loop repeats its
+> indented lines once for each value in the list after `in`. `Ybar, Y = a, b` gives two variables their values
+> in one line.
+
+```{python}
+for t in (2, 6):
+    Ybar, Y = potential_output(t), actual_output(t)
+    Y_tilde = short_run_output(Y, Ybar)
+    print(f"Year {t}: potential {Ybar:.2f}, actual {Y:.2f}, Y~ = {Y_tilde:+.2f}% (equation 1)")
+    print(f"        equation (2): Ybar x (1 + Y~) = {Ybar * (1 + Y_tilde / 100):.2f}")
+for g in (0.0, 2.0, 4.0):
+    Y_tilde = short_run_output(actual_output(6, g=g), potential_output(6, g=g))
+    print(f"Potential grows {g:.0f}% a year: Y~ in year 6 = {Y_tilde:+.2f}%")
+```
+
+**Check 2: the log difference, equation (3).** For gaps of different sizes we compare the exact gap with
+$100\times(\ln Y - \ln\bar{Y}) = 100\ln(1+\tilde{Y})$.
+
+> **Python note.** `np.log` is the natural logarithm. `:+6.1f` reserves 6 characters for the number, so that
+> the columns line up.
+
+```{python}
+for gap in (2.0, -2.0, -5.0, -10.0):
+    log_gap = 100 * np.log(1 + gap / 100)                     # ln Y - ln Ybar, in percent
+    print(f"Y~ = {gap:+6.1f}%   log difference = {log_gap:+7.2f}%   error {log_gap - gap:+.2f} points")
+```
+
+**Check 3: growth rates, equation (4).** Year by year over one cycle, we compare the exact growth rate of actual
+output with potential growth (2 percent) plus the change in short-run output.
+
+> **Python note.** `range(1, 9)` counts 1, 2, ..., 8, so the loop visits every year of one cycle.
+
+```{python}
+for t in range(1, 9):
+    exact = 100 * (actual_output(t) / actual_output(t - 1) - 1)
+    gap_now = short_run_output(actual_output(t), potential_output(t))
+    gap_before = short_run_output(actual_output(t - 1), potential_output(t - 1))
+    approx = 2.0 + (gap_now - gap_before)                     # equation (4) with g = 2
+    print(f"Year {t}: Y~ = {gap_now:+5.2f}%   growth of Y = {exact:4.2f}% (exact), {approx:4.2f}% (equation 4)")
+```
+
+**Check 4: the Phillips curve over one cycle, equations (5) and (6).** We move inflation forward one year at a
+time with equation (5), and compare it with the running-total formula, equation (6). Inflation should peak in
+years 3 and 4 and be back at 2 percent by the end of the cycle.
+
+> **Python note.** `pi = pi + ...` replaces last year's inflation with this year's. `total_gap` starts at zero
+> and adds one year's gap each time round the loop: a *running total*.
+
+```{python}
+pi = 2.0                                                      # year 0: inflation at its long-run rate
+total_gap = 0.0                                               # running total of short-run output
+for t in range(1, 9):
+    Y_tilde = short_run_output(actual_output(t), potential_output(t))
+    pi = pi + phillips_curve(Y_tilde)                         # one year of equation (5)
+    total_gap = total_gap + Y_tilde
+    formula = 2.0 + 0.33 * total_gap                          # equation (6)
+    print(f"Year {t}: Y~ = {Y_tilde:+5.2f}%   inflation {pi:.3f}% (year by year), {formula:.3f}% (equation 6)")
+```
+
+The same running total measures the **cost of the slump**: the gaps of years 5 to 7 add up to the output lost, and
+the whole cycle adds up to zero.
+
+> **Python note.** `abs` is the absolute value. We use it on the full-cycle total only to drop a meaningless minus
+> sign: the computer's answer is a tiny number such as $-0.0000000000000004$.
+
+```{python}
+lost = 0.0
+for t in (5, 6, 7):
+    lost = lost + short_run_output(actual_output(t), potential_output(t))
+print(f"Output lost in years 5-7: {lost:.2f} percent of a year's potential output")
+print(f"Sum of Y~ over the whole cycle (years 1-8): {abs(total_gap):.2f}")
+```
+
+**Check 5: the cost of a disinflation, equation (7).** To lower inflation from 2 to 1 percent with
+$\bar{\nu} = 0.33$, equation (7) asks for a cumulative gap of $-3.03$ percent-years. We try it all in one year and
+spread over three years: both must end at 1 percent.
+
+> **Python note.** `[a, b, c]` is a *list*. A loop can sit inside another loop: the outer one picks a path, the
+> inner one runs through its years. `len(path)` is the number of years in the path.
+
+```{python}
+needed = (1.0 - 2.0) / 0.33                                   # equation (7)
+print(f"Cumulative Y~ needed: {needed:.2f} percent-years")
+fast = [needed]                                               # all of it in one year
+slow = [needed / 3, needed / 3, needed / 3]                   # spread over three years
+for path in (fast, slow):
+    pi = 2.0
+    for Y_tilde in path:
+        pi = pi + phillips_curve(Y_tilde)
+    print(f"{len(path)} year(s) at Y~ = {path[0]:+.2f}%: inflation ends at {pi:.2f}%")
+print(f"Okun's law: extra unemployment, summed over the years = {okun_law(needed):+.2f} point-years")
+```
+
+**Check 6: Okun's law, equations (8) and (9).** From year 4 to year 5 of the baseline, output still grows. We
+compute the change in unemployment from equation (8) and from the growth form, equation (9). Then we check that
+the Phillips curve in unemployment terms, $\Delta\pi = -2\bar{\nu}(u - \bar{u})$, gives the same answer as
+equation (5).
+
+```{python}
+gap_4 = short_run_output(actual_output(4), potential_output(4))
+gap_5 = short_run_output(actual_output(5), potential_output(5))
+growth = 100 * (actual_output(5) / actual_output(4) - 1)
+change_u = okun_law(gap_5) - okun_law(gap_4)                  # from equation (8)
+print(f"Year 4 to 5: output grows {growth:.2f}%, unemployment changes by {change_u:+.2f} points (equation 8)")
+print(f"Equation (9): -1/2 x ({growth:.2f} - 2) = {-0.5 * (growth - 2.0):+.2f} points")
+u_gap = okun_law(-2.0)                                        # the bottom of the baseline slump
+print(f"Y~ = -2%: u - u_bar = {u_gap:+.2f} points")
+print(f"Phillips curve with unemployment: -2 x 0.33 x ({u_gap:+.2f}) = {-2 * 0.33 * u_gap:+.2f}; "
+      f"with output: {phillips_curve(-2.0):+.2f}")
+```
+
+The two ways of computing the change in unemployment differ a little (0.71 against 0.72 points), because
+equation (4) is an approximation.
+
+<!-- cell -->
+
+### Drawing the curves
 
 The textbook writes the name of each curve next to it, so our model figures do the same instead of using a
 legend. `side` says whether the name sits above (`"bottom"`), beside (`"middle"`) or below (`"top"`) the end point.
@@ -192,24 +525,6 @@ def add_end_label(fig, x, y, text, color, side="middle", row=None, col=None, xan
     fig.add_annotation(x=x, y=y, text=text, showarrow=False, xanchor=xanchor, yanchor=side,
                        xshift=4 if xanchor == "left" else -4, font=dict(color=color, size=15), row=row, col=col)
 ```
-
-Let us try the functions on the textbook's own examples.
-
-> **Python note.** An *f-string* such as `f"Y~ = {value:+.2f}%"` inserts the value of a variable
-> into a piece of text; `:.2f` means "show two decimals" and the `+` adds a sign.
-
-```{python}
-print(f"Actual 980, potential 1,000:  Y~ = {short_run_output(980, 1000):+.2f}%")
-print(f"Output 3% above potential:    delta pi = {phillips_curve(3.0):+.2f} points (slope 0.33)")
-print(f"Output 6% below potential:    u - u_bar = {okun_law(-6.0):+.2f} points (Okun's law)")
-print(f"Baseline in year 2: potential {potential_output(2):.2f}, actual {actual_output(2):.2f}, "
-      f"Y~ = {short_run_output(actual_output(2), potential_output(2)):+.2f}%")
-```
-
-The first line is the textbook's example: output of 980 against a potential of 1,000 is
-$-20/1{,}000 = -2$ percent. With a slope of $0.33$, output 3 percent above potential raises inflation
-by about 1 percentage point, and Okun's law turns a 6 percent shortfall of output into unemployment
-3 points above its natural rate.
 
 <!-- cell -->
 
@@ -360,7 +675,7 @@ We start with a made-up economy to see the key idea of the chapter: actual outpu
 **Goal.** See how removing the trend from actual output leaves the ups and downs of the business cycle.
 
 Panel (a) draws actual output $Y_t$ around a smooth potential output $\bar{Y}_t$. Panel (b) draws short-run
-output $\tilde{Y}_t$ from equation (9.2): the same wiggle, with the trend taken out. The gray bars in panel (a)
+output $\tilde{Y}_t$ from equation (1): the same wiggle, with the trend taken out. The gray bars in panel (a)
 are the gaps $Y - \bar{Y}$ at the top of the boom and at the bottom of the slump.
 
 > **Python note.** `np.linspace(0, 8, 200)` creates 200 evenly spaced numbers from 0 to 8: the
@@ -435,7 +750,7 @@ slider_figure(fluctuations, "g", [0.0, 0.5, 1.0, 2.0, 3.0, 4.0], start=2.0, labe
 <details><summary>Hint</summary>
 
 Pass the same arguments to both functions, for example `actual_output(6, A=2.0, g=4.0)` and
-`potential_output(6, g=4.0)`. Look at equation (9.2): the trend cancels out.
+`potential_output(6, g=4.0)`. Look at equation (1): the trend cancels out.
 
 </details>
 
@@ -1219,7 +1534,7 @@ When output is above potential, inflation tends to rise. We draw this relationsh
 Think of a hot holiday toy. When demand is high, the firm that makes it runs overtime and pays its workers
 more, and the toy is scarce. So its price rises faster than usual. In a booming economy, it is as if *every* firm
 made the hot toy: all of them raise prices faster than the current inflation rate, so inflation goes up. In a
-slump the opposite happens. The Phillips curve puts this in one line:
+slump the opposite happens. The Phillips curve, equation (5), puts this in one line:
 
 $$\Delta\pi_t = \bar{\nu}\,\tilde{Y}_t$$
 
@@ -1493,7 +1808,7 @@ Output below potential also means more people out of work. Okun's law puts a num
 
 ### Fig. 8: Okun's law for the U.S. economy
 
-**Goal.** Link short-run output to unemployment with Okun's law, $u - \bar{u} = -\tfrac{1}{2}\tilde{Y}$.
+**Goal.** Link short-run output to unemployment with Okun's law (equation 8), $u - \bar{u} = -\tfrac{1}{2}\tilde{Y}$.
 
 **Cyclical unemployment** $u - \bar{u}$ is the unemployment rate minus the natural rate, the rate that prevails
 in the long run (Chapter 7). Here $\bar{u}$ is the CBO's estimate.
@@ -1655,12 +1970,12 @@ We end with an experiment: what happens to inflation if policymakers keep output
 3 percent above potential every year?
 
 The economy starts at potential with inflation at its long-run rate, $\bar{\pi} = 2\%$. Then output is held at
-$\tilde{Y} = +3\%$. The Phillips curve says inflation rises by $\Delta\pi = \bar{\nu}\tilde{Y}$ **every** year:
+$\tilde{Y} = +3\%$. The Phillips curve (equation 5) says inflation rises by $\Delta\pi = \bar{\nu}\tilde{Y}$ **every** year:
 
 $$\pi_t = \pi_{t-1} + \bar{\nu}\,\tilde{Y}_t$$
 
-With the textbook's slope $\bar{\nu} = 1$, inflation goes from 2 to 5, 8 and 11 percent in three years. A computer can
-apply this equation year after year: a **simulation**.
+With the textbook's slope $\bar{\nu} = 1$, inflation goes from 2 to 5, 8 and 11 percent in three years, the straight-line climb that equation (6)
+predicts for a gap held constant. A computer can apply this equation year after year: a **simulation**.
 
 > **Python note.** A `for` loop repeats the indented lines once for each year. `pi_path[-1]` is the last
 > number in the list, last year's inflation, and `pi_path.append(...)` adds this year's at the end.
@@ -1760,12 +2075,14 @@ Inflation must fall by 3 points in 3 years, so by 1 point a year. Solve $-1 = 0.
 
 ## Concluding remarks
 
-- Actual output is potential output plus short-run fluctuations. **Short-run output** $\tilde{Y}_t = (Y_t - \bar{Y}_t)/\bar{Y}_t$
-  is positive in a boom and negative in a recession.
+- Actual output is potential output times a cycle factor, $Y_t = \bar{Y}_t(1+\tilde{Y}_t)$, equations (1) and (2). **Short-run output**
+  $\tilde{Y}_t = (Y_t - \bar{Y}_t)/\bar{Y}_t$ is positive in a boom and negative in a recession; it is close to the log difference
+  $\ln Y_t - \ln\bar{Y}_t$ (equation 3), and actual growth is trend growth plus the change in the gap (equation 4).
 - U.S. recessions push output a few percent below potential, cost millions of jobs and, in total, several percent
   of a year's GDP. Potential output is only estimated, so the measured gaps change when the data are revised.
-- Inflation usually falls during a recession. The **Phillips curve** $\Delta\pi = \bar{\nu}\tilde{Y}$ captures this, with a
-  U.S. slope of about 1/3; oil and other shocks move inflation too.
-- **Okun's law** links output and unemployment: each point of output below potential adds about half a point
-  of unemployment.
+- Inflation usually falls during a recession. The **Phillips curve** $\Delta\pi = \bar{\nu}\tilde{Y}$, equation (5), captures this, with a
+  U.S. slope of about 1/3. Solved forward, inflation is a running total of past gaps (equation 6): a lasting boom
+  raises it without end, and lowering it costs a cumulative slump of $1/\bar{\nu}$ percent-years per point (equation 7).
+- **Okun's law**, equation (8), links output and unemployment: each point of output below potential adds about half a point
+  of unemployment, and unemployment rises whenever output grows more slowly than potential (equation 9).
 - The next chapter uses this short-run lens on the Great Recession and the Covid-19 pandemic.

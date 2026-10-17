@@ -1,4 +1,4 @@
-# Chapter 13: Stabilization Policy and the AS/AD Framework
+# 13. Stabilization Policy and the AS/AD Framework
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/ch13-stabilization-policy-and-the-as-ad-framework.ipynb)
 
@@ -11,11 +11,13 @@ Phillips curve. In those chapters the central bank chose the interest rate case 
 gives it a **rule**, and the whole short-run model then fits in one familiar diagram. By the end of it
 you will be able to:
 
-- combine the IS curve with a **monetary policy rule** to get the **aggregate demand (AD) curve**, and
+- derive the **aggregate demand (AD) curve** by substituting a **monetary policy rule** into the IS curve, and
   read the Phillips curve as an **aggregate supply (AS) curve**;
-- solve the AS/AD model for its steady state and for the path of inflation and output, period by period,
-  after an inflation shock, a disinflation and an aggregate demand shock;
-- explain why expectations, credibility and inflation targets matter for the cost of fighting inflation;
+- derive the model's steady state, its solution for one period, and the rule by which the inflation gap shrinks
+  each period; use them to follow an inflation shock, a disinflation and an aggregate demand shock;
+- read the **comparative statics**: how the policy response, the slope of the AS curve and the shocks change the
+  first-period effects, the speed of recovery and the total output cost; explain why expectations, credibility and
+  inflation targets matter for the cost of fighting inflation;
 - test the model on U.S. data, and on data for dozens of other countries: policy rates against the policy rule,
   inflation-output loops, and three centuries of inflation;
 - in Python: write one `simulate` loop and reuse it in many figures, build tables from lists of
@@ -93,49 +95,263 @@ def slider_figure(make_figure, name, values, start, label=None):
 
 ## Model overview
 
-This chapter puts the whole short-run model into one picture. The central bank now follows a simple rule: when inflation is above its target, it raises the real interest rate, which cools spending and pulls output below potential. That rule gives a downward-sloping **aggregate demand (AD) curve** linking inflation to output. The Phillips curve, written in levels, becomes an upward-sloping **aggregate supply (AS) curve**: inflation this year equals the inflation people expected plus a boost when the economy runs hot. Where the two curves cross we read this period's output and inflation.
+What happens to output and inflation when the central bank stops choosing the interest rate case by case and commits to a fixed rule instead? This chapter answers with the **AS/AD model**. A simple rule links the real interest rate to inflation. Put into the IS curve of [Chapter 11](https://quarcs-lab.github.io/macro102-site/notebooks/ch11-the-is-curve.html), it gives a downward-sloping **aggregate demand (AD) curve**. The Phillips curve of [Chapter 12](https://quarcs-lab.github.io/macro102-site/notebooks/ch12-monetary-policy-and-the-phillips-curve.html), written in levels, is an upward-sloping **aggregate supply (AS) curve**. Two equations then pin down two unknowns, this period's output and inflation. Because firms expect last period's inflation, the AS curve moves from one period to the next, and the model becomes dynamic: it tells us how the economy finds its way home to the **steady state** once a shock has hit.
 
-The model takes the inflation target, the strength of the policy response, the slope of the AS curve and any shocks as given. It tells us how output and inflation move from one period to the next as expectations catch up, until the economy is back at its **steady state**, with inflation on target and output at potential. Below we write the equations, pick one shared set of illustrative numbers, and build the tools every section reuses: a solver for one period, a loop that runs an event over many periods, and the drawing functions. The sections then use them for the AD and AS curves, three events, the U.S. data, and modern monetary policy.
+We build the model in five blocks, each going from its assumptions to its solution and then to its predictions. The first block derives the AD curve and the second the AS curve. The third puts them together: the steady state, the solution for one period, the path over time, the total output cost of an episode, and the chapter's three events (an inflation shock, a disinflation and a demand shock). The fourth writes the rule for the nominal interest rate that central banks actually set, and adds a rule that also reacts to output. The fifth lets expectations look ahead, which is why credibility matters. At the end, `### The model in code` turns the results into Python functions and checks each of them with numbers.
 
-The short-run model of Chapter 12 has three equations: the IS curve
-$\tilde{Y}_t = \bar{a} - \bar{b}(R_t - \bar{r})$, the MP curve (the central bank chooses $R_t$) and the
-Phillips curve $\Delta\pi_t = \bar{\nu}\tilde{Y}_t + \bar{o}$. This chapter replaces the MP curve with a
-**monetary policy rule**: the central bank raises the real interest rate above the marginal product of
-capital whenever inflation is above its **inflation target** $\bar{\pi}$,
+**Notation and numbers.** A bar over a letter marks a **parameter**, a number we take from outside the model: $\bar{a}$, $\bar{b}$, $\bar{m}$, $\bar{\nu}$, $\bar{o}$, $\bar{r}$, $\bar{\pi}$. A tilde marks **short-run output** $\tilde{Y}_t$, the percentage gap between actual and potential output. The subscript $t$ counts periods (years). All worked examples, and every diagram of this notebook, use one baseline: an inflation target $\bar{\pi} = 2$ percent (the target of the U.S., the U.K., the euro area and Japan), John Taylor's policy response $\bar{m} = 1/2$ (used again in Fig. 16), the interest sensitivity $\bar{b} = 2$ of Chapter 11's example, and an illustrative Phillips-curve slope $\bar{\nu} = 1$. The shocks are an inflation shock $\bar{o} = 2$ points for one period, a demand shock $\bar{a} = 2$ points for nine periods, and a cut in the target from 4 to 2 percent (the numbers of textbook Fig. 13.20).
 
-$$R_t - \bar{r} = \bar{m}\,(\pi_t - \bar{\pi}). \qquad (13.1)$$
+<!-- cell -->
 
-The parameter $\bar{m}$ says how hard the central bank leans against inflation. Substitute the rule into
-the IS curve and you get the **AD curve**. Write the Phillips curve in levels and you get the **AS curve**:
+### The policy rule and the AD curve
 
-$$\text{AD:}\quad \tilde{Y}_t = \bar{a} - \bar{b}\bar{m}\,(\pi_t - \bar{\pi}), \qquad (13.3)$$
+#### Assumptions
 
-$$\text{AS:}\quad \pi_t = \pi_{t-1} + \bar{\nu}\tilde{Y}_t + \bar{o}. \qquad (13.4)$$
+**1. The IS curve** (Chapter 11). Short-run output depends on the real interest rate $R_t$:
 
-Last year's inflation $\pi_{t-1}$ in the AS curve is **expected inflation**: firms expect inflation to stay
-where it was (*adaptive expectations*, $\pi^e_t = \pi_{t-1}$). We write it as `pi_e` in the code, because
-Fig. 20 will let expectations be formed differently.
+$$\tilde{Y}_t = \bar{a} - \bar{b}\,(R_t - \bar{r}).$$
 
-The model has two unknowns, $\tilde{Y}_t$ and $\pi_t$. Substitute the AS curve into the AD curve and solve
-for output; then the AS curve gives inflation:
+Spending falls below normal when borrowing costs more than the marginal product of capital $\bar{r}$, and $\bar{b} > 0$ says how strongly it reacts. The **aggregate demand shock** $\bar{a}$ moves spending at every interest rate.
 
-$$\tilde{Y}_t = \frac{\bar{a} - \bar{b}\bar{m}\,(\pi^e_t + \bar{o} - \bar{\pi})}{1 + \bar{b}\bar{m}\bar{\nu}}.$$
+**2. A monetary policy rule.** In Chapter 12 the central bank picked $R_t$ through the MP curve. Now it follows a rule, a fixed recipe that maps what it observes into an interest rate:
 
-**One baseline for every diagram.** The textbook draws its diagrams without numbers. All the diagrams of
-this notebook start from one illustrative set of parameters:
+$$R_t - \bar{r} = \bar{m}\,(\pi_t - \bar{\pi}). \tag{1}$$
 
-- inflation target $\bar{\pi} = 2$ percent, the target of the U.S., the U.K., the euro area and Japan;
-- policy response $\bar{m} = 1/2$, John Taylor's value, used again in Fig. 16;
-- interest sensitivity $\bar{b} = 2$, as in Chapter 11's example;
-- Phillips-curve slope $\bar{\nu} = 1$ (illustrative);
-- the shocks: an inflation shock $\bar{o} = 2$ points for one period, an aggregate demand shock
-  $\bar{a} = 2$ points for nine periods, and a disinflation from a target of 4 to 2 percent (the numbers of
-  textbook Fig. 13.20).
+Here $\bar{\pi}$ is the **inflation target** and $\bar{m} > 0$ is the **policy response**. The recipe has two steps: measure how far inflation is from the target, then set the real interest rate $\bar{m}$ times that many points above $\bar{r}$. With $\bar{m} = 1/2$, inflation of 3 percent, one point above the target, calls for a real rate half a point above $\bar{r}$, and inflation of 1 percent calls for a rate half a point below it. The rule looks at inflation only; the fourth block lets it look at output too.
 
-With these values $\bar{b}\bar{m}\bar{\nu} = 1$, so the denominator above is 2: after any shock, the economy
-closes **half** of the remaining inflation gap every period. That matches the spacing of the textbook's figures.
-$\bar{b}$ and $\bar{m}$ enter the dynamics only through their product, so the event figures have a slider for
-$\bar{m}$ and keep $\bar{b} = 2$.
+#### Solving the model
+
+The rule (1) gives exactly the interest-rate gap $R_t - \bar{r}$ that appears in the IS curve, so we substitute it ([Appendix C.9](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.9-solving-equations-and-systems)):
+
+$$\tilde{Y}_t = \bar{a} - \bar{b}\,\underbrace{(R_t - \bar{r})}_{=\ \bar{m}(\pi_t - \bar{\pi})} = \bar{a} - \bar{b}\,\bar{m}\,(\pi_t - \bar{\pi}).$$
+
+This is the AD curve:
+
+$$\text{AD:}\quad \tilde{Y}_t = \bar{a} - \bar{b}\bar{m}\,(\pi_t - \bar{\pi}). \tag{2}$$
+
+The interest rate has disappeared: the AD curve links two endogenous variables, output and inflation. In the diagram output goes on the horizontal axis and inflation on the vertical axis, so we also solve (2) for $\pi_t$. Move the inflation term to the left and $\tilde{Y}_t$ to the right, then divide by $\bar{b}\bar{m}$:
+
+$$\bar{b}\bar{m}\,(\pi_t - \bar{\pi}) = \bar{a} - \tilde{Y}_t \quad\Longrightarrow\quad \pi_t = \bar{\pi} + \frac{\bar{a} - \tilde{Y}_t}{\bar{b}\bar{m}}.$$
+
+In the diagram the AD curve is a straight line through the point $(\tilde{Y}, \pi) = (\bar{a}, \bar{\pi})$ with slope $-1/(\bar{b}\bar{m})$. In the baseline $\bar{b}\bar{m} = 2 \times 0.5 = 1$: each point of inflation above the target costs one point of output.
+
+Follow the chain for inflation of 3 percent: the rule raises $R_t - \bar{r}$ to $0.5 \times (3 - 2) = 0.5$, and the IS curve turns that into $\tilde{Y}_t = 0 - 2 \times 0.5 = -1$ percent.
+
+*Intuition.* The AD curve slopes down because of the central bank, not because buyers react to prices as on a market demand curve. When the bank sees inflation above its target, it raises the real interest rate, spending falls, and output drops below potential. A weaker economy brings inflation down later, and that is the bank's aim.
+
+#### What the model predicts
+
+The AD curve is a straight line, so each effect below is the same at every point of it ([Appendix C.7](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.7-derivatives-and-marginal-thinking)):
+
+| A change in ... | effect on $\tilde{Y}_t$ at a given $\pi_t$ | in the AS/AD diagram |
+|---|---|---|
+| inflation $\pi_t$, up 1 point | $-\bar{b}\bar{m}$ (baseline $-1$) | a movement **along** the AD curve (Fig. 2) |
+| demand shock $\bar{a}$, up 1 point | $+1$ | AD shifts right by 1 point, or up by $1/(\bar{b}\bar{m})$ |
+| target $\bar{\pi}$, up 1 point | $+\bar{b}\bar{m}$ | AD shifts up by 1 point, or right by $\bar{b}\bar{m}$ |
+| policy response $\bar{m}$ or sensitivity $\bar{b}$, up | output reacts more to inflation | AD turns around $(\bar{a}, \bar{\pi})$ and gets flatter (Fig. 3) |
+
+Two facts are worth keeping. First, $\bar{b}$ and $\bar{m}$ enter only through their product $\bar{b}\bar{m}$, so a tougher central bank and a more interest-sensitive economy give the same AD curve. Second, inflation on target always goes with $\tilde{Y}_t = \bar{a}$: whatever $\bar{m}$ is, with no demand shock the bank wants output at potential when inflation is on target.
+
+<!-- cell -->
+
+### The Phillips curve as the AS curve
+
+#### Assumptions
+
+**3. The Phillips curve** (Chapter 12). The change in inflation rises with short-run output and with inflation shocks $\bar{o}$, such as a jump in oil prices:
+
+$$\Delta\pi_t \equiv \pi_t - \pi_{t-1} = \bar{\nu}\tilde{Y}_t + \bar{o}, \qquad \bar{\nu} > 0.$$
+
+**4. Adaptive expectations.** Firms expect this period's inflation to equal last period's: $\pi^e_t = \pi_{t-1}$. When period $t$ begins, $\pi_{t-1}$ is already known, so it is a given number for the period, not an unknown.
+
+#### Solving the model
+
+Write out $\Delta\pi_t$ and add $\pi_{t-1}$ to both sides:
+
+$$\pi_t - \pi_{t-1} = \bar{\nu}\tilde{Y}_t + \bar{o} \quad\Longrightarrow\quad \text{AS:}\quad \pi_t = \pi_{t-1} + \bar{\nu}\tilde{Y}_t + \bar{o}. \tag{3}$$
+
+Using $\pi_{t-1} = \pi^e_t$, the same equation reads $\pi_t = \pi^e_t + \bar{\nu}\tilde{Y}_t + \bar{o}$: inflation is what firms expected, plus a push from a hot economy, plus any shock. In the diagram the AS curve is a straight line with slope $\bar{\nu}$ that crosses $\tilde{Y} = 0$ at the height $\pi_{t-1} + \bar{o}$.
+
+*Intuition.* Firms raise their prices in step with the inflation they expect. When demand pushes output above potential, they pay overtime and run machines harder, so they raise prices faster than that to cover the extra cost. In a slump they raise them more slowly.
+
+#### What the model predicts
+
+| A change in ... | effect on $\pi_t$ at a given $\tilde{Y}_t$ | in the AS/AD diagram |
+|---|---|---|
+| output $\tilde{Y}_t$, up 1 point | $+\bar{\nu}$ | a movement **along** the AS curve |
+| last period's inflation $\pi_{t-1}$, up 1 point | $+1$ | AS shifts up by 1 point, next period too |
+| inflation shock $\bar{o}$ | $+\bar{o}$ while the shock lasts | AS shifts up by $\bar{o}$ (Fig. 6) |
+| slope $\bar{\nu}$, up | prices react more to booms and slumps | AS turns around $(0, \pi_{t-1} + \bar{o})$ and gets steeper |
+
+The second row is the engine of the whole chapter. Whenever this period's inflation differs from last period's, next period's AS curve sits at a different height. The AS curve keeps moving until inflation stops changing.
+
+<!-- cell -->
+
+### The AS/AD model: steady state and dynamics
+
+#### Assumptions
+
+**5. Equilibrium in every period.** In each period $t = 1, 2, 3, \dots$ both the AD curve (2) and the AS curve (3) hold. The two unknowns are $\tilde{Y}_t$ and $\pi_t$. Last period's inflation $\pi_{t-1}$ and this period's shocks $\bar{a}$ and $\bar{o}$ are given.
+
+**6. Shocks are temporary.** Both shocks are zero in the long run. For $\bar{a}$ the reason is the resource constraint: at potential output, the shares of consumption, investment, government purchases and net exports add up to one, so demand cannot stay above normal for ever. Period 0 is the steady state the economy starts from.
+
+#### Solving the model
+
+**Step 1: the steady state.** In a steady state there are no shocks ($\bar{a} = \bar{o} = 0$) and inflation does not change, $\pi_t = \pi_{t-1} = \pi^*$. Put this into the AS curve (3): $\pi^* = \pi^* + \bar{\nu}\tilde{Y}^*$, so $\bar{\nu}\tilde{Y}^* = 0$, and since $\bar{\nu} > 0$, $\tilde{Y}^* = 0$. Put $\tilde{Y}^* = 0$ and $\bar{a} = 0$ into the AD curve (2): $0 = -\bar{b}\bar{m}(\pi^* - \bar{\pi})$, and since $\bar{b}\bar{m} > 0$, $\pi^* = \bar{\pi}$. So
+
+$$\tilde{Y}^* = 0, \qquad \pi^* = \bar{\pi}. \tag{4}$$
+
+In the long run output is at potential and the central bank's target becomes the economy's inflation rate, whatever the values of $\bar{m}$, $\bar{b}$ and $\bar{\nu}$.
+
+**Step 2: one period.** Take $\pi_{t-1}$ as given and substitute the AS curve (3) for $\pi_t$ in the AD curve (2):
+
+$$\tilde{Y}_t = \bar{a} - \bar{b}\bar{m}\,(\pi_{t-1} + \bar{\nu}\tilde{Y}_t + \bar{o} - \bar{\pi}).$$
+
+Multiply out the bracket, keeping the $\tilde{Y}_t$ term apart:
+
+$$\tilde{Y}_t = \bar{a} - \bar{b}\bar{m}\,(\pi_{t-1} - \bar{\pi} + \bar{o}) - \bar{b}\bar{m}\bar{\nu}\,\tilde{Y}_t.$$
+
+Move the last term to the left, $\tilde{Y}_t + \bar{b}\bar{m}\bar{\nu}\tilde{Y}_t = (1 + \bar{b}\bar{m}\bar{\nu})\tilde{Y}_t$, and divide:
+
+$$\tilde{Y}_t = \frac{\bar{a} - \bar{b}\bar{m}\,(\pi_{t-1} - \bar{\pi} + \bar{o})}{1 + \bar{b}\bar{m}\bar{\nu}}. \tag{5}$$
+
+For inflation, subtract $\bar{\pi}$ from both sides of the AS curve, $\pi_t - \bar{\pi} = (\pi_{t-1} - \bar{\pi} + \bar{o}) + \bar{\nu}\tilde{Y}_t$, and insert (5):
+
+$$\pi_t - \bar{\pi} = (\pi_{t-1} - \bar{\pi} + \bar{o})\left[1 - \frac{\bar{b}\bar{m}\bar{\nu}}{1 + \bar{b}\bar{m}\bar{\nu}}\right] + \frac{\bar{\nu}\bar{a}}{1 + \bar{b}\bar{m}\bar{\nu}}.$$
+
+The bracket equals $\dfrac{1 + \bar{b}\bar{m}\bar{\nu} - \bar{b}\bar{m}\bar{\nu}}{1 + \bar{b}\bar{m}\bar{\nu}} = \dfrac{1}{1 + \bar{b}\bar{m}\bar{\nu}}$, so
+
+$$\pi_t - \bar{\pi} = \frac{(\pi_{t-1} - \bar{\pi}) + \bar{o} + \bar{\nu}\bar{a}}{1 + \bar{b}\bar{m}\bar{\nu}}. \tag{6}$$
+
+To keep the formulas short we write $\lambda \equiv 1/(1 + \bar{b}\bar{m}\bar{\nu})$. This shorthand is ours, not the textbook's. It lies between 0 and 1, and in the baseline $\bar{b}\bar{m}\bar{\nu} = 2 \times 0.5 \times 1 = 1$, so $\lambda = 1/2$.
+
+*Intuition.* Equation (6) splits the inflation pressure that reaches the economy in period $t$: the gap inherited from last period, plus the inflation shock, plus the push from a demand shock. Only the share $\lambda$ of it shows up as inflation above the target. The policy rule removes the rest by holding output below potential, as equation (5) shows.
+
+**Step 3: the path back to the steady state.** When the shocks are over ($\bar{a} = \bar{o} = 0$), equation (6) and the AD curve (2) become
+
+$$\pi_t - \bar{\pi} = \lambda\,(\pi_{t-1} - \bar{\pi}), \qquad \tilde{Y}_t = -\bar{b}\bar{m}\,(\pi_t - \bar{\pi}). \tag{7}$$
+
+The first part is a **difference equation** ([Appendix C.10](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.10-difference-equations-how-macro-variables-move-over-time)). Apply it again and again, starting from some period $s$:
+
+$$\pi_t - \bar{\pi} = \lambda(\pi_{t-1} - \bar{\pi}) = \lambda^2(\pi_{t-2} - \bar{\pi}) = \dots = \lambda^{t-s}(\pi_s - \bar{\pi}).$$
+
+Each period the inflation gap, and with it the recession, shrinks by the same factor $\lambda$; in the baseline both halve every period. The fall in the gap from one period to the next is $(\pi_{t-1} - \bar{\pi}) - (\pi_t - \bar{\pi}) = (1 - \lambda)(\pi_{t-1} - \bar{\pi})$, proportional to the gap itself. So the economy moves fastest when it is farthest from the steady state: the **principle of transition dynamics** of the [Solow model (Chapter 5)](https://quarcs-lab.github.io/macro102-site/notebooks/ch05-the-solow-growth-model.html) holds here too. Because $\lambda < 1$, the gap always dies out, and the economy always returns to the steady state (4).
+
+**Step 4: the total output cost of an episode.** Add up the AS curve, $\pi_t - \pi_{t-1} = \bar{\nu}\tilde{Y}_t + \bar{o}_t$, over the periods $t = 1, \dots, T$, writing $\bar{o}_t$ for the shock of period $t$. On the left, every middle term cancels:
+
+$$(\pi_1 - \pi_0) + (\pi_2 - \pi_1) + \dots + (\pi_T - \pi_{T-1}) = \pi_T - \pi_0.$$
+
+So $\pi_T - \pi_0 = \bar{\nu}\sum_t \tilde{Y}_t + \sum_t \bar{o}_t$. Solve for the sum of output:
+
+$$\sum_{t=1}^{T}\tilde{Y}_t = \frac{(\pi_T - \pi_0) - \sum_{t=1}^{T}\bar{o}_t}{\bar{\nu}}. \tag{8}$$
+
+Take $T$ large enough for the economy to be back at a steady state. Then the total output gained or lost in an episode depends only on how far inflation moved in the end, on the inflation shocks, and on the slope $\bar{\nu}$. The policy response $\bar{m}$ does not appear: an aggressive central bank makes the slump deeper but shorter, not larger in total. Each point by which inflation must come down costs $1/\bar{\nu}$ points of a year's output, a number often called the **sacrifice ratio**.
+
+**Step 5: the three events.** We now apply equations (5) to (8) to the chapter's three events, with the baseline numbers.
+
+*Event 1: an inflation shock.* The economy starts at $\pi_0 = \bar{\pi} = 2$ and $\bar{o} = 2$ hits in period 1 only. Equation (6) gives $\pi_1 - \bar{\pi} = \lambda\bar{o} = 1$, so $\pi_1 = 3$ percent, and equation (5) gives $\tilde{Y}_1 = -\bar{b}\bar{m}\lambda\bar{o} = -1$ percent. Inflation rises *and* output falls: **stagflation**. From period 2 on, equation (7) halves both gaps: inflation is 2.5, 2.25, 2.125, … percent and output −0.5, −0.25, −0.125, … percent. Inflation ends where it started and the shock adds up to 2, so equation (8) gives a total output loss of $\sum\tilde{Y}_t = -2/\bar{\nu} = -2$ percent of a year's output.
+
+*Event 2: a disinflation.* The economy starts in a steady state with a target of 4 percent, so $\pi_0 = 4$. From period 1 on the target is $\bar{\pi}' = 2$. Every formula above holds with $\bar{\pi}'$ in place of $\bar{\pi}$. Equation (6): $\pi_1 - \bar{\pi}' = \lambda(\pi_0 - \bar{\pi}') = 1$, so $\pi_1 = 3$ percent, halfway between the old and the new target. The AD curve (2) gives $\tilde{Y}_1 = -\bar{b}\bar{m}(\pi_1 - \bar{\pi}') = -1$ percent. After that the gap to the new target halves every period, and the new steady state (4) has $\pi^* = \bar{\pi}' = 2$. Inflation falls by 2 points in total with no inflation shocks, so by equation (8) the disinflation costs $-2/\bar{\nu} = -2$ percent of a year's output.
+
+*Event 3: a demand shock.* $\bar{a} = 2$ in periods 1 to 9. In period 1, equation (6) gives $\pi_1 - \bar{\pi} = \lambda\bar{\nu}\bar{a} = 1$, so $\pi_1 = 3$ percent, and equation (5) gives $\tilde{Y}_1 = \lambda\bar{a} = 1$ percent: a boom with rising inflation. While the shock lasts, inflation drifts toward the point $C$ where output is at potential. There the AS curve gives $\pi_t = \pi_{t-1}$, so inflation is stable, and the shifted AD curve gives $0 = \bar{a} - \bar{b}\bar{m}(\pi^c - \bar{\pi})$. Solving for $\pi^c$:
+
+$$\pi^c = \bar{\pi} + \frac{\bar{a}}{\bar{b}\bar{m}}. \tag{9}$$
+
+In the baseline $\pi^c = 2 + 2/1 = 4$ percent. Subtracting $\pi^c$ from both sides of equation (6) shows that, while $\bar{a}$ stays constant, the gap $\pi_t - \pi^c$ also shrinks by the factor $\lambda$ each period. After eight periods it is $(1/2)^7 \times (3 - 4) \approx -0.008$, so $\pi_8 \approx 3.992$ percent. When the shock ends after period 9, equation (7) applies again: $\pi_{10} - \bar{\pi} = \lambda(\pi_9 - \bar{\pi}) \approx 1$, so inflation is about 3 percent and output about −1 percent, a recession (point $D$). From there both gaps halve on the way back to the steady state. Inflation starts and ends at 2 percent with no inflation shocks, so equation (8) gives $\sum\tilde{Y}_t = 0$: the boom and the later recession cancel exactly.
+
+#### What the model predicts
+
+**The first period after a shock.** Equations (5) and (6), for an economy that starts in its steady state:
+
+| Shock | output $\tilde{Y}_1$ | inflation in period 1 | baseline | what comes next |
+|---|---|---|---|---|
+| inflation shock $\bar{o}$ | $-\bar{b}\bar{m}\lambda\,\bar{o}$ | $\pi_1 - \bar{\pi} = \lambda\bar{o}$ | $-1$ and $+1$ for $\bar{o} = 2$ | back to the steady state along AD (Figs. 6–9) |
+| target cut from $\bar{\pi}$ to $\bar{\pi}'$ | $-\bar{b}\bar{m}\lambda\,(\bar{\pi} - \bar{\pi}')$ | $\pi_1 - \bar{\pi}' = \lambda(\bar{\pi} - \bar{\pi}')$ | $-1$, and $\pi_1 = 3$ | down the new AD curve to $\bar{\pi}'$ (Figs. 10–11) |
+| demand shock $\bar{a}$ | $+\lambda\bar{a}$ | $\pi_1 - \bar{\pi} = \lambda\bar{\nu}\bar{a}$ | $+1$ and $+1$ for $\bar{a} = 2$ | up toward $\pi^c$, then a slump when it ends (Figs. 12–15) |
+
+**The role of the parameters.** Recall $\lambda = 1/(1 + \bar{b}\bar{m}\bar{\nu})$, which falls when $\bar{m}$ or $\bar{\nu}$ rises.
+
+| A higher ... | recession on impact of $\bar{o}$, $\bar{b}\bar{m}\lambda\bar{o}$ | speed of return ($1 - \lambda$) | total output cost, equation (8) | inflation at $C$, equation (9) |
+|---|---|---|---|---|
+| policy response $\bar{m}$ | deeper | faster | unchanged | closer to the target |
+| AS slope $\bar{\nu}$ | milder | faster | smaller, $1/\bar{\nu}$ per point | unchanged |
+
+**Five predictions.**
+
+- **Shocks to prices hurt twice.** A one-period inflation shock raises inflation at once, and the central bank then needs a recession lasting many periods to bring it back, because the shock has raised *expected* inflation.
+- **Disinflation is costly when expectations are sticky.** Lowering the target permanently lowers inflation, but at a total cost of $(\bar{\pi} - \bar{\pi}')/\bar{\nu}$ points of output.
+- **Booms are paid for with recessions.** A temporary demand boom leaves inflation above the target. Only a later slump brings it down, and over the whole episode output sums to zero. What remains is a long spell of high inflation, a net loss, which is why central banks try to keep output at potential.
+- **Counterclockwise loops.** Output above potential pushes inflation up, by the AS curve; inflation above the target makes the central bank push output down, by the AD curve. After the demand shock the economy goes from $A$ (0, 2) to $B$ (1, 3), up toward $C$ (0, 4), down to $D$ (−1, 3) and back to $A$: a counterclockwise loop in the diagram, the pattern tested in Fig. 17.
+- **The rule reacts only to inflation.** A central bank that could see $\bar{a}$ directly could offset it with the interest rate and avoid the whole cycle. With a rule based on inflation alone, it reacts to a demand shock only once the shock has raised inflation.
+
+<!-- cell -->
+
+### The rule for the nominal interest rate, and richer rules
+
+#### Assumptions
+
+**7. The Fisher equation** ([Chapter 8](https://quarcs-lab.github.io/macro102-site/notebooks/ch08-inflation.html)). Central banks set a *nominal* rate, such as the fed funds rate, and the nominal rate is the real rate plus inflation: $i_t = R_t + \pi_t$.
+
+**8. Taylor's numbers.** John Taylor suggested $\bar{r} = 2$ percent, $\bar{m} = 1/2$ and $\bar{\pi} = 2$ percent.
+
+**9. A rule that also reacts to output.** The full Taylor rule adds a term for short-run output, with a weight $\bar{x} \ge 0$: $R_t - \bar{r} = \bar{m}(\pi_t - \bar{\pi}) + \bar{x}\tilde{Y}_t$.
+
+#### Solving the model
+
+**The nominal rule.** Add $\pi_t$ to both sides of the rule (1). The left side becomes $R_t + \pi_t = i_t$:
+
+$$i_t = \bar{r} + \pi_t + \bar{m}\,(\pi_t - \bar{\pi}). \tag{10}$$
+
+Collect the terms in $\pi_t$: $i_t = (\bar{r} - \bar{m}\bar{\pi}) + (1 + \bar{m})\,\pi_t$. With Taylor's numbers, $\bar{r} - \bar{m}\bar{\pi} = 2 - 1 = 1$ and $1 + \bar{m} = 1.5$, so $i_t = 1 + 1.5\,\pi_t$. At the 2 percent target this gives $i = 4$ percent, which is $\bar{r} + \bar{\pi}$. At 4 percent inflation it gives $i = 7$ percent.
+
+**Why the slope must exceed one.** The nominal rate moves by $1 + \bar{m}$ points for each point of inflation, so the real rate $R_t = i_t - \pi_t$ moves by $\bar{m}$ points. Suppose the nominal rate rose by *less* than one for one, so that $\bar{m} < 0$. Then higher inflation would *lower* the real rate, the AD curve would slope up, and $\bar{b}\bar{m}\bar{\nu} < 0$. If $-1 < \bar{b}\bar{m}\bar{\nu} < 0$, then $\lambda = 1/(1 + \bar{b}\bar{m}\bar{\nu}) > 1$, and equation (7) makes the inflation gap *grow* every period. For example, $\bar{m} = -1/4$ in the baseline gives $\bar{b}\bar{m}\bar{\nu} = -1/2$ and $\lambda = 2$: the gap doubles every period, and inflation spirals away from the target. A good rule therefore raises the nominal rate more than one for one with inflation. Equation (10) also shows a limit of the rule: with Taylor's numbers it asks for a negative nominal rate, which banks can hardly set, as soon as $1 + 1.5\,\pi_t < 0$, that is, when inflation falls below $-2/3$ percent. Chapter 14 comes back to this limit.
+
+**The richer rule.** Substitute the rule of assumption 9 into the IS curve:
+
+$$\tilde{Y}_t = \bar{a} - \bar{b}\left[\bar{m}(\pi_t - \bar{\pi}) + \bar{x}\tilde{Y}_t\right] = \bar{a} - \bar{b}\bar{m}(\pi_t - \bar{\pi}) - \bar{b}\bar{x}\,\tilde{Y}_t.$$
+
+Collect the $\tilde{Y}_t$ terms on the left, $(1 + \bar{b}\bar{x})\tilde{Y}_t$, and divide:
+
+$$\tilde{Y}_t = \frac{\bar{a} - \bar{b}\bar{m}\,(\pi_t - \bar{\pi})}{1 + \bar{b}\bar{x}}.$$
+
+#### What the model predicts
+
+- With $\bar{m} > 0$ each point of inflation lifts the nominal rate by more than a point, and the *real* rate goes up as well. With Taylor's numbers, one more point of inflation raises the nominal rate by 1.5 points. Fig. 16 tests equation (10) on the fed funds rate.
+- The richer rule gives an AD curve of the same shape, a downward-sloping straight line, so all the lessons above survive. It is steeper: each point of inflation lowers output by $\bar{b}\bar{m}/(1 + \bar{b}\bar{x})$ instead of $\bar{b}\bar{m}$. A demand shock now moves output by only $\bar{a}/(1 + \bar{b}\bar{x})$: with $\bar{b} = 2$ and $\bar{x} = 1/2$ the central bank cancels half of it at once.
+- Even the simple rule pays attention to output *indirectly*. Booms raise inflation through the AS curve, and the rule answers the inflation, which is one reason why such a simple rule describes actual policy fairly well.
+
+<!-- cell -->
+
+### Expectations and credibility
+
+#### Assumptions
+
+**10. Expected inflation in general.** Drop adaptive expectations and keep expected inflation $\pi^e_t$ in the AS curve:
+
+$$\pi_t = \pi^e_t + \bar{\nu}\tilde{Y}_t + \bar{o}. \tag{11}$$
+
+**11. Rational expectations.** Firms use all the information they have to forecast inflation, including the target the central bank announces. An announcement that everyone believes moves $\pi^e_t$ straight to the new target. In Fig. 20 we measure belief with a **credibility** share $c$ between 0 and 1 (our addition): after a cut in the target from $\bar{\pi}$ to $\bar{\pi}'$, $\pi^e = c\,\bar{\pi}' + (1 - c)\,\bar{\pi}$.
+
+#### Solving the model
+
+The algebra of step 2 goes through unchanged, with $\pi^e_t$ in place of $\pi_{t-1}$. Equation (5) becomes $\tilde{Y}_t = \left[\bar{a} - \bar{b}\bar{m}(\pi^e_t - \bar{\pi} + \bar{o})\right]/(1 + \bar{b}\bar{m}\bar{\nu})$, and equation (6) changes in the same way. Take the disinflation from 4 to 2 percent with no shocks. The new target enters the AD curve, and expected inflation is above it by $\pi^e - \bar{\pi}' = (1 - c)(\bar{\pi} - \bar{\pi}')$. So in period 1
+
+$$\tilde{Y}_1 = -\bar{b}\bar{m}\lambda\,(1 - c)(\bar{\pi} - \bar{\pi}'), \qquad \pi_1 - \bar{\pi}' = \lambda\,(1 - c)(\bar{\pi} - \bar{\pi}').$$
+
+With the baseline numbers, $c = 0$ gives $\tilde{Y}_1 = -1$ and $\pi_1 = 3$ (the adaptive case of Event 2), $c = 1/2$ gives $-0.5$ and $2.5$, and $c = 1$ gives $0$ and $2$.
+
+#### What the model predicts
+
+- **A fully credible disinflation is free.** When firms believe the new target, the AS curve moves down together with the AD curve, and inflation drops to the new target with output at potential.
+- **Every bit of credibility saves output.** The recession in period 1 shrinks in proportion to $1 - c$.
+- **Commitment is valuable.** A central bank that might later be tempted to create a surprise boom cannot be fully believed (the **time consistency problem**). Rules, a reputation for low inflation, and announced **inflation targets** raise credibility and lower the cost of keeping inflation low.
+- **Models with fixed expectations can mislead.** If a change in policy changes how people form expectations, a model that keeps them fixed gives wrong answers about that policy: this is the **Lucas critique**.
+
+<!-- cell -->
+
+### The model in code
+
+We now turn the key results into Python functions: the AD curve (equation 2), the AS curve (equations 3 and 11) and the solution for one period (equations 5 and 6). The cell also stores the baseline numbers. The cells after it check the algebra above with numbers. Every later section reuses these functions.
 
 > **Python note.** `def` creates a *function*: a named recipe that takes inputs (the *arguments*) and gives
 > back a result with `return`. Writing `m=M_BAR` gives an argument a *default value*, used whenever we do not
@@ -149,17 +365,17 @@ T_MAX = 20                                           # number of periods simulat
 
 
 def ad_output(pi, pi_bar=PI_BAR, m=M_BAR, a=0.0, b=B_BAR):
-    """Equation 13.3, the AD curve: Y~ = a - b m (pi - pi_bar), in percent."""
+    """Equation 2, the AD curve: Y~ = a - b m (pi - pi_bar), in percent."""
     return a - b * m * (pi - pi_bar)
 
 
 def as_inflation(Y, pi_e=PI_BAR, nu=NU_BAR, o=0.0):
-    """Equation 13.4, the AS curve: pi = pi_e + nu Y~ + o, with expected inflation pi_e (= pi_{t-1})."""
+    """Equations 3 and 11, the AS curve: pi = pi_e + nu Y~ + o, with expected inflation pi_e (= pi_{t-1})."""
     return pi_e + nu * Y + o
 
 
 def solve_asad(pi_e, a=0.0, o=0.0, pi_bar=PI_BAR, m=M_BAR, nu=NU_BAR):
-    """The point where the AD and AS curves cross: short-run output and inflation in one period."""
+    """Equations 5 and 6: the point where the AD and AS curves cross, output and inflation in one period."""
     Y = (a - B_BAR * m * (pi_e + o - pi_bar)) / (1 + B_BAR * m * nu)
     return Y, as_inflation(Y, pi_e, nu, o)
 ```
@@ -177,7 +393,125 @@ print(f"Inflation shock o = 2 hits the steady state:      Y~ = {Y:.2f}%,  pi = {
 ```
 
 In the steady state output is at potential and inflation equals the target. The shock raises inflation by
-only 1 point, not 2, because the central bank answers with a recession of 1 percent.
+only 1 point, not 2, because the central bank answers with a recession of 1 percent: with $\lambda = 1/2$, half
+of the shock becomes inflation (equation 6).
+
+**Check 1: the steady state does not depend on the parameters.** Equation (4) says that when expected inflation
+equals the target, output is at potential and inflation stays on target, whatever $\bar{m}$ and $\bar{\nu}$ are.
+
+> **Python note.** A `for` loop repeats its indented lines once for each element of a list. Here each element is a
+> pair of numbers in parentheses, and `for m, nu in ...` unpacks each pair into two variables, as `Y, pi = ...` did.
+
+```{python}
+for m, nu in [(0.25, 0.5), (0.5, 1.0), (2.0, 2.0)]:
+    Y, pi = solve_asad(pi_e=PI_BAR, m=m, nu=nu)
+    print(f"m = {m:.2f}, nu = {nu:.1f}:  Y~ = {Y:.2f}%,  pi = {pi:.2f}%   (equation 4: Y~ = 0, pi = {PI_BAR:.1f}%)")
+```
+
+**Check 2: the gap shrinks by the factor $\lambda$.** We solve the inflation shock period by period with
+`solve_asad`, carrying each period's inflation into the next period's expectations. Equations (6) and (7) predict
+an inflation gap of $\lambda\bar{o}$ in period 1 and $\lambda^t\bar{o}$ in period $t$, with output $-\bar{b}\bar{m}$
+times the gap.
+
+> **Python note.** `range(1, 7)` counts 1, 2, ..., 6. `**` means "to the power of". The line `pi_e = pi` replaces
+> the old expectation by this period's inflation, ready for the next pass through the loop.
+
+```{python}
+lam = 1 / (1 + B_BAR * M_BAR * NU_BAR)          # the share of the inflation gap left after each period
+print(f"Share of the gap left each period: 1 / (1 + b m nu) = {lam:.2f}")
+pi_e = PI_BAR                                    # period 0: the steady state
+for t in range(1, 7):
+    o = 0.0
+    if t == 1:
+        o = 2.0                                  # the inflation shock hits in period 1 only
+    Y, pi = solve_asad(pi_e, o=o)
+    gap = lam ** t * 2.0                         # equations (6) and (7)
+    print(f"Period {t}: pi = {pi:.4f}% (formula {PI_BAR + gap:.4f}%),  "
+          f"Y~ = {Y:+.4f}% (formula {-B_BAR * M_BAR * gap:+.4f}%)")
+    pi_e = pi                                    # adaptive expectations for the next period
+```
+
+**Check 3: the total output cost.** Equation (8) says that the sum of output over a whole episode is
+$-\bar{o}/\bar{\nu}$ after an inflation shock and $-(\bar{\pi} - \bar{\pi}')/\bar{\nu}$ after a disinflation, and
+that $\bar{m}$ does not matter. The function below adds up output over 200 periods, long enough to be back at the
+steady state.
+
+```{python}
+def total_output(o_first=0.0, pi_start=PI_BAR, pi_bar=PI_BAR, m=M_BAR, nu=NU_BAR, periods=200):
+    """Sum of Y~ over many periods, after a shock o_first in period 1 or a new target pi_bar (equation 8)."""
+    pi_e, total = pi_start, 0.0
+    for t in range(1, periods + 1):
+        o = 0.0
+        if t == 1:
+            o = o_first
+        Y, pi = solve_asad(pi_e, o=o, pi_bar=pi_bar, m=m, nu=nu)
+        total = total + Y
+        pi_e = pi
+    return total
+
+
+for nu in [0.5, 1.0, 2.0]:
+    print(f"Inflation shock o = 2, nu = {nu:.1f}: sum of Y~ = {total_output(o_first=2.0, nu=nu):+.4f}"
+          f"   equation (8): {-2.0 / nu:+.4f}")
+for m in [0.25, 0.5, 2.0]:
+    print(f"Target 4% -> 2%, m = {m:.2f}:       sum of Y~ = {total_output(pi_start=4.0, m=m):+.4f}"
+          f"   equation (8): {(2.0 - 4.0) / NU_BAR:+.4f}")
+```
+
+**Check 4: inflation at point $C$.** Keep the demand shock $\bar{a} = 2$ in place for 60 periods. Equation (9)
+predicts that inflation settles at $\bar{\pi} + \bar{a}/(\bar{b}\bar{m})$ with output back at potential: 4 percent
+in the baseline and 3 percent with $\bar{m} = 1$.
+
+```{python}
+for m in [0.5, 1.0]:
+    pi_e = PI_BAR
+    for t in range(1, 61):                       # a demand shock a = 2 that does not end
+        Y, pi = solve_asad(pi_e, a=2.0, m=m)
+        pi_e = pi
+    print(f"m = {m:.1f}: after 60 periods pi = {pi:.4f}%, Y~ = {Y:+.4f}%"
+          f"   equation (9): pi_c = {PI_BAR + 2.0 / (B_BAR * m):.4f}%")
+```
+
+**Check 5: the nominal rule and why its slope must exceed one.** With Taylor's numbers, equation (10) should agree
+with $i = 1 + 1.5\,\pi$, and the real rate $i - \pi$ should rise by $\bar{m} = 0.5$ for each point of inflation. Then
+we give the central bank a wrong-signed response, $\bar{m} = -1/4$, start one point above the target, and watch the
+gap: with $\lambda = 2$ it should double every period.
+
+```{python}
+r_bar = 2.0
+for pi in [0.5, 2.0, 4.0, 6.0]:
+    i = r_bar + pi + M_BAR * (pi - PI_BAR)       # equation (10)
+    print(f"pi = {pi:.1f}%:  i = {i:.2f}%  (1 + 1.5 pi = {1 + 1.5 * pi:.2f}%),  real rate i - pi = {i - pi:.2f}%")
+
+pi_e = PI_BAR + 1.0                              # start one point above the target
+for t in range(1, 5):
+    Y, pi = solve_asad(pi_e, m=-0.25)            # the nominal rate rises by only 0.75 per point of inflation
+    print(f"m = -0.25, period {t}: inflation gap = {pi - PI_BAR:.2f} points")
+    pi_e = pi
+```
+
+**Check 6: the richer rule.** With $\bar{x} = 1/2$, a demand shock $\bar{a} = 2$ and inflation on target, the formula
+above gives $\tilde{Y} = 2/(1 + 2 \times 0.5) = 1$ percent. We plug that output into the rule and the resulting interest
+rate into the IS curve: the IS curve must give back the same output.
+
+```{python}
+a, x, pi = 2.0, 0.5, PI_BAR                      # demand shock, weight on output, inflation on target
+Y = (a - B_BAR * M_BAR * (pi - PI_BAR)) / (1 + B_BAR * x)   # the richer AD curve
+rate_gap = M_BAR * (pi - PI_BAR) + x * Y         # the richer rule: R - r_bar
+print(f"Richer AD curve at pi = target: Y~ = {Y:.2f}%   (simple rule: {ad_output(PI_BAR, a=a):.2f}%)")
+print(f"IS curve with that interest rate: Y~ = a - b (R - r_bar) = {a - B_BAR * rate_gap:.2f}%")
+```
+
+**Check 7: credibility.** For the cut in the target from 4 to 2 percent, period 1 should give
+$\tilde{Y}_1 = -\bar{b}\bar{m}\lambda(1 - c) \times 2$: −1, −0.5 and 0 percent for credibility 0, 1/2 and 1.
+
+```{python}
+for c in [0.0, 0.5, 1.0]:
+    pi_e = c * 2.0 + (1 - c) * PI_OLD            # expected inflation after the announcement (equation 11)
+    Y, pi = solve_asad(pi_e, pi_bar=2.0)
+    formula = -B_BAR * M_BAR * lam * (1 - c) * (PI_OLD - 2.0) + 0.0   # + 0.0 turns -0.0 into 0.0
+    print(f"credibility {c:.1f}: expected pi = {pi_e:.1f}%  ->  pi = {pi:.2f}%, Y~ = {Y:+.2f}%  (formula {formula:+.2f}%)")
+```
 
 <!-- cell -->
 
@@ -275,12 +609,12 @@ def add_curve(fig, x, y, label, color, dash="solid", col=1):
 
 ```{python}
 def add_ad(fig, label, color, a=0.0, pi_bar=PI_BAR, m=M_BAR, b=B_BAR, dash="solid", col=1):
-    """Draw an AD curve (equation 13.3): output on the horizontal axis, inflation on the vertical axis."""
+    """Draw an AD curve (equation 2): output on the horizontal axis, inflation on the vertical axis."""
     add_curve(fig, ad_output(PI_GRID, pi_bar, m, a, b), PI_GRID, label, color, dash, col)
 
 
 def add_as(fig, label, color, pi_e=PI_BAR, nu=NU_BAR, o=0.0, dash="solid", col=1):
-    """Draw an AS curve (equation 13.4)."""
+    """Draw an AS curve (equation 3)."""
     add_curve(fig, Y_GRID, as_inflation(Y_GRID, pi_e, nu, o), label, color, dash, col)
 
 
@@ -1157,7 +1491,7 @@ slider_figure(inflation_shock_summary, "nu", [0.25, 0.5, 1.0, 1.5, 2.0], start=1
 #### Key numbers: the inflation gap halves every period
 
 With $\bar{b}\bar{m}\bar{\nu} = 1$, the AS/AD solution makes the gap between inflation and the target shrink by the
-factor $1/(1 + \bar{b}\bar{m}\bar{\nu}) = 1/2$ each period.
+factor $1/(1 + \bar{b}\bar{m}\bar{\nu}) = 1/2$ each period (equation 7).
 
 ```{python}
 path = simulate(NO_SHOCK, shock_list(2.0, 1))
@@ -1173,7 +1507,7 @@ From period 2 on the ratio is exactly 0.5. (Period 0 has no gap, so the ratio of
 pandas shows `inf`.) Inflation is 3, 2.5, 2.25, ... and output −1, −0.5, −0.25, ...
 
 **Your turn.** Over all periods, the total change in inflation is zero (it starts and ends at 2 percent). Use the AS
-curve to explain why the sum of output must then be $-\bar{o}/\bar{\nu} = -2$. Check it with `path.Y.sum()`.
+curve to explain why the sum of output must then be $-\bar{o}/\bar{\nu} = -2$ (equation 8). Check it with `path.Y.sum()`.
 
 <details><summary>Hint</summary>
 
@@ -1298,7 +1632,7 @@ slider_figure(disinflation_summary, "m", [0.25, 0.5, 1.0, 1.5, 2.0], start=0.5, 
 - Inflation falls for good, from 4 to 2 percent, and output returns to potential. The price is a recession: about 2
   percent of a year's output in total.
 - A more aggressive central bank (higher $\bar{m}$) makes the recession deeper and shorter, but the total loss stays
-  near 2. Only the AS slope $\bar{\nu}$ changes it: the total loss is $(\bar{\pi} - \bar{\pi}')/\bar{\nu}$.
+  near 2. Only the AS slope $\bar{\nu}$ changes it: the total loss is $(\bar{\pi} - \bar{\pi}')/\bar{\nu}$ (equation 8).
 - Why must there be a recession at all? Because firms keep expecting the old inflation. If everyone believed the new
   target at once, the economy could jump straight from $A$ to $C$. Fig. 20 returns to this idea.
 
@@ -1394,7 +1728,7 @@ output and how much into inflation in period 1?
 
 Inflation at $B$ is above the 2 percent firms expected, so next period they expect 3 percent, and the AS curve shifts
 **up**. Period by period, inflation rises and output falls back toward zero, along AD₁. At $C$ (period 8 in the
-textbook) output is back at potential, but inflation is well above target. There $\tilde{Y} = 0$ on AD₁, so
+textbook) output is back at potential, but inflation is well above target. There $\tilde{Y} = 0$ on AD₁, so (equation 9)
 
 $$0 = \bar{a} - \bar{b}\bar{m}\,(\pi^c - \bar{\pi}) \quad\Rightarrow\quad \pi^c = \bar{\pi} + \frac{\bar{a}}{\bar{b}\bar{m}}.$$
 
@@ -1574,9 +1908,9 @@ How well does the model describe real economies? We compare the fed funds rate w
 **Goal.** Test the policy rule on U.S. data: does it predict the Federal Reserve's interest rate?
 
 The rule sets the *real* interest rate, but the Fed sets a *nominal* rate, the fed funds rate. The Fisher equation
-links the two, $i_t = R_t + \pi_t$, so the rule implies
+links the two, $i_t = R_t + \pi_t$, so the rule implies (equation 10)
 
-$$i_t = \bar{r} + \pi_t + \bar{m}\,(\pi_t - \bar{\pi}). \qquad (13.5)$$
+$$i_t = \bar{r} + \pi_t + \bar{m}\,(\pi_t - \bar{\pi}).$$
 
 John Taylor picked numbers that are all built on the number 2: $\bar{r} = 2\%$, $\bar{m} = 1/2$ and $\bar{\pi} = 2\%$. Then
 $i_t = 1 + 1.5\,\pi_t$: when inflation rises by 1 point, the nominal rate rises by 1.5 points, so the real rate rises
@@ -1615,7 +1949,7 @@ very high inflation, so the rule asks for rates far off the chart.
 
 ```{python}
 def policy_rule(pi, r_bar=2.0, m=M_BAR, pi_bar=PI_BAR):
-    """Equation 13.5: the nominal interest rate i = r_bar + pi + m (pi - pi_bar)."""
+    """Equation 10: the nominal interest rate i = r_bar + pi + m (pi - pi_bar)."""
     return r_bar + pi + m * (pi - pi_bar)
 ```
 
@@ -2153,9 +2487,9 @@ Filter `by_country.loc[1995:2015, "Japan"]` with `<= 0`, and count the rows with
 
 So far firms expected last year's inflation (adaptive expectations). Under **rational expectations**, an idea
 developed by Robert Lucas, people use all the information they have, including the central bank's announced target.
-The AS curve then uses expected inflation $\pi^e_t$ instead of $\pi_{t-1}$:
+The AS curve then uses expected inflation $\pi^e_t$ instead of $\pi_{t-1}$ (equation 11):
 
-$$\pi_t = \pi^e_t + \bar{\nu}\tilde{Y}_t + \bar{o}. \qquad (13.6)$$
+$$\pi_t = \pi^e_t + \bar{\nu}\tilde{Y}_t + \bar{o}.$$
 
 The Fed announces a cut in its target from 4 to 2 percent. If firms believe it and expect 2 percent, the AS curve moves
 down together with the AD curve, and the economy goes straight from $A$ to $B$ with output at potential. To see the
@@ -2426,15 +2760,16 @@ the axes.
 
 ## Concluding remarks
 
-- A **monetary policy rule** $R_t - \bar{r} = \bar{m}(\pi_t - \bar{\pi})$ turns the IS curve into the downward-sloping **AD
-  curve** $\tilde{Y}_t = \bar{a} - \bar{b}\bar{m}(\pi_t - \bar{\pi})$; the Phillips curve is the upward-sloping **AS curve**.
-  Their crossing gives this period's output and inflation; the steady state has inflation on target and output at
-  potential.
-- Because expected inflation is sticky, every shock is followed by slow **transition dynamics**: an inflation shock
-  brings stagflation, a lower target costs a recession, and a temporary demand boom must be paid for with a later
-  recession. The economy moves in **counterclockwise loops**, and the U.S. data show them too.
-- A simple rule with Taylor's numbers tracks the fed funds rate surprisingly well, with large gaps in the 1970s, after
+- A **monetary policy rule**, equation (1), turns the IS curve into the downward-sloping **AD curve**, equation (2);
+  the Phillips curve is the upward-sloping **AS curve**, equation (3). Their crossing gives this period's output and
+  inflation, equations (5) and (6), and the steady state, equation (4), has inflation on target and output at potential.
+- Because expected inflation is sticky, every shock is followed by slow **transition dynamics**: the inflation gap
+  shrinks by the same factor each period, equation (7). An inflation shock brings stagflation, a lower target costs a
+  recession of $1/\bar{\nu}$ points of output per point of disinflation, equation (8), and a temporary demand boom
+  pushes inflation up toward the level of equation (9) and must be paid for with a later recession. The economy moves in
+  **counterclockwise loops**, and the U.S. data show them too.
+- A simple rule with Taylor's numbers, equation (10), tracks the fed funds rate surprisingly well, with large gaps in the 1970s, after
   2008 and in 2021–2022. Data revisions can change what the numbers say.
-- **Expectations** are central: a credible target can lower inflation at little cost, which is why modern central banks
+- **Expectations** are central, equation (11): a credible target can lower inflation at little cost, which is why modern central banks
   adopt inflation targets and value their reputation.
 - The next chapter turns to **financial crises** and how they fit into the short-run model.

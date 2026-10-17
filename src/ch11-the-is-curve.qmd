@@ -1,4 +1,4 @@
-# Chapter 11: The IS Curve
+# 11. The IS Curve
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/ch11-the-is-curve.ipynb)
 
@@ -10,11 +10,14 @@ Chapter 9 measured the ups and downs of the economy. This chapter builds the fir
 model that explains them: the **IS curve**, which links the real interest rate to short-run output.
 By the end of it you will be able to:
 
-- derive the IS curve $\tilde{Y}_t = \bar{a} - \bar{b}(R_t - \bar{r})$ from the national income identity
-  and explain why it slopes down;
-- tell a **movement along** the IS curve (a change in the real interest rate) from a **shift** of the curve
-  (an aggregate demand shock or a change in the marginal product of capital);
-- explain the **life-cycle / permanent-income** theory of consumption and the **multiplier**;
+- derive the IS curve $\tilde{Y}_t = \bar{a} - \bar{b}(R_t - \bar{r})$ step by step from the national income identity
+  and the five demand equations, and explain why it slopes down and why "IS" means investment equals saving;
+- read the **comparative statics** of the IS curve: tell a **movement along** it (a change in the real interest rate)
+  from a **shift** (an aggregate demand shock or a change in the marginal product of capital), and say by how much
+  output changes;
+- derive the **multiplier** $1/(1-\bar{x})$ in two ways, by solving the model and by adding up the rounds of spending;
+- explain the **life-cycle / permanent-income** theory of consumption, compute permanent income as a present value,
+  and explain why only the present value of taxes matters (Ricardian equivalence);
 - compare the Congressional Budget Office's 2009 forecasts of unemployment with what actually happened;
 - in Python: reuse one model function in many figures, shade areas between two curves, and summarize
   monthly data by quarter and year with `groupby`.
@@ -90,45 +93,230 @@ def slider_figure(make_figure, name, values, start, label=None):
 
 ## Model overview
 
-The IS curve is the first piece of the short-run model. It answers one question: when the real interest rate changes, what happens to output relative to its potential? The key link is investment. Firms borrow to buy new machines, so a higher interest rate makes some investments no longer worth it, investment falls, and output falls below potential. Spending shocks, such as more optimistic consumers or more government purchases, shift the whole curve.
+The IS curve is the first building block of the short-run model. It asks a single question: when the real interest rate moves, where does output end up relative to its potential level? The answer runs through investment. A firm that can borrow at the real interest rate compares that cost with what a new machine would earn. When borrowing gets dearer, fewer projects pay off and investment spending drops; with less spending on goods, firms produce less and output falls below potential. In one line: a higher interest rate means less investment, and less investment means less output.
 
-The curve has one input the central bank controls, the real interest rate, and a few parameters that describe the economy: the demand shock, how strongly investment reacts to the interest rate, and the marginal product of capital. Its outcome is short-run output. Below we derive the curve from the national income identity, fix one baseline for all the diagrams, and define the functions that every section reuses: to draw the curve, to move along it and shift it, to study consumption, and to work through the textbook's exercise.
+This section builds the curve in three blocks. The first derives the IS curve itself. We write down the national income identity and one equation for each use of output, combine them step by step into a single straight line, and then read off which changes move the economy along that line and which shift it. The second block lets consumption react to booms and slumps, which puts a **multiplier** in front of the curve. The third looks behind the consumption equation at the **permanent-income** idea that justifies it, and at what that idea implies for the timing of taxes. At the end, `### The model in code` turns the key results into Python functions, checks each of them with numbers, and sets up the drawing tools that every figure reuses.
 
-The IS curve starts from the **national income identity** of Chapter 2: output is used for consumption,
-investment, government purchases and net exports,
+As in the rest of the book, a bar over a letter marks something the short-run model takes as given: a **parameter** such as $\bar{b}$, or a value handed over by the long-run model, such as potential output $\bar{Y}_t$ and the marginal product of capital $\bar{r}$. Letters without a bar, such as $Y_t$, $C_t$ and $I_t$, are **endogenous variables**. The real interest rate $R_t$ carries no bar because [Chapter 12](https://quarcs-lab.github.io/macro102-site/notebooks/ch12-monetary-policy-and-the-phillips-curve.html) will make it endogenous; in this chapter we simply treat it as given. In the code we write `a`, `b` and `r_bar`.
 
-$$Y_t = C_t + I_t + G_t + EX_t - IM_t. \qquad (11.2)$$
+<!-- cell -->
 
-The short-run model takes **potential output** $\bar{Y}_t$ from the long-run model, and each use of output is
-a share of it:
+### The IS curve
 
-- consumption, government purchases, exports and imports are constant shares,
-  $C_t = \bar{a}_c\bar{Y}_t$, $G_t = \bar{a}_g\bar{Y}_t$, $EX_t = \bar{a}_{ex}\bar{Y}_t$ and $IM_t = \bar{a}_{im}\bar{Y}_t$
-  (equations 11.3–11.6);
-- investment is different. It depends on the gap between the **real interest rate** $R_t$, the cost of
-  borrowing, and the **marginal product of capital** $\bar{r}$, the return on a new machine:
+#### Assumptions
 
-$$\frac{I_t}{\bar{Y}_t} = \bar{a}_i - \bar{b}\,(R_t - \bar{r}). \qquad (11.7)$$
+Time runs in periods $t$ (think of quarters or years), and six equations hold in every period.
 
-Divide the identity by $\bar{Y}_t$, substitute the five shares, and subtract 1 from both sides. Short-run
-output $\tilde{Y}_t = (Y_t - \bar{Y}_t)/\bar{Y}_t$ is on the left, and we get the **IS curve**:
+**1. The national income identity.** Every unit of output ends up in one of four places: it is consumed, invested, bought by the government, or sold abroad, and goods bought from abroad are subtracted because they were not made at home ([Chapter 2](https://quarcs-lab.github.io/macro102-site/notebooks/ch02-measuring-the-macroeconomy.html)):
 
-$$\tilde{Y}_t = \bar{a} - \bar{b}\,(R_t - \bar{r}), \qquad \bar{a} \equiv \bar{a}_c + \bar{a}_i + \bar{a}_g + \bar{a}_{ex} - \bar{a}_{im} - 1. \qquad (11.12)$$
+$$Y_t = C_t + I_t + G_t + EX_t - IM_t. \tag{1}$$
 
-$\bar{a}$ is the **aggregate demand shock**. In the long run the shares add up to 1, so $\bar{a} = 0$: when the
-real interest rate equals the marginal product of capital, output is at potential ($\tilde{Y} = 0$). For now
-$R_t$ is exogenous; Chapter 12 explains how the central bank sets it.
+Adding $IM_t$ to both sides gives a second reading: home production plus imports, the goods the economy has to work with, equals consumption, investment, government purchases and exports, the four things it does with them.
 
-**One baseline for every diagram.** The textbook's numerical example (after equation 11.14) gives the
-baseline that all the IS figures of this notebook start from:
+**2 to 5. Four uses of output that follow potential output.** Consumption, government purchases, exports and imports are each a constant share of potential output:
 
-- no aggregate demand shock, $\bar{a} = 0$;
-- the sensitivity of investment to the interest rate, $\bar{b} = 2$;
-- the marginal product of capital, $\bar{r} = 5$ percent.
+$$C_t = \bar{a}_c\bar{Y}_t, \qquad G_t = \bar{a}_g\bar{Y}_t, \qquad EX_t = \bar{a}_{ex}\bar{Y}_t, \qquad IM_t = \bar{a}_{im}\bar{Y}_t.$$
 
-We measure $\tilde{Y}$, $R$, $\bar{r}$ and $\bar{a}$ in percent (or percentage points). For the demand shares we use
-illustrative values that add up to 100 percent of potential output: consumption 65 (the textbook's "about
-2/3"), investment 17, government purchases 20 (the textbook's "about 20 percent"), exports 12 and imports 14.
+Potential output $\bar{Y}_t$ is the output the economy would produce with its resources fully employed. It comes from the long-run model ([Chapters 5](https://quarcs-lab.github.io/macro102-site/notebooks/ch05-the-solow-growth-model.html) and [6](https://quarcs-lab.github.io/macro102-site/notebooks/ch06-growth-and-ideas.html)), so here it is given. Linking consumption to $\bar{Y}_t$ rather than to actual output $Y_t$ is a real economic assumption. Potential output is far smoother than actual output, so when a recession pulls $Y_t$ down, $\bar{Y}_t$ hardly moves, and neither does consumption: households keep spending, for instance by running down their savings. The third block below gives the reason. As rough benchmarks for the United States, consumption is close to two thirds of GDP and government purchases close to one fifth.
+
+**6. Investment reacts to the interest rate.** The investment share has a normal level $\bar{a}_i$, and it rises or falls depending on how the real interest rate $R_t$ compares with the marginal product of capital $\bar{r}$:
+
+$$\frac{I_t}{\bar{Y}_t} = \bar{a}_i - \bar{b}\,(R_t - \bar{r}). \tag{2}$$
+
+Why that gap? Think of one unit of output that a firm could put into a new machine. Installed, it produces $\bar{r}$ extra units of output a period later. Lent out in financial markets instead (or used to repay a loan), it earns $R_t$. When $\bar{r} > R_t$, the machine beats the bond. For example, with $\bar{r} = 5$ percent and $R_t = 3$ percent, a firm that borrows 100 units and installs them as capital gets 5 units of extra output, owes 3 units of interest and is left with 2: so firms invest more than usual. When $R_t > \bar{r}$, the bond beats the machine and firms invest less than usual. The parameter $\bar{b} > 0$ measures how strongly firms react: each percentage point of gap moves investment by $\bar{b}$ percentage points of potential output.
+
+In the long run the two rates coincide, $R_t = \bar{r}$: firms keep adding capital until its marginal product is driven down to the interest rate, as in the Solow model ([Chapter 5](https://quarcs-lab.github.io/macro102-site/notebooks/ch05-the-solow-growth-model.html)), and investment sits at its normal share $\bar{a}_i$. In the short run the two rates can differ. A central bank can move $R_t$ within a day, while the marginal product of capital changes only as new factories and machines are built and put to work. $\bar{r}$ has no time subscript because it is constant along a balanced growth path; $\bar{Y}_t$ keeps its subscript because potential output grows.
+
+The model at a glance: six equations for six endogenous variables, $Y_t$, $C_t$, $I_t$, $G_t$, $EX_t$ and $IM_t$.
+
+| Equation | Name | What it takes as given |
+|---|---|---|
+| $Y_t = C_t + I_t + G_t + EX_t - IM_t$ | national income identity | nothing |
+| $C_t = \bar{a}_c\bar{Y}_t$ | consumption | $\bar{a}_c$, $\bar{Y}_t$ |
+| $G_t = \bar{a}_g\bar{Y}_t$ | government purchases | $\bar{a}_g$, $\bar{Y}_t$ |
+| $EX_t = \bar{a}_{ex}\bar{Y}_t$ | exports | $\bar{a}_{ex}$, $\bar{Y}_t$ |
+| $IM_t = \bar{a}_{im}\bar{Y}_t$ | imports | $\bar{a}_{im}$, $\bar{Y}_t$ |
+| $I_t/\bar{Y}_t = \bar{a}_i - \bar{b}(R_t - \bar{r})$ | investment | $\bar{a}_i$, $\bar{b}$, $\bar{r}$, $\bar{Y}_t$, and for now $R_t$ |
+
+**The numbers used in this notebook.** Every IS diagram starts from one baseline, the values the textbook uses in its own diagrams: no aggregate demand shock, $\bar{a} = 0$; a sensitivity of investment $\bar{b} = 2$; and a marginal product of capital $\bar{r} = 5$ percent. For the demand shares we use illustrative values, in percent of potential output, that add up to 100: consumption $\bar{a}_c = 65$, investment $\bar{a}_i = 17$, government purchases $\bar{a}_g = 20$, exports $\bar{a}_{ex} = 12$ and imports $\bar{a}_{im} = 14$. We measure $\tilde{Y}$, $R$, $\bar{r}$ and $\bar{a}$ in percent (or percentage points), so all the numbers below are percentages.
+
+<!-- cell -->
+
+#### Solving the model
+
+**Step 1: write every use of output as a share of potential output.** Divide both sides of the identity (1) by $\bar{Y}_t$. Each term turns into a share:
+
+$$\frac{Y_t}{\bar{Y}_t} = \frac{C_t}{\bar{Y}_t} + \frac{I_t}{\bar{Y}_t} + \frac{G_t}{\bar{Y}_t} + \frac{EX_t}{\bar{Y}_t} - \frac{IM_t}{\bar{Y}_t}.$$
+
+**Step 2: substitute the demand equations.** Divide each of assumptions 2 to 5 by $\bar{Y}_t$: $C_t/\bar{Y}_t = \bar{a}_c$, $G_t/\bar{Y}_t = \bar{a}_g$, $EX_t/\bar{Y}_t = \bar{a}_{ex}$ and $IM_t/\bar{Y}_t = \bar{a}_{im}$. Equation (2) already gives the investment share. Put all five on the right-hand side:
+
+$$\frac{Y_t}{\bar{Y}_t} = \bar{a}_c + \big[\bar{a}_i - \bar{b}\,(R_t - \bar{r})\big] + \bar{a}_g + \bar{a}_{ex} - \bar{a}_{im}.$$
+
+Five of the six unknowns have dropped out. Only $Y_t$ is left, and it depends on the interest rate and on parameters.
+
+**Step 3: from the output ratio to short-run output.** Short-run output, defined in [Chapter 9](https://quarcs-lab.github.io/macro102-site/notebooks/ch09-an-introduction-to-the-short-run.html), is the percentage gap between actual and potential output. Splitting the fraction into two parts shows how it relates to the ratio on the left of step 2:
+
+$$\tilde{Y}_t \equiv \frac{Y_t - \bar{Y}_t}{\bar{Y}_t} = \frac{Y_t}{\bar{Y}_t} - \frac{\bar{Y}_t}{\bar{Y}_t} = \frac{Y_t}{\bar{Y}_t} - 1.$$
+
+For small gaps, $\tilde{Y}_t \approx \ln Y_t - \ln\bar{Y}_t$ ([Appendix C.6](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.6-approximations)), so $\tilde{Y}_t = -0.02$, or $-2$ percent, means that output is 2 percent below potential.
+
+**Step 4: subtract 1 from both sides.** The left side of step 2 becomes $\tilde{Y}_t$. On the right, collect the constant terms in one group:
+
+$$\tilde{Y}_t = \underbrace{\bar{a}_c + \bar{a}_i + \bar{a}_g + \bar{a}_{ex} - \bar{a}_{im} - 1}_{\text{call it } \bar{a}} - \bar{b}\,(R_t - \bar{r}).$$
+
+Giving the group a name yields the **IS curve**:
+
+$$\tilde{Y}_t = \bar{a} - \bar{b}\,(R_t - \bar{r}), \qquad \bar{a} \equiv \bar{a}_c + \bar{a}_i + \bar{a}_g + \bar{a}_{ex} - \bar{a}_{im} - 1. \tag{3}$$
+
+Six equations have shrunk to one straight line that links short-run output to the real interest rate.
+
+*Intuition.* Equation (3) says that output can leave potential for two reasons. The first is $\bar{a}$, the **aggregate demand shock**: it packs all five demand shares into one number that measures how far total spending at normal interest rates is from potential output. The second is the interest-rate term, and what matters there is the *gap* $R_t - \bar{r}$, not the level of $R_t$. A high interest rate does not hold back investment if new capital earns just as much.
+
+**Step 5: the long-run value of $\bar{a}$.** In the long run output is at potential, $\tilde{Y}_t = 0$, and the interest rate equals the marginal product of capital, $R_t = \bar{r}$. Put both into equation (3): $0 = \bar{a} - \bar{b}\times 0$, so $\bar{a} = 0$. Read through the definition of $\bar{a}$, this says that at potential the five spending shares add up to exactly one: $\bar{a}_c + \bar{a}_i + \bar{a}_g + \bar{a}_{ex} - \bar{a}_{im} = 1$. Our baseline shares pass this test, since $65 + 17 + 20 + 12 - 14 = 100$ percent. So $\bar{a} = 0$ is the normal case, and shocks to spending push $\bar{a}$ away from zero for a while.
+
+**Step 6: the curve on a graph.** The textbook draws the curve with output across and the interest rate up, so we solve equation (3) for $R_t$. Move the interest-rate term to the left and $\tilde{Y}_t$ to the right, then divide by $\bar{b}$ ([Appendix C.9](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.9-solving-equations-and-systems)):
+
+$$\bar{b}\,(R_t - \bar{r}) = \bar{a} - \tilde{Y}_t \quad\Longrightarrow\quad R_t = \bar{r} + \frac{\bar{a} - \tilde{Y}_t}{\bar{b}}.$$
+
+In this form the IS curve is a line with slope $-1/\bar{b}$ that passes through the point $(\tilde{Y}, R) = (\bar{a}, \bar{r})$. With $\bar{b} = 2$ the slope is $-0.5$: the interest rate must fall by half a point to raise output by one point. A larger $\bar{b}$ gives a flatter line.
+
+*A worked example with the baseline.* At $R = 4$ percent, investment is $17 - 2\times(4 - 5) = 19$ percent of potential output, so $Y/\bar{Y} = 65 + 19 + 20 + 12 - 14 = 102$ percent and $\tilde{Y} = +2$ percent. At $R = 7$ percent, investment is $17 - 2\times 2 = 13$ percent, $Y/\bar{Y} = 96$ percent and $\tilde{Y} = -4$ percent. Equation (3) gives the same answers in one step: $0 - 2\times(4 - 5) = 2$ and $0 - 2\times(7 - 5) = -4$.
+
+**Step 7: why the curve is called "IS".** The letters stand for *investment equals saving*, and the identity (1) shows why. Keep investment on the right and move every other term to the left:
+
+$$Y_t - C_t - G_t + (IM_t - EX_t) = I_t.$$
+
+Now add and subtract tax revenue $T_t$ on the left. Since $-T_t + T_t = 0$, nothing changes except the grouping:
+
+$$\underbrace{(Y_t - T_t - C_t)}_{\text{private saving}} + \underbrace{(T_t - G_t)}_{\text{government saving}} + \underbrace{(IM_t - EX_t)}_{\text{foreign saving}} = I_t. \tag{4}$$
+
+Households save the part of their after-tax income they do not consume. The government saves when its tax revenue exceeds its purchases, that is, when it runs a surplus. Foreigners save in our economy when they ship us more goods than they buy from us, because they are lending us the difference. The three kinds of saving together must finance investment. At potential, with our shares and taxes of, say, 18 percent of potential output, private saving is $100 - 18 - 65 = 17$, government saving is $18 - 20 = -2$ (a deficit) and foreign saving is $14 - 12 = 2$: total saving is 17, exactly the investment share. John Hicks introduced the curve in 1937, as a compact algebraic version of Keynes's *General Theory*. Equation (4) comes back when the book studies budget deficits and the trade balance.
+
+<!-- cell -->
+
+#### What the model predicts
+
+**Comparative statics.** Equation (3) is linear, so each effect is a constant: the derivative of $\tilde{Y}_t$ with respect to that parameter ([Appendix C.7](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.7-derivatives-and-marginal-thinking)). Because $\tilde{Y}$ is already a percentage, each number reads as "percent of potential output per percentage point".
+
+| A rise of 1 point in ... | changes $\tilde{Y}_t$ (at a given $R_t$) by | baseline value | What happens to the IS curve |
+|---|---|---|---|
+| the real interest rate $R_t$ | $-\bar{b}$ | $-2$ | nothing: the economy moves **up along** the curve |
+| $\bar{a}_c$, $\bar{a}_i$, $\bar{a}_g$ or $\bar{a}_{ex}$ (so $\bar{a}$) | $+1$ | $+1$ | **shifts right** by 1 point |
+| imports $\bar{a}_{im}$ | $-1$ | $-1$ | **shifts left** by 1 point |
+| the marginal product of capital $\bar{r}$ | $+\bar{b}$ | $+2$ | **shifts up** by 1 point (right by $\bar{b}$ points) |
+| the sensitivity $\bar{b}$ | $-(R_t - \bar{r})$ | $0$ at $R_t = \bar{r}$ | **rotates** around the point $(\bar{a}, \bar{r})$ and gets flatter |
+| potential output $\bar{Y}_t$ | $0$ | $0$ | nothing: $\bar{Y}_t$ is not in equation (3) |
+
+What these signs mean:
+
+- **Along or shift.** The IS curve plots output against the interest rate, so a change in $R_t$ is read off the curve itself: a movement along it. A change in anything else in equation (3) changes the output that goes with each interest rate: a shift of the whole curve.
+- **Demand shocks pass into output one for one.** A rise in $\bar{a}_i$ of 1 point, say an investment boom driven by optimism about new technology, raises $\bar{a}$ from 0 to 1 and, at an unchanged interest rate, puts output 1 percent above potential. The same works in reverse for pessimistic consumers ($\bar{a}_c$ falls), cuts in government purchases ($\bar{a}_g$ falls) or a recession abroad that lowers the demand for our exports ($\bar{a}_{ex}$ falls). The last case is how recessions travel between countries.
+- **The slope comes from investment.** The more sensitive investment is to the interest rate (larger $\bar{b}$), the more output moves when the interest rate moves.
+- **Potential output does not shift the curve.** When a new technology lifts potential output, actual output rises in the same proportion, so the gap $\tilde{Y}_t$ is unchanged. The same holds for an earthquake that destroys capital: actual and potential output fall together.
+- **But the return on capital does.** The same technology, or the same earthquake, can also raise the marginal product of capital $\bar{r}$, because the capital that is left, or the capital that uses the new ideas, earns more. At an unchanged $R_t$ investment then rises, and output goes up by $\bar{b}$ points for every point of $\bar{r}$.
+
+<!-- cell -->
+
+### The multiplier
+
+#### Assumptions
+
+Keep every assumption of the IS curve except the consumption equation. Now consumption also reacts to booms and slumps:
+
+$$\frac{C_t}{\bar{Y}_t} = \bar{a}_c + \bar{x}\,\tilde{Y}_t, \qquad 0 < \bar{x} < 1.$$
+
+When output is 1 percent above potential, consumption is $\bar{x}$ percent of potential output higher than its normal share. The parameter $\bar{x}$ captures households that spend part of a temporary rise in income instead of smoothing it away; the third block below shows why such households exist in the data.
+
+#### Solving the model
+
+**Step 1: redo the derivation with the new consumption share.** Steps 1 to 4 of the IS curve go through as before, with one extra term on the right, because $C_t/\bar{Y}_t$ now equals $\bar{a}_c + \bar{x}\tilde{Y}_t$:
+
+$$\tilde{Y}_t = \bar{a} + \bar{x}\,\tilde{Y}_t - \bar{b}\,(R_t - \bar{r}),$$
+
+with $\bar{a}$ defined exactly as in equation (3). Short-run output now appears on both sides.
+
+**Step 2: solve for $\tilde{Y}_t$.** Subtract $\bar{x}\tilde{Y}_t$ from both sides, factor out $\tilde{Y}_t$, and divide by $1 - \bar{x}$, which is positive because $\bar{x} < 1$:
+
+$$\tilde{Y}_t - \bar{x}\,\tilde{Y}_t = \bar{a} - \bar{b}\,(R_t - \bar{r}) \quad\Longrightarrow\quad (1 - \bar{x})\,\tilde{Y}_t = \bar{a} - \bar{b}\,(R_t - \bar{r}),$$
+
+$$\tilde{Y}_t = \frac{1}{1 - \bar{x}}\times\big[\bar{a} - \bar{b}\,(R_t - \bar{r})\big]. \tag{5}$$
+
+The factor $1/(1 - \bar{x})$ is the **multiplier**. Since $\bar{x}$ lies between 0 and 1, it is larger than 1: with $\bar{x} = 1/3$ it is $1/(2/3) = 1.5$, and with $\bar{x} = 1/2$ it is 2.
+
+**Step 3: the same result, round by round.** Where does the extra output come from? Suppose the interest rate rises by 1 point in our baseline. Investment falls by $\bar{b} = 2$ points of potential output, so in the first round output falls by 2 percent. Lower output means lower incomes, and consumption falls by $\bar{x}$ times that, $\frac{1}{3}\times 2 = \frac{2}{3}$ of a point: a second round. That cut in spending lowers other incomes and cuts consumption again, by $\frac{1}{3}\times\frac{2}{3} = \frac{2}{9}$ of a point, and so on. Adding up all the rounds:
+
+$$\Delta\tilde{Y} = -2\,\big(1 + \bar{x} + \bar{x}^2 + \bar{x}^3 + \cdots\big).$$
+
+The bracket is a **geometric series** ([Appendix C.12](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.12-present-value-and-discounting)). Call it $S$. Multiplying by $\bar{x}$ shifts every term one place, $\bar{x}S = \bar{x} + \bar{x}^2 + \bar{x}^3 + \cdots$, and subtracting this from $S$ leaves only the first term: $S - \bar{x}S = 1$, so $S = 1/(1 - \bar{x})$. The total is $-2\times 1.5 = -3$ percent, exactly what equation (5) gives. The series adds up to a finite number only when $\bar{x} < 1$, which is why the model needs that assumption: if every lost dollar of income cut spending by a dollar or more, the rounds would never die out.
+
+**Step 4: a second route to a multiplier, through investment.** Multiply equation (2) by $\bar{Y}_t$ to write investment in levels:
+
+$$I_t = \bar{a}_i\bar{Y}_t - \bar{b}\,(R_t - \bar{r})\,\bar{Y}_t.$$
+
+Investment grows in step with potential output. One reason is **cash flow**, the funds firms have left over after paying their costs: firms can finance investment more cheaply from their own funds than by borrowing, and the cash flow of all firms together moves roughly with potential output. If cash flow also rises in a boom, investment gets an extra term in $\tilde{Y}_t$. Writing it, with a label of our own, as $+\bar{z}\tilde{Y}_t$ in the investment share, steps 1 and 2 give a multiplier of $1/(1 - \bar{x} - \bar{z})$, as long as $\bar{x} + \bar{z} < 1$. The curve keeps the same form; only the size of the multiplier changes.
+
+#### What the model predicts
+
+**Comparative statics with and without the multiplier.** Differentiate equation (5) and compare with equation (3):
+
+| Effect | IS curve (3) | with the multiplier (5) | baseline, $\bar{x} = 1/3$ |
+|---|---|---|---|
+| a 1-point demand shock $\bar{a}$ | $+1$ | $+1/(1-\bar{x})$ | $+1$ → $+1.5$ |
+| a 1-point rise in $R_t$ | $-\bar{b}$ | $-\bar{b}/(1-\bar{x})$ | $-2$ → $-3$ |
+| a 1-point rise in $\bar{r}$ | $+\bar{b}$ | $+\bar{b}/(1-\bar{x})$ | $+2$ → $+3$ |
+| slope of the curve in the diagram, $dR/d\tilde{Y}$ | $-1/\bar{b}$ | $-(1-\bar{x})/\bar{b}$ | $-0.5$ → $-0.33$ (flatter) |
+
+- **Every shock is amplified.** Spending feeds on itself: a fall in one kind of demand lowers incomes, which lowers consumption, which lowers incomes again. The same chain makes good news larger too, so the IS curve can produce "vicious" and "virtuous" circles.
+- **The form of the curve does not change.** Define $\bar{a}^m \equiv \bar{a}/(1-\bar{x})$ and $\bar{b}^m \equiv \bar{b}/(1-\bar{x})$. Then equation (5) reads $\tilde{Y}_t = \bar{a}^m - \bar{b}^m(R_t - \bar{r})$, which is equation (3) with larger coefficients. That is why the rest of the book keeps writing equation (3) and lets $\bar{a}$ and $\bar{b}$ include any multiplier.
+- **Fiscal policy is stronger, unless it is offset.** A rise in government purchases of 1 point of potential output raises $\bar{a}_g$, and so output, by $1/(1-\bar{x})$ points at a given interest rate. The next block shows why the way the spending is paid for can offset part of this.
+
+<!-- cell -->
+
+### Permanent income and consumption smoothing
+
+#### Assumptions
+
+This block looks behind the consumption equation $C_t = \bar{a}_c\bar{Y}_t$ at the household decision it stands for.
+
+- **People prefer a smooth path of consumption.** Marginal utility diminishes: each extra unit of consumption in a period adds less satisfaction than the one before. So a steady amount every period is better than plenty in some periods and little in others, even if the total is the same.
+- **People can borrow and lend** at a constant real interest rate $R$, here written as a decimal.
+- **The budget holds over a whole life.** Over a life of $T$ periods, the present discounted value of consumption equals the present discounted value of income ([Appendix C.12](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.12-present-value-and-discounting); present values first appear in [Chapter 7](https://quarcs-lab.github.io/macro102-site/notebooks/ch07-the-labor-market-wages-and-unemployment.html)). Borrowing and saving can shift consumption between periods, but cannot raise its total value.
+
+#### Solving the model
+
+**Step 1: define permanent income.** A person's income stream is $y_0, y_1, \dots, y_{T-1}$. Their **permanent income** $y^p$ is the constant amount per period whose stream has the same present discounted value:
+
+$$\sum_{t=0}^{T-1}\frac{y^p}{(1+R)^t} = \sum_{t=0}^{T-1}\frac{y_t}{(1+R)^t}. \tag{6}$$
+
+A household that wants smooth consumption sets $c_t = y^p$ in every period. By equation (6) this plan costs exactly what the household earns, in present value, so it satisfies the lifetime budget.
+
+**Step 2: solve for $y^p$.** $y^p$ is the same in every term on the left, so it factors out of the sum. Dividing both sides by the remaining sum gives
+
+$$y^p = \frac{\sum_{t=0}^{T-1} y_t/(1+R)^t}{\sum_{t=0}^{T-1} 1/(1+R)^t}:$$
+
+a weighted average of income, with weights that fall the further a period lies in the future.
+
+**Step 3: no interest, the life-cycle model.** With $R = 0$ every weight equals 1 and the denominator is just $T$, so $y^p = \frac{1}{T}\sum_t y_t$: consumption equals **average lifetime income**. That is the life-cycle model of Fig. 5. Young people consume more than they earn, middle-aged workers save, and retirees live on what they saved.
+
+**Step 4: a windfall.** Suppose someone who plans to live forever receives an unexpected gift $W$ today. If they keep the gift in the bank and consume only the interest it earns, they can spend $\Delta c = R\,W$ more in every future period without ever touching the gift. The present value of that extra spending, starting next period, is a geometric series with ratio $q = 1/(1+R)$:
+
+$$\sum_{t=1}^{\infty}\frac{R\,W}{(1+R)^t} = R\,W\,\frac{q}{1-q} = R\,W\times\frac{1/(1+R)}{R/(1+R)} = R\,W\times\frac{1}{R} = W.$$
+
+So the permanent increase in consumption is the interest on the windfall. With $R = 2$ percent, a gift of 50,000 dollars raises consumption by 1,000 dollars a year, not by 50,000 dollars this year.
+
+**Step 5: the timing of taxes.** Suppose the government needs a tax of $\tau$ from you. It can collect $\tau$ today, or borrow, spend now, and collect $(1+R)\tau$ next period to repay the loan with interest. In present value the two are the same, $(1+R)\tau/(1+R) = \tau$, so they lower your permanent income, and your consumption, by the same amount. The idea that only the present value of taxes matters for consumption, not their timing, is called **Ricardian equivalence**.
+
+#### What the model predicts
+
+- **Consumption is smoother than income.** It follows permanent income, which changes little when income moves for a short time. This is the justification for $C_t = \bar{a}_c\bar{Y}_t$ in the IS curve: in a recession that people expect to be temporary, $Y_t$ falls but permanent income barely moves, so consumption holds up. A strict version of the theory would smooth even the predictable growth of potential output, so our equation captures the idea only in part.
+- **Large, predictable changes in income are smoothed; small surprises are partly spent.** Studies of individual households support the first part well and the second part less well. Spending out of temporary income is what the parameter $\bar{x}$ of the multiplier block captures.
+- **How spending is financed matters for fiscal policy.** Extra government purchases raise $\bar{a}_g$. If households expect higher taxes to pay for them, now or later, their permanent income falls and $\bar{a}_c$ falls too, which offsets part of the shift of the IS curve. If the extra spending today is simply spending moved forward from the future, there is no extra tax burden, consumption does not fall, and the IS curve shifts out by the full amount. [Chapter 16](https://quarcs-lab.github.io/macro102-site/notebooks/ch16-consumption.html) studies consumption, and [Chapter 18](https://quarcs-lab.github.io/macro102-site/notebooks/ch18-the-government-and-the-macroeconomy.html) the government budget, in more depth.
+
+<!-- cell -->
+
+### The model in code
+
+We now turn the key results into Python functions. Each function's description names the equation it computes. The cells after them check the algebra above with numbers.
 
 > **Python note.** `def` creates a *function*: a named recipe that takes inputs (the *arguments*) and gives
 > back a result with `return`. Writing `b=B_BAR` gives the argument a *default value*, used whenever we do
@@ -140,21 +328,21 @@ A_BAR, B_BAR, R_BAR = 0.0, 2.0, 5.0     # the baseline: no demand shock, b = 2, 
 
 
 def is_curve(R, a=A_BAR, b=B_BAR, r_bar=R_BAR):
-    """Equation 11.12, the IS curve: short-run output Y~ = a - b (R - r_bar), in percent."""
+    """Equation (3), the IS curve: short-run output Y~ = a - b (R - r_bar), in percent."""
     return a - b * (R - r_bar)
 
 
 def investment_share(R, a_i=17.0, b=B_BAR, r_bar=R_BAR):
-    """Equation 11.7: investment in percent of potential output, I/Ybar = a_i - b (R - r_bar)."""
+    """Equation (2): investment in percent of potential output, I/Ybar = a_i - b (R - r_bar)."""
     return a_i - b * (R - r_bar)
 
 
 def demand_shock(a_c=65.0, a_i=17.0, a_g=20.0, a_ex=12.0, a_im=14.0):
-    """Equation 11.12: the aggregate demand shock a = a_c + a_i + a_g + a_ex - a_im - 100 (shares in percent)."""
+    """The aggregate demand shock of equation (3): a = a_c + a_i + a_g + a_ex - a_im - 100 (shares in percent)."""
     return a_c + a_i + a_g + a_ex - a_im - 100
 ```
 
-Let us try the functions on the textbook's numbers.
+Let us try the functions on the baseline numbers.
 
 > **Python note.** An *f-string* such as `f"Y~ = {value:.1f}%"` inserts the value of a variable into a piece
 > of text; `:.1f` means "show one decimal".
@@ -165,9 +353,113 @@ print(f"R = r_bar = 5%:  Y~ = {is_curve(5.0):.1f}%,  investment = {investment_sh
 print(f"R' = 6%:         Y~ = {is_curve(6.0):.1f}%,  investment = {investment_share(6.0):.1f}% of potential")
 ```
 
-With the baseline shares the demand shock is zero, so output is at potential when $R = \bar{r}$. The second and
-third lines are the textbook's example: when the real interest rate rises from 5 to 6 percent, investment
-falls by 2 percentage points of potential output, and output falls to 2 percent below potential.
+With the baseline shares the demand shock is zero, so output is at potential when $R = \bar{r}$. When the real
+interest rate rises from 5 to 6 percent, investment falls by 2 percentage points of potential output, and output
+falls to 2 percent below potential.
+
+**Check 1: the IS curve agrees with the six equations it came from.** For three interest rates we compute each
+use of output from its own equation, add them up with the identity (1), subtract 100, and compare the result with
+equation (3).
+
+> **Python note.** `for R in [4.0, 5.0, 7.0]:` runs the indented lines once for each number in the list, with `R`
+> set to that number. `:+.0f` shows a number with its sign and no decimals.
+
+```{python}
+a_c, a_g, a_ex, a_im = 65.0, 20.0, 12.0, 14.0        # the baseline shares, in percent of potential output
+for R in [4.0, 5.0, 7.0]:
+    I_share = investment_share(R)                    # equation (2)
+    Y_share = a_c + I_share + a_g + a_ex - a_im      # equation (1), divided by potential output
+    print(f"R = {R:.0f}%: I/Ybar = {I_share:.0f}%, Y/Ybar = {Y_share:.0f}%, so Y~ = {Y_share - 100:+.0f}%"
+          f"   |   equation (3): Y~ = {is_curve(R):+.0f}%")
+```
+
+**Check 2: investment equals saving.** At potential output, with $R = \bar{r}$ and taxes of 18 percent of potential
+output, the three kinds of saving in equation (4) must add up to the investment share.
+
+```{python}
+taxes = 18.0                                         # illustrative tax revenue, percent of potential output
+Y_share, I_share = 100.0, investment_share(R_BAR)    # output at potential, interest rate at r_bar
+private = Y_share - taxes - a_c
+government = taxes - a_g
+foreign = a_im - a_ex
+print(f"Private saving {private:.0f} + government saving {government:+.0f} + foreign saving {foreign:+.0f}"
+      f" = {private + government + foreign:.0f}")
+print(f"Investment = {I_share:.0f}")
+```
+
+**Check 3: the comparative statics.** We change one thing at a time by 1 point and measure the change in $\tilde{Y}$
+at $R = \bar{r}$. The table above predicts $-2$, $+2$, $+1$, $-1$ and $0$.
+
+```{python}
+base = is_curve(R_BAR)
+print(f"R up 1 point:              {is_curve(R_BAR + 1) - base:+.1f}   (predicted -b = {-B_BAR:+.1f})")
+print(f"r_bar up 1 point:          {is_curve(R_BAR, r_bar=R_BAR + 1) - base:+.1f}   (predicted +b = {B_BAR:+.1f})")
+print(f"a_c up 1 point:            {is_curve(R_BAR, a=demand_shock(a_c=66.0)) - base:+.1f}   (predicted +1)")
+print(f"a_im up 1 point:           {is_curve(R_BAR, a=demand_shock(a_im=15.0)) - base:+.1f}   (predicted -1)")
+print(f"b doubled, at R = r_bar:   {is_curve(R_BAR, b=2 * B_BAR) - base:+.1f}   (predicted 0)")
+print(f"Slope of the curve in the diagram: dR/dY~ = -1/b = {-1 / B_BAR:.2f}")
+```
+
+**Check 4: the multiplier, round by round.** The interest rate rises by 1 point, so the first round lowers output
+by 2 percent, and each later round is $\bar{x} = 1/3$ times the round before. We add up 30 rounds and compare the
+total with equation (5).
+
+> **Python note.** `range(1, 31)` counts 1, 2, ..., 30. `total = total + this_round` replaces the old value of
+> `total` by the new one. `if round_number in (1, 2, 3, 30):` is true only for those rounds. `**` means "to the
+> power of".
+
+```{python}
+x = 1 / 3                                            # how much consumption reacts to short-run output
+first_round = is_curve(R_BAR + 1)                    # R up 1 point: investment and output fall by b = 2 points
+total, this_round = 0.0, first_round
+for round_number in range(1, 31):
+    total = total + this_round
+    if round_number in (1, 2, 3, 30):
+        print(f"After round {round_number:2d}: Y~ = {total:.4f}%")
+    this_round = x * this_round                      # the next round: consumption falls by x times the last change
+print(f"Equation (5): Y~ = {first_round / (1 - x):.4f}%   (multiplier 1/(1 - x) = {1 / (1 - x):.2f})")
+print(f"Geometric sum of 30 terms, (1 - x**30) / (1 - x) = {(1 - x ** 30) / (1 - x):.6f}")
+```
+
+**Check 5: equation (5) solves the model with the new consumption equation.** We plug the output gap from
+equation (5) into the consumption share $\bar{a}_c + \bar{x}\tilde{Y}$, add up all the uses of output, and check that
+the identity gives back the same gap.
+
+```{python}
+for R in [4.0, 6.0]:
+    Y_tilde = is_curve(R) / (1 - x)                  # equation (5)
+    C_share = a_c + x * Y_tilde                      # consumption now reacts to short-run output
+    Y_share = C_share + investment_share(R) + a_g + a_ex - a_im     # equation (1), divided by potential output
+    print(f"R = {R:.0f}%: equation (5) gives Y~ = {Y_tilde:+.3f}%; the identity gives Y/Ybar - 100 = {Y_share - 100:+.3f}%")
+```
+
+**Check 6: permanent income.** First, equation (6) for a short income stream: we compute $y^p$ with the formula of
+step 2 and check that a constant stream of $y^p$ has the same present value as the original stream. Then the windfall
+of step 4 and the timing of taxes of step 5.
+
+> **Python note.** `incomes[t]` is the element of the list at position `t`, counting from 0, and `len(incomes)` is
+> the length of the list. `:,.0f` writes a number with commas between the thousands.
+
+```{python}
+rate = 0.02                                          # the real interest rate R, as a decimal
+incomes = [20.0, 40.0, 60.0, 40.0, 10.0]             # an illustrative income stream over five periods
+pv_income, pv_one = 0.0, 0.0
+for t in range(len(incomes)):
+    pv_income = pv_income + incomes[t] / (1 + rate) ** t
+    pv_one = pv_one + 1 / (1 + rate) ** t            # present value of 1 in every period
+y_p = pv_income / pv_one                             # step 2
+print(f"Permanent income y^p = {y_p:.3f} (average income: {sum(incomes) / len(incomes):.1f})")
+print(f"Present value of income: {pv_income:.3f};  of y^p in every period: {y_p * pv_one:.3f}")
+W = 50000.0                                          # a windfall of 50,000 dollars
+pv_interest = 0.0
+for t in range(1, 2001):                             # 2,000 periods stand in for "forever"
+    pv_interest = pv_interest + rate * W / (1 + rate) ** t
+print(f"Windfall {W:,.0f}: consume {rate * W:,.0f} more per year; present value of that = {pv_interest:,.0f}")
+tau = 1000.0
+print(f"Tax of {tau:,.0f} today vs {(1 + rate) * tau:,.0f} next year: present values {tau:,.0f} and {(1 + rate) * tau / (1 + rate):,.0f}")
+```
+
+### Drawing the curves
 
 Every IS diagram below uses the same axes and the same few drawing steps, so we write them once.
 `add_is` draws an IS curve and writes its name at its lower end, as the textbook does; `is_end` finds that
@@ -261,7 +553,7 @@ We start from the investment equation and see how a higher interest rate lowers 
 **Goal.** See the basic story of the chapter: a higher real interest rate means less investment and so
 less output in the short run.
 
-$$\uparrow \text{interest rate} \;\Rightarrow\; \downarrow \text{investment} \;\Rightarrow\; \downarrow \text{output} \qquad (11.1)$$
+$$\uparrow \text{interest rate} \;\Rightarrow\; \downarrow \text{investment} \;\Rightarrow\; \downarrow \text{output}$$
 
 A higher interest rate makes borrowing more expensive. Firms buy fewer machines and build fewer factories,
 and households buy fewer new houses, which also count as investment. Less demand for goods means that
@@ -326,7 +618,7 @@ Output rises by 2 points for every point that $R$ falls below 5 percent. Try `is
 
 $$\tilde{Y}_t = \bar{a} - \bar{b}\,(R_t - \bar{r})$$
 
-The equation makes output a function of the interest rate, yet the graph puts output on the horizontal axis.
+This is equation (3). The equation makes output a function of the interest rate, yet the graph puts output on the horizontal axis.
 The textbook keeps this convention for two reasons: in Chapter 12 the interest rate becomes an endogenous
 variable, and economists put the price (here the interest rate, the price of borrowing) on the vertical axis,
 as in supply and demand.
@@ -479,7 +771,7 @@ slider_figure(is_experiment, "R_new", [5.0, 5.5, 6.0, 6.5, 7.0, 7.5, 8.0], start
 
 #### Key numbers: the textbook's example
 
-The textbook plugs $\bar{a} = 0$, $\bar{b} = 2$, $R = \bar{r} = 5\%$ and $R' = 6\%$ into the IS curve (equation 11.14).
+The textbook plugs $\bar{a} = 0$, $\bar{b} = 2$, $R = \bar{r} = 5\%$ and $R' = 6\%$ into the IS curve (equation 3).
 A *loop* repeats the same line for several interest rates.
 
 > **Python note.** `for R in [5.0, 6.0, 7.0]:` runs the indented line once for each number in the list, with
@@ -567,15 +859,15 @@ In `is_experiment`, the first row is the slider $R'$; all the other sliders shif
 #### Key numbers: the multiplier
 
 So far consumption depends only on potential output. Suppose it also rises a little when the economy booms,
-$C_t/\bar{Y}_t = \bar{a}_c + \bar{x}\,\tilde{Y}_t$ with $0 < \bar{x} < 1$ (equation 11.15). Then a first fall in investment
+$C_t/\bar{Y}_t = \bar{a}_c + \bar{x}\,\tilde{Y}_t$ with $0 < \bar{x} < 1$, as in the multiplier block of the Model overview. Then a first fall in investment
 costs some jobs, the people who lose them spend less, other firms sell less, and so on. Solving the model again
-gives the IS curve times a **multiplier**:
+gives the IS curve times a **multiplier** (equation 5):
 
-$$\tilde{Y}_t = \frac{1}{1 - \bar{x}} \times \left[\bar{a} - \bar{b}\,(R_t - \bar{r})\right]. \qquad (11.16)$$
+$$\tilde{Y}_t = \frac{1}{1 - \bar{x}} \times \left[\bar{a} - \bar{b}\,(R_t - \bar{r})\right].$$
 
 ```{python}
 def multiplier(x):
-    """Equation 11.16: the multiplier 1 / (1 - x), when consumption rises by x for each point of Y~."""
+    """Equation (5): the multiplier 1 / (1 - x), when consumption rises by x for each point of Y~."""
     return 1 / (1 - x)
 
 
@@ -627,7 +919,7 @@ based on **average lifetime income**, not on the income of a given year:
 Our stylized income profile is low until age 20, rises to a peak at age 50, stays there until five years before
 retirement, and falls back to its low level at the retirement age. The income levels are illustrative units, so
 only their relative size matters. With no interest, the budget only requires that lifetime consumption equals
-lifetime income, so the smooth consumption level is simply average income.
+lifetime income, so the smooth consumption level is simply average income (equation 6 with $R = 0$).
 
 > **Python note.** `np.interp(age, ages, incomes)` draws straight lines between the points (`ages`, `incomes`)
 > and reads off the income at every `age`. `np.arange(0, T) + 0.5` is 0.5, 1.5, ..., the middle of each year of
@@ -1082,12 +1374,13 @@ $R'$ slider moves in steps of 0.5.
 
 ## Concluding remarks
 
-- The **IS curve** $\tilde{Y}_t = \bar{a} - \bar{b}(R_t - \bar{r})$ comes from the national income identity. It slopes down because a
-  higher real interest rate lowers investment, and lower investment lowers output.
+- The **IS curve**, equation (3), $\tilde{Y}_t = \bar{a} - \bar{b}(R_t - \bar{r})$, comes from the national income identity,
+  equation (1), and the investment equation, equation (2). It slopes down because a higher real interest rate lowers
+  investment, and lower investment lowers output. Rearranged, the identity says that investment equals saving, equation (4).
 - When only the real interest rate changes, the economy slides **along** the curve. A change in any demand share (the **aggregate demand
   shock** $\bar{a}$) or in the marginal product of capital $\bar{r}$ **shifts** it. Potential output does not enter the curve at all.
-- The **life-cycle / permanent-income** hypothesis explains why consumption follows average income rather than current income.
-  When consumption also responds to current income, a **multiplier** $1/(1-\bar{x})$ makes every shock and every change in
+- The **life-cycle / permanent-income** hypothesis, equation (6), explains why consumption follows average income rather than current income.
+  When consumption also responds to current income, a **multiplier** $1/(1-\bar{x})$, equation (5), makes every shock and every change in
   the interest rate move output by more.
 - The CBO's 2009 forecasts show how uncertain the effects of fiscal policy are: unemployment stayed above even the no-stimulus
   forecast through 2015.

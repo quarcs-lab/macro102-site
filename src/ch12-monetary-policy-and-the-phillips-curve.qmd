@@ -1,4 +1,4 @@
-# Chapter 12: Monetary Policy and the Phillips Curve
+# 12. Monetary Policy and the Phillips Curve
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/ch12-monetary-policy-and-the-phillips-curve.ipynb)
 
@@ -10,11 +10,14 @@ Chapter 11 built the IS curve, which links the real interest rate to short-run o
 two missing pieces of the short-run model: the **MP curve** (how the central bank sets the real interest rate)
 and the **Phillips curve** (how output moves inflation over time). By the end of it you will be able to:
 
-- explain why a central bank that sets a **nominal** interest rate also sets the **real** interest rate in the
-  short run, using the Fisher equation and the assumption of **sticky inflation**;
-- use the **IS/MP diagram** to analyze monetary policy and demand shocks, such as the end of a housing bubble;
-- explain the **Phillips curve** $\Delta\pi_t = \bar{\nu}\tilde{Y}_t + \bar{o}$, with **adaptive expectations** and **price shocks**;
-- simulate the **Volcker disinflation** year by year and explain how mistakes contributed to the **Great Inflation**;
+- derive the **MP curve** from the Fisher equation and **sticky inflation**, and explain why a central bank that sets a
+  **nominal** interest rate also sets the **real** rate in the short run;
+- use the **IS/MP diagram** to analyze monetary policy and demand shocks, and derive the interest rate that keeps output at potential;
+- derive the **Phillips curve** $\Delta\pi_t = \bar{\nu}\tilde{Y}_t + \bar{o}$ from price setting with **adaptive expectations**
+  and **price shocks**, and read its comparative statics;
+- combine the IS, MP and Phillips curves into one equation for inflation, solve it for a **disinflation** and its cost in
+  lost output, simulate the **Volcker disinflation** year by year, explain how mistakes contributed to the
+  **Great Inflation**, and preview how an interest-rate rule (the **Taylor rule**) brings inflation back to target;
 - read U.S. data on the federal funds rate, the yield curve, inflation and the Covid-19 recession, and compare them
   with dozens of other countries;
 - in Python: draw several panels with `make_subplots`, simulate a model with a loop, reshape tables with
@@ -92,36 +95,16 @@ def slider_figure(make_figure, name, values, start, label=None):
 
 ## Model overview
 
-This chapter completes the short-run model. It explains how the central bank moves the economy and how the economy, in turn, moves inflation. The chain has three links. The central bank sets a nominal interest rate, and because inflation adjusts slowly, it also sets the real interest rate (the **MP curve**). The real interest rate sets short-run output through the IS curve of Chapter 11. And short-run output changes inflation over time through the **Phillips curve**: a booming economy pushes inflation up, a slump pulls it down.
+The IS curve of [Chapter 11](https://quarcs-lab.github.io/macro102-site/notebooks/ch11-the-is-curve.html) tells us how much output the economy produces at a given real interest rate, but it leaves open who picks that rate and what happens to prices afterwards. This chapter fills both gaps and so completes the short-run model. The central bank sets a short-term **nominal** interest rate. Because inflation moves slowly, that choice also fixes the **real** rate for a while (the **MP curve**). The real rate fixes short-run output through the IS curve. Short-run output, in turn, pushes inflation up or down from one year to the next (the **Phillips curve**). Put together, the three equations form a small dynamic model: feed it a path for the interest rate and for the shocks, and it returns output and inflation year by year.
 
-The inputs are the central bank's interest rate and the shocks that hit the economy, to demand or to prices; the outcomes are short-run output and inflation, period by period. Below we write the three equations, fix one baseline for every diagram, and define the functions that the sections reuse: the IS/MP diagram, the Phillips curve, a year-by-year simulation of the whole model, the money market, and the tools for comparing countries in the data figures.
+We build the model in six blocks, each going from assumptions to solution to predictions: the MP curve (with the link from short to long interest rates), the IS/MP diagram, the Phillips curve, the full model and its dynamics (how a disinflation works and what it costs), a preview of the interest-rate rule of Chapter 13 (the Taylor rule), and the money market that lets the central bank set the nominal rate in the first place. At the end, `### The model in code` turns the key results into Python functions and checks each of them with numbers. The drawing tools and the data helpers come after it.
 
-The short-run model has three building blocks. Each one links two variables, and together they form a chain
-from the central bank's interest rate to inflation.
+**Notation.** A bar over a letter marks a **parameter**, a number taken from outside the model, such as $\bar{b}$ or $\bar{\nu}$. $\tilde{Y}_t$ is **short-run output**, the percentage gap between actual and potential output: $\tilde{Y}_t > 0$ in a boom, $\tilde{Y}_t < 0$ in a slump. Interest rates and inflation are in percent per year, and $\Delta x_t \equiv x_t - x_{t-1}$ is the change of any variable from last year to this year.
 
-**1. The MP curve.** The central bank sets a short-term **nominal** interest rate $i_t$. The **Fisher equation**
-links it to the **real** interest rate $R_t$ and the inflation rate $\pi_t$:
-
-$$i_t = R_t + \pi_t \qquad (12.1) \qquad\Longleftrightarrow\qquad R_t = i_t - \pi_t. \qquad (12.2)$$
-
-The key assumption is **sticky inflation**: in the very short run (say six months), inflation does not react to
-monetary policy. So when the central bank moves $i_t$, $R_t$ moves one for one. In effect the central bank
-chooses the real interest rate, and the **MP curve** is a horizontal line at that rate.
-
-**2. The IS curve** of Chapter 11 turns the real interest rate into short-run output:
-
-$$\tilde{Y}_t = \bar{a} - \bar{b}\,(R_t - \bar{r}). \qquad (11.12)$$
-
-**3. The Phillips curve.** Firms raise their prices by the inflation they expect, plus an adjustment for demand.
-With **adaptive expectations**, $\pi^e_t = \pi_{t-1}$, and with a **price shock** $\bar{o}$ (an oil shock, for example):
-
-$$\pi_t = \pi_{t-1} + \bar{\nu}\tilde{Y}_t + \bar{o} \qquad (12.7) \qquad\Longleftrightarrow\qquad \Delta\pi_t = \bar{\nu}\tilde{Y}_t + \bar{o}. \qquad (12.8)$$
-
-**One baseline for every diagram.** The textbook draws its diagrams without numbers, apart from a few
-examples. All the figures of this notebook start from one set of values:
+**One baseline for every diagram.** The textbook draws its diagrams without numbers, apart from a few examples. All the figures and worked examples of this notebook start from one set of values:
 
 - the IS curve of Chapter 11's numerical example: no demand shock $\bar{a} = 0$, $\bar{b} = 2$ and a marginal
-  product of capital $\bar{r} = 5$ percent. Then the textbook's "$-2$ percent" in Figs. 12.4, 12.5 and 12.10
+  product of capital $\bar{r} = 5$ percent. Then the textbook's "$-2$ percent" in Figs. 4, 5 and 10
   comes from $R' = 6$ percent or from $\bar{a}' = -2$;
 - the slope of the Phillips curve $\bar{\nu} = 0.5$ (illustrative; Chapter 9 estimated about 1/3 for the United
   States) and no price shock, $\bar{o} = 0$;
@@ -131,6 +114,304 @@ examples. All the figures of this notebook start from one set of values:
   the nominal interest rate is 5 percent;
 - for the productivity slowdown of Fig. 13, potential output growth of 3.5 percent a year before 1973 and
   2.5 percent after (illustrative).
+
+<!-- cell -->
+
+### The MP curve: a nominal rate that moves the real rate
+
+#### Assumptions
+
+**1. The policy instrument.** The central bank chooses a short-term nominal interest rate $i_t$: in the United States, the **federal funds rate** that banks charge each other on overnight loans. It makes that rate stick by offering to lend, or to borrow, any amount overnight at $i_t$. No bank can then charge a borrower more than $i_t$, since the borrower would go to the central bank instead. And no bank can lend for less for long: other banks would borrow at the cheap rate and lend the money straight back to the central bank at $i_t$, a riskless profit (an **arbitrage**), until the cheap lender ran out of funds.
+
+**2. The Fisher equation** of [Chapter 8](https://quarcs-lab.github.io/macro102-site/notebooks/ch08-inflation.html). A nominal interest rate pays for two things: the real return $R_t$ and the loss of purchasing power through inflation $\pi_t$,
+
+$$i_t = R_t + \pi_t.$$
+
+**3. Sticky inflation.** Inflation has inertia. Over a short horizon, about six months, $\pi_t$ does not react to a change in monetary policy: when the central bank moves $i_t$, it takes $\pi_t$ as given.
+
+#### Solving the model
+
+**Step 1: the real interest rate.** Subtract $\pi_t$ from both sides of the Fisher equation:
+
+$$R_t = i_t - \pi_t. \tag{1}$$
+
+**Step 2: what a policy move does.** Compare the economy just before and just after the central bank changes its rate. Writing equation (1) for both moments and subtracting gives $\Delta R_t = \Delta i_t - \Delta\pi_t$. Sticky inflation means $\Delta\pi_t = 0$ over that short horizon, so
+
+$$\Delta R_t = \Delta i_t:$$
+
+every point on the nominal rate is a point on the real rate. In effect, the central bank **chooses the real interest rate**. To hit a target real rate $R^T$, it sets $i_t = R^T + \pi_t$. With inflation at 2 percent, a nominal rate of 7 percent gives $R = 5\% = \bar{r}$. With inflation at 10 percent, as in 1979, the same real rate needs a nominal rate of 15 percent, and 16 percent pushes the real rate to 6 percent.
+
+The **MP curve** draws this choice in the diagram with short-run output $\tilde{Y}$ on the horizontal axis and $R$ on the vertical axis. Here the central bank's choice does not depend on output, so the curve is a **horizontal line** at the chosen $R_t$.
+
+**Step 3: expected or actual inflation?** A borrower signs the loan before knowing how much prices will rise. So there are two real rates: the **ex ante** rate the borrower expects, $R^{\text{ex ante}}_t = i_t - \pi^e_t$, and the **ex post** rate that is realized, $R^{\text{ex post}}_t = i_t - \pi_t$. Subtracting the first from the second,
+
+$$R^{\text{ex post}}_t - R^{\text{ex ante}}_t = \pi^e_t - \pi_t.$$
+
+Inflation above what was expected lowers the real rate actually paid: the borrower gains and the lender loses. With $i = 7$, expected inflation of 2 and actual inflation of 4 percent, the ex ante real rate is 5 percent but the ex post one only 3. Investment decisions depend on the ex ante rate. The short-run model ignores the difference and uses equation (1).
+
+**Step 4: from the overnight rate to long-term rates.** Firms borrow for years, not overnight. Suppose you want to save for $n$ years. You can buy one $n$-year bond at the annual rate $i^{(n)}$, or a one-year bond now and a new one-year bond each year, at the rates $i_1, i^e_2, \dots, i^e_n$ you expect. If the two plans paid different amounts, everyone would choose the better one, so in equilibrium
+
+$$(1 + i^{(n)})^n = (1 + i_1)(1 + i^e_2)\cdots(1 + i^e_n).$$
+
+Take logs of both sides ([Appendix C.4](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.4-logarithms)): the log of a power is the exponent times the log, and the log of a product is the sum of the logs, so $n\ln(1+i^{(n)}) = \ln(1+i_1) + \ln(1+i^e_2) + \dots + \ln(1+i^e_n)$. For small rates, $\ln(1+x) \approx x$ ([Appendix C.6](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.6-approximations)). Dividing by $n$:
+
+$$i^{(n)} \approx \frac{i_1 + i^e_2 + \dots + i^e_n}{n}.$$
+
+A long-term rate is about the **average of the short-term rates expected over its life**: the **term structure of interest rates**. If markets expect one-year rates of 2, 3, 4, 5 and 6 percent over the next five years, the five-year rate is about 4 percent.
+
+#### What the model predicts
+
+| Change (inflation sticky unless stated) | Effect on $R_t$ | In the IS/MP diagram |
+|---|---|---|
+| $i_t$ up 1 point | $+1$ point | the MP line shifts up |
+| $\pi_t$ up 1 point, $i_t$ unchanged | $-1$ point | the MP line shifts down |
+| $i_t$ and $\pi_t$ both up 1 point | $0$ | nothing moves |
+| short rates expected to stay high for years | long rates rise toward them | (the yield curve shifts up) |
+
+- Monetary policy has real effects only because inflation is sticky. If inflation jumped together with the nominal rate (the third row, the classical dichotomy), the real rate would not change.
+- A rise in today's short rate lifts long rates more when markets expect it to last. When the **yield curve**, the plot of rates against maturity, is **inverted**, markets expect short rates to fall (Fig. 6).
+
+<!-- cell -->
+
+### The IS/MP diagram
+
+#### Assumptions
+
+**1. The IS curve** of [Chapter 11](https://quarcs-lab.github.io/macro102-site/notebooks/ch11-the-is-curve.html). Short-run output falls when the real interest rate rises above the marginal product of capital $\bar{r}$:
+
+$$\tilde{Y}_t = \bar{a} - \bar{b}\,(R_t - \bar{r}). \tag{2}$$
+
+Here $\bar{a}$ is the **aggregate demand shock** (zero in normal times) and $\bar{b}$ measures how strongly investment demand reacts to the interest rate. The intuition: when borrowing costs more than new capital earns, firms and households postpone investment, and output falls below potential.
+
+**2. The MP curve.** The central bank sets $R_t$, as derived above.
+
+#### Solving the model
+
+**Step 1: from the policy rate to output.** Put equation (1) into equation (2):
+
+$$\tilde{Y}_t = \bar{a} - \bar{b}\,(i_t - \pi_t - \bar{r}).$$
+
+With $\pi_t$ sticky, one more point on the nominal rate lowers short-run output by $\bar{b}$ percent. The economy sits where the MP line crosses the IS curve.
+
+**Step 2: the rate that delivers a target for output.** Suppose the central bank wants output $\tilde{Y}^T$. Set $\tilde{Y}_t = \tilde{Y}^T$ in equation (2) and solve for $R_t$: move $\tilde{Y}^T$ to the right and $\bar{b}(R_t - \bar{r})$ to the left, $\bar{b}(R_t - \bar{r}) = \bar{a} - \tilde{Y}^T$, and divide by $\bar{b}$:
+
+$$R_t = \bar{r} + \frac{\bar{a} - \tilde{Y}^T}{\bar{b}}.$$
+
+To keep output at potential ($\tilde{Y}^T = 0$) the central bank needs
+
+$$R_t = \bar{r} + \frac{\bar{a}}{\bar{b}}, \tag{3}$$
+
+which by equation (1) means a nominal rate $i_t = \bar{r} + \bar{a}/\bar{b} + \pi_t$. Intuition: a fall in demand ($\bar{a} < 0$) is offset by cheaper borrowing, and each point of demand lost needs a cut of $1/\bar{b}$ points.
+
+**Worked numbers.** With $\bar{a} = 0$ and $R = \bar{r} = 5$ percent, $\tilde{Y} = 0$ (point $A$ of Fig. 3). Raising $R$ to 6 percent gives $\tilde{Y} = -2 \times (6 - 5) = -2$ percent (Fig. 4). After a housing bust with $\bar{a}' = -2$, output at $R = 5$ is $-2$ percent, and equation (3) says a cut to $R' = 5 - 2/2 = 4$ percent brings it back to potential (Fig. 5).
+
+#### What the model predicts
+
+| A rise of 1 in ... | Effect on $\tilde{Y}_t$ | Which curve moves |
+|---|---|---|
+| the real rate $R_t$ | $-\bar{b} = -2$ points | the MP line shifts up; the economy moves **along** the IS curve |
+| the nominal rate $i_t$ (inflation sticky) | $-\bar{b} = -2$ points | the MP line shifts up |
+| the demand shock $\bar{a}$ | $+1$ point | the IS curve shifts right |
+| the marginal product of capital $\bar{r}$ | $+\bar{b} = +2$ points at a given $R_t$ | the IS curve shifts up |
+| the sensitivity $\bar{b}$ | a larger effect of every rate change | the IS curve gets flatter |
+
+- In the model, monetary policy can fully offset any demand shock: it only has to set $R_t$ by equation (3).
+- In practice it is hard. It takes time to learn how large a shock is, and interest rates take roughly 6 to 18 months to move spending (Milton Friedman's "long and variable lags").
+
+<!-- cell -->
+
+### The Phillips curve
+
+#### Assumptions
+
+Inflation is the percentage rise of the price level over the coming year, $\pi_t \equiv (P_{t+1} - P_t)/P_t$, so it is set by firms during year $t$ when they choose next year's prices.
+
+**1. Price setting.** Each firm raises its prices by the inflation it expects in the rest of the economy, $\pi^e_t$, plus an adjustment for the demand it faces: more when demand is strong, less when it is weak. Adding up over all firms,
+
+$$\pi_t = \pi^e_t + \bar{\nu}\tilde{Y}_t, \qquad \bar{\nu} > 0.$$
+
+**2. Adaptive expectations.** Firms expect this year's inflation to equal last year's: $\pi^e_t = \pi_{t-1}$. This is the sticky-inflation assumption again, now in firms' forecasts.
+
+**3. Price shocks.** Occasionally a shock $\bar{o}$ adds to inflation directly: a jump in oil or steel prices, or a large union wage settlement ($\bar{o} > 0$), or a wave of immigration that holds wages down ($\bar{o} < 0$). Most of the time $\bar{o} = 0$.
+
+#### Solving the model
+
+**Step 1: the Phillips curve in levels.** Replace $\pi^e_t$ by $\pi_{t-1}$ in the price-setting equation and add the price shock:
+
+$$\pi_t = \pi_{t-1} + \bar{\nu}\tilde{Y}_t + \bar{o}. \tag{4}$$
+
+**Step 2: in changes.** Subtract $\pi_{t-1}$ from both sides:
+
+$$\Delta\pi_t = \bar{\nu}\tilde{Y}_t + \bar{o}. \tag{5}$$
+
+Short-run output does not set the **level** of inflation; it sets its **change**. A boom makes inflation rise, a slump makes it fall, and at potential (with no price shock) inflation stays where it was. The slope $\bar{\nu}$ says how strongly prices react to demand: with $\bar{\nu} = 0.5$, output 2 percent above potential raises inflation by $0.5 \times 2 = 1$ point a year.
+
+**Step 3: inflation as a running total.** Start from the inflation of the year before the first year, $\pi_{-1}$, and apply equation (4) one year at a time ([Appendix C.10](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.10-difference-equations-how-macro-variables-move-over-time)):
+
+$$\pi_0 = \pi_{-1} + \bar{\nu}\tilde{Y}_0 + \bar{o}_0, \qquad
+\pi_1 = \pi_0 + \bar{\nu}\tilde{Y}_1 + \bar{o}_1 = \pi_{-1} + \bar{\nu}(\tilde{Y}_0 + \tilde{Y}_1) + (\bar{o}_0 + \bar{o}_1),$$
+
+and after $t + 1$ years
+
+$$\pi_t = \pi_{-1} + \bar{\nu}\sum_{s=0}^{t}\tilde{Y}_s + \sum_{s=0}^{t}\bar{o}_s. \tag{6}$$
+
+Inflation adds up all past output gaps and price shocks. Nothing is ever forgotten: a gap that has closed leaves inflation at its new level.
+
+**Step 4: when is inflation steady?** Set $\Delta\pi_t = 0$ in equation (5) and solve for output: $\tilde{Y}_t = -\bar{o}/\bar{\nu}$. With no price shock that is $\tilde{Y}_t = 0$. After an oil shock of $\bar{o} = 1$ point, holding inflation steady would take output of $-1/0.5 = -2$ percent.
+
+#### What the model predicts
+
+| A rise of 1 in ... | Effect on $\Delta\pi_t$ | In the Phillips curve diagram |
+|---|---|---|
+| short-run output $\tilde{Y}_t$ | $+\bar{\nu} = +0.5$ point | a movement **along** the curve |
+| the price shock $\bar{o}$ | $+1$ point at every $\tilde{Y}_t$ | the curve shifts up for one period |
+| the slope $\bar{\nu}$ | a larger effect of every output gap | the curve gets steeper |
+
+- **Demand-pull and cost-push.** The term $\bar{\nu}\tilde{Y}_t$ is **demand-pull inflation** (strong demand pulls prices up); $\bar{o}$ is **cost-push inflation** (higher costs push them up).
+- **No lasting trade-off.** Try to hold output above potential for ever, at $\tilde{Y}_s = x > 0$. Equation (6) gives $\pi_t = \pi_{-1} + \bar{\nu}x(t+1)$: inflation rises without limit. A permanently booming economy cannot be bought with a permanently higher but stable inflation rate, as the original Phillips curve of the 1960s suggested; this is the argument of Milton Friedman and Edmund Phelps.
+- **Phillips curve and quantity theory.** In the quantity theory of [Chapter 8](https://quarcs-lab.github.io/macro102-site/notebooks/ch08-inflation.html), faster growth of real GDP lowers inflation; here a boom raises it. There is no contradiction: the quantity theory is about the long run, where more output is more **supply**; here a positive $\tilde{Y}_t$ is **demand** above what the economy can normally supply.
+
+<!-- cell -->
+
+### The full short-run model: IS, MP and the Phillips curve together
+
+#### Assumptions
+
+In every year $t$ three equations hold:
+
+| Block | Equation | Role |
+|---|---|---|
+| MP curve | the central bank chooses $R_t$ (and sets $i_t = R_t + \pi_t$) | policy |
+| IS curve | $\tilde{Y}_t = \bar{a} - \bar{b}(R_t - \bar{r})$, equation (2) | $R_t \Rightarrow \tilde{Y}_t$ |
+| Phillips curve | $\pi_t = \pi_{t-1} + \bar{\nu}\tilde{Y}_t + \bar{o}$, equation (4) | $\tilde{Y}_t \Rightarrow \pi_t$ |
+
+The model takes as given the path of policy $R_t$, the shocks $\bar{a}$ and $\bar{o}$, the parameters $\bar{b}$, $\bar{r}$, $\bar{\nu}$, and the inflation of the year before the first year, $\pi_{-1}$. It determines short-run output $\tilde{Y}_t$ and inflation $\pi_t$ (and the nominal rate $i_t$) in every year. Within a year the chain runs in one direction: $R_t \Rightarrow \tilde{Y}_t \Rightarrow \pi_t$. Because $\pi_t$ is the price rise **over the coming year**, a recession in year 0 already lowers the inflation of year 0: firms choosing next year's prices see this year's weak demand.
+
+#### Solving the model
+
+**Step 1: one equation for inflation.** Substitute the IS curve (2) for $\tilde{Y}_t$ in the Phillips curve (4):
+
+$$\pi_t = \pi_{t-1} + \bar{\nu}\left[\bar{a} - \bar{b}\,(R_t - \bar{r})\right] + \bar{o}. \tag{7}$$
+
+This is the whole model in one line. It is a **difference equation**: given last year's inflation and this year's policy and shocks, it gives this year's inflation. Our `simulate` function below applies it year after year.
+
+**Step 2: a constant policy.** Let the central bank hold $R_t = R$ for some years, with $\bar{a} = \bar{o} = 0$. Then $\tilde{Y}_t = -\bar{b}(R - \bar{r})$ is the same every year, and equation (6) gives $\pi_t = \pi_{-1} + (t+1)\,\bar{\nu}\tilde{Y} = \pi_{-1} - (t+1)\,\bar{\nu}\bar{b}(R - \bar{r})$. Inflation falls by the same $\bar{\nu}\bar{b}(R - \bar{r})$ points every year: a straight line.
+
+**Step 3: designing a disinflation.** The central bank wants inflation to fall from $\pi_{-1}$ to a target $\pi^T$ in $T$ years, with a constant real rate. After $T$ years (in year $T - 1$), step 2 says $\pi^T = \pi_{-1} + T\bar{\nu}\tilde{Y}$. Solve for the output gap: $\tilde{Y} = -(\pi_{-1} - \pi^T)/(\bar{\nu}T)$. Then solve the IS curve for the rate that delivers it, $R - \bar{r} = -\tilde{Y}/\bar{b}$:
+
+$$R = \bar{r} + \frac{\pi_{-1} - \pi^T}{\bar{\nu}\bar{b}\,T}. \tag{8}$$
+
+**Step 4: the cost.** The output lost is the sum of the gaps, $\sum_{t=0}^{T-1}(-\tilde{Y}) = T \times (\pi_{-1} - \pi^T)/(\bar{\nu}T)$. The $T$ cancels:
+
+$$\text{lost output} = \frac{\pi_{-1} - \pi^T}{\bar{\nu}} \quad\text{percent-years}. \tag{9}$$
+
+In fact, equation (6) with no price shocks says that **any** path of output with $\sum_s \tilde{Y}_s = (\pi^T - \pi_{-1})/\bar{\nu}$ does the job, so equation (9) holds whatever the shape of the recession. Each point of inflation removed costs $1/\bar{\nu}$ percent-years of output: a fast disinflation means a deep recession, a slow one a long recession, but the total is the same. Only a steeper Phillips curve makes it cheaper.
+
+**Worked numbers.** From $\pi_{-1} = 10$ to $\pi^T = 5$ percent in $T = 5$ years, with $\bar{\nu} = 0.5$, $\bar{b} = 2$ and $\bar{r} = 5$: equation (8) gives $R = 5 + 5/(0.5 \times 2 \times 5) = 6$ percent, so $\tilde{Y} = -2$ percent every year, and inflation runs 9, 8, 7, 6, 5. Equation (9) gives a cost of $5/0.5 = 10$ percent-years. This is Fig. 12.
+
+**Step 5: where inflation comes to rest.** Once policy returns to $R_t = \bar{r} + \bar{a}/\bar{b}$ (equation 3), output is at potential and, with $\bar{o} = 0$, $\Delta\pi_t = 0$: inflation stays at whatever level it has reached. **Any** inflation rate can be a resting point. Nothing inside the model pulls inflation back to a particular level; only policy can move it.
+
+#### What the model predicts
+
+The dynamics after each kind of event, with the baseline $\bar{b} = 2$, $\bar{\nu} = 0.5$ and $R_t = \bar{r}$ unless stated:
+
+| Event | Output | Inflation |
+|---|---|---|
+| tight policy, $R = \bar{r} + 1$ for $T$ years | $\tilde{Y} = -2$ while it lasts | falls 1 point a year, then stays at the lower level |
+| demand boom $\bar{a} = 2$ for $T$ years, $R$ unchanged | $\tilde{Y} = +2$ while it lasts | rises 1 point a year, then stays higher |
+| the same boom, policy follows equation (3) | $\tilde{Y} = 0$ | unchanged |
+| a one-year price shock $\bar{o} = 1$ | $\tilde{Y} = 0$ | up 1 point, and **stays** up |
+| the same shock, then the central bank undoes it | a recession of $\bar{o}/\bar{\nu} = 2$ percent-years in total | back to where it started |
+| a slowdown in potential mistaken for $\bar{a}' = -2$ | $\tilde{Y} = -\bar{a}' = +2$ | rises 1 point a year |
+
+The last row is the policy mistake of the 1970s (Figs. 13 and 21). Policymakers cut the rate by equation (3) to $R' = \bar{r} + \bar{a}'/\bar{b}$, but the true IS curve has $\bar{a} = 0$, so true output is $\tilde{Y} = -\bar{b}(R' - \bar{r}) = -\bar{b}\,\bar{a}'/\bar{b} = -\bar{a}'$: a boom instead of a return to potential.
+
+- With sticky inflation and adaptive expectations, the **only** way to lower inflation is a period with output below potential (equation 9). Disinflation is a temporary recession, not a permanent loss.
+- Inflation keeps the memory of every shock (equation 6). Oil shocks, a too-loose policy and a misread productivity slowdown can therefore add up to a **Great Inflation**.
+
+<!-- cell -->
+
+### Looking ahead: an interest-rate rule (the Taylor rule)
+
+#### Assumptions
+
+So far the central bank chooses each year's real rate by judgment. [Chapter 13](https://quarcs-lab.github.io/macro102-site/notebooks/ch13-stabilization-policy-and-the-as-ad-framework.html) lets it follow a **rule** instead: it sets the real rate above $\bar{r}$ by $\bar{m}$ points for every point that inflation is above an **inflation target** $\bar{\pi}$,
+
+$$R_t - \bar{r} = \bar{m}\,(\pi_t - \bar{\pi}), \qquad \bar{m} > 0.$$
+
+In terms of the nominal rate, by the Fisher equation, $i_t = R_t + \pi_t = \bar{r} + \pi_t + \bar{m}(\pi_t - \bar{\pi})$. This is the inflation part of the **Taylor rule**; John Taylor's full rule also responds to short-run output. The IS curve (2) and the Phillips curve (4) stay as they are. Here we only preview the result, with this chapter's numbers.
+
+#### Solving the model
+
+**Step 1: the rule in the IS curve.** Replace $R_t - \bar{r}$ in equation (2): $\tilde{Y}_t = \bar{a} - \bar{b}\bar{m}(\pi_t - \bar{\pi})$. Higher inflation now brings a higher real rate and lower output. Chapter 13 calls this the AD curve.
+
+**Step 2: into the Phillips curve.** Put it into equation (4) and subtract $\bar{\pi}$ from both sides. Writing the **inflation gap** as $x_t \equiv \pi_t - \bar{\pi}$,
+
+$$x_t = x_{t-1} + \bar{\nu}\bar{a} - \bar{\nu}\bar{b}\bar{m}\,x_t + \bar{o}.$$
+
+$x_t$ appears on both sides, because this year's inflation sets this year's interest rate. Collect the $x_t$ terms on the left, $(1 + \bar{\nu}\bar{b}\bar{m})\,x_t = x_{t-1} + \bar{\nu}\bar{a} + \bar{o}$, and divide:
+
+$$\pi_t - \bar{\pi} = \lambda\left[(\pi_{t-1} - \bar{\pi}) + \bar{\nu}\bar{a} + \bar{o}\right], \qquad \lambda \equiv \frac{1}{1 + \bar{\nu}\bar{b}\bar{m}}. \tag{10}$$
+
+**Step 3: the path with no shocks.** With $\bar{a} = \bar{o} = 0$, $x_t = \lambda x_{t-1}$, so $x_0 = \lambda x_{-1}$, $x_1 = \lambda^2 x_{-1}$, and in general
+
+$$\pi_t - \bar{\pi} = \lambda^{t+1}\,(\pi_{-1} - \bar{\pi}). \tag{11}$$
+
+Since $0 < \lambda < 1$, the gap shrinks by the same fraction every year and inflation converges to the target on its own ([Appendix C.10](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.10-difference-equations-how-macro-variables-move-over-time)). Output follows, $\tilde{Y}_t = -\bar{b}\bar{m}\,x_t$.
+
+**Worked numbers.** With $\bar{\nu} = 0.5$, $\bar{b} = 2$, Taylor's $\bar{m} = 1/2$ and a target of 2 percent, $\bar{\nu}\bar{b}\bar{m} = 0.5$ and $\lambda = 1/1.5 = 2/3$. Starting from 10 percent inflation, the gap of 8 points becomes $5.33$, $3.56$, $2.37$, …: inflation runs about $7.3$, $5.6$, $4.4$ percent, and output $-5.3$, $-3.6$, $-2.4$ percent. The total output lost is $8 \times (2/3)/(1 - 2/3) = 16$ percent-years, exactly $(\pi_{-1} - \bar{\pi})/\bar{\nu} = 8/0.5$, as equation (9) requires.
+
+#### What the model predicts
+
+- Each year the economy closes the share $1 - \lambda = \bar{\nu}\bar{b}\bar{m}/(1 + \bar{\nu}\bar{b}\bar{m})$ of the inflation gap: one third at the baseline. A tougher central bank (larger $\bar{m}$), more interest-sensitive spending (larger $\bar{b}$) or a steeper Phillips curve (larger $\bar{\nu}$) all make $\lambda$ smaller and the return faster.
+- A tougher rule front-loads the recession but does not make it cheaper: by equation (6) the total output lost is still $(\pi_{-1} - \bar{\pi})/\bar{\nu}$, whatever $\bar{m}$.
+- The nominal rate rises by $1 + \bar{m}$ points for each point of inflation, more than one for one, so that the **real** rate rises. This is the **Taylor principle**.
+
+<!-- cell -->
+
+### Microfoundations: money demand, money supply and the policy rate
+
+#### Assumptions
+
+**1. Money demand.** Cash and checking accounts pay no interest, while a savings account pays $i$. The nominal interest rate is therefore the **opportunity cost** of holding money, and people hold less money when it is high. We use an illustrative straight line, $M^d = m_0 - i$, with $m_0 = 10$ at the baseline. Higher prices or output, or new ways of paying, shift $m_0$.
+
+**2. Money supply.** The central bank decides how much money to supply, $M^s$: a vertical line in a diagram with money on the horizontal axis and $i$ on the vertical axis.
+
+**3. Sticky inflation.** In the short run the price level does not jump to clear the money market, as it would in the quantity theory. The market clears through the interest rate instead (and so through the velocity of money).
+
+#### Solving the model
+
+**Step 1: the equilibrium rate.** Set money demand equal to money supply, $m_0 - i^* = M^s$, and solve for $i^*$:
+
+$$i^* = m_0 - M^s. \tag{12}$$
+
+At the baseline, $i^* = 10 - 5 = 5$ percent. Above $i^*$ people want to hold less money than there is and the rate falls; below it they want more and the rate rises.
+
+**Step 2: comparative statics.** From equation (12), one unit less of money supply raises $i^*$ by one point, and one unit more of money demand also raises it by one point. Cutting the supply from 5 to 4 units lifts the rate from 5 to 6 percent: **tight money** means a higher interest rate (Fig. 19).
+
+**Step 3: targeting the rate.** To keep the rate at a target $i^T$ whatever happens to demand, solve equation (12) for the supply: $M^s = m_0 - i^T$. The supply now moves one for one with demand, and the rate does not move at all. In the diagram the money supply becomes a **horizontal** line at $i^T$. If demand rises to $m_0 = 11$, the central bank supplies 6 units instead of 5 (Fig. 20).
+
+**Step 4: bonds and open-market operations.** The central bank changes the money supply by buying or selling government bonds. A bond that pays 100 dollars in one year and costs $P_B$ today earns $100 - P_B$ on an outlay of $P_B$, so its interest rate is
+
+$$i = \frac{100 - P_B}{P_B} \quad\Longleftrightarrow\quad P_B = \frac{100}{1 + i}.$$
+
+A bond priced at 96 dollars yields $4/96 \approx 4.2$ percent. When the central bank sells bonds, it takes money out of the economy and pushes bond prices down, so the interest rate rises; buying bonds does the opposite.
+
+#### What the model predicts
+
+| Change | Effect on $i^*$ with $M^s$ fixed | Effect when the central bank targets $i$ |
+|---|---|---|
+| money supply down 1 unit | $+1$ point | (not used: $M^s$ follows demand) |
+| money demand $m_0$ up 1 unit | $+1$ point | $0$; $M^s$ rises by 1 unit |
+
+- With a fixed money supply, every shift in money demand would move the interest rate, and with sticky inflation also the real rate and output, although nothing real has happened. Targeting the rate shields the economy from such shocks, which is why modern central banks set an interest rate rather than a quantity of money.
+- **IS/LM.** Hold $M^s$ fixed and let higher output raise money demand: the rate then rises with output, an upward-sloping "LM" curve. A central bank that adjusts $M^s$ to hold its rate turns that curve into our flat MP line.
+
+<!-- cell -->
+
+### The model in code
+
+We now write the key results as Python functions, defined once and reused by every section of the notebook. Each description names the equation it computes. The cells after them check the algebra above with numbers.
 
 > **Python note.** `def` creates a *function*: a named recipe that takes inputs (the *arguments*) and gives
 > back a result with `return`. Writing `b=B_BAR` gives the argument a *default value*, used whenever we do
@@ -144,36 +425,36 @@ M0, M_BAR = 10.0, 5.0                    # money market: demand M = 10 - i, supp
 
 
 def real_rate(i, pi):
-    """Equation 12.2, the Fisher equation: the real interest rate R = i - pi, in percent."""
+    """Equation (1), the Fisher equation: the real interest rate R = i - pi, in percent."""
     return i - pi
 
 
 def is_curve(R, a=A_BAR, b=B_BAR, r_bar=R_BAR):
-    """Equation 11.12, the IS curve: short-run output Y~ = a - b (R - r_bar), in percent."""
+    """Equation (2), the IS curve: short-run output Y~ = a - b (R - r_bar), in percent."""
     return a - b * (R - r_bar)
 
 
 def rate_for_output(Y, a=A_BAR, b=B_BAR, r_bar=R_BAR):
-    """The IS curve solved for R: the real interest rate at which short-run output equals Y."""
+    """The IS curve solved for R: the real rate at which short-run output equals Y (equation 3 when Y = 0)."""
     return r_bar + (a - Y) / b
 
 
 def phillips(Y, nu=NU, o=O_BAR):
-    """Equation 12.8, the Phillips curve: the change in inflation = nu * Y~ + o, in percentage points."""
+    """Equation (5), the Phillips curve: the change in inflation = nu * Y~ + o, in percentage points."""
     return nu * Y + o
 ```
 
-The money market of Section 12.7 has two more functions. People hold less money when the nominal interest
-rate, the opportunity cost of holding money, is higher.
+The money market has two more functions. People hold less money when the nominal interest rate, the opportunity
+cost of holding money, is higher.
 
 ```{python}
 def money_demand(i, m0=M0):
-    """Fig. 12.18: money demanded falls as the nominal interest rate rises, M = m0 - i."""
+    """Fig. 18: money demanded falls as the nominal interest rate rises, M = m0 - i."""
     return m0 - i
 
 
 def market_rate(M_s, m0=M0):
-    """The nominal rate that clears the money market: m0 - i = M_s, so i = m0 - M_s."""
+    """Equation (12): the nominal rate that clears the money market, m0 - i = M_s, so i = m0 - M_s."""
     return m0 - M_s
 ```
 
@@ -187,7 +468,7 @@ interest rates.
 
 ```{python}
 def simulate(R_path, pi_start, nu=NU, a=A_BAR):
-    """The short-run model year by year: MP sets R, IS gives Y~, the Phillips curve gives pi (eq. 12.7)."""
+    """The short-run model year by year (equation 7): MP sets R, IS gives Y~, the Phillips curve gives pi."""
     Y_path, pi_path = [], []
     pi = pi_start                          # inflation of the year before the first year
     for R in R_path:
@@ -214,9 +495,124 @@ Y_path, pi_path = simulate([6.0, 6.0, 6.0, 6.0, 6.0, 5.0], pi_start=10.0)
 print("Volcker: five years at R = 6%, then R = 5%. Inflation:", pi_path)
 ```
 
-Raising the real interest rate from 5 to 6 percent pushes output 2 percent below potential, as in the textbook.
+Raising the real interest rate from 5 to 6 percent pushes output 2 percent below potential.
 With $\bar{\nu} = 0.5$, a 2 percent recession lowers inflation by 1 point a year, so five years of it bring inflation
 from 10 down to 5 percent, and it stays there once the interest rate is back at $\bar{r}$.
+
+**Check 1: the MP curve and equation (3).** With inflation sticky, a point on $i$ must move $R$ by a point; if
+inflation rises with $i$, $R$ must not move. Equation (3) must give a rate at which the IS curve returns exactly
+$\tilde{Y} = 0$, and the slope of the IS curve must be $-\bar{b}$.
+
+```{python}
+R_before = real_rate(7.0, 2.0)
+print(f"i 7% -> 8%, pi sticky at 2%:   R changes by {real_rate(8.0, 2.0) - R_before:+.1f} point")
+print(f"i 7% -> 8% and pi 2% -> 3%:    R changes by {real_rate(8.0, 3.0) - R_before:+.1f} points")
+for a in [-2.0, -1.0, 1.5]:
+    R_stab = R_BAR + a / B_BAR                                   # equation (3)
+    print(f"a = {a:+.1f}: equation (3) gives R = {R_stab:.2f}%, and there the IS curve gives Y~ = {is_curve(R_stab, a=a):+.2f}%")
+print(f"Slope of the IS curve: {is_curve(6.0) - is_curve(5.0):+.1f} points of output per point of R (-b = {-B_BAR:.1f})")
+```
+
+**Check 2: the term structure.** The five-year rate that matches five one-year bonds in a row, computed exactly,
+should be close to the simple average of the expected one-year rates.
+
+> **Python note.** `growth = growth * (1 + rate / 100)` multiplies the running product by one more factor each time
+> round the loop. `** (1 / 5)` takes the fifth root, and `np.mean` is the average of a list.
+
+```{python}
+expected = [2.0, 3.0, 4.0, 5.0, 6.0]           # expected one-year rates over the next five years, percent
+growth = 1.0
+for rate in expected:
+    growth = growth * (1 + rate / 100)          # roll the money over, one year at a time
+exact = 100 * (growth ** (1 / 5) - 1)
+print(f"Five-year rate, exact:          {exact:.3f}%")
+print(f"Average of the one-year rates:  {np.mean(expected):.3f}%")
+```
+
+**Check 3: the disinflation, equations (6), (8) and (9).** We let equation (8) choose the real rate that takes
+inflation from 10 to 5 percent in five years, run `simulate`, and compare each year's inflation with the running
+total of equation (6) and the total cost with equation (9).
+
+> **Python note.** `[R_high] * T` is a list with `T` copies of `R_high`, and `+` joins two lists. `Y_path[: t + 1]`
+> keeps the first `t + 1` numbers of the array (years 0 to `t`), and `.sum()` adds them up.
+
+```{python}
+pi_start, pi_target, T = 10.0, 5.0, 5
+R_high = R_BAR + (pi_start - pi_target) / (NU * B_BAR * T)      # equation (8)
+Y_path, pi_path = simulate([R_high] * T + [R_BAR, R_BAR], pi_start)
+print(f"Equation (8): hold R at {R_high:.2f}% for {T} years")
+for t in range(T + 2):
+    total = pi_start + NU * Y_path[: t + 1].sum()                # equation (6), no price shocks
+    print(f"Year {t}: Y~ = {Y_path[t]:+.1f}%, pi = {pi_path[t]:.2f}% (simulated), {total:.2f}% (equation 6)")
+print(f"Output lost: {-Y_path.sum():.1f} percent-years;  equation (9): {(pi_start - pi_target) / NU:.1f}")
+R_fast = R_BAR + (10.0 - 4.0) / (NU * B_BAR * 4)                 # from 10 to 4 percent in four years
+print(f"From 10% to 4% in 4 years: R = {R_fast:.2f}%, inflation path {simulate([R_fast] * 4, 10.0)[1]}")
+```
+
+**Check 4: shocks with an unchanged interest rate.** A one-year price shock should raise inflation for good when
+the real rate stays at $\bar{r}$. And a cut by equation (3) for a demand shock that never happened should give
+true output $\tilde{Y} = -\bar{a}'$.
+
+```{python}
+pi = 2.0
+for o in [1.0, 0.0, 0.0, 0.0]:                                   # the shock hits in the first year only
+    pi = pi + phillips(is_curve(R_BAR), o=o)                     # equation (4) with R = r_bar
+    print(f"Price shock {o:.1f}: inflation {pi:.1f}%")
+print(f"Undoing it costs {1.0 / NU:.1f} percent-years of output:", simulate([R_BAR + 1.0, R_BAR], 3.0)[1])
+for a_believed in [-2.0, -1.0]:
+    R_cut = rate_for_output(0.0, a=a_believed)                   # policy believes the IS curve shifted
+    print(f"Believed a' = {a_believed:+.1f}: R cut to {R_cut:.2f}%, true Y~ = {is_curve(R_cut):+.1f}%")
+```
+
+**Check 5: the interest-rate rule, equations (10) and (11).** Each year we compute inflation with equation (10),
+then the rule's interest rate and the IS curve's output. Two things must hold: inflation must match the closed form
+(11), and the change in inflation must equal what the Phillips curve says for that output.
+
+```{python}
+m, pi_bar = 0.5, 2.0                                             # Taylor's response and an inflation target
+lam = 1 / (1 + NU * B_BAR * m)
+pi_old = 10.0
+for t in range(4):
+    pi = pi_bar + lam * (pi_old - pi_bar)                        # equation (10), no shocks
+    R = R_BAR + m * (pi - pi_bar)                                # the rule
+    Y = is_curve(R)
+    closed = pi_bar + lam ** (t + 1) * (10.0 - pi_bar)          # equation (11)
+    print(f"Year {t}: pi = {pi:.3f}% (eq. 11: {closed:.3f}%), R = {R:.2f}%, Y~ = {Y:+.2f}%,"
+          f" change in pi {pi - pi_old:+.3f} = Phillips {phillips(Y):+.3f}")
+    pi_old = pi
+```
+
+Over many years, the output lost under the rule must add up to $(\pi_{-1} - \bar{\pi})/\bar{\nu} = 16$ percent-years,
+whatever the value of $\bar{m}$ (equation 9 again).
+
+> **Python note.** A loop inside a loop runs the inner loop in full for each value of the outer one: here 200 years
+> for each value of `m`. `if t == 0:` is true only in the first year, so `Y_first` keeps that year's output.
+
+```{python}
+for m in [0.25, 0.5, 1.0]:
+    lam = 1 / (1 + NU * B_BAR * m)
+    pi, lost = 10.0, 0.0
+    for t in range(200):
+        pi = pi_bar + lam * (pi - pi_bar)                        # equation (10)
+        Y = is_curve(R_BAR + m * (pi - pi_bar))                  # the rule, then the IS curve
+        lost = lost - Y                                          # add up the output gaps
+        if t == 0:
+            Y_first = Y
+    print(f"m = {m:.2f}: λ = {lam:.3f}, output in year 0 {Y_first:+.2f}%, total output lost {lost:.2f} percent-years")
+```
+
+**Check 6: the money market and bond prices, equation (12).** At the equilibrium rate, money demand must equal the
+supply; a rate target must make the supply follow demand; and a bond's price and yield must agree in both directions.
+
+```{python}
+i_star = market_rate(M_BAR)
+print(f"Equation (12): i* = {i_star:.1f}%;  money demanded there {money_demand(i_star):.1f} = supply {M_BAR:.1f}")
+print(f"Demand up to 11 - i, supply fixed: i* = {market_rate(M_BAR, m0=11.0):.1f}%")
+print(f"Demand up to 11 - i, rate held at 5%: supply needed {money_demand(5.0, m0=11.0):.1f}")
+price = 96.0
+i_bond = (100 - price) / price                                   # the yield of a one-year bond
+print(f"Bond price {price:.0f}: yield {100 * i_bond:.2f}%;  back to the price: {100 / (1 + i_bond):.2f}")
+```
 
 <!-- cell -->
 
@@ -909,7 +1305,7 @@ You need $1.5 - 2\,(R' - 5) = 0$. Check with `is_curve(5.75, a=1.5)`.
 When a housing bubble bursts, households lose wealth and confidence, and spend less: the demand shock $\bar{a}$ falls
 to $\bar{a}' < 0$. The IS curve shifts left, and at an unchanged interest rate the economy moves from $A$ to $B$, a
 recession (panel a; the textbook uses $-2$ percent as its example). The central bank can respond by cutting the
-real interest rate to
+real interest rate to the level of equation (3),
 
 $$R' = \bar{r} + \frac{\bar{a}'}{\bar{b}},$$
 
@@ -1183,13 +1579,13 @@ The Phillips curve links output to changes in inflation. We add a price shock, s
 Imagine you run a firm and inflation has been 5 percent a year. You expect it to stay there, so normally you raise
 your prices by 5 percent. If demand for your products is weak, you raise them by less, to win back customers; if
 demand is strong, by more. When all firms do this, inflation equals last year's inflation plus an adjustment for
-demand:
+demand (equation 5):
 
 $$\Delta\pi_t = \bar{\nu}\,\tilde{Y}_t + \bar{o}.$$
 
 A booming economy ($\tilde{Y} > 0$) raises inflation; a slumping one lowers it. The slope $\bar{\nu}$ measures how
 strongly prices react to demand. As with the IS diagram, one function draws three textbook figures: the Phillips
-curve itself (12.7), an oil shock (12.8) and a recession (12.11). Its arguments are short-run output `Y_new`, the
+curve itself (Fig. 7), an oil shock (Fig. 8) and a recession (Fig. 11). Its arguments are short-run output `Y_new`, the
 price shock `o_new` and the slope `nu`.
 
 > **Python note.** `for x, y, anchor, text in REGIONS:` takes the list of (x, y, anchor, text) groups one at a time and
@@ -1475,7 +1871,7 @@ Now we put the three pieces together and run the model through time, first for t
 **Goal.** Follow the first step of the Volcker disinflation in the IS/MP diagram.
 
 By 1979 inflation exceeded 10 percent. Paul Volcker's Fed slowed money growth, which means raising the nominal
-interest rate. Because inflation is sticky, the real rate rises too: $R' = i' - \pi$. With inflation at 10 percent, a
+interest rate. Because inflation is sticky, the real rate rises too: $R' = i' - \pi$ (equation 1). With inflation at 10 percent, a
 nominal rate of 15 percent keeps $R = 5\% = \bar{r}$; raising it to 16 percent lifts the real rate to 6 percent, and output
 falls to the textbook's $-2$ percent. The function reuses `ismp_experiment` and only adds the Fisher step.
 
@@ -1576,7 +1972,7 @@ inflation in one year at $\tilde{Y} = -2$ for $\bar{\nu} = 0.25$, 0.5 and 1 with
 
 The Fed raises the real interest rate in year 0 and keeps it high until year $t^*$, when inflation has fallen enough;
 then it returns $R$ to $\bar{r}$. Each year the model takes three steps: the MP curve sets $R_t$, the IS curve gives
-$\tilde{Y}_t$, and the Phillips curve gives $\pi_t = \pi_{t-1} + \bar{\nu}\tilde{Y}_t$. That is exactly our `simulate`
+$\tilde{Y}_t$, and the Phillips curve gives $\pi_t = \pi_{t-1} + \bar{\nu}\tilde{Y}_t$ (equation 4 with $\bar{o} = 0$). That is exactly our `simulate`
 function. Inflation starts at the textbook's 10 percent. Inflation in year 0 already falls, because
 $\pi_0 = (P_1 - P_0)/P_0$: firms set next year's prices when they see this year's recession.
 
@@ -2064,8 +2460,8 @@ Chart: inspired by Fig. 12.16 in Jones (2024), [*Macroeconomics*, 6th ed.](https
   about 23 percent. The Great Recession had raised it too, to 24.3 percent in FY2009.
 - Much of the extra spending was transfers to households and firms: loans, generous unemployment benefits and three
   rounds of direct payments (Fig. 17).
-- **Data check.** The textbook says spending rose "from 22 percent in 2019". Neither these data (20.65) nor the textbook's
-  own figure (20.8) show that: it is a slip in the text. Its "nearly 32 percent in 2020 and 30 percent in 2021" match the
+- **Data check.** The textbook says spending rose "from 22 percent in 2019". Neither these data (20.65 percent) nor the textbook's
+  own figure (20.8 percent) show that: it is a slip in the text. Its "nearly 32 percent in 2020 and 30 percent in 2021" match the
   data of 2023 (31.1 and 29.3); since then a revision of GDP has lowered these shares by about half a point.
 
 <!-- cell -->
@@ -2297,10 +2693,10 @@ So far the central bank simply chose the interest rate. The money market shows h
 The **nominal interest rate is the opportunity cost of holding money**: cash and checking accounts pay nothing, while a
 savings or money-market account pays $i$. At 1 percent you might as well hold cash; at 20 percent you would keep as little
 as possible. So money demand $M^d$ falls as $i$ rises. The central bank decides how much money to supply, $M^s$: a
-vertical line. The interest rate $i^*$ is where people want to hold exactly the money supplied. If $i$ were higher, people
+vertical line. The interest rate $i^*$ is where people want to hold exactly the money supplied (equation 12). If $i$ were higher, people
 would want less money than there is, and the rate would fall; if lower, the opposite.
 
-As before, one function draws two textbook figures: this one (12.18) and a change in the money supply (12.19). Its arguments
+As before, one function draws two textbook figures: this one (Fig. 18) and a change in the money supply (Fig. 19). Its arguments
 are the new money supply `M_new` and the new level of money demand `m0_new` (demand is $M^d = m_0 - i$).
 
 > **Python note.** `"Mᵈ′" if m0_new != M0 else "Mᵈ"` is a one-line `if`: it gives the first text when the condition is true
@@ -2517,7 +2913,7 @@ The four panels tell the story of Fig. 13 with the model's diagrams:
 
 - (a) Policymakers believe a negative demand shock $\bar{a}' < 0$ caused the slowdown: they think the IS curve shifted to IS′,
   and the economy is at $B$, below potential.
-- (b) So they lower the real interest rate to $R' = \bar{r} + \bar{a}'/\bar{b}$, which, they believe, takes the economy back to
+- (b) So they lower the real interest rate to $R' = \bar{r} + \bar{a}'/\bar{b}$ (equation 3), which, they believe, takes the economy back to
   potential at $C$.
 - (c) Demand never actually fell, so the IS curve is where it was. The lower rate moves the economy **down the true IS curve**,
   to $C$, above potential.
@@ -2611,13 +3007,18 @@ needs $\tilde{Y} = -1/\bar{\nu}$: try `rate_for_output(-2.0)`.
 ## Concluding remarks
 
 - The short-run model has three building blocks. Through the **MP curve**, the central bank's nominal interest rate sets the
-  real interest rate, because inflation is **sticky**. Through the **IS curve**, the real rate sets short-run output. Through the
-  **Phillips curve**, $\Delta\pi_t = \bar{\nu}\tilde{Y}_t + \bar{o}$, output changes inflation over time.
-- In the IS/MP diagram, monetary policy can in principle offset demand shocks such as a housing bust, but long and variable
-  lags make this hard in practice.
-- Lowering inflation requires a temporary recession: the **Volcker disinflation** brought inflation from 13.5 percent in 1980 to
+  real interest rate, $R_t = i_t - \pi_t$ (equation 1), because inflation is **sticky**. Through the **IS curve**, equation (2),
+  the real rate sets short-run output. Through the **Phillips curve**, equations (4) and (5),
+  $\Delta\pi_t = \bar{\nu}\tilde{Y}_t + \bar{o}$, output changes inflation over time, and inflation adds up every past gap and
+  shock (equation 6).
+- In the IS/MP diagram, monetary policy can in principle offset demand shocks such as a housing bust by setting the rate of
+  equation (3), but long and variable lags make this hard in practice.
+- Combined, the three blocks give one difference equation for inflation, equation (7). Lowering inflation requires a temporary
+  recession whose total cost, $(\pi_{-1} - \pi^T)/\bar{\nu}$ percent-years, does not depend on how fast it is done
+  (equations 8 and 9): the **Volcker disinflation** brought inflation from 13.5 percent in 1980 to
   3.2 percent in 1983, at the cost of the deepest recession in decades. Oil shocks, the belief in a permanent trade-off, and a
   productivity slowdown mistaken for a recession all contributed to the **Great Inflation** of the 1970s.
 - Central banks set the interest rate by supplying whatever money is demanded at their target. Through the term structure,
   the short rate also moves longer-term rates.
-- The next chapter adds the central bank's **policy rule** and expectations, leading to the AS/AD framework.
+- The next chapter adds the central bank's **policy rule** and expectations, leading to the AS/AD framework. Our preview,
+  equations (10) and (11), already shows that such a rule closes a fixed share of the inflation gap every year.

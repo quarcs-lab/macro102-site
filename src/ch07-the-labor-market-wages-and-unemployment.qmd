@@ -1,4 +1,4 @@
-# Chapter 7: The Labor Market, Wages, and Unemployment
+# 7. The Labor Market, Wages, and Unemployment
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/ch07-the-labor-market-wages-and-unemployment.ipynb)
 
@@ -11,11 +11,15 @@ of this chapter you will be able to:
 
 - read the main U.S. labor-market statistics: the **employment-population ratio** and the
   **unemployment rate**, and how both move in recessions;
-- solve a supply-and-demand model of the labor market and use it for experiments: an income tax, a
-  fall in labor demand, and a wage that does not fall;
-- compute the **natural rate of unemployment** with the bathtub model;
-- compute **present discounted values**, and use them to value a working life and a college degree;
-- explain why the college wage premium rose while the supply of college graduates grew;
+- link the unemployment rate, the participation rate and the employment-population ratio with one identity;
+- derive the equilibrium wage and employment of a supply-and-demand model of the labor market, read its
+  **comparative statics**, and use it for experiments: an income tax, a fall in labor demand, and a wage
+  that does not fall;
+- derive the **natural rate of unemployment** from the bathtub model, and the path that unemployment
+  follows on its way there;
+- derive the **present discounted value** formulas from the geometric series, and use them to value a
+  working life and a college degree;
+- explain with two labor markets why the college wage premium rose while the supply of college graduates grew;
 - load monthly data with pandas, shade recessions, recompute textbook tables, and build interactive
   Plotly figures with sliders, toggles, menus and buttons;
 - go beyond the textbook's countries: compare up to 187 countries with a country picker, and spot breaks,
@@ -150,35 +154,311 @@ def legend_menu(fig, shown, label="Textbook view"):
 
 ## Model overview
 
-The labor market is where most people earn their income, so its two key numbers, how many people work and what they are paid, matter to almost everyone. This chapter first measures them: the share of adults with a job, the unemployment rate, and how wages differ by education and across the income distribution. It then explains them with the oldest tool in economics, **supply and demand**, applied to workers instead of goods.
+The labor market decides two numbers that touch almost every household: how many people have a job and how much a job pays. This chapter first measures them, then explains them with **supply and demand**, the workhorse of economics, now applied to hours of work instead of apples or cars. Two smaller models complete the picture. The **bathtub model** follows the people who lose and find jobs every month and gives the unemployment rate the economy returns to in normal times. **Present discounted value** turns a lifetime of wages into one number today, which lets us ask what a college degree is worth.
 
-The model takes the position and slope of the labor demand and labor supply curves as given and tells us the equilibrium wage and employment. Shifting a curve, adding a tax, or freezing the wage shows how shocks and policies move the market, and a simple "bathtub" model adds the flows into and out of unemployment. Below we write the equations, solve for the equilibrium, and define the drawing and data helpers, such as recession shading, that the sections reuse: first for the U.S. facts, then for the model experiments, and finally for unemployment abroad, the return to education and inequality.
+This section builds the tools in five blocks. We start with the definitions behind the labor-market statistics. Then we solve the supply-and-demand model and use it for three experiments: an income tax, a fall in labor demand and a wage that does not fall. The third block solves the bathtub model, the fourth derives the present-value formulas, and the fifth combines supply and demand with present values to study the return to education. Each block goes from the assumptions to the solution and then to the predictions. At the end, `### The model in code` turns the key results into Python functions and checks every one of them with numbers.
 
-The model of this chapter is **supply and demand in the labor market**. Employment $L$ goes on the
-horizontal axis and the wage $w$ on the vertical axis, so we write each curve as "the wage at each
-level of employment":
+As in the book, a bar over a letter marks a **parameter**, a number fixed outside the model, such as the labor force $\bar{L}$ or the job finding rate $\bar{f}$. Letters without a bar are **endogenous**: the model solves for them. A star marks an equilibrium or a steady state, as in $w^*$ or $u^*$. Careful: in this chapter $\bar{s}$ is the job *separation* rate, not the investment rate of the Solow model.
 
-$$\text{labor demand: } w = \bar{a}_d - \bar{b}_d\,L \qquad\qquad \text{labor supply: } w = \bar{a}_s + \bar{b}_s\,L$$
+<!-- cell -->
 
-- **Labor demand** slopes down. Firms hire until the extra output of the last worker (the marginal
-  product of labor, Chapter 4) equals the wage, and each extra worker adds less than the one before.
-- **Labor supply** slopes up. A higher wage makes an hour of leisure more expensive, so more people
-  choose to work.
+### Measuring the labor market
 
-The textbook draws these curves without numbers. We use simple illustrative values: $\bar{a}_d = 100$,
-$\bar{b}_d = 1$, $\bar{a}_s = 10$, $\bar{b}_s = 1$. Setting demand equal to supply gives the equilibrium
+#### Definitions
 
-$$L^* = \frac{\bar{a}_d - \bar{a}_s}{\bar{b}_d + \bar{b}_s} \qquad\qquad w^* = \bar{a}_d - \bar{b}_d\,L^*$$
+Split the adult population $N$ (people aged 16 and over) into three groups. The **employed** $E$ have a paid job. The **unemployed** $U$ have no job, have searched for one in the last four weeks, and could start work now. Everybody else is **not in the labor force**: students, retirees, people caring for family, and discouraged workers who stopped searching. The **labor force** is the first two groups together:
 
-so $L^* = 90/2 = 45$ and $w^* = 55$.
+$$LF = E + U.$$
 
-Later we add an income tax at rate $\tau$: firms pay $w$, but workers keep only $(1-\tau)w$. Workers
-decide how much to work from the wage they keep, so supply becomes $(1-\tau)w = \bar{a}_s + \bar{b}_s L$.
-Solving with demand gives
+Three ratios summarize the market:
 
-$$L^* = \frac{(1-\tau)\,\bar{a}_d - \bar{a}_s}{(1-\tau)\,\bar{b}_d + \bar{b}_s}$$
+| Ratio | Formula | What it measures |
+|---|---|---|
+| unemployment rate | $u = U/LF$ | the share of people *in the labor force* who look for work and do not have it |
+| participation rate | $LF/N$ | the share of adults who work or want to work |
+| employment-population ratio | $E/N$ | the share of *all* adults who work |
 
-which is the formula above when $\tau = 0$. One function, `equilibrium`, covers both cases.
+#### Solving: how the three ratios fit together
+
+The three ratios are linked by an identity. Multiply and divide $E/N$ by the labor force, then use $E = LF - U$:
+
+$$\frac{E}{N} = \frac{E}{LF}\cdot\frac{LF}{N} = \frac{LF - U}{LF}\cdot\frac{LF}{N} = \left(1 - \frac{U}{LF}\right)\frac{LF}{N},$$
+
+so that
+
+$$\frac{E}{N} = (1 - u)\times\frac{LF}{N}. \tag{1}$$
+
+Taking logs turns the product into a sum ([Appendix C.4](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.4-logarithms)): $\ln(E/N) = \ln(1-u) + \ln(LF/N)$. Since $\ln(1-u) \approx -u$ when $u$ is small ([Appendix C.6](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.6-approximations)), a one-point rise in the unemployment rate lowers the employment-population ratio by about 1 percent, and a 1 percent rise in participation raises it by 1 percent.
+
+*Intuition.* The employment-population ratio can fall for two different reasons: more of the labor force is jobless, or fewer adults are in the labor force at all. The unemployment rate sees only the first. With 100 adults, a labor force of 62 and 3 unemployed, $u = 3/62 \approx 4.8\%$, participation is $62\%$ and $E/N = (1 - 0.048)\times 0.62 = 0.59$: 59 of the 100 adults work. If one of the 3 jobless people gives up searching, $U$ falls to 2 and $LF$ to 61: the unemployment rate drops to $3.3\%$, yet nobody has found a job and $E/N$ is still 59 percent.
+
+**The kinds of unemployment.** Economists split the unemployment rate into a part that is there in normal times and a part that comes and goes with booms and recessions:
+
+$$u = \underbrace{u_{\text{frictional}} + u_{\text{structural}}}_{\text{natural rate } u^n} + u_{\text{cyclical}}. \tag{2}$$
+
+- **Frictional** unemployment comes from the time it takes to move between jobs, even in a market that works smoothly.
+- **Structural** unemployment comes from the rules and institutions of the labor market: hiring and firing costs, unemployment benefits, the minimum wage.
+- The **natural rate** $u^n$ is their sum: the rate in an economy that is neither booming nor in recession. The bathtub model below explains its level.
+- **Cyclical** unemployment is the rest, $u - u^n$. It is positive in recessions and negative in booms.
+
+#### What the definitions tell us
+
+- **Read the two employment statistics together.** By identity (1), a policy that pushes people out of the labor force lowers $E/N$ but can leave $u$ unchanged, or even lower it. That is why this chapter tracks both statistics (Figs. 1 and 2).
+- **A recession shows up in both.** Job losses raise $u$, and by identity (1) they lower $E/N$, roughly one percent for each point of unemployment.
+- **The natural rate is not fixed by nature.** By equation (2) it moves with labor-market institutions, which is how the chapter explains Europe's high unemployment (Fig. 7).
+
+<!-- cell -->
+
+### Supply and demand in the labor market
+
+#### Assumptions
+
+There is one kind of labor, measured by employment $L$, and one price for it, the wage $w$. Following the book's diagrams, we put $L$ on the horizontal axis and $w$ on the vertical axis, so each curve gives "the wage at each level of employment".
+
+**1. Labor demand slopes down.** Firms keep adding workers as long as one more worker produces at least what he or she costs. They stop when the **marginal product of labor**, the output added by one more worker, has fallen to the wage. In the production model of [Chapter 4](https://quarcs-lab.github.io/macro102-site/notebooks/ch04-a-model-of-production.html), $Y = \bar{A}\bar{K}^{1/3}L^{2/3}$, this rule is $w = \tfrac{2}{3}\bar{A}\bar{K}^{1/3}L^{-1/3}$: the exponent $-1/3$ makes the wage firms will pay fall as employment rises, because each extra worker adds less output (**diminishing returns**, [Appendix C.7](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.7-derivatives-and-marginal-thinking)).
+
+**2. Labor supply slopes up.** An hour spent not working costs the wage it could have earned. When the wage rises, leisure becomes more expensive, and people choose to work more.
+
+**3. A straight-line version.** The book draws the curves without equations. To compute with them we use straight lines, the simplest curves with the right slopes:
+
+$$\text{labor demand: } w = \bar{a}_d - \bar{b}_d L, \qquad\qquad \text{labor supply: } w = \bar{a}_s + \bar{b}_s L.$$
+
+The intercept $\bar{a}_d$ is what firms would pay for the very first worker, and $\bar{b}_d$ is how fast that falls as they hire more. The intercept $\bar{a}_s$ is the lowest wage that gets anyone to work, and $\bar{b}_s$ is how much more pay it takes to draw in each extra worker. We assume $\bar{a}_d > \bar{a}_s$, so that the lines cross at positive employment.
+
+**4. The wage clears the market.** The wage adjusts until the amount of work people want to supply equals the amount firms want to hire.
+
+**5. A fixed population.** With $N$ adults, employment also fixes the employment-population ratio $L/N$.
+
+Every diagram of this notebook starts from the same illustrative values: $\bar{a}_d = 100$, $\bar{b}_d = 1$, $\bar{a}_s = 10$ and $\bar{b}_s = 1$, the default positions of the sliders of Figs. 3 to 6.
+
+#### Solving the model
+
+**Step 1: the equilibrium.** In equilibrium both curves give the same wage at the same employment. Set the two right-hand sides equal:
+
+$$\bar{a}_d - \bar{b}_d L^* = \bar{a}_s + \bar{b}_s L^*.$$
+
+Collect the terms with $L^*$ on the right and the constants on the left, then divide by $\bar{b}_d + \bar{b}_s$ ([Appendix C.9](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.9-solving-equations-and-systems)):
+
+$$\bar{a}_d - \bar{a}_s = (\bar{b}_d + \bar{b}_s)L^* \quad\Longrightarrow\quad L^* = \frac{\bar{a}_d - \bar{a}_s}{\bar{b}_d + \bar{b}_s}.$$
+
+For the wage, put $L^*$ back into the demand curve and write everything over the common denominator:
+
+$$w^* = \bar{a}_d - \bar{b}_d\frac{\bar{a}_d - \bar{a}_s}{\bar{b}_d + \bar{b}_s} = \frac{\bar{a}_d\bar{b}_d + \bar{a}_d\bar{b}_s - \bar{b}_d\bar{a}_d + \bar{b}_d\bar{a}_s}{\bar{b}_d + \bar{b}_s}.$$
+
+The terms $\bar{a}_d\bar{b}_d$ cancel, which leaves
+
+$$L^* = \frac{\bar{a}_d - \bar{a}_s}{\bar{b}_d + \bar{b}_s}, \qquad\qquad w^* = \frac{\bar{b}_s\bar{a}_d + \bar{b}_d\bar{a}_s}{\bar{b}_d + \bar{b}_s}. \tag{3}$$
+
+With our values, $L^* = 90/2 = 45$ and $w^* = (100 + 10)/2 = 55$. The wage is a weighted average of the two intercepts: each intercept is weighted by the slope of the *other* curve.
+
+*Intuition.* Employment depends on the gap between what firms will pay for the first worker and what it takes to get the first person to work, $\bar{a}_d - \bar{a}_s$. Steep curves, large $\bar{b}_d + \bar{b}_s$, close that gap after only a few hires.
+
+**Step 2: an income tax.** Suppose the government taxes labor income at the rate $\tau$. Firms still pay $w$, but workers keep $(1-\tau)w$. People decide how much to work from what they keep, so the supply curve now reads $(1-\tau)w = \bar{a}_s + \bar{b}_s L$. Solved for the wage firms pay, it is $w = (\bar{a}_s + \bar{b}_s L)/(1-\tau)$: at every level of employment, firms must pay more than before to get the same work, so the supply curve shifts up and to the left. To find the new equilibrium, multiply the demand curve by $(1-\tau)$ and set it equal to the taxed supply curve:
+
+$$(1-\tau)(\bar{a}_d - \bar{b}_d L) = \bar{a}_s + \bar{b}_s L \quad\Longrightarrow\quad (1-\tau)\bar{a}_d - \bar{a}_s = \big[(1-\tau)\bar{b}_d + \bar{b}_s\big]L,$$
+
+so that
+
+$$L_\tau = \frac{(1-\tau)\bar{a}_d - \bar{a}_s}{(1-\tau)\bar{b}_d + \bar{b}_s}, \qquad w_\tau = \bar{a}_d - \bar{b}_d L_\tau. \tag{4}$$
+
+With $\tau = 0$ this is equation (3) again. With $\tau = 0.25$ (the default of Fig. 4), $L_\tau = (75 - 10)/(0.75 + 1) = 65/1.75 \approx 37.1$. Firms pay $w_\tau = 100 - 37.1 = 62.9$, and workers keep $0.75 \times 62.9 = 47.1$. The gap between the two, 15.7, is the **tax wedge**: the tax collected on each unit of work.
+
+To see that a higher tax always lowers employment, divide the numerator and denominator of (4) by $1-\tau$:
+
+$$L_\tau = \frac{\bar{a}_d - \bar{a}_s/(1-\tau)}{\bar{b}_d + \bar{b}_s/(1-\tau)}.$$
+
+A higher $\tau$ raises $1/(1-\tau)$. That lowers the numerator and raises the denominator, so $L_\tau$ falls.
+
+**Step 3: a fall in labor demand.** Suppose firms become less willing to hire, for example because new rules make firing costly or an input such as oil becomes dearer. Model it as a downward shift of the demand curve by an amount $\Delta$: the intercept becomes $\bar{a}_d - \Delta$. Equation (3) is linear in the intercepts, so the changes can be read off directly:
+
+$$\Delta L^* = -\frac{\Delta}{\bar{b}_d + \bar{b}_s}, \qquad\qquad \Delta w^* = -\frac{\bar{b}_s\,\Delta}{\bar{b}_d + \bar{b}_s}.$$
+
+With $\Delta = 20$ (the default of Fig. 5), employment falls from 45 to 35 and the wage from 55 to 45. Both fall.
+
+**Step 4: a wage that does not fall.** Now suppose the wage stays at its old level $\bar{w} = w^*$ after demand falls. The market no longer clears: firms hire what they want at $\bar{w}$, which we read off the new demand curve by solving $\bar{w} = (\bar{a}_d - \Delta) - \bar{b}_d L$ for $L$. Since $\bar{a}_d - w^* = \bar{b}_d L^*$ at the old equilibrium,
+
+$$L'' = \frac{\bar{a}_d - \Delta - \bar{w}}{\bar{b}_d} = L^* - \frac{\Delta}{\bar{b}_d}. \tag{5}$$
+
+At the wage $\bar{w}$, however, the supply curve says that $L^*$ people still want to work. The difference, $L^* - L'' = \Delta/\bar{b}_d$, is the number of people who want a job at the going wage but cannot find one. With our values, $L'' = 45 - 20 = 25$, and 20 people are left without a job.
+
+*Intuition.* With a flexible wage, part of the shock is absorbed by a lower wage, and some people choose to work less. With a rigid wage, the whole shock falls on employment. Comparing step 3 with equation (5), the fall in employment is larger by the factor $(\bar{b}_d + \bar{b}_s)/\bar{b}_d$, which is 2 with our slopes.
+
+#### What the model predicts
+
+**Comparative statics.** Each parameter of equation (3) moves one curve:
+
+| A rise in ... | Which curve moves | $L^*$ | $w^*$ | Elasticity of $L^*$ | Elasticity of $w^*$ |
+|---|---|---|---|---|---|
+| $\bar{a}_d$ (firms value workers more) | demand shifts up | $+$ | $+$ | $\bar{a}_d/(\bar{a}_d - \bar{a}_s) \approx +1.11$ | $\bar{b}_s\bar{a}_d/(\bar{b}_s\bar{a}_d + \bar{b}_d\bar{a}_s) \approx +0.91$ |
+| $\bar{a}_s$ (people need more pay to work) | supply shifts up | $-$ | $+$ | $-\bar{a}_s/(\bar{a}_d - \bar{a}_s) \approx -0.11$ | $\bar{b}_d\bar{a}_s/(\bar{b}_s\bar{a}_d + \bar{b}_d\bar{a}_s) \approx +0.09$ |
+| $\bar{b}_d$ | demand gets steeper | $-$ | $-$ | $-\bar{b}_d/(\bar{b}_d+\bar{b}_s) = -0.5$ | $\approx -0.41$ |
+| $\bar{b}_s$ | supply gets steeper | $-$ | $+$ | $-\bar{b}_s/(\bar{b}_d+\bar{b}_s) = -0.5$ | $\approx +0.41$ |
+| $\tau$, equation (4) | supply shifts up and left | $-$ | $+$ (paid), $-$ (kept) | | |
+
+The elasticities come from taking logs of equation (3) ([Appendix C.4](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.4-logarithms)). For example, $\ln L^* = \ln(\bar{a}_d - \bar{a}_s) - \ln(\bar{b}_d + \bar{b}_s)$, so a 1 percent rise in $\bar{a}_d$, which adds $0.01\,\bar{a}_d$ to the gap $\bar{a}_d - \bar{a}_s$, raises $L^*$ by $\bar{a}_d/(\bar{a}_d - \bar{a}_s)$ percent. The numbers are for our baseline values. The signs hold for any positive values.
+
+- **Demand shocks move the wage and employment in the same direction; supply shocks move them in opposite directions.** This is the key to reading the data: when wages and employment both rise, demand has grown.
+- **A labor income tax lowers employment and the employment-population ratio.** Its effect on the unemployment rate is less clear. People who quit because of the tax and stop searching leave the labor force, and by identity (1) they lower $E/N$ but not $u$. People laid off because firms now pay more are unemployed while they search, and if some of them give up, $u$ falls back again.
+- **Who bears the tax depends on the slopes.** With equal slopes, the wage firms pay rises by 7.9 and the wage workers keep falls by 7.9: the burden is shared equally. A steeper supply curve puts more of it on workers.
+- **Rigid wages amplify shocks.** By equation (5), a wage that does not fall turns the same fall in demand into a larger fall in employment, and it creates people who want to work at the going wage but cannot find a job. This is how Keynes explained the mass unemployment of the 1930s, and rigid prices and wages return in the short-run chapters of the book.
+
+<!-- cell -->
+
+### The bathtub model of unemployment
+
+#### Assumptions
+
+Time runs in months, $t = 0, 1, 2, \dots$
+
+**1. A fixed labor force.** Every member of the labor force $\bar{L}$ is either employed or unemployed:
+
+$$E_t + U_t = \bar{L}.$$
+
+**2. Constant flow rates.** Each month a fixed share $\bar{s}$ of the employed lose their job, the **job separation rate**, and a fixed share $\bar{f}$ of the unemployed find one, the **job finding rate**. Unemployment therefore changes by the inflow minus the outflow:
+
+$$\Delta U_{t+1} \equiv U_{t+1} - U_t = \underbrace{\bar{s}E_t}_{\text{inflow: jobs lost}} - \underbrace{\bar{f}U_t}_{\text{outflow: jobs found}}. \tag{6}$$
+
+The two endogenous variables are $E_t$ and $U_t$, and the two equations above determine them month by month from a starting value $U_0$. In U.S. data about 1 percent of the employed lose their job each month and about a fifth of the unemployed find one, so we use $\bar{s} = 0.01$ and $\bar{f} = 0.20$, the default positions of the sliders of the bathtub chart below.
+
+The name comes from a bathtub with the tap running and the drain open. Job losses are the tap, job findings are the drain, and the number of unemployed is the water in the tub.
+
+#### Solving the model
+
+**Step 1: the steady state.** In a **steady state** unemployment does not change, $\Delta U_{t+1} = 0$, so the inflow equals the outflow. Set (6) to zero and replace $E$ with $\bar{L} - U$ from assumption 1:
+
+$$0 = \bar{s}(\bar{L} - U^*) - \bar{f}U^* = \bar{s}\bar{L} - \bar{s}U^* - \bar{f}U^* = \bar{s}\bar{L} - (\bar{s} + \bar{f})U^*.$$
+
+Move the last term to the left and divide by $\bar{s} + \bar{f}$: $U^* = \bar{s}\bar{L}/(\bar{s} + \bar{f})$. Dividing by the labor force gives the steady-state unemployment rate:
+
+$$u^* \equiv \frac{U^*}{\bar{L}} = \frac{\bar{s}}{\bar{f} + \bar{s}}. \tag{7}$$
+
+With $\bar{s} = 0.01$ and $\bar{f} = 0.20$, $u^* = 0.01/0.21 \approx 0.048$, or 4.8 percent. Because $\bar{s}$ is small next to $\bar{f}$, a quick approximation is $u^* \approx \bar{s}/\bar{f} = 5$ percent. The size of the labor force does not matter: only the two flow rates do.
+
+*Intuition.* The water level in a tub is steady when water drains out as fast as it flows in. A slow tap (few job losses) and a fast drain (jobs found quickly) leave little water in the tub, that is, a low unemployment rate. In the steady state about 0.95 percent of the labor force loses a job each month and the same number finds one: large flows in both directions, with a small stock of unemployed in between.
+
+**Step 2: the path to the steady state.** Divide (6) by $\bar{L}$ to write it in terms of the rate $u_t = U_t/\bar{L}$, and use $E_t/\bar{L} = 1 - u_t$:
+
+$$u_{t+1} - u_t = \bar{s}(1 - u_t) - \bar{f}u_t = \bar{s} - (\bar{s} + \bar{f})u_t.$$
+
+Equation (7) says $\bar{s} = (\bar{s} + \bar{f})u^*$. Substitute it for the first $\bar{s}$:
+
+$$u_{t+1} - u_t = -(\bar{s} + \bar{f})(u_t - u^*).$$
+
+Add $u_t - u^*$ to both sides: $u_{t+1} - u^* = (1 - \bar{s} - \bar{f})(u_t - u^*)$. Each month the gap to the steady state shrinks by the same factor $1 - \bar{s} - \bar{f}$. Applying this $t$ times from the start ([Appendix C.10](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.10-difference-equations-how-macro-variables-move-over-time)):
+
+$$u_t = u^* + (1 - \bar{s} - \bar{f})^t\,(u_0 - u^*). \tag{8}$$
+
+With our rates the factor is $0.79$: each month the gap closes by 21 percent. The gap halves in $\ln 0.5/\ln 0.79 \approx 2.9$ months. Starting from $u_0 = 10\%$, after a year the gap is $5.24 \times 0.79^{12} \approx 0.31$ points, so $u_{12} \approx 5.1\%$.
+
+*Intuition.* The unemployment rate behaves like the capital stock of the Solow model ([Chapter 5](https://quarcs-lab.github.io/macro102-site/notebooks/ch05-the-solow-growth-model.html)): whatever its starting point, it moves toward a steady state, quickly when it is far away and slowly when it is close. Here the speed is high because flows in and out of unemployment are large compared with the stock.
+
+#### What the model predicts
+
+**Comparative statics.** Take logs of equation (7): $\ln u^* = \ln\bar{s} - \ln(\bar{f} + \bar{s})$.
+
+| A 1% rise in ... | changes $u^*$ by | In the bathtub |
+|---|---|---|
+| job separation rate $\bar{s}$ | $+\bar{f}/(\bar{f} + \bar{s}) = +(1 - u^*) \approx +0.95\%$ | the tap runs faster |
+| job finding rate $\bar{f}$ | $-\bar{f}/(\bar{f} + \bar{s}) = -(1 - u^*) \approx -0.95\%$ | the drain gets wider |
+| labor force $\bar{L}$ | $0$ | a bigger tub, same water level |
+
+The elasticity with respect to $\bar{s}$ is $1 - \bar{s}/(\bar{f} + \bar{s})$, because $\bar{s}$ appears in both the numerator and the denominator. With $u^*$ small, both elasticities are close to $\pm 1$: the natural rate is roughly proportional to $\bar{s}/\bar{f}$.
+
+- **Only the two flow rates move the natural rate.** Policies that aim at the natural rate must change how often people lose jobs or how fast the jobless find new ones.
+- **Policies can work against themselves.** A firing cost lowers $\bar{s}$, but it also makes firms cautious about hiring, which lowers $\bar{f}$. If only $\bar{s}$ falls, from 0.01 to 0.008, the natural rate falls to $0.008/0.208 \approx 3.85\%$. If $\bar{f}$ also falls, to 0.15, it *rises* to $0.008/0.158 \approx 5.06\%$.
+- **Spells are short on average.** If a fifth of the unemployed find a job each month, the average spell lasts $1/\bar{f} = 5$ months.
+- **A shock fades fast.** By equation (8), a recession that pushes unemployment above $u^*$ is followed by a quick return, unless the shock also changes $\bar{s}$ or $\bar{f}$.
+
+<!-- cell -->
+
+### Present discounted value
+
+#### Assumptions
+
+- Money can be saved or borrowed at a constant interest rate $R$ per year. One dollar saved today becomes $1 + R$ dollars next year.
+- Interest is **compounded**: interest earned in one year earns interest itself in later years.
+- Payments arrive at the start of a year. "Year 0" is today.
+- There is no risk: every promised payment is made.
+
+#### Solving the model
+
+**Step 1: one future payment.** Suppose we deposit $X$ dollars today. After one year we have $X(1+R)$, after two years $X(1+R)(1+R) = X(1+R)^2$, and after $T$ years $X(1+R)^T$ ([Appendix C.3](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.3-exponents-and-exponential-growth)). The **present discounted value** $pdv$ of a payment received in $T$ years is the deposit today that grows into exactly that payment: $pdv \times (1+R)^T = \text{future value}$. Divide both sides by $(1+R)^T$:
+
+$$pdv = \frac{\text{future value}}{(1 + R)^T}. \tag{9}$$
+
+For example, at $R = 3\%$, 10,000 dollars received in 10 years are worth $10{,}000/1.03^{10} \approx 7{,}441$ dollars today. Dividing by $(1+R)^T$ is called **discounting**, and $1/(1+R)^T$ is the **discount factor** ([Appendix C.12](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.12-present-value-and-discounting)).
+
+**Step 2: a stream of payments.** Now a payment of the same size arrives every year for $n$ years, starting today. Value each payment with equation (9) and add them up. To shorten the notation, write $a = 1/(1+R)$, a number between 0 and 1:
+
+$$pdv = \text{payment}\times\left[1 + \frac{1}{1+R} + \frac{1}{(1+R)^2} + \dots + \frac{1}{(1+R)^{n-1}}\right] = \text{payment}\times\left[1 + a + a^2 + \dots + a^{n-1}\right].$$
+
+The last payment arrives in year $n - 1$, because the first one arrives in year 0.
+
+**Step 3: the geometric-series trick.** Call the sum in brackets $S$. Multiply it by $a$; every term moves up by one power:
+
+$$S = 1 + a + a^2 + \dots + a^{n-1}, \qquad aS = a + a^2 + \dots + a^{n-1} + a^n.$$
+
+Subtract the second line from the first. All the middle terms cancel, and only the first term of $S$ and the last term of $aS$ survive: $S - aS = 1 - a^n$. Factor out $S$ and divide by $1 - a$:
+
+$$S = \frac{1 - a^n}{1 - a}, \qquad\text{so}\qquad pdv = \text{payment}\times\frac{1 - \left(\frac{1}{1+R}\right)^n}{1 - \frac{1}{1+R}}. \tag{10}$$
+
+**Step 4: a simpler form.** The denominator is $1 - \frac{1}{1+R} = \frac{1+R-1}{1+R} = \frac{R}{1+R}$, and dividing by it means multiplying by $\frac{1+R}{R}$:
+
+$$pdv = \text{payment}\times\frac{1+R}{R}\left[1 - \frac{1}{(1+R)^n}\right].$$
+
+**Step 5: the value of a working life.** The bracket in equation (10) is the value today of one dollar a year for $n$ years. At $R = 3\%$ for $n = 45$ years, a working life from age 22 to 67: $(1+R)/R = 34.33$ and $1/1.03^{45} \approx 0.264$, so the factor is $34.33 \times (1 - 0.264) \approx 25.25$. Each dollar of yearly pay is worth 25.25 dollars today, so a constant wage of 100,000 dollars, the value used in the chart in Fig. 8's section, is worth about 2.53 million dollars today. The value of this stream of future earnings is the value of a person's **human capital**.
+
+*Intuition.* A dollar far in the future is worth little today, because a smaller deposit today would grow into it. Adding up 45 such dollars gives about 25 dollars, not 45: the later years count for less and less.
+
+#### What the model predicts
+
+- **A higher interest rate lowers present values.** In equation (9), $\ln pdv = \ln(\text{future value}) - T\ln(1+R) \approx \ln(\text{future value}) - TR$ (Appendix C.6). So one more point of interest lowers the value of a payment $T$ years away by about $T$ percent: about 9 percent for a payment in 10 years.
+- **Distant payments add little.** Each extra year adds $a^{n}$ times the payment, which shrinks toward zero. Letting $n$ grow without limit in Step 4 gives the value of a payment that lasts forever, $\text{payment}\times(1+R)/R$: 34.33 dollars per dollar at $3\%$. The 45 years of a working life already give 74 percent of that.
+- **Any two streams can be compared.** Bring every payment to today with equation (9) and add them up; the stream with the larger total is worth more, however its payments are spread over time.
+
+<!-- cell -->
+
+### The return to education
+
+This block combines the two tools above: supply and demand explain the college wage, and present values tell us what the wage gap is worth.
+
+#### Assumptions
+
+**1. Two labor markets.** High school graduates and college graduates are different kinds of labor, each with its own straight-line supply and demand curves, as in the supply-and-demand block. The high school market keeps the baseline values, so its wage is 55. The college market has demand $w = 90 - 0.4L$ and supply $w = 30 + 0.6L$, the values of Figs. 9 and 13.
+
+**2. The college premium.** The **college wage premium** is how much more a college graduate earns, in percent: $w_{\text{college}}/w_{\text{high school}} - 1$.
+
+**3. Shifts.** Demand for college graduates shifts out (up) by $x_d$, so its intercept becomes $90 + x_d$, and supply shifts out (down) by $x_s$, so its intercept becomes $30 - x_s$.
+
+**4. The decision to study.** Studying takes 4 years. During them a student gives up a high school wage of 60,000 dollars and pays tuition, here an illustrative 15,000 dollars a year. After college, the graduate earns 90,000 dollars instead of 60,000 for 45 years. The interest rate is $R = 3\%$.
+
+#### Solving the model
+
+**Step 1: the college equilibrium.** Equation (3) with $\bar{a}_d = 90$, $\bar{b}_d = 0.4$, $\bar{a}_s = 30$ and $\bar{b}_s = 0.6$ gives $L^* = 60/1 = 60$ and $w^* = (0.6 \times 90 + 0.4 \times 30)/1 = 66$. The premium over the high school wage is $66/55 - 1 = 20\%$.
+
+**Step 2: how the shifts move the college wage.** Equation (3) is linear in the intercepts, so raise $\bar{a}_d$ by $x_d$ and lower $\bar{a}_s$ by $x_s$ and keep only the changes:
+
+$$\Delta L^* = \frac{x_d + x_s}{\bar{b}_d + \bar{b}_s}, \qquad\qquad \Delta w^* = \frac{\bar{b}_s\,x_d - \bar{b}_d\,x_s}{\bar{b}_d + \bar{b}_s}. \tag{11}$$
+
+Both shifts raise employment. For the wage they pull in opposite directions, and the wage rises only if $\bar{b}_s x_d > \bar{b}_d x_s$, that is, if $x_d/x_s > \bar{b}_d/\bar{b}_s$. With slopes 0.4 and 0.6, $\Delta w^* = 0.6x_d - 0.4x_s$. The defaults of Fig. 9, $x_d = 15$ and $x_s = 10$, give $\Delta w^* = 9 - 4 = 5$ and $\Delta L^* = 25$: the college wage rises to 71 while college employment rises to 85, and the premium rises to $71/55 - 1 \approx 29\%$. The 1970s defaults of Fig. 13, $x_d = 10$ and $x_s = 25$, give $\Delta w^* = 6 - 10 = -4$: the wage falls to 62.
+
+**Step 3: what the degree is worth.** Bring every cost and every gain to today with equations (9) and (10). Write $S_n$ for the bracket of equation (10), the value today of one dollar a year for $n$ years. The costs are 75,000 dollars a year (lost wage plus tuition) in years 0 to 3, worth $75{,}000\times S_4$. The gain is the extra 30,000 dollars a year for 45 years. As a stream starting in year 0 it would be worth $30{,}000\times S_{45}$; it starts in year 4 instead, so by equation (9) we discount it four more years. The **net present value** of a degree is
+
+$$NPV = (w_{\text{college}} - w_{\text{high school}})\times S_{45}\times\frac{1}{(1+R)^4} \;-\; (w_{\text{high school}} + \text{tuition})\times S_4. \tag{12}$$
+
+At $R = 3\%$, $S_4 \approx 3.83$, $S_{45} \approx 25.25$ and $1/1.03^4 \approx 0.888$. The gain is worth about $30{,}000 \times 25.25 \times 0.888 \approx 673{,}000$ dollars and the cost about $75{,}000 \times 3.83 \approx 287{,}000$ dollars, so $NPV \approx 386{,}000$ dollars. The interest rate at which $NPV = 0$ is the degree's **rate of return**. The code below finds it: about 8.6 percent a year.
+
+#### What the model predicts
+
+- **More graduates and a higher premium together mean that demand grew faster than supply.** By equation (11), a supply shift alone lowers the college wage. A rising premium during decades of rapid growth in the number of graduates (Fig. 8) requires demand shifts large enough that $x_d/x_s > \bar{b}_d/\bar{b}_s$ (Fig. 9). In the 1970s supply won and the premium fell (Fig. 13).
+- **Two candidate demand shifters.** *Skill-biased technical change* (computers and software raise the productivity of skilled workers more) and *globalization* (trade with countries where skilled workers are scarce raises their value, and trade with countries rich in unskilled labor lowers the wages of the unskilled).
+- **A degree is a good investment at these numbers.** By equation (12), the gain is more than twice the cost, and the return beats a 3 percent interest rate by a wide margin. A higher interest rate or a smaller premium shrinks the NPV, because the gains come later than the costs.
+
+<!-- cell -->
+
+### The model in code
+
+We now turn the key results into Python functions. Each function's description names the equation it computes. The cells after it check the algebra above with numbers, in the order of the blocks.
 
 > **Python note.** `def` creates a *function*: a named recipe that takes inputs (the *arguments*)
 > and gives back a result with `return`. Writing `a_d=100.0` gives the argument a *default value*,
@@ -186,30 +466,50 @@ which is the formula above when $\tau = 0$. One function, `equilibrium`, covers 
 
 ```{python}
 def labor_demand(L, a_d=100.0, b_d=1.0):
-    """Fig. 7.3: the wage firms are willing to pay when they employ L, w = a_d - b_d L."""
+    """Labor demand: the wage firms are willing to pay when they employ L, w = a_d - b_d L."""
     return a_d - b_d * L
 
 
 def labor_supply(L, a_s=10.0, b_s=1.0):
-    """Fig. 7.3: the wage workers need to receive to supply L, w = a_s + b_s L."""
+    """Labor supply: the wage workers need to receive to supply L, w = a_s + b_s L."""
     return a_s + b_s * L
 
 
 def equilibrium(a_d=100.0, b_d=1.0, a_s=10.0, b_s=1.0, tau=0.0):
-    """Figs. 7.3-7.4: employment L* and the wage firms pay w*, when workers keep (1 - tau) w."""
+    """Equations (3) and (4): employment L* and the wage firms pay w*, when workers keep (1 - tau) w."""
     L_star = ((1 - tau) * a_d - a_s) / ((1 - tau) * b_d + b_s)
     w_star = labor_demand(L_star, a_d, b_d)
     return L_star, w_star
 
 
 def demand_at_wage(w, a_d=100.0, b_d=1.0):
-    """Fig. 7.6: the employment firms want at a given wage w (labor demand solved for L)."""
+    """Equation (5): the employment firms want at a given wage w (labor demand solved for L)."""
     return (a_d - w) / b_d
 
 
 def supply_at_wage(w, a_s=10.0, b_s=1.0):
-    """Fig. 7.6: the number of people who want to work at a given wage w (labor supply solved for L)."""
+    """The number of people who want to work at a given wage w (labor supply solved for L)."""
     return (w - a_s) / b_s
+```
+
+Three more functions hold the closed forms of the bathtub model, of present values and of the value of a degree.
+`100_000` is simply 100000: Python ignores the underscore, which only makes large numbers easier to read.
+
+```{python}
+def natural_rate(s=0.01, f=0.20):
+    """Equation (7): the steady-state unemployment rate u* = s / (f + s)."""
+    return s / (f + s)
+
+
+def annuity_factor(R, n):
+    """Equation (10) for a payment of 1: the value today of 1 dollar a year for n years, starting today."""
+    a = 1 / (1 + R)
+    return (1 - a ** n) / (1 - a)
+
+
+def college_npv(R, premium=30_000, cost=75_000):
+    """Equation (12): net present value of 4 years of college followed by 45 years of a higher wage."""
+    return premium * annuity_factor(R, 45) / (1 + R) ** 4 - cost * annuity_factor(R, 4)
 ```
 
 A quick check of the functions against the numbers above.
@@ -224,6 +524,122 @@ print(f"At L*, demand wage = {labor_demand(L_star):.1f} and supply wage = {labor
 L_tax, w_tax = equilibrium(tau=0.25)
 print(f"With a 25% income tax:  L' = {L_tax:.2f}, firms pay w' = {w_tax:.2f}, workers keep {0.75 * w_tax:.2f}")
 ```
+
+**Check 1: the identity of the labor-market ratios.** With 100 adults, a labor force of 62 and 3 unemployed, both sides of identity (1) must agree. Then one jobless person stops searching.
+
+```{python}
+N, LF, U = 100, 62, 3
+E = LF - U
+print(f"E/N directly:            {E / N:.4f}")
+print(f"(1 - u) x LF/N, eq. (1): {(1 - U / LF) * (LF / N):.4f}   with u = {100 * U / LF:.2f}%")
+U, LF = 2, 61                                     # one unemployed person leaves the labor force
+print(f"After one person gives up: u = {100 * U / LF:.2f}%, E/N = {(LF - U) / N:.2f} (unchanged)")
+```
+
+**Check 2: the closed form and the elasticities of equation (3).** The function `equilibrium` solves the model with the tax formula. Equation (3) must give the same numbers, and a 1 percent rise in each parameter must reproduce the elasticities of the table.
+
+> **Python note.** `cases` is a list of pairs: a name and a list of the four parameter values, in the order
+> `a_d, b_d, a_s, b_s`. `for name, values in cases` unpacks each pair into two variables, and `values[0]` is the
+> first element of the list `values`.
+
+```{python}
+a_d, b_d, a_s, b_s = 100.0, 1.0, 10.0, 1.0
+print(f"Equation (3): L* = {(a_d - a_s) / (b_d + b_s):.2f}, w* = {(b_s * a_d + b_d * a_s) / (b_d + b_s):.2f}")
+L0, w0 = equilibrium(a_d, b_d, a_s, b_s)
+cases = [["a_d", [101.0, 1.0, 10.0, 1.0]], ["a_s", [100.0, 1.0, 10.1, 1.0]],
+         ["b_d", [100.0, 1.01, 10.0, 1.0]], ["b_s", [100.0, 1.0, 10.0, 1.01]]]
+for name, values in cases:
+    L1, w1 = equilibrium(values[0], values[1], values[2], values[3])
+    print(f"1% higher {name}: L* {100 * (L1 / L0 - 1):+.3f}%, w* {100 * (w1 / w0 - 1):+.3f}%")
+```
+
+**Check 3: the tax and the rigid wage.** A higher tax rate must always lower employment, equation (4). With a fall in demand of 20, a rigid wage must cut employment by $\Delta/\bar{b}_d = 20$, twice the flexible fall, equation (5).
+
+```{python}
+for tau in [0.0, 0.1, 0.25, 0.4]:
+    L_t, w_t = equilibrium(tau=tau)
+    print(f"tau = {tau:.2f}: L = {L_t:.2f}, firms pay {w_t:.2f}, workers keep {(1 - tau) * w_t:.2f}")
+L_flex = equilibrium(a_d=80.0)[0]
+L_rigid = demand_at_wage(w_star, a_d=80.0)
+print(f"Demand falls by 20: flexible wage L' = {L_flex:.1f}, rigid wage L'' = {L_rigid:.1f}")
+print(f"Want a job at the old wage but have none: {supply_at_wage(w_star) - L_rigid:.1f}")
+```
+
+**Check 4: the bathtub model.** We start at 10 percent unemployment and apply equation (6) month by month. The simulation must match the closed form (8) and settle at the natural rate (7), where the inflow equals the outflow.
+
+> **Python note.** `range(1, 61)` counts 1, 2, ..., 60, one step per month. Inside the loop, `U = U + ...` replaces the old
+> number of unemployed with the new one, and `if t in (3, 12, 60)` is true only in those three months.
+
+```{python}
+s, f, L_bar = 0.01, 0.20, 100.0
+u_star = natural_rate(s, f)
+U = 10.0                                          # start at 10% unemployment
+for t in range(1, 61):
+    U = U + s * (L_bar - U) - f * U               # equation (6), with E = L_bar - U
+    if t in (3, 12, 60):
+        closed = u_star + (1 - s - f) ** t * (0.10 - u_star)          # equation (8)
+        print(f"Month {t:2d}: simulated u = {100 * U / L_bar:.4f}%, equation (8) gives {100 * closed:.4f}%")
+print(f"Natural rate, equation (7): u* = {100 * u_star:.4f}%")
+E_star = L_bar * (1 - u_star)
+print(f"Steady-state flows: jobs lost {s * E_star:.3f} = jobs found {f * u_star * L_bar:.3f}")
+```
+
+**Check 5: the elasticities of the natural rate and the firing-cost example.** A 1 percent rise in $\bar{s}$ or $\bar{f}$ must change $u^*$ by about $\pm(1 - u^*) = \pm 0.95$ percent.
+
+```{python}
+u0 = natural_rate(0.01, 0.20)
+print(f"1% higher s: u* changes by {100 * (natural_rate(0.0101, 0.20) / u0 - 1):+.3f}%   (1 - u* = {1 - u0:.3f})")
+print(f"1% higher f: u* changes by {100 * (natural_rate(0.01, 0.202) / u0 - 1):+.3f}%")
+print(f"Firing costs lower s only:     u* = {100 * natural_rate(0.008, 0.20):.2f}%")
+print(f"Firing costs lower s and f:    u* = {100 * natural_rate(0.008, 0.15):.2f}%")
+```
+
+The change for $\bar{f}$ comes out at $-0.94$ rather than $-0.95$ percent, because an elasticity describes very small
+changes and 1 percent is small but not zero.
+
+**Check 6: present values, two ways.** A deposit of $pdv$ from equation (9) must grow back into the future payment. The loop over 45 years must match the formula (10), and the formula must approach $(1+R)/R$ for a very long stream.
+
+```{python}
+R = 0.03
+deposit = 10_000 / (1 + R) ** 10                   # equation (9)
+print(f"10,000 dollars in 10 years are worth {deposit:,.2f} today; {deposit:,.2f} x 1.03^10 = {deposit * (1 + R) ** 10:,.2f}")
+total = 0.0
+for t in range(45):                                # one discounted dollar per year, t = 0 is today
+    total = total + 1 / (1 + R) ** t
+print(f"1 dollar a year for 45 years: loop {total:.4f}, equation (10) {annuity_factor(R, 45):.4f}")
+print(f"A working life at 100,000 dollars a year: {100_000 * annuity_factor(R, 45):,.0f} dollars")
+print(f"1,000 years: {annuity_factor(R, 1000):.4f}   and (1 + R)/R = {(1 + R) / R:.4f}")
+print(f"One more point of interest, payment in 10 years: {100 * (1.03 / 1.04) ** 10 - 100:+.1f}%")
+```
+
+**Check 7: the college market and the value of a degree.** Equation (11) must agree with the equilibrium function for the shifts of Figs. 9 and 13, and equation (12) gives the net present value of a degree.
+
+```{python}
+w_hs = equilibrium()[1]
+w_1 = equilibrium(a_d=90.0, b_d=0.4, a_s=30.0, b_s=0.6)[1]
+for x_d, x_s in [[15.0, 10.0], [10.0, 25.0]]:
+    w_2 = equilibrium(a_d=90.0 + x_d, b_d=0.4, a_s=30.0 - x_s, b_s=0.6)[1]
+    formula = (0.6 * x_d - 0.4 * x_s) / (0.4 + 0.6)                      # equation (11)
+    print(f"x_d = {x_d:4.1f}, x_s = {x_s:4.1f}: wage change {w_2 - w_1:+.2f} (equation 11: {formula:+.2f}), "
+          f"premium {w_1 / w_hs - 1:.0%} -> {w_2 / w_hs - 1:.0%}")
+print(f"NPV of a degree at R = 3%: {college_npv(0.03):,.0f} dollars")
+```
+
+**The rate of return on a degree.** We raise the interest rate in small steps until the net present value of equation (12) turns negative.
+
+> **Python note.** A `while` loop repeats its indented lines as long as its condition is true. Here it stops at the first
+> interest rate at which the degree no longer pays.
+
+```{python}
+R = 0.03
+while college_npv(R) > 0:
+    R = R + 0.0001                                 # one hundredth of a percentage point at a time
+print(f"The NPV of a degree turns negative at R = {100 * R:.2f}%: this is its rate of return")
+```
+
+<!-- cell -->
+
+### Drawing the curves
 
 Three small drawing helpers save us from repeating the same lines in every figure. `add_curve` draws
 one curve and writes its name (such as $L^s$) at one end, as the textbook does, and skips the name when it
@@ -790,7 +1206,7 @@ Now the model. We draw the labor market, add an income tax, and let labor demand
 **Goal.** Draw the supply-and-demand diagram of the labor market and see how its equilibrium moves.
 
 Labor demand $w = \bar{a}_d - \bar{b}_d L$ slopes down and labor supply $w = \bar{a}_s + \bar{b}_s L$
-slopes up. They cross at $(L^*, w^*)$. If the population is a fixed number $N$, the model also gives
+slopes up. They cross at $(L^*, w^*)$, equation (3). If the population is a fixed number $N$, the model also gives
 the employment-population ratio $L^*/N$. When you move a slider, the starting curves stay on the chart
 as dashed gray lines, so you can see the shift.
 
@@ -862,7 +1278,7 @@ firms pay and the wage workers keep.
 With a tax at rate $\tau$, a worker keeps only $(1-\tau)w$ of the wage $w$ the firm pays. To supply the
 same amount of work as before, workers now need a higher wage from the firm, $w = (\bar{a}_s + \bar{b}_s L)/(1-\tau)$.
 Drawn against the wage firms pay, labor supply shifts **back** (up and to the left). The economy moves
-from $A$ to $B$.
+from $A$ to $B$ (equation 4).
 
 ```{python}
 def income_tax(tau=0.25, b_s=1.0):
@@ -999,7 +1415,7 @@ supply curve means many people leave work when the wage drops a little.
 **Goal.** See why a wage that does not fall turns a fall in demand into a much larger fall in employment.
 
 Suppose the wage stays at its old level $\bar{w} = w^*$ after labor demand falls. Firms then hire only
-what they want at $\bar{w}$, so employment moves along the new demand curve to $C$:
+what they want at $\bar{w}$, so employment moves along the new demand curve to $C$ (equation 5):
 
 $$L'' = \frac{(\bar{a}_d - \text{shift}) - \bar{w}}{\bar{b}_d}$$
 
@@ -1066,30 +1482,31 @@ slider_figure(wage_rigidity, "shift", [0, 10, 20, 30, 40], start=20, label="fall
 
 The textbook's Section 7.4 explains the **natural rate of unemployment** with a simple model. The labor
 force $\bar{L}$ is fixed, and each month a share $\bar{s}$ of the employed lose their job (the **job
-separation rate**) while a share $\bar{f}$ of the unemployed find one (the **job finding rate**):
+separation rate**) while a share $\bar{f}$ of the unemployed find one (the **job finding rate**),
+as in equation (6):
 
-$$E_t + U_t = \bar{L} \qquad (7.2) \qquad\qquad \Delta U_{t+1} = \bar{s}E_t - \bar{f}U_t \qquad (7.3)$$
+$$E_t + U_t = \bar{L} \qquad\qquad \Delta U_{t+1} = \bar{s}E_t - \bar{f}U_t$$
 
 Unemployment is like water in a bathtub: job losses are the faucet and job findings the drain. The level
-stops changing when the two flows are equal, which gives the steady-state rate
+stops changing when the two flows are equal, which gives the steady-state rate of equation (7)
 
-$$u^* = \frac{\bar{s}}{\bar{f} + \bar{s}} \qquad (7.4)$$
+$$u^* = \frac{\bar{s}}{\bar{f} + \bar{s}}$$
 
 > **Python note.** `range(61)` counts 0, 1, ..., 60, one step per month. Each pass of the loop
-> stores the current rate with `.append` and then applies equations (7.2) and (7.3) once.
+> stores the current rate with `.append` and then applies the two equations above once.
 > `interact_manual` adds a button, so nothing happens until you press it.
 
 ```{python}
 def bathtub_path(s=0.01, f=0.20):
-    """Section 7.4: simulate the bathtub model for 60 months, starting at 10% unemployment."""
+    """The bathtub model, equations (6) and (7): simulate 60 months, starting at 10% unemployment."""
     L_bar, U = 100.0, 10.0                     # labor force and unemployed (only the ratio matters)
     months, rates = [], []
     for t in range(61):
         months.append(t)
         rates.append(100 * U / L_bar)
-        E = L_bar - U                          # equation (7.2)
-        U = U + s * E - f * U                  # equation (7.3)
-    u_star = 100 * s / (f + s)                 # equation (7.4)
+        E = L_bar - U                          # the labor force: E + U = L_bar
+        U = U + s * E - f * U                  # equation (6)
+    u_star = 100 * s / (f + s)                 # equation (7)
     path = pd.DataFrame({"month": months, "rate": rates})
     fig = px.line(path, x="month", y="rate", hover_name="month",
                   labels={"month": "Months from the start", "rate": "Unemployment rate (percent)"},
@@ -1117,7 +1534,7 @@ run_bathtub(bathtub_path,
 slider_figure(bathtub_path, "f", [0.1, 0.15, 0.2, 0.3, 0.4, 0.5], start=0.2, label="job finding rate f")
 ```
 
-**Source.** Adapted from the bathtub model of unemployment (Section 7.4, equations 7.2–7.4) in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
+**Source.** Adapted from the bathtub model of unemployment (Section 7.4) in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 Our own simulation and interactive chart, with our own starting point, layout and code; the textbook draws no figure for it.
 
 <!-- cell -->
@@ -1573,14 +1990,14 @@ Chart: inspired by Fig. 7.8 in Jones (2024), [*Macroeconomics*, 6th ed.](https:/
 
 To value a college degree we need a tool from the textbook's Section 7.6. A payment received $T$ years
 from now is worth less than the same payment today, because money today can earn interest at rate $R$.
-Its **present discounted value** is
+Its **present discounted value** is (equation 9)
 
-$$pdv = \frac{\text{future value}}{(1 + R)^T} \qquad (7.7)$$
+$$pdv = \frac{\text{future value}}{(1 + R)^T}$$
 
 For a payment that arrives every year for $n$ years, starting today, we add up the present values of
-all the payments. The geometric-series formula gives the sum directly:
+all the payments. The geometric-series formula gives the sum directly (equation 10):
 
-$$pdv = \text{payment} \times \frac{1 - \left(\frac{1}{1+R}\right)^n}{1 - \frac{1}{1+R}} \qquad (7.14)$$
+$$pdv = \text{payment} \times \frac{1 - \left(\frac{1}{1+R}\right)^n}{1 - \frac{1}{1+R}}$$
 
 > **Python note.** The loop in `pdv` adds one discounted payment per year, so we can check the formula.
 > `**` is a power: `(1 + R) ** t` is $(1+R)^t$. `100_000` is simply 100000; Python ignores the
@@ -1589,7 +2006,7 @@ $$pdv = \text{payment} \times \frac{1 - \left(\frac{1}{1+R}\right)^n}{1 - \frac{
 
 ```{python}
 def pdv(payment, R, years):
-    """Equation (7.14): present value of `payment` received every year for `years` years, starting today."""
+    """Equation (10): present value of `payment` received every year for `years` years, starting today."""
     total = 0.0
     for t in range(years):                       # t = 0 is today, t = 1 next year, ...
         total = total + payment / (1 + R) ** t
@@ -1599,7 +2016,7 @@ def pdv(payment, R, years):
 print(f"$1,000 in 5 years at R = 10%:          ${1000 / 1.10 ** 5:,.0f}")
 print(f"$100 a year for 20 years at R = 10%:   ${pdv(100, 0.10, 20):,.0f}")
 a = 1 / 1.10
-print(f"... and with the formula (7.14):       ${100 * (1 - a ** 20) / (1 - a):,.0f}")
+print(f"... and with the formula (10):         ${100 * (1 - a ** 20) / (1 - a):,.0f}")
 print(f"$100,000 a year for 45 years at 3%:   ${pdv(100_000, 0.03, 45):,.0f}")
 print(f"$30,000 a year for 45 years at 3%:    ${pdv(30_000, 0.03, 45):,.0f}")
 ```
@@ -1623,7 +2040,7 @@ fig.update_xaxes(tickvals=[10, 20, 30, 40])            # no label in the bottom-
 fig.show()
 ```
 
-**Source.** Our own calculation with equation (7.14) and illustrative numbers (a wage of 100,000 dollars, $R$ = 3 percent); the
+**Source.** Our own calculation with equation (10) and illustrative numbers (a wage of 100,000 dollars, $R$ = 3 percent); the
 chart uses no data. Inspired by the present-value discussion in Section 7.6 of Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 To compare with real earnings by education, see the
 [U.S. Bureau of Labor Statistics, Education pays](https://www.bls.gov/emp/chart-unemployment-earnings-education.htm).
@@ -1726,7 +2143,7 @@ from falling? Find it with the sliders, then explain it with the slopes 0.4 and 
 <details><summary>Hint</summary>
 
 The wage stays put when the two shifts move the equilibrium wage by the same amount in opposite directions.
-For these lines that happens when $0.6 \times \text{shift}_d = 0.4 \times \text{shift}_s$.
+For these lines that happens when $0.6 \times \text{shift}_d = 0.4 \times \text{shift}_s$ (equation 11).
 
 </details>
 
@@ -2316,7 +2733,7 @@ slider_figure(premium_1970s, "shift_s", [0, 5, 10, 15, 20, 25, 30], start=25, la
 
 <details><summary>Hint</summary>
 
-Use the rule from Fig. 9: the wage stays put when $0.6 \times \text{shift}_d = 0.4 \times \text{shift}_s$.
+Use the rule from Fig. 9 (equation 11): the wage stays put when $0.6 \times \text{shift}_d = 0.4 \times \text{shift}_s$.
 Check with `premium_1970s(shift_d=..., shift_s=25)`.
 
 </details>
@@ -2329,15 +2746,20 @@ Check with `premium_1970s(shift_d=..., shift_s=25)`.
 ## Concluding remarks
 
 - The employment-population ratio rose for decades as women joined the labor force, while men's ratio
-  fell. Both the ratio and the unemployment rate swing sharply in recessions.
-- In the supply-and-demand model of the labor market, an income tax shifts supply back and lowers
-  employment; a fall in labor demand lowers both the wage and employment. If the wage does not fall,
-  employment falls even more and some people who want a job cannot find one.
-- The bathtub model gives the natural rate of unemployment, $u^* = \bar{s}/(\bar{f} + \bar{s})$: about 5
-  percent with U.S. job finding and separation rates. Europe's higher unemployment since the 1980s reflects
-  adverse shocks combined with labor market institutions.
-- Present discounted values compare payments at different dates: a working life is worth millions of
-  dollars today, and a college degree several hundred thousand.
+  fell. Both the ratio and the unemployment rate swing sharply in recessions, and identity (1),
+  $E/N = (1-u)\,LF/N$, shows why the two statistics can tell different stories. Equation (2) splits
+  unemployment into a natural rate and a cyclical part.
+- In the supply-and-demand model of the labor market, equation (3) gives the equilibrium wage and
+  employment. An income tax shifts supply back and lowers employment (equation 4); a fall in labor demand
+  lowers both the wage and employment. If the wage does not fall, employment falls even more and some
+  people who want a job cannot find one (equation 5).
+- The bathtub model, equation (6), gives the natural rate of unemployment, $u^* = \bar{s}/(\bar{f} + \bar{s})$
+  (equation 7): about 5 percent with U.S. job finding and separation rates. Unemployment returns to it
+  quickly after a shock (equation 8). Europe's higher unemployment since the 1980s reflects adverse shocks
+  combined with labor market institutions.
+- Present discounted values, equations (9) and (10), compare payments at different dates: a working life is
+  worth millions of dollars today, and a college degree several hundred thousand (equation 12).
 - The college premium rose while college graduates became more numerous, so demand for skills must have
-  grown faster than supply. Inequality at the very top has risen sharply in the United States since 1980.
+  grown faster than supply (equation 11). Inequality at the very top has risen sharply in the United States
+  since 1980.
 - The next chapter turns to the other long-run topic of the book: **inflation**.

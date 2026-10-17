@@ -1,4 +1,4 @@
-# Chapter 2: Measuring the Macroeconomy
+# 2. Measuring the Macroeconomy
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/ch02-measuring-the-macroeconomy.ipynb)
 
@@ -9,12 +9,14 @@
 This chapter is about measurement: how economists turn millions of transactions into a few
 numbers that describe a whole economy. By the end of it you will be able to:
 
-- explain why **production = expenditure = income**, and split GDP with the national income
-  identity $Y = C + I + G + NX$;
-- describe how the composition of U.S. GDP and **labor's share** of income have changed since 1929;
-- separate **nominal** from **real** GDP with Laspeyres, Paasche and chain-weighted indexes, and
-  measure **inflation** with the GDP deflator;
-- compare GDP across countries with exchange rates and **purchasing power parity**;
+- derive why **production = expenditure = income**: value added adds up to final sales, and the
+  national income identity $Y = C + I + G + NX$ splits GDP by who buys it;
+- describe how the composition of U.S. GDP and **labor's share** of income have changed since 1929,
+  and derive the labor-share measure that splits proprietors' income;
+- derive the **Laspeyres**, **Paasche** and **chain-weighted** growth rates of real GDP as weighted
+  averages, and split nominal growth into **inflation** and real growth;
+- compare GDP across countries with exchange rates and **purchasing power parity**, and read the
+  comparative statics of each conversion;
 - read CSV files with pandas, compute new columns, work with dates, and draw area and line charts
   with Plotly Express;
 - compare countries, and check that two data sources use the same definitions before you compare them.
@@ -162,27 +164,277 @@ def dropdown_figure(make_figure, name, values, start):
 
 ## Model overview
 
-Before we can explain why an economy grows or shrinks, we need to measure it. The main measure is **gross domestic product** (GDP): the value of everything an economy produces in a year. A nice property of GDP is that we can count it three ways, by what is produced, by what is spent, and by what is earned, and all three give the same total, because every dollar spent on a good is a dollar of income for someone.
+This chapter has no model of behavior. Instead, it builds the measuring sticks that every later model is tested against. The main one is **gross domestic product** (GDP): the market value of all final goods and services that an economy produces in a given period. Three questions organize the chapter. How can one total be counted in three different ways and still give a single answer? How do we split a rise in GDP into higher prices and more goods? And how do we compare economies that use different currencies and face different prices?
 
-This chapter has no economic model, so this section collects the measurement tools instead: shares of a total, the value of production at fixed prices, chain-weighted growth, and the conversion of GDP across currencies. The sections below use them to split U.S. GDP by who buys it and who earns it, and then to separate price changes from real growth.
+Each question has an accounting framework, and this section derives them one by one. The first block shows why **production = expenditure = income**: value added, the national income identity and labor's share of income. The second block separates **nominal** from **real** GDP with the Laspeyres, Paasche and chain-weighted quantity indexes. The third turns the same tools into **price indexes and inflation** rates. The fourth converts GDP across countries with **exchange rates** and **purchasing power parity**. At the end, `### The model in code` turns the formulas into Python functions and checks every result with numbers, including the textbook's small economy of apples and computers (Table 2.4).
 
-These **accounting rules** come back in every later chapter.
+There are no parameters in this chapter, so no letter carries a bar. The subscript $t$ is the year, $i$ is a good and $j$ is a producer. A small $p_{i,t}$ and $q_{i,t}$ are the price and quantity of one good, and a capital $P_t$ is the price level of the whole economy. A $g$ is a growth rate. All the results below are **identities**: they hold in any data set, by the way the variables are defined. That is what makes them useful checks on the data.
 
-**Gross domestic product** (GDP) is the market value of the final goods and services produced in an
-economy in a given period. It can be measured in three ways that give the same number: as total
-production, as total spending, and as total income. On the spending side, the **national income
-identity** splits GDP by who buys the goods:
+<!-- cell -->
 
-$$Y = C + I + G + NX \qquad (2.1)$$
+### Production, expenditure and income
 
-where $Y$ is GDP, $C$ consumption, $I$ investment, $G$ government purchases, and $NX$ net exports
-(exports minus imports). To compare the parts, we divide each one by GDP and get its **share**.
+#### Definitions
 
-GDP measured at today's prices is **nominal** GDP. It can rise because prices rise or because the
-economy produces more. **Real** GDP values production at a fixed set of prices, so it only changes
-when quantities change:
+- A **final good** is bought by its last user: a household, a firm that keeps it as capital, the government, or a buyer abroad. An **intermediate good** is used up in making another good in the same period, like flour in bread or electricity in a factory.
+- Producer $j$ sells its output for **revenue** $R_j$ and buys **intermediate inputs** worth $M_j$. Its **value added** is what it adds to the inputs it bought:
+  $$VA_j \equiv R_j - M_j.$$
+- **Capital** (buildings, machines, software) helps to produce output but is not used up within the period. Its wear and tear is **depreciation**. GDP is *gross* because depreciation is not subtracted; net domestic product is GDP minus depreciation.
+- Value added is paid out as **income**: compensation of employees (wages, salaries and benefits), taxes on production less subsidies, depreciation, and the **net operating surplus**, what remains for the owners. The operating surplus is a residual, so the split always adds up to value added.
+- **Spending** on final goods has four parts: consumption $C$; investment $I$ (business structures, equipment, intellectual property products such as software and R&D, new housing, and the change in inventories); government purchases $G$; and net exports $NX$, exports $X$ minus imports $IM$. Government *purchases* buy goods and services. Transfers such as pensions, and interest on the public debt, move income from one group to another and buy nothing, so they are not part of $G$.
+- Only **new production** counts. The resale of a used good is not production, but the dealer's margin is: it pays for the service of finding a buyer.
 
-$$\text{nominal GDP} = \text{price level} \times \text{real GDP} \qquad (2.2)$$
+#### Deriving the results
+
+**Step 1: value added adds up to final sales.** Take a chain of $J$ producers. Producer 1 buys no inputs, every producer sells its whole output to the next one, and producer $J$ sells to final users. Then $M_1 = 0$ and $M_j = R_{j-1}$, so that
+
+$$VA_1 = R_1, \qquad VA_2 = R_2 - R_1, \qquad \dots, \qquad VA_J = R_J - R_{J-1}.$$
+
+Add them up. Every revenue except the last appears twice, once with a plus sign (as a seller's revenue) and once with a minus sign (as a buyer's cost), so the sum *telescopes*:
+
+$$\sum_{j=1}^{J} VA_j = R_1 + (R_2 - R_1) + \dots + (R_J - R_{J-1}) = R_J.$$
+
+The same cancellation happens in any web of sales between firms, because every sale of an intermediate good is revenue for one firm and a cost for another. So the production approach and the final-sales definition give the same GDP:
+
+$$\text{GDP} = \sum_j VA_j = \text{value of the final goods and services}. \tag{1}$$
+
+*Intuition.* Adding up all revenues would count the grain inside the bread twice, once when the farm sells it and again when the bakery sells the bread. Subtracting purchased inputs counts the contribution of each stage exactly once.
+
+**Step 2: production = income.** Add the income split of value added over all producers:
+
+$$\text{GDP} = \text{compensation} + \text{taxes on production less subsidies} + \text{net operating surplus} + \text{depreciation}.$$
+
+Because the operating surplus is whatever is left over, each dollar of value added is somebody's income. In the data, though, the statisticians measure income from sources (tax records, payroll data) that differ from those they use for spending. The income total is called **gross domestic income** (GDI), and the small gap between GDI and GDP is the *statistical discrepancy*.
+
+**Step 3: production = expenditure.** Final goods are bought by households, firms, the government and foreigners, so domestic buyers spend $C + I + G$ and foreign buyers spend $X$. But $C$, $I$ and $G$ also include goods made abroad, which are not domestic production. Subtracting them gives the domestic output that was sold to final users: $C + I + G + X - IM$. What about goods that were made but not sold this year? They are counted as **inventory investment**, part of $I$, as if the firm had bought its own output. So every unit produced has a buyer in the accounts, and
+
+$$Y = C + I + G + NX, \qquad NX \equiv X - IM. \tag{2}$$
+
+This is the **national income identity**, the expenditure approach to GDP $Y$.
+
+**Step 4: shares of GDP.** Divide both sides of (2) by $Y$ ([Appendix C.2](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.2-percentages-ratios-and-index-numbers)):
+
+$$1 = \frac{C}{Y} + \frac{I}{Y} + \frac{G}{Y} + \frac{NX}{Y}.$$
+
+The four shares add up to 100 percent in every year. Now take the change of both sides between two years. The left side is always 1, so its change is zero:
+
+$$\Delta\frac{C}{Y} + \Delta\frac{I}{Y} + \Delta\frac{G}{Y} + \Delta\frac{NX}{Y} = 0.$$
+
+A rise in one share must be matched by a fall in the others (Fig. 2). We compute shares from *nominal* values; the second block explains why.
+
+**Step 5: labor's share of income.** We want the fraction of income that pays for work. Two items do not belong cleanly to labor or to capital. Taxes on production $T$ (such as sales taxes) are income of neither. **Proprietors' income** $\mathit{Prop}$, what the self-employed earn, pays both for their own work and for their own equipment. Income net of these taxes is
+
+$$\text{GDI} - T = \text{compensation} + \mathit{Prop} + \text{other capital income}.$$
+
+Assume that labor's fraction of proprietors' income equals labor's fraction $\theta$ of all the other income:
+
+$$\theta = \frac{\text{compensation}}{\text{GDI} - T - \mathit{Prop}}, \qquad\text{so}\qquad \text{compensation} = \theta\,(\text{GDI} - T - \mathit{Prop}).$$
+
+Labor's total income is then compensation plus the fraction $\theta$ of proprietors' income. Its share of income net of taxes is
+
+$$\frac{\text{compensation} + \theta\,\mathit{Prop}}{\text{GDI} - T} = \frac{\theta\,(\text{GDI} - T - \mathit{Prop}) + \theta\,\mathit{Prop}}{\text{GDI} - T} = \frac{\theta\,(\text{GDI} - T)}{\text{GDI} - T} = \theta.$$
+
+So the labor share is
+
+$$\text{labor share} = \frac{\text{compensation}}{\text{GDI} - \text{taxes on production} - \text{proprietors' income}}, \tag{3}$$
+
+and the capital share is one minus it. *Intuition.* Leaving proprietors out of both the top and the bottom of the fraction gives the same answer as splitting their income in the same proportion as everybody else's. The simple ratio compensation/GDP is lower, because its denominator still holds the taxes and all of proprietors' income. Fig. 3 uses equation (3).
+
+#### What the framework predicts
+
+The identities tell us exactly which entries move when something happens. A few examples, each worth $\$p$:
+
+| Event | $C$ | $I$ | $G$ | $NX$ | GDP $Y$ |
+|---|---|---|---|---|---|
+| A household buys a new car made at home | $+p$ | 0 | 0 | 0 | $+p$ |
+| A household buys a new imported car | $+p$ | 0 | 0 | $-p$ | 0 |
+| A firm builds a factory | 0 | $+p$ | 0 | 0 | $+p$ |
+| A firm makes goods it cannot sell this year | 0 | $+p$ (inventories) | 0 | 0 | $+p$ |
+| A foreigner buys a new car made at home | 0 | 0 | 0 | $+p$ | $+p$ |
+| The government pays a pension | 0 | 0 | 0 | 0 | 0 |
+| The government hires a teacher | 0 | 0 | $+p$ | 0 | $+p$ |
+| A dealer resells a used car with margin $m$ | $+m$ | 0 | 0 | 0 | $+m$ |
+
+- **Imports never add to GDP.** They enter $C$, $I$ or $G$ with a plus sign and $NX$ with a minus sign, so the two cancel.
+- **The shares are tied together.** Since they add up to one, their changes add up to zero (Step 4). Over a decade, a rising consumption share has to be paid for by a lower share of something else.
+- **GDP measures market production, not welfare.** It leaves out work done at home (cooking, caring for one's own children), the value of longer and healthier lives, leisure, and the depletion of natural resources and damage to the environment. The note on Table 2.3 in the Fig. 3 section discusses a broader measure that adds some of them.
+
+<!-- cell -->
+
+### Real GDP: quantity indexes and chain weighting
+
+#### Definitions
+
+The economy produces goods $i = 1, \dots, n$. Good $i$ has price $p_{i,t}$ and quantity $q_{i,t}$ in year $t$.
+
+- **Nominal GDP** values each year's goods at that year's prices: $\text{nominal GDP}_t = \sum_i p_{i,t}\,q_{i,t}$.
+- **Real GDP at the prices of a base year $b$** values each year's goods at the *same* prices: $\sum_i p_{i,b}\,q_{i,t}$. Prices are held fixed, so it changes only when quantities change. It is measured in "year-$b$ dollars".
+- The **expenditure share** of good $i$ is $s_{i,t} \equiv p_{i,t}q_{i,t}\big/\sum_k p_{k,t}q_{k,t}$. The shares of a year add up to one.
+- The **growth rate** of the quantity of good $i$ is $g_i$, so $q_{i,t+1} = (1+g_i)\,q_{i,t}$.
+
+The **price level**, also called the **GDP deflator**, is defined as the ratio of nominal to real GDP, $P_t \equiv \text{nominal GDP}_t/\text{real GDP}_t$. Multiplying both sides by real GDP gives
+
+$$\text{nominal GDP}_t = P_t \times \text{real GDP}_t. \tag{4}$$
+
+With a single good, $P_t$ is simply its price and real GDP is its quantity. In the base year, real and nominal GDP are equal, so $P_b = 1$ (or 100, as an index).
+
+#### Deriving the results
+
+**Step 1: two ways to hold prices fixed.** To measure real growth from year $t$ to year $t+1$, we can value both years' quantities at the *initial* prices (the **Laspeyres** index) or at the *final* prices (the **Paasche** index):
+
+$$1 + g^L = \frac{\sum_i p_{i,t}\,q_{i,t+1}}{\sum_i p_{i,t}\,q_{i,t}}, \qquad 1 + g^P = \frac{\sum_i p_{i,t+1}\,q_{i,t+1}}{\sum_i p_{i,t+1}\,q_{i,t}}.$$
+
+**Step 2: Laspeyres growth is an average of the goods' growth rates.** In the numerator, replace $q_{i,t+1}$ by $(1+g_i)\,q_{i,t}$ and split the fraction good by good:
+
+$$1 + g^L = \sum_i \frac{p_{i,t}\,q_{i,t}}{\sum_k p_{k,t}\,q_{k,t}}\,(1+g_i) = \sum_i s_{i,t}\,(1+g_i) = \sum_i s_{i,t} + \sum_i s_{i,t}\,g_i = 1 + \sum_i s_{i,t}\,g_i.$$
+
+The last step uses the fact that the shares add up to one.
+
+**Step 3: Paasche growth is an average too, with other weights.** Turn the Paasche fraction upside down and use $q_{i,t} = q_{i,t+1}/(1+g_i)$:
+
+$$\frac{1}{1+g^P} = \frac{\sum_i p_{i,t+1}\,q_{i,t}}{\sum_k p_{k,t+1}\,q_{k,t+1}} = \sum_i \frac{p_{i,t+1}\,q_{i,t+1}}{\sum_k p_{k,t+1}\,q_{k,t+1}}\cdot\frac{1}{1+g_i} = \sum_i \frac{s_{i,t+1}}{1+g_i}.$$
+
+Together:
+
+$$g^L = \sum_i s_{i,t}\,g_i, \qquad \frac{1}{1+g^P} = \sum_i \frac{s_{i,t+1}}{1+g_i}. \tag{5}$$
+
+*Intuition.* Both indexes average the growth rates of the individual goods. The Laspeyres index weights each good by its share of spending in the first year; the Paasche index (a weighted *harmonic* mean of the growth factors) uses the shares of the final year.
+
+**When do the two agree?** (a) If every quantity grows at the same rate $g$, both formulas in (5) give exactly $g$, because the shares add up to one. (b) If every price changes by the same factor $\lambda$, so that $p_{i,t+1} = \lambda p_{i,t}$, then $\lambda$ cancels from the top and the bottom of the Paasche fraction, which becomes the Laspeyres fraction. So the two indexes differ only when **relative prices** change. The usual pattern is that the goods whose relative price falls, like computers, are the goods whose quantity grows fastest. At the initial prices those goods were still expensive and carry a large weight, so $g^L > g^P$. The longer the period, the larger the change in relative prices, and the larger the gap.
+
+**Step 4: chain weighting.** The chain-weighted index takes the average of the two growth rates:
+
+$$g^{\text{chain}} = \tfrac{1}{2}\left(g^L + g^P\right). \tag{6}$$
+
+The statistical agencies use the **Fisher** index, which takes the geometric mean of the two growth factors instead, $1 + g^F = \sqrt{(1+g^L)(1+g^P)}$. When the two rates are close, the two averages are practically equal ([Appendix C.6](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.6-approximations)); the code below compares them.
+
+**Step 5: linking the years into a chain.** Equation (6) is applied to every pair of neighboring years, so the weights are always the prices of those two years. To turn the growth rates into levels, pick a **benchmark year** $b$ in which real GDP is set equal to nominal GDP. Then move forward and backward one year at a time:
+
+$$X_{t+1} = X_t\,(1 + g^{\text{chain}}_{t,t+1}), \qquad X_t = \frac{X_{t+1}}{1 + g^{\text{chain}}_{t,t+1}},$$
+
+where $X_t$ is chained real GDP. Over several years the growth factors multiply, $X_T = X_b\,(1+g_{b,b+1})(1+g_{b+1,b+2})\cdots(1+g_{T-1,T})$. The levels are said to be in "chained year-$b$ dollars".
+
+#### What the framework predicts
+
+| From year $t$ to $t+1$ ... | Nominal GDP | Laspeyres $g^L$ | Paasche $g^P$ | Chained $g^{\text{chain}}$ | Price level $P$ |
+|---|---|---|---|---|---|
+| every price $\times\lambda$, same quantities | $\times\lambda$ | 0 | 0 | 0 | $\times\lambda$ |
+| every quantity $\times\mu$, same prices | $\times\mu$ | $\mu-1$ | $\mu-1$ | $\mu-1$ | unchanged |
+| relative prices change, same quantities | changes | 0 | 0 | 0 | moves with nominal GDP |
+| quantities grow fastest where relative prices fall | rises | highest | lowest | in between | |
+
+- **Real GDP ignores pure price changes.** When only prices move, every index reports zero real growth, and the whole change in nominal GDP shows up in the price level.
+- **Fixed base years go out of date.** Over long spans the Laspeyres index overstates growth and the Paasche index understates it. The U.S. national accounts switched to chain weighting in the 1990s, when computer prices were falling fast.
+- **Chained components do not add up.** Each chained component uses its own weights, so chained $C + I + G + NX$ generally differs from chained GDP. To compute **shares**, use nominal values, which do add up (equation 2). To compute **real growth rates**, use chained real values.
+
+<!-- cell -->
+
+### Price indexes and inflation
+
+#### Definitions
+
+- The **GDP deflator** is the price level of equation (4), $P_t = \text{nominal GDP}_t/\text{real GDP}_t$, usually multiplied by 100 so that it equals 100 in the base year.
+- The **inflation rate** is the growth rate of the price level, $\pi_{t+1} \equiv P_{t+1}/P_t - 1$.
+- Each quantity index has a matching **price index**. The Laspeyres price index values the *initial* quantities at both years' prices, $\sum_i p_{i,t+1}q_{i,t}\big/\sum_i p_{i,t}q_{i,t}$. The Paasche price index uses the *final* quantities, $\sum_i p_{i,t+1}q_{i,t+1}\big/\sum_i p_{i,t}q_{i,t+1}$.
+
+#### Deriving the results
+
+**Step 1: nominal growth splits exactly into a price part and a quantity part.** Multiply and divide the growth factor of nominal GDP by $\sum_i p_{i,t}q_{i,t+1}$:
+
+$$\frac{\sum_i p_{i,t+1}q_{i,t+1}}{\sum_i p_{i,t}q_{i,t}} = \underbrace{\frac{\sum_i p_{i,t+1}q_{i,t+1}}{\sum_i p_{i,t}q_{i,t+1}}}_{\text{Paasche price index}} \times \underbrace{\frac{\sum_i p_{i,t}q_{i,t+1}}{\sum_i p_{i,t}q_{i,t}}}_{\text{Laspeyres quantity index}}.$$
+
+Multiplying and dividing by $\sum_i p_{i,t+1}q_{i,t}$ instead gives the Laspeyres price index times the Paasche quantity index. Multiply the two splits and take the square root: the Fisher price index times the Fisher quantity index also equals the growth factor of nominal GDP, exactly. That is why a chained price index and chained real GDP always satisfy equation (4).
+
+**Step 2: the growth rate of a product.** Write equation (4) in two neighboring years and divide. The growth factor of a product is the product of the growth factors:
+
+$$1 + g_{\text{nominal}} = (1+\pi)(1+g_{\text{real}}) = 1 + \pi + g_{\text{real}} + \pi\,g_{\text{real}}.$$
+
+Subtract 1 from both sides: $g_{\text{nominal}} = \pi + g_{\text{real}} + \pi\,g_{\text{real}}$. The last term is the product of two small numbers, so it is much smaller than the others, and ([Appendix C.5](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.5-growth-rates-and-the-growth-rules))
+
+$$g_{\text{nominal GDP}} \approx \pi + g_{\text{real GDP}}. \tag{7}$$
+
+To get inflation from the other two, solve the exact form for $\pi$: $\pi = (1+g_{\text{nominal}})/(1+g_{\text{real}}) - 1 \approx g_{\text{nominal}} - g_{\text{real}}$. With natural logs the split has no error at all: $\ln(\text{nominal GDP}) = \ln P + \ln(\text{real GDP})$, so the changes in logs add up exactly ([Appendix C.4](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.4-logarithms)).
+
+*Intuition.* Nominal GDP can grow because each good costs more or because there are more goods. Equation (7) adds the two sources. The small cross term is the extra price increase on the extra goods.
+
+**Step 3: rates over different periods.** With quarterly data, the change from a year ago compares a quarter with the same quarter one year earlier, $P_t/P_{t-4} - 1$. A one-quarter change is turned into an **annual rate** by compounding it four times, $(P_t/P_{t-1})^4 - 1$, which is close to four times the quarterly rate when that rate is small ([Appendix C.3](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.3-exponents-and-exponential-growth)). Over $T$ years, the **average annual growth rate** $\bar{g}$ is the constant rate that turns the first value into the last: $P_T = P_0(1+\bar{g})^T$. Raise both sides of $P_T/P_0 = (1+\bar{g})^T$ to the power $1/T$ and subtract 1:
+
+$$\bar{g} = \left(\frac{P_T}{P_0}\right)^{1/T} - 1.$$
+
+**Step 4: changing the base year.** Rebasing an index to year $b$ means $P'_t = 100 \times P_t/P_b$. The constant $100/P_b$ cancels in every ratio, $P'_{t+1}/P'_t = P_{t+1}/P_t$, so rebasing moves the level of the index but leaves every growth rate and inflation rate unchanged.
+
+#### What the framework predicts
+
+Taking the change in logs of equation (4), $\Delta\ln(\text{nominal GDP}) = \Delta\ln P + \Delta\ln(\text{real GDP})$: the **elasticity** of nominal GDP with respect to the price level is 1, and with respect to real GDP it is also 1.
+
+| If ... | then ... |
+|---|---|
+| inflation is 1 point higher and real growth is unchanged | nominal growth is about 1 point higher |
+| nominal growth is unchanged and real growth is 1 point higher | measured inflation is about 1 point lower |
+| an index is rebased | its level changes; growth rates and inflation do not |
+
+- **The rule of thumb in equation (7) is good when rates are small.** With 2 percent inflation and 2 percent real growth the cross term is only $0.02 \times 0.02 = 0.0004$, or 0.04 percentage points. In the apples-and-computers economy, with prices up 8 percent and quantities up 18 percent, it is about 1.5 points (see the checks below). In a high-inflation country it can be large.
+- **Ratio scales show inflation directly.** Since $\ln P_t$ rises by about $\pi$ each year, a constant inflation rate is a straight line on a ratio (log) scale (Fig. 4).
+
+<!-- cell -->
+
+### Comparing countries: exchange rates and purchasing power parity
+
+#### Definitions
+
+We compare China with the United States; any pair of countries works the same way.
+
+- The **exchange rate** $e$ is the number of yuan that buy one dollar in the currency market.
+- China's GDP in its own currency is $Y^{\text{yuan}}$. Converted at the exchange rate, it is $\text{nominal GDP}^{\text{dollars}}_{\text{China}} = Y^{\text{yuan}}/e$.
+- $\text{price level}_{\text{U.S.}}$ and $\text{price level}_{\text{China}}$ are what the same basket of goods costs in each country, both in dollars at the exchange rate. Their ratio, the **relative price level**, says how expensive China is compared with the United States.
+- The **PPP conversion factor** is the number of yuan that buy in China what one dollar buys in the United States: $\text{PPP} = e \times \text{price level}_{\text{China}}/\text{price level}_{\text{U.S.}}$.
+
+#### Deriving the results
+
+**Step 1: China's real output.** Equation (4) holds in China too, with everything in dollars. Solving it for real GDP:
+
+$$\text{real GDP}_{\text{China}} = \frac{\text{nominal GDP}^{\text{dollars}}_{\text{China}}}{\text{price level}_{\text{China}}}.$$
+
+**Step 2: value China's goods at U.S. prices.** For a fair comparison we value China's quantities at the prices that hold in the United States:
+
+$$\text{real GDP}^{\text{U.S. prices}}_{\text{China}} = \text{price level}_{\text{U.S.}} \times \text{real GDP}_{\text{China}}.$$
+
+**Step 3: substitute Step 1 into Step 2.**
+
+$$\text{real GDP}^{\text{U.S. prices}}_{\text{China}} = \frac{\text{price level}_{\text{U.S.}}}{\text{price level}_{\text{China}}} \times \text{nominal GDP}^{\text{dollars}}_{\text{China}}. \tag{8}$$
+
+Dollar GDP must be divided by China's relative price level. Where goods are cheap, the same dollars stand for more goods.
+
+**Step 4: the shortcut through the PPP factor.** Put $\text{nominal GDP}^{\text{dollars}}_{\text{China}} = Y^{\text{yuan}}/e$ into (8) and collect the terms in the denominator:
+
+$$\text{real GDP}^{\text{U.S. prices}}_{\text{China}} = \frac{Y^{\text{yuan}}}{e \times \text{price level}_{\text{China}}/\text{price level}_{\text{U.S.}}} = \frac{Y^{\text{yuan}}}{\text{PPP}}.$$
+
+So we can skip the exchange rate altogether: dividing GDP in yuan by the PPP conversion factor gives GDP at U.S. prices.
+
+**Step 5: how much of the gap is due to prices?** Divide (8) by U.S. GDP and take logs ([Appendix C.4](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.4-logarithms)):
+
+$$\ln\frac{\text{real GDP}^{\text{U.S. prices}}_{\text{China}}}{\text{GDP}_{\text{U.S.}}} = \ln\frac{\text{nominal GDP}^{\text{dollars}}_{\text{China}}}{\text{GDP}_{\text{U.S.}}} - \ln\frac{\text{price level}_{\text{China}}}{\text{price level}_{\text{U.S.}}}.$$
+
+The log gap at common prices equals the log gap at the exchange rate minus the log of the relative price level. If China is cheaper, that log is negative, and the gap at common prices is smaller. Dividing both GDPs by population gives the same split for GDP per person.
+
+Valuing China's goods at U.S. prices is the cross-country version of a Laspeyres index; valuing U.S. goods at Chinese prices would be the Paasche version. In practice, the World Bank's International Comparison Program and the Penn World Table use average world prices ("international dollars"), much as chain weighting averages the two indexes over time.
+
+#### What the framework predicts
+
+| A 1% rise in ... | GDP at the exchange rate | GDP at common prices | Relative price level of China |
+|---|---|---|---|
+| the exchange rate $e$ (a weaker yuan), with yuan prices unchanged | $-1\%$ | 0 | $-1\%$ |
+| every yuan price in China, with quantities unchanged | $+1\%$ | 0 | $+1\%$ |
+| China's output of every good | $+1\%$ | $+1\%$ | 0 |
+
+- **Common prices do not react to the currency market.** A swing in the exchange rate changes GDP in dollars one for one, but leaves the comparison at common prices untouched, because China's goods become cheaper in dollars by the same 1 percent (the elasticity of dollar GDP with respect to $e$ is $-1$).
+- **Rich countries look less far ahead at common prices.** Services that cannot be traded, such as haircuts or restaurant meals, need a lot of labor, so they are cheap where wages are low. Poor countries therefore have low price levels, and comparisons at exchange rates exaggerate the income gaps between rich and poor countries.
+
+<!-- cell -->
+
+### The model in code
+
+We now turn the measurement rules into Python functions, and then check every result above with numbers. Each function's description names the equation it computes.
 
 > **Python note.** `def` creates a *function*: a named recipe that takes inputs (the *arguments*)
 > and gives back a result with `return`. The text in triple quotes is a short description of what
@@ -190,7 +442,7 @@ $$\text{nominal GDP} = \text{price level} \times \text{real GDP} \qquad (2.2)$$
 
 ```{python}
 def share(part, total):
-    """Share of a part in a total, in percent (Tables 2.1 and 2.2)."""
+    """Share of a part in a total, in percent (Tables 2.1 and 2.2; the shares of equation 2)."""
     return 100 * part / total
 
 
@@ -200,14 +452,52 @@ def gdp_value(prices, quantities):
 
 
 def chain_growth(g_laspeyres, g_paasche):
-    """Chain-weighted growth: the average of the Laspeyres and Paasche growth rates (Section 2.3)."""
+    """Chain-weighted growth: the average of the Laspeyres and Paasche growth rates (equation 6)."""
     return (g_laspeyres + g_paasche) / 2
+
+
+def to_dollars(gdp_local, exchange_rate):
+    """Convert GDP in local currency into dollars at the market exchange rate."""
+    return gdp_local / exchange_rate
+
+
+def at_common_prices(gdp_dollars, relative_price_level):
+    """Real GDP at U.S. prices: dollar GDP divided by the price level relative to the U.S. (equation 8)."""
+    return gdp_dollars / relative_price_level
 ```
 
-### Table 2.4: real GDP in an economy with apples and computers
+**Check 1: value added adds up to final sales (equation 1).** A made-up chain of three producers: a farm
+grows grain worth \$40 and sells it to a mill; the mill turns it into flour worth \$70 and sells it to a bakery;
+the bakery sells bread worth \$120 to households.
 
-The textbook's example economy produces only apples and computers. We store its prices and
-quantities in two small tables, one row per year.
+> **Python note.** `pd.Series({...})` builds one labeled column from a dictionary: the keys become the
+> labels. Subtracting two Series subtracts the values with the same label.
+
+```{python}
+revenue = pd.Series({"farm": 40, "mill": 70, "bakery": 120})
+inputs = pd.Series({"farm": 0, "mill": 40, "bakery": 70})     # each buys the output of the one before
+value_added = revenue - inputs
+print(value_added)
+print(f"Sum of value added:   ${value_added.sum()}")
+print(f"Final sales (bread):  ${revenue['bakery']}")
+print(f"Sum of all revenues:  ${revenue.sum()}   (counts the grain three times and the flour twice)")
+```
+
+**Check 2: the labor share (equation 3).** Take made-up round numbers for one year's income (in billions)
+and check the algebra of Step 5: splitting proprietors' income in the economy-wide proportion gives the same
+labor share as leaving it out of the fraction.
+
+```{python}
+gdi, taxes, proprietors, compensation = 100.0, 7.0, 9.0, 54.0
+theta = compensation / (gdi - taxes - proprietors)                  # equation (3)
+split = (compensation + theta * proprietors) / (gdi - taxes)        # proprietors' income split by theta
+print(f"Labor share, equation (3):                 {theta:.4f}")
+print(f"Labor share with proprietors split:        {split:.4f}")
+print(f"Simple share, compensation / GDI:          {compensation / gdi:.4f}   (lower)")
+```
+
+**Check 3: real GDP in the economy of Table 2.4.** The textbook's example economy produces only apples
+and computers. We store its prices and quantities in two small tables, one row per year.
 
 > **Python note.** `pd.DataFrame({...}, index=[...])` builds a table from a dictionary: each key
 > becomes a column and the `index` gives the row labels. `prices.loc[2026]` picks the row for 2026.
@@ -221,7 +511,7 @@ prices
 
 Nominal GDP uses each year's own prices. Real GDP holds the prices fixed. The **Laspeyres** index
 measures the change from 2026 to 2027 with the *initial* (2026) prices, and the **Paasche** index with
-the *final* (2027) prices. **Chain weighting** averages the two growth rates.
+the *final* (2027) prices. **Chain weighting** averages the two growth rates (equation 6).
 
 > **Python note.** An *f-string* such as `f"{x:,.0f}"` inserts the value of a variable into a piece
 > of text: `,` adds thousands separators, `.0f` shows no decimals and `.1%` shows a share as a
@@ -244,39 +534,105 @@ print(f"Inflation (nominal growth minus real growth):  {g_nominal - g_chain:.1%}
 ```
 
 These are the numbers of Table 2.4: real growth is 18.3 percent at 2026 prices, 17.7 percent at
-2027 prices, and 18.0 percent chain-weighted. Nominal GDP grew 27.5 percent, so prices rose by
-about $27.5 - 18.0 = 9.5$ percent. (The textbook gets \$6,483 for chained real GDP in 2026, because it
-rounds the growth rate to 18.0 percent first; with the unrounded rate we get \$6,482.)
+2027 prices, and 18.0 percent chain-weighted. Nominal GDP grew 27.5 percent, so by the rule of thumb in
+equation (7) prices rose by about $27.5 - 18.0 = 9.5$ percent. (The textbook gets \$6,483 for chained real
+GDP in 2026, because it rounds the growth rate to 18.0 percent first; with the unrounded rate we get \$6,482.)
 
-<!-- cell -->
-
-### Comparing countries: exchange rates and purchasing power parity
-
-To compare GDP across countries we first convert it to a common currency with the **exchange rate**.
-But prices also differ across countries, so we then value production at common prices, which is
-called **purchasing power parity** (PPP):
-
-$$\text{real GDP}^{\text{U.S. prices}}_{\text{China}} = \frac{\text{price level}_{\text{U.S.}}}{\text{price level}_{\text{China}}}\times\text{nominal GDP}^{\text{dollars}}_{\text{China}} \qquad (2.6)$$
+**Check 4: the two indexes as weighted averages (equation 5).** Apples grew 10 percent and computers 20
+percent. Weighting these rates with the 2026 spending shares must give the Laspeyres rate, and the harmonic
+form with the 2027 shares must give the Paasche rate. If every price rises by the same factor, the two
+indexes must agree.
 
 ```{python}
-def to_dollars(gdp_local, exchange_rate):
-    """Convert GDP in local currency into dollars at the market exchange rate (Section 2.4)."""
-    return gdp_local / exchange_rate
+p0, p1 = prices.loc[2026], prices.loc[2027]
+q0, q1 = quantities.loc[2026], quantities.loc[2027]
+s0 = p0 * q0 / gdp_value(p0, q0)                 # spending shares in 2026
+s1 = p1 * q1 / gdp_value(p1, q1)                 # spending shares in 2027
+growth_i = q1 / q0 - 1                           # growth of each good's quantity
+print(f"Shares of computers: {s0['computers']:.3f} in 2026, {s1['computers']:.3f} in 2027")
+print(f"Laspeyres: direct {g_laspeyres:.4%}   share-weighted average {(s0 * growth_i).sum():.4%}")
+print(f"Paasche:   direct {g_paasche:.4%}   harmonic form          {1 / (s1 / (1 + growth_i)).sum() - 1:.4%}")
+p_scaled = 1.5 * p0                              # every price 50% higher: relative prices unchanged
+g_scaled = gdp_value(p_scaled, q1) / gdp_value(p_scaled, q0) - 1
+print(f"Paasche when all prices rise by the same factor: {g_scaled:.4%} (= Laspeyres)")
+```
 
+The price of apples rose by half while computers kept their price, so computers became relatively cheaper,
+and their quantity grew faster. At the 2026 prices computers carry more weight, which is why the
+Laspeyres rate is the higher one.
 
-def at_common_prices(gdp_dollars, relative_price_level):
-    """Real GDP at U.S. prices: dollar GDP divided by the price level relative to the U.S. (equation 2.6)."""
-    return gdp_dollars / relative_price_level
+**Check 5: the exact split of nominal growth, and the Fisher index.** Step 1 of the price block says that a
+price index times the matching quantity index gives the growth factor of nominal GDP exactly. Step 2 says
+that the rule of thumb in equation (7) misses the cross term $\pi\,g$.
 
+> **Python note.** `x ** 0.5` is the square root of `x`.
 
+```{python}
+price_laspeyres = gdp_value(p1, q0) / gdp_value(p0, q0)
+price_paasche = gdp_value(p1, q1) / gdp_value(p0, q1)
+price_fisher = (price_laspeyres * price_paasche) ** 0.5
+g_fisher = ((1 + g_laspeyres) * (1 + g_paasche)) ** 0.5 - 1
+print(f"Nominal growth factor:                     {1 + g_nominal:.5f}")
+print(f"Paasche price x Laspeyres quantity:        {price_paasche * (1 + g_laspeyres):.5f}")
+print(f"Laspeyres price x Paasche quantity:        {price_laspeyres * (1 + g_paasche):.5f}")
+print(f"Fisher price x Fisher quantity:            {price_fisher * (1 + g_fisher):.5f}")
+print(f"Real growth: chain-weighted {g_chain:.4%}, Fisher {g_fisher:.4%}")
+exact = (1 + g_nominal) / (1 + g_chain) - 1
+print(f"Inflation: rule of thumb {g_nominal - g_chain:.2%}, exact {exact:.2%}, "
+      f"Fisher price index {price_fisher - 1:.2%}")
+print(f"Cross term pi x g: {exact * g_chain:.2%}  ->  {exact:.2%} + {g_chain:.2%} + {exact * g_chain:.2%} "
+      f"= {exact + g_chain + exact * g_chain:.2%}")
+```
+
+The four products agree to the last digit, and the arithmetic and geometric averages of the two growth
+rates differ only in the third decimal. But with rates this large, the rule of thumb is off: prices in this
+economy rose by about 8.0 percent, not 9.5. The missing 1.5 points are the cross term.
+
+**Check 6: rates over different periods.** A price level that rises 1 percent every quarter rises by more
+than 4 percent a year, because the increases compound. And a price level that doubles in 10 years grows at
+an average annual rate of $2^{1/10} - 1$.
+
+```{python}
+quarterly = 0.01
+print(f"1% a quarter, compounded: {(1 + quarterly) ** 4 - 1:.4%} a year (simple rule: {4 * quarterly:.0%})")
+g_bar = 2 ** (1 / 10) - 1
+print(f"Prices double in 10 years: average growth {g_bar:.3%} a year")
+print(f"Check: (1 + {g_bar:.5f})^10 = {(1 + g_bar) ** 10:.4f}")
+```
+
+**Check 7: China and the United States at common prices (equation 8).** We use the textbook's 2019 numbers:
+U.S. GDP of \$20.6 trillion, China's GDP of 95.1 trillion yuan, 6.91 yuan per dollar, and Chinese prices at
+68.4 percent of U.S. prices.
+
+```{python}
 china_dollars = to_dollars(95.1, 6.91)                  # 95.1 trillion yuan, 6.91 yuan per dollar (2019)
 china_ppp = at_common_prices(china_dollars, 0.684)      # goods in China cost 68.4% of U.S. prices
 print(f"China at the exchange rate: ${china_dollars:.1f} trillion, {china_dollars / 20.6:.0%} of U.S. GDP")
 print(f"China at common prices:     ${china_ppp:.1f} trillion, {china_ppp / 20.6:.0%} of U.S. GDP")
 ```
 
-With the textbook's 2019 numbers, China's economy looks like two-thirds of the U.S. economy at the
-exchange rate, but almost exactly as large at common prices.
+With these numbers, China's economy looks like two-thirds of the U.S. economy at the exchange rate, but
+almost exactly as large at common prices. The next cell checks Steps 4 and 5 and the first row of the table
+of predictions: the PPP shortcut, the log split of the gap, and a 1 percent weaker yuan.
+
+> **Python note.** `np.log` is the natural logarithm.
+
+```{python}
+ppp = 6.91 * 0.684                                      # yuan that buy what one dollar buys in the U.S.
+print(f"PPP factor: {ppp:.3f} yuan per dollar; 95.1 / PPP = ${95.1 / ppp:.2f} trillion (= {china_ppp:.2f})")
+gap_exchange, gap_prices = np.log(china_dollars / 20.6), np.log(0.684)
+print(f"Log gap at the exchange rate {gap_exchange:.4f} - log relative price level {gap_prices:.4f} "
+      f"= {gap_exchange - gap_prices:.4f};  log gap at common prices {np.log(china_ppp / 20.6):.4f}")
+e_new = 6.91 * 1.01                                     # the yuan weakens by 1 percent
+dollars_new = to_dollars(95.1, e_new)
+ppp_new = at_common_prices(dollars_new, ppp / e_new)    # China's relative price level falls with e
+print(f"1% weaker yuan: GDP in dollars {dollars_new / china_dollars - 1:+.2%}, "
+      f"at common prices {ppp_new / china_ppp - 1:+.2%}")
+```
+
+The log gap at common prices is close to zero, so China and the United States had almost the same GDP. A
+weaker yuan makes China's GDP look about 1 percent smaller in dollars, while the comparison at common prices
+does not move at all.
 
 <!-- cell -->
 
@@ -297,7 +653,7 @@ shares = pd.read_csv(DATA_URL + "fig2-1.csv")
 shares.tail()
 ```
 
-The identity (2.1) says the four shares must add up to 100 percent in every year. Let us check.
+The national income identity, equation (2), says the four shares must add up to 100 percent in every year. Let us check.
 
 ```{python}
 total = shares.consumption_share + shares.investment_share + shares.government_share + shares.net_exports_share
@@ -904,7 +1260,7 @@ Nominal GDP rises when prices rise and when production rises. These figures pull
 
 **Goal.** Follow the U.S. price level since 1947, as measured by the **GDP deflator**.
 
-The GDP deflator is the price level in equation (2.2): nominal GDP divided by real GDP. It is an
+The GDP deflator is the price level in equation (4): nominal GDP divided by real GDP. It is an
 **index**: its value in a chosen base year is set to 100. The data are quarterly, with one row per
 quarter labeled by the first day of the quarter.
 
@@ -1051,7 +1407,7 @@ Nominal GDP more than tripled, but real GDP did not quite double: the rest of th
 price level that went up by about three-quarters. (The textbook's \$7.4 trillion for 1995 is now \$7.6 trillion after
 revisions.)
 
-Taking growth rates of equation (2.2) gives a handy approximation: the growth of nominal GDP is about
+Taking growth rates of equation (4) gives a handy approximation (equation 7): the growth of nominal GDP is about
 the growth of the price level plus the growth of real GDP.
 
 > **Python note.** `.pct_change()` computes the change from the previous row as a fraction, for every
@@ -1216,13 +1572,17 @@ decade had the highest average inflation, and which the lowest?
 
 ## Concluding remarks
 
-- GDP is the market value of final goods and services. Production, expenditure and income are three
-  ways to measure it, and they give the same number (up to a small statistical discrepancy).
-- The national income identity $Y = C + I + G + NX$ splits spending. In the United States, consumption is
-  about two-thirds of GDP, and since the 1970s its rise has been matched by falling government purchases
-  and a trade deficit.
-- Labor earns roughly two-thirds of income, but its share has drifted down since 1970 and is now below 60 percent.
-- Real GDP values production at common prices. Chain weighting averages the Laspeyres and Paasche growth
-  rates; nominal growth is about inflation plus real growth. Comparing countries also needs common prices
-  (purchasing power parity), which shrinks the measured gap between rich and poor countries.
+- GDP is the market value of final goods and services. Value added adds up to final sales, equation (1),
+  and every dollar of it is someone's income, so production, expenditure and income give the same total
+  (up to a small statistical discrepancy).
+- The national income identity, equation (2), splits spending. In the United States, consumption is about
+  two-thirds of GDP, and since the 1970s its rise has been matched by falling government purchases and a
+  trade deficit.
+- Labor earns roughly two-thirds of income (equation 3), but its share has drifted down since 1970 and is
+  now below 60 percent.
+- Real GDP values production at common prices, and the price level links it to nominal GDP, equation (4).
+  The Laspeyres and Paasche indexes are averages of the goods' growth rates with different weights,
+  equation (5), and chain weighting averages the two, equation (6). Nominal growth is about inflation plus
+  real growth, equation (7). Comparing countries also needs common prices, equation (8), which shrinks the
+  measured gap between rich and poor countries.
 - The next chapter uses real GDP per person to study long-run economic growth.
