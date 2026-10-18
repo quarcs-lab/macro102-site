@@ -41,6 +41,7 @@
 | B | [Accessing Macroeconomic Data with Python](notebooks/appB-accessing-macroeconomic-data-with-python.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/appB-accessing-macroeconomic-data-with-python.ipynb) |
 | C | [Math Review for Macroeconomics](notebooks/appC-math-review-for-macroeconomics.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/appC-math-review-for-macroeconomics.ipynb) |
 | D | [DSGE Modeling with Python](notebooks/appD-dsge-modeling-with-python.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/appD-dsge-modeling-with-python.ipynb) |
+| E | [The DSGE Model of Smets and Wouters](notebooks/appE-the-dsge-model-of-smets-and-wouters.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/appE-the-dsge-model-of-smets-and-wouters.ipynb) |
 
 ## Repository layout
 
@@ -49,8 +50,8 @@
 | `notebooks/` | The chapter notebooks (`.ipynb`, saved with outputs). Open them in Colab. |
 | `src/` | The source of each notebook (`.qmd`). The notebook is generated from it, so edit the source, not the `.ipynb`. |
 | `data/chNN/` | The CSV files each notebook reads, plus a `README.md` with sources and a `build_data.py` that rebuilds the wider files. |
-| `data/appA/`, `images/appA/` | The data files and the Colab screenshots of Appendix A. (Appendix B downloads its data live from the original sources; Appendix D installs the Snowdrop package and uses the models and data that come with it.) |
-| `_quarto.yml`, `index.qmd`, `_includes/` | The Quarto book website, in a dark theme (the default, in the colors of the book cover) and a light one, switched with the button at the top right. `_includes/theme-*.scss` hold the colors; `_includes/plotly-theme.html` recolors the saved charts for the dark theme, so each chart is stored only once. The matplotlib charts of Appendix D are saved as light/dark image pairs, and `_includes/styles.css` shows the one that matches the theme. |
+| `data/appA/`, `images/appA/` | The data files and the Colab screenshots of Appendix A. (Appendix B downloads its data live from the original sources; Appendices D and E install the Snowdrop package and use the models and data that come with it.) |
+| `_quarto.yml`, `index.qmd`, `_includes/` | The Quarto book website, in a dark theme (the default, in the colors of the book cover) and a light one, switched with the button at the top right. `_includes/theme-*.scss` hold the colors; `_includes/plotly-theme.html` recolors the saved charts for the dark theme, so each chart is stored only once. The matplotlib charts of Appendices D and E are saved as light/dark image pairs, and `_includes/styles.css` shows the one that matches the theme. |
 
 ## Rebuilding
 
