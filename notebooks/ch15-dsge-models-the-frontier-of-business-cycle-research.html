@@ -74,16 +74,18 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
 <script src="../site_libs/quarto-html/anchor.min.js"></script>
 <link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-ed96de9b727972fe78a7b5d16c58bf87.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-ed96de9b727972fe78a7b5d16c58bf87.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-399c733d4f211ee7f5317d85c22e765e.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-9e2c9f7c8fa6d639e70e73c2df8e2a02.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-1f50abf2a858de6a9ed992def5b52d1b.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-dark-73ab815f77abe8b7d3b5d9e665c7adf5.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
 <script id="quarto-search-options" type="application/json">{
-  "location": "sidebar",
+  "location": "navbar",
   "copy-button": false,
   "collapse-after": 3,
-  "panel-placement": "start",
-  "type": "textbox",
+  "panel-placement": "end",
+  "type": "overlay",
   "limit": 50,
   "keyboard-shortcut": [
     "f",
@@ -106,6 +108,220 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   }
 }</script>
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+<script>
+/* Dark mode for the saved Plotly charts (dark is the site's default theme).
+   Every chart is saved once, in its light colors. This script keeps that light figure and, in dark mode,
+   draws a recolored copy: the book palette has hand-picked dark versions (DARK), and any other color is
+   remapped by role (ink is lightened with its hue kept, white paper becomes navy). It follows the
+   theme toggle live, so the notebooks need no second copy of any figure.
+   It must load right after plotly.js (_includes/plotly-head.html) and before the saved charts. */
+(function () {
+  "use strict";
+  var P = window.Plotly;
+  if (!P || P.__bookTheme) return;
+  P.__bookTheme = true;
+
+  // Chart colors of the dark theme (keep in sync with _includes/theme-dark.scss)
+  var T = {
+    paper: "#06253e", text: "#d8e3ee", title: "#f3f6fa", muted: "#9fb3c8",
+    grid: "rgba(162, 201, 238, 0.11)", zero: "rgba(162, 201, 238, 0.34)", axis: "#4f7193",
+    menu: "#0c3252", menuLine: "#2d5a80", rail: "#1d4a72", grip: "#7fa3c8", accent: "#f5c842", land: "#0d3354"
+  };
+  // The book palette (BLUE, TEAL, GREEN, GRAY and the px color sequence of the notebook template) in dark mode
+  var DARK = {
+    "#16528c": "#5eb1f2", "#008070": "#3dd6c4", "#7fb23a": "#a6d85b", "#8a96a3": "#97a9bd",
+    "#5aa0d8": "#a9d3f7", "#0b4f47": "#22a08d", "#e0a33b": "#f2c14e", "#c4651a": "#f08c4a",
+    "#b04a5a": "#f07a8c", "#8e5ea2": "#c39be0", "#000000": "#e6edf5", "#ffffff": T.paper
+  };
+
+  // ---- colors -------------------------------------------------------------------------------
+  var ctx = document.createElement("canvas").getContext("2d");
+  function hex2(v) { return (v < 16 ? "0" : "") + v.toString(16); }
+  function parse(s) {                 // any CSS color -> {r, g, b, a, hex}, or null
+    if (typeof s !== "string" || !s) return null;
+    ctx.fillStyle = "#010203";
+    ctx.fillStyle = s;
+    var v = ctx.fillStyle;
+    if (v === "#010203" && s.replace(/\s/g, "").toLowerCase() !== "#010203") return null;
+    var c;
+    if (v[0] === "#") c = { r: parseInt(v.slice(1, 3), 16), g: parseInt(v.slice(3, 5), 16), b: parseInt(v.slice(5, 7), 16), a: 1 };
+    else { var m = v.match(/[\d.]+/g); c = { r: +m[0], g: +m[1], b: +m[2], a: +m[3] }; }
+    c.hex = "#" + hex2(c.r) + hex2(c.g) + hex2(c.b);
+    return c;
+  }
+  function lin(v) { v /= 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }
+  function gam(v) { v = v <= 0.0031308 ? 12.92 * v : 1.055 * Math.pow(v, 1 / 2.4) - 0.055; return Math.round(Math.min(1, Math.max(0, v)) * 255); }
+  function toLab(c) {                 // sRGB -> OKLab
+    var r = lin(c.r), g = lin(c.g), b = lin(c.b);
+    var l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b),
+        m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b),
+        s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+    return [0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s,
+            1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s,
+            0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s];
+  }
+  function fromLab(L, A, B) {         // OKLab -> sRGB, lowering the chroma until it fits
+    for (var k = 1; k >= 0; k -= 0.05) {
+      var a = A * k, b = B * k;
+      var l = Math.pow(L + 0.3963377774 * a + 0.2158037573 * b, 3),
+          m = Math.pow(L - 0.1055613458 * a - 0.0638541728 * b, 3),
+          s = Math.pow(L - 0.0894841775 * a - 1.2914855480 * b, 3);
+      var rgb = [4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+                 -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+                 -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s];
+      if (k < 0.05 || rgb.every(function (v) { return v > -0.002 && v < 1.002; })) return rgb.map(gam);
+    }
+  }
+  var NAVY = toLab(parse(T.paper));
+  function out(rgb, a) {
+    return a < 1 ? "rgba(" + rgb.join(", ") + ", " + +a.toFixed(3) + ")" : "#" + rgb.map(hex2).join("");
+  }
+
+  // Roles: "ink" (lines, markers, text, fills), "paper" (*bgcolor), "rule" (grid, axis, tick, border lines)
+  function recolor(c, role) {
+    if (c.a === 0) return null;                          // transparent stays transparent
+    var lab = toLab(c), L = lab[0], chroma = Math.hypot(lab[1], lab[2]), L2, A = lab[1], B = lab[2];
+    if (role === "rule" && chroma >= 0.035) role = "ink"; // a colored border or axis reads as ink
+    if (role === "ink" && DARK[c.hex]) {
+      var d = parse(DARK[c.hex]);
+      return out([d.r, d.g, d.b], c.a < 1 ? c.a * 0.85 : 1);
+    }
+    if (chroma < 0.035 || (role !== "ink" && L > 0.6)) {
+      // neutrals and light paper: swap light and dark (black ink -> light ink, white paper -> navy paper)
+      // (pure white becomes the chart's navy; other light ink stays a step above it, so it still shows)
+      var hi = role === "rule" ? 0.78 : 0.93, lo = role === "ink" && L < 0.985 ? NAVY[0] + 0.08 : NAVY[0];
+      L2 = hi - (hi - lo) * L;
+      var f = Math.max(0, (1 - L2) / (1 - NAVY[0]));     // darker results take the navy's blue cast
+      A = A * 0.6 + NAVY[1] * f;
+      B = B * 0.6 + NAVY[2] * f;
+    } else if (role === "ink" && L < 0.8) {
+      L2 = 0.66 + L * 0.175;                             // lift dark ink above the navy, keeping its hue
+    } else {
+      L2 = L;
+    }
+    return out(fromLab(L2, A, B), role === "ink" && c.a < 1 ? c.a * 0.85 : c.a);
+  }
+  var cache = {};
+  function mapColor(s, role) {
+    var key = role + "|" + s;
+    if (!(key in cache)) {
+      var c = parse(s);
+      cache[key] = c ? (recolor(c, role) || s) : s;
+    }
+    return cache[key];
+  }
+  function roleOf(key) {
+    var k = String(key).split(".").pop().toLowerCase();
+    if (!/color$|^colorway$/.test(k)) return null;      // also skips colorscale and coloraxis references
+    if (/bgcolor$/.test(k)) return "paper";
+    if (/^(grid|zeroline|line|tick|border|outline|spike|minorgrid)color$/.test(k)) return "rule";
+    return "ink";
+  }
+  function mapValue(v, role) {
+    if (typeof v === "string") return mapColor(v, role);
+    if (Array.isArray(v)) return v.map(function (u) { return mapValue(u, role); });
+    return v;
+  }
+  function walk(x) {                                     // recolor a figure part (data, layout, frames, menu args)
+    if (Array.isArray(x)) return x.map(walk);
+    if (!x || typeof x !== "object") return x;
+    var o = {};
+    for (var k in x) {
+      if (!Object.prototype.hasOwnProperty.call(x, k)) continue;
+      var role = roleOf(k);
+      o[k] = k === "template" ? darkTemplate(x[k]) : role ? mapValue(x[k], role) : walk(x[k]);
+    }
+    return o;
+  }
+  function merge(a, b) { return Object.assign({}, a || {}, b); }
+  function darkTemplate(tpl) {
+    var t = walk(tpl && typeof tpl === "object" ? tpl : {});
+    var L = t.layout = t.layout || {};
+    L.paper_bgcolor = T.paper;
+    L.plot_bgcolor = T.paper;
+    L.font = merge(L.font, { color: T.text });
+    L.title = merge(L.title, {});
+    L.title.font = merge(L.title.font, { color: T.title });
+    ["xaxis", "yaxis"].forEach(function (ax) {
+      L[ax] = merge(L[ax], { gridcolor: T.grid, linecolor: T.axis, zerolinecolor: T.zero, tickcolor: T.axis });
+    });
+    L.geo = merge(L.geo, { bgcolor: T.paper, landcolor: T.land, lakecolor: T.paper, subunitcolor: T.axis });
+    L.annotationdefaults = merge(L.annotationdefaults, { arrowcolor: T.muted });
+    L.shapedefaults = merge(L.shapedefaults, { line: { color: T.muted } });
+    L.updatemenudefaults = { bgcolor: T.menu, bordercolor: T.menuLine, font: { color: T.text } };
+    L.sliderdefaults = { bgcolor: T.rail, activebgcolor: T.accent, bordercolor: T.grip, tickcolor: T.muted, font: { color: T.text } };
+    L.modebar = { bgcolor: "rgba(0, 0, 0, 0)", color: "rgba(216, 227, 238, 0.5)", activecolor: T.accent };
+    return t;
+  }
+  function darkFigure(fig) {
+    var layout = walk(fig.layout || {});
+    if (!layout.template) layout.template = darkTemplate({});
+    return { data: walk(fig.data || []), layout: layout, frames: walk(fig.frames || []), config: fig.config || {} };
+  }
+
+  // ---- theme state and drawing --------------------------------------------------------------
+  function isDark() {
+    var b = document.body;
+    if (b && (b.classList.contains("quarto-dark") || b.classList.contains("quarto-light"))) return b.classList.contains("quarto-dark");
+    var link = document.querySelector('link.quarto-color-scheme[data-mode="dark"]');
+    return !!(link && !link.disabled && link.rel === "stylesheet");
+  }
+  function clone(x) { return JSON.parse(JSON.stringify(x)); }
+  function el(gd) { return typeof gd === "string" ? document.getElementById(gd) : gd; }
+
+  // Plotly Express switches to WebGL (scattergl) for long tables, but Chrome keeps only about 16 WebGL
+  // contexts per page, and a chapter with 8+ such charts lost the oldest ones (blank charts). The book's
+  // charts are small (at most ~25k points, ~2k visible), so the website draws them as SVG scatter.
+  function svg(traces) {
+    (traces || []).forEach(function (t) { if (t && t.type === "scattergl") t.type = "scatter"; });
+    return traces;
+  }
+
+  var newPlot = P.newPlot, addFrames = P.addFrames;
+  P.newPlot = function (gd, data, layout, config) {
+    var div = el(gd);
+    var fig = data && !Array.isArray(data) && typeof data === "object" ? data : { data: data, layout: layout, config: config };
+    if (!div) return newPlot.apply(P, arguments);
+    svg(fig.data);
+    (fig.frames || []).forEach(function (f) { svg(f.data); });
+    div.__bookLight = clone({ data: fig.data || [], layout: fig.layout || {}, config: fig.config || {}, frames: fig.frames || [] });
+    div.__bookDark = isDark();
+    return newPlot.call(P, div, div.__bookDark ? darkFigure(div.__bookLight) : fig);
+  };
+  P.addFrames = function (gd, frames, indices) {
+    var div = el(gd);
+    if (div && div.__bookLight && Array.isArray(frames)) {
+      frames.forEach(function (f) { svg(f.data); });
+      div.__bookLight.frames = div.__bookLight.frames.concat(clone(frames));
+      if (div.__bookDark) frames = walk(frames);
+    }
+    return addFrames.call(P, gd, frames, indices);
+  };
+
+  // Redraw the charts when the reader flips the theme (Quarto toggles quarto-dark/quarto-light on <body>):
+  // the ones on screen first, then one chart per task, so a page with 20+ charts never freezes.
+  function restyle() {
+    var dark = isDark(), h = window.innerHeight;
+    var todo = Array.prototype.filter.call(document.querySelectorAll(".js-plotly-plot"), function (div) {
+      return div.__bookLight && div.__bookDark !== dark;
+    });
+    function gap(div) { var r = div.getBoundingClientRect(); return r.bottom < 0 ? -r.bottom : r.top > h ? r.top - h : 0; }
+    todo.sort(function (a, b) { return gap(a) - gap(b); });
+    (function next() {
+      if (!todo.length || isDark() !== dark) return;   // done, or the reader flipped back meanwhile
+      var div = todo.shift();
+      if (div.__bookDark !== dark) {
+        div.__bookDark = dark;
+        P.react(div, dark ? darkFigure(div.__bookLight) : clone(div.__bookLight));
+      }
+      setTimeout(next, 0);
+    })();
+  }
+  function watch() { new MutationObserver(restyle).observe(document.body, { attributes: true, attributeFilter: ["class"] }); restyle(); }
+  if (document.body) watch(); else document.addEventListener("DOMContentLoaded", watch);
+  window.bookPlotlyTheme = { darkFigure: darkFigure, mapColor: mapColor, restyle: restyle };
+})();
+</script>
 <script src="https://cdn.jsdelivr.net/npm/requirejs@2.3.6/require.min.js" integrity="sha384-c9c+LnTbwQ3aujuU7ULEPVvgLs+Fn6fJUvIGTsuu1ZcCf11fiEubah0ttpca4ntM sha384-6V1/AdqZRWk1KAlWbKBlGhN7VG4iE/yAZcO6NZPMF8od0vukrvr0tg4qY6NSrItx" crossorigin="anonymous"></script>
 
 <script type="application/javascript">define('jquery', [],function() {return window.jQuery;})</script>
@@ -143,10 +359,184 @@ window.Quarto = {
 <link rel="stylesheet" href="../_includes/styles.css">
 </head>
 
-<body class="nav-sidebar floating quarto-light">
+<body class="nav-sidebar floating nav-fixed quarto-dark"><script id="quarto-html-before-body" type="application/javascript">
+    const toggleBodyColorMode = (bsSheetEl) => {
+      const mode = bsSheetEl.getAttribute("data-mode");
+      const bodyEl = window.document.querySelector("body");
+      if (mode === "dark") {
+        bodyEl.classList.add("quarto-dark");
+        bodyEl.classList.remove("quarto-light");
+      } else {
+        bodyEl.classList.add("quarto-light");
+        bodyEl.classList.remove("quarto-dark");
+      }
+    }
+    const toggleBodyColorPrimary = () => {
+      const bsSheetEl = window.document.querySelector("link#quarto-bootstrap:not([rel=disabled-stylesheet])");
+      if (bsSheetEl) {
+        toggleBodyColorMode(bsSheetEl);
+      }
+    }
+    const setColorSchemeToggle = (alternate) => {
+      const toggles = window.document.querySelectorAll('.quarto-color-scheme-toggle');
+      for (let i=0; i < toggles.length; i++) {
+        const toggle = toggles[i];
+        if (toggle) {
+          if (alternate) {
+            toggle.classList.add("alternate");
+          } else {
+            toggle.classList.remove("alternate");
+          }
+        }
+      }
+    };
+    const toggleColorMode = (alternate) => {
+      // Switch the stylesheets
+      const primaryStylesheets = window.document.querySelectorAll('link.quarto-color-scheme:not(.quarto-color-alternate)');
+      const alternateStylesheets = window.document.querySelectorAll('link.quarto-color-scheme.quarto-color-alternate');
+      manageTransitions('#quarto-margin-sidebar .nav-link', false);
+      if (alternate) {
+        // note: dark is layered on light, we don't disable primary!
+        enableStylesheet(alternateStylesheets);
+        for (const sheetNode of alternateStylesheets) {
+          if (sheetNode.id === "quarto-bootstrap") {
+            toggleBodyColorMode(sheetNode);
+          }
+        }
+      } else {
+        disableStylesheet(alternateStylesheets);
+        enableStylesheet(primaryStylesheets)
+        toggleBodyColorPrimary();
+      }
+      manageTransitions('#quarto-margin-sidebar .nav-link', true);
+      // Switch the toggles
+      setColorSchemeToggle(alternate)
+      // Hack to workaround the fact that safari doesn't
+      // properly recolor the scrollbar when toggling (#1455)
+      if (navigator.userAgent.indexOf('Safari') > 0 && navigator.userAgent.indexOf('Chrome') == -1) {
+        manageTransitions("body", false);
+        window.scrollTo(0, 1);
+        setTimeout(() => {
+          window.scrollTo(0, 0);
+          manageTransitions("body", true);
+        }, 40);
+      }
+    }
+    const disableStylesheet = (stylesheets) => {
+      for (let i=0; i < stylesheets.length; i++) {
+        const stylesheet = stylesheets[i];
+        stylesheet.rel = 'disabled-stylesheet';
+      }
+    }
+    const enableStylesheet = (stylesheets) => {
+      for (let i=0; i < stylesheets.length; i++) {
+        const stylesheet = stylesheets[i];
+        if(stylesheet.rel !== 'stylesheet') { // for Chrome, which will still FOUC without this check
+          stylesheet.rel = 'stylesheet';
+        }
+      }
+    }
+    const manageTransitions = (selector, allowTransitions) => {
+      const els = window.document.querySelectorAll(selector);
+      for (let i=0; i < els.length; i++) {
+        const el = els[i];
+        if (allowTransitions) {
+          el.classList.remove('notransition');
+        } else {
+          el.classList.add('notransition');
+        }
+      }
+    }
+    const isFileUrl = () => {
+      return window.location.protocol === 'file:';
+    }
+    const hasAlternateSentinel = () => {
+      let styleSentinel = getColorSchemeSentinel();
+      if (styleSentinel !== null) {
+        return styleSentinel === "alternate";
+      } else {
+        return false;
+      }
+    }
+    const setStyleSentinel = (alternate) => {
+      const value = alternate ? "alternate" : "default";
+      if (!isFileUrl()) {
+        window.localStorage.setItem("quarto-color-scheme", value);
+      } else {
+        localAlternateSentinel = value;
+      }
+    }
+    const getColorSchemeSentinel = () => {
+      if (!isFileUrl()) {
+        const storageValue = window.localStorage.getItem("quarto-color-scheme");
+        return storageValue != null ? storageValue : localAlternateSentinel;
+      } else {
+        return localAlternateSentinel;
+      }
+    }
+    const toggleGiscusIfUsed = (isAlternate, darkModeDefault) => {
+      const baseTheme = document.querySelector('#giscus-base-theme')?.value ?? 'light';
+      const alternateTheme = document.querySelector('#giscus-alt-theme')?.value ?? 'dark';
+      let newTheme = '';
+      if(authorPrefersDark) {
+        newTheme = isAlternate ? baseTheme : alternateTheme;
+      } else {
+        newTheme = isAlternate ? alternateTheme : baseTheme;
+      }
+      const changeGiscusTheme = () => {
+        // From: https://github.com/giscus/giscus/issues/336
+        const sendMessage = (message) => {
+          const iframe = document.querySelector('iframe.giscus-frame');
+          if (!iframe) return;
+          iframe.contentWindow.postMessage({ giscus: message }, 'https://giscus.app');
+        }
+        sendMessage({
+          setConfig: {
+            theme: newTheme
+          }
+        });
+      }
+      const isGiscussLoaded = window.document.querySelector('iframe.giscus-frame') !== null;
+      if (isGiscussLoaded) {
+        changeGiscusTheme();
+      }
+    };
+    const authorPrefersDark = true;
+    const darkModeDefault = authorPrefersDark;
+    let localAlternateSentinel = darkModeDefault ? 'alternate' : 'default';
+    // Dark / light mode switch
+    window.quartoToggleColorScheme = () => {
+      // Read the current dark / light value
+      let toAlternate = !hasAlternateSentinel();
+      toggleColorMode(toAlternate);
+      setStyleSentinel(toAlternate);
+      toggleGiscusIfUsed(toAlternate, darkModeDefault);
+      window.dispatchEvent(new Event('resize'));
+    };
+    // Switch to dark mode if need be
+    if (hasAlternateSentinel()) {
+      toggleColorMode(true);
+    } else {
+      toggleColorMode(false);
+    }
+  </script>
 
 <div id="quarto-search-results"></div>
   <header id="quarto-header" class="headroom fixed-top">
+    <nav class="navbar navbar-expand-lg " data-bs-theme="dark">
+      <div class="navbar-container container-fluid">
+      <div class="navbar-brand-container mx-auto">
+    <a class="navbar-brand" href="../index.html">
+    <span class="navbar-title">Data Science and Macroeconomic Models</span>
+    </a>
+  </div>
+        <div class="quarto-navbar-tools tools-end">
+    <a href="https://github.com/quarcs-lab/macro102-site" title="Source Code" class="quarto-navigation-tool px-1" aria-label="Source Code"><i class="bi bi-github"></i></a>
+  <a href="" class="quarto-color-scheme-toggle quarto-navigation-tool  px-1" onclick="window.quartoToggleColorScheme(); return false;" title="Toggle dark mode"><i class="bi"></i></a>
+</div>
+          <div id="quarto-search" class="" title="Search"></div>
+      </div> <!-- /container-fluid -->
+    </nav>
   <nav class="quarto-secondary-nav">
     <div class="container-fluid d-flex">
       <button type="button" class="quarto-btn-toggle btn" data-bs-toggle="collapse" role="button" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
@@ -155,29 +545,13 @@ window.Quarto = {
         <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../notebooks/ch15-dsge-models-the-frontier-of-business-cycle-research.html"><span class="chapter-title">15. DSGE Models: The Frontier of Business Cycle Research</span></a></li></ol></nav>
         <a class="flex-grow-1" role="navigation" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">      
         </a>
-      <button type="button" class="btn quarto-search-button" aria-label="Search" onclick="window.quartoOpenSearch();">
-        <i class="bi bi-search"></i>
-      </button>
     </div>
   </nav>
 </header>
 <!-- content -->
-<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article">
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article page-navbar">
 <!-- sidebar -->
   <nav id="quarto-sidebar" class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation floating overflow-auto">
-    <div class="pt-lg-2 mt-2 text-left sidebar-header">
-    <div class="sidebar-title mb-0 py-0">
-      <a href="../">Data Science and Macroeconomic Models</a> 
-        <div class="sidebar-tools-main">
-    <a href="https://github.com/quarcs-lab/macro102-site" title="Source Code" class="quarto-navigation-tool px-1" aria-label="Source Code"><i class="bi bi-github"></i></a>
-</div>
-    </div>
-      </div>
-        <div class="mt-2 flex-shrink-0 align-items-center">
-        <div class="sidebar-search">
-        <div id="quarto-search" class="" title="Search"></div>
-        </div>
-        </div>
     <div class="sidebar-menu-container"> 
     <ul class="list-unstyled mt-1">
         <li class="sidebar-item">
@@ -375,6 +749,7 @@ window.Quarto = {
     </div>
 <!-- main -->
 <main class="content" id="quarto-document-content">
+
 
 <header id="title-block-header" class="quarto-title-block default">
 <div class="quarto-title">
@@ -2990,6 +3365,19 @@ Solution
 </main> <!-- /main -->
 <script id="quarto-html-after-body" type="application/javascript">
   window.document.addEventListener("DOMContentLoaded", function (event) {
+    // Ensure there is a toggle, if there isn't float one in the top right
+    if (window.document.querySelector('.quarto-color-scheme-toggle') === null) {
+      const a = window.document.createElement('a');
+      a.classList.add('top-right');
+      a.classList.add('quarto-color-scheme-toggle');
+      a.href = "";
+      a.onclick = function() { try { window.quartoToggleColorScheme(); } catch {} return false; };
+      const i = window.document.createElement("i");
+      i.classList.add('bi');
+      a.appendChild(i);
+      window.document.body.appendChild(a);
+    }
+    setColorSchemeToggle(hasAlternateSentinel())
     const icon = "";
     const anchorJS = new window.AnchorJS();
     anchorJS.options = {
