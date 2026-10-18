@@ -42,6 +42,7 @@
 | C | [Math Review for Macroeconomics](notebooks/appC-math-review-for-macroeconomics.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/appC-math-review-for-macroeconomics.ipynb) |
 | D | [DSGE Modeling with Python](notebooks/appD-dsge-modeling-with-python.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/appD-dsge-modeling-with-python.ipynb) |
 | E | [The DSGE Model of Smets and Wouters](notebooks/appE-the-dsge-model-of-smets-and-wouters.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/appE-the-dsge-model-of-smets-and-wouters.ipynb) |
+| F | [Growth and Development Accounting](notebooks/appF-growth-and-development-accounting.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/appF-growth-and-development-accounting.ipynb) |
 
 ## Repository layout
 
