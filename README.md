@@ -44,6 +44,7 @@
 | E | [The DSGE Model of Smets and Wouters](notebooks/appE-the-dsge-model-of-smets-and-wouters.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/appE-the-dsge-model-of-smets-and-wouters.ipynb) |
 | F | [Growth and Development Accounting](notebooks/appF-growth-and-development-accounting.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/appF-growth-and-development-accounting.ipynb) |
 | G | [Growth and Convergence Across Countries](notebooks/appG-growth-and-convergence-across-countries.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/appG-growth-and-convergence-across-countries.ipynb) |
+| H | [Augmented Solow Growth Model](notebooks/appH-augmented-solow-growth-model.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/appH-augmented-solow-growth-model.ipynb) |
 
 ## Repository layout
 
@@ -54,6 +55,7 @@
 | `data/chNN/` | The CSV files each notebook reads, plus a `README.md` with sources and a `build_data.py` that rebuilds the wider files. |
 | `data/appA/`, `images/appA/` | The data files and the Colab screenshots of Appendix A. (Appendix B downloads its data live from the original sources; Appendices D and E install the Snowdrop package and use the models and data that come with it.) |
 | `data/appG/` | The Penn World Table 10.0 panel of Appendix G (84 countries, 1960–2019), with its `build_data.py` and `README.md`. |
+| `data/appH/` | The data of Mankiw, Romer and Weil (1992) and their variables rebuilt from the Penn World Table 11.0 and the World Bank WDI (Appendix H), with `build_data.py` and `README.md`. |
 | `_quarto.yml`, `index.qmd`, `_includes/` | The Quarto book website, in a dark theme (the default, in the colors of the book cover) and a light one, switched with the button at the top right. `_includes/theme-*.scss` hold the colors; `_includes/plotly-theme.html` recolors the saved charts for the dark theme, so each chart is stored only once. The matplotlib charts of Appendices D and E are saved as light/dark image pairs, and `_includes/styles.css` shows the one that matches the theme. |
 
 ## Rebuilding
