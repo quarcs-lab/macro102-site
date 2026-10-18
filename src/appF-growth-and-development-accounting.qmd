@@ -336,10 +336,30 @@ def country_picker(value):
     options = sorted((name, code) for code, name in NAMES.items())
     return SelectMultiple(options=options, value=tuple(value), rows=8, description="economies", style=WIDE)
 
+PALETTE = [BLUE, RUST, GREEN, PURPLE, TEAL, "#d4a017", "#5aa0d8", "#0b4f47", "#c2185b", "#6d4c41",
+           "#00897b", "#7cb342", "#5e35b1", "#f4511e", "#3949ab", GRAY]
+
+def country_colors(codes):
+    """One fixed colour per economy: COUNTRIES first, in order, then the next free colours."""
+    colors = {}
+    order = list(COUNTRIES)
+    for code in codes:
+        if code not in order:
+            order.append(code)
+    for i, code in enumerate(order):
+        colors[NAMES[code]] = PALETTE[i % len(PALETTE)]
+    return colors
+```
+
+> **Python note.** `country_colors` returns a dictionary from country names to colours. Passing it to Plotly
+> Express as `color_discrete_map` keeps each economy's colour when you add or remove others in the menu.
+
+```{python}
 def output_figure(codes=tuple(COUNTRIES)):
     """Fig. 2: output per worker for the chosen economies, ratio scale."""
     chosen = pwt[pwt["iso3"].isin(codes)]
     fig = px.line(chosen, x="year", y="y_worker", color="country", log_y=True,
+                  color_discrete_map=country_colors(codes),
                   range_x=[1970, 2023], range_y=[500, 400000],
                   labels={"year": "Year", "y_worker": "Output per worker (2021 US$ at PPP, ratio scale)",
                           "country": ""},
@@ -1162,7 +1182,8 @@ def medians_figure(codes=tuple(COUNTRIES)):
         for year in medians["year"]:
             row = DA_PANEL[(DA_PANEL["iso3"] == code) & (DA_PANEL["year"] == year)]
             path.append(row["share_tfp"].iloc[0] if len(row) else None)
-        fig.add_trace(go.Scatter(x=medians["year"], y=path, mode="lines", line=dict(dash="dot", width=1.5),
+        fig.add_trace(go.Scatter(x=medians["year"], y=path, mode="lines",
+                                 line=dict(dash="dot", width=1.5, color=country_colors(codes)[NAMES[code]]),
                                  name=f"TFP share: {NAMES[code][:24]}"))
     fig.update_layout(title="TFP explains a growing share of income gaps", xaxis_title="Year",
                       yaxis=dict(title="Share of the gap with the United States", range=[0, 1]))
