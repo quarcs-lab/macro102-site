@@ -1,6 +1,6 @@
 # Data for Appendix A: Google Colab, Python Coding, and Data Science Libraries
 
-Read by `notebooks/appA-google-colab-python-and-data-science-libraries.ipynb` from
+Read by `notebooks/appA-google-colab-and-ai-powered-python.ipynb` from
 `https://raw.githubusercontent.com/quarcs-lab/macro102-site/main/data/appA/`.
 
 Appendix A teaches Google Colab, Python and the data science libraries of the book, with examples built on

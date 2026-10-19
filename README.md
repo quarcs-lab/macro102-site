@@ -37,7 +37,7 @@
 
 | Appendix | Notebook | Colab |
 |---|---|---|
-| A | [Google Colab, Python Coding, and Data Science Libraries](notebooks/appA-google-colab-python-and-data-science-libraries.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/appA-google-colab-python-and-data-science-libraries.ipynb) |
+| A | [Google Colab and AI-powered Python](notebooks/appA-google-colab-and-ai-powered-python.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/appA-google-colab-and-ai-powered-python.ipynb) |
 | B | [Accessing Macroeconomic Data with Python](notebooks/appB-accessing-macroeconomic-data-with-python.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/appB-accessing-macroeconomic-data-with-python.ipynb) |
 | C | [Math Review for Macroeconomics](notebooks/appC-math-review-for-macroeconomics.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/appC-math-review-for-macroeconomics.ipynb) |
 | D | [Growth and Development Accounting](notebooks/appD-growth-and-development-accounting.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/appD-growth-and-development-accounting.ipynb) |
