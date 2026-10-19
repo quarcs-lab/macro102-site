@@ -101,11 +101,42 @@ def slider_figure(make_figure, name, values, start, label=None):
 
 ## Model overview
 
-Earlier chapters let consumption be a fixed share of income. This chapter turns it into a choice. A household decides how much to spend now and how much to carry into the future, and it decides by weighing what an extra unit of spending is worth in each period against the price of moving resources from one period to the other. The **neoclassical consumption model** makes this trade-off precise. Its one character is a consumer called Irving, after the economist Irving Fisher.
+Meet a young islander of **Islandia**. He is still a student and earns little today, but once he starts working he expects to earn five times as much. Should he live on his small income now, or borrow against his richer future? Earlier chapters made consumption a fixed share of income; this chapter turns it into a choice, and we follow this islander through every step. The figures and the code of this notebook call him Irving, after the economist Irving Fisher, who first studied this choice.
 
-The overview has three blocks, each built from assumptions to solution to predictions. The first block is the two-period model: two period budgets merge into a single lifetime budget, Irving maximizes lifetime utility, the best plan satisfies the **Euler equation**, and with log utility we solve for consumption in closed form. The same block derives the real interest rate that a given growth rate of consumption requires. The second block stretches the model to many periods and reads it as the **permanent-income** and **life-cycle** hypotheses. The third adds taxes, a limit on borrowing and uncertain income, which deliver **Ricardian equivalence**, a much higher marginal propensity to consume for constrained households, the **random walk** of consumption and **precautionary saving**. Finally, `### The model in code` turns the results into Python functions and checks each one with numbers.
+::: {.callout-note .mo-bigidea title="The big idea"}
+**The question.** How does a household split its spending between today and the future, and why does it not simply spend what it earns each period?
 
-**Notation.** Irving takes his financial wealth $f_{\text{today}}$, his labor incomes $y_{\text{today}}$ and $y_{\text{future}}$, the real interest rate $R$ and his patience $\beta$ as given, and he chooses consumption $c_{\text{today}}$ and $c_{\text{future}}$. As in the textbook, the bar in $\bar{X}$ marks total wealth as a number that Irving cannot change. A prime marks marginal utility, $u'(c)$. The worked numbers use the baseline Irving of every figure in this notebook: $f_{\text{today}}=0$, $y_{\text{today}}=1$, $y_{\text{future}}=5$, $\beta=1$, and $R=0$ or $R=0.05$. Think of one unit as 10,000 dollars, so Irving looks like a student who expects to earn much more later.
+**The answer in one sentence.** Because each extra unit of consumption is worth less than the one before, a household spreads its **total wealth** over its lifetime, and the **Euler equation** sets how steeply its consumption rises or falls.
+
+**What goes in and what comes out.** We choose financial wealth, labor income in each period, the real interest rate and patience. The model gives back consumption in each period, saving or borrowing today, and the marginal propensity to consume out of extra income or a tax cut.
+
+**Road map.**
+
+1. [The two-period consumption model](#the-two-period-consumption-model): the [assumptions](#assumptions), [solving the model](#solving-the-model) step by step (lifetime budget, Euler equation, consumption plan, interest rate), and [what the model predicts](#what-the-model-predicts).
+2. [Permanent income and the life cycle](#permanent-income-and-the-life-cycle): the same logic over many periods, and saving for retirement.
+3. [Taxes, borrowing constraints and uncertainty](#taxes-borrowing-constraints-and-uncertainty): Ricardian equivalence, the islander who cannot borrow, the random walk and precautionary saving.
+4. [The model in code](#the-model-in-code): the key results as Python functions, checked with numbers. The figures below reuse them.
+
+**Notation.** As in the textbook, a bar marks total wealth $\bar{X}$, a number the islander takes as given and cannot change; the other givens ($f_{\text{today}}$, the incomes, $R$ and $\beta$) carry no bar, and the model determines consumption.
+
+| Symbol | Meaning | Type |
+|---|---|---|
+| $c_{\text{today}}, c_{\text{future}}$ | consumption today and in the future | endogenous |
+| $f_{\text{future}}$ | financial wealth carried into the future (a debt if negative) | endogenous |
+| $U$ | lifetime utility | endogenous |
+| $g_c$ | growth rate of consumption, $(c_{\text{future}} - c_{\text{today}})/c_{\text{today}}$ | endogenous |
+| $f_{\text{today}}$ | financial wealth at the start: a bank balance, stocks, bonds | parameter |
+| $y_{\text{today}}, y_{\text{future}}$ | labor income today and in the future | parameters |
+| $R$ | the real interest rate | parameter |
+| $\beta$ | patience: the weight on future utility | parameter |
+| $\bar{X}$ | total wealth: financial wealth plus human wealth | parameter |
+| $T, W$ | periods of life and periods of work (second block) | parameters |
+| $\tau_{\text{today}}, \tau_{\text{future}}$ | taxes (third block) | parameters |
+| $u(c)$, $u'(c)$ | flow utility, and marginal utility (a prime marks it) | notation |
+| $E[\cdot]$ | the average over the possible outcomes | notation |
+
+The worked numbers use the baseline islander of every figure in this notebook: $f_{\text{today}}=0$, $y_{\text{today}}=1$, $y_{\text{future}}=5$, $\beta=1$, and $R=0$ or $R=0.05$. Think of one unit as 10,000 dollars.
+:::
 
 <!-- cell -->
 
@@ -113,35 +144,37 @@ The overview has three blocks, each built from assumptions to solution to predic
 
 #### Assumptions
 
-**1. Two periods.** Time has only two periods, today and the future. The future is the last period of Irving's life, so he has no reason to leave anything over at the end.
+The islander's life is cut into two periods. Six rules describe his choice.
 
-**2. A budget in each period.** Irving starts today with financial wealth $f_{\text{today}}$ (a bank balance, stocks, bonds) and earns labor income $y_{\text{today}}$. What he does not spend raises his financial wealth to $f_{\text{future}}$:
+**1. Two periods.** There is today, and there is the future. The future is his last period, so nothing should be left over at its end.
+
+**2. A budget in each period.** Today he holds financial wealth $f_{\text{today}}$ and earns labor income $y_{\text{today}}$. Whatever he does not spend is added to his wealth, which becomes $f_{\text{future}}$:
 
 $$c_{\text{today}} + \underbrace{(f_{\text{future}} - f_{\text{today}})}_{\text{saving today}} = y_{\text{today}}.$$
 
-In the future he earns $y_{\text{future}}$, his savings come back with interest, and he spends everything:
+In the future he earns $y_{\text{future}}$, gets his savings back with interest, and spends it all:
 
 $$c_{\text{future}} = y_{\text{future}} + (1+R)\,f_{\text{future}}.$$
 
-Each line says "spending plus saving equals income" for one period. Saving can be negative: $f_{\text{future}} < 0$ means that Irving borrows today and pays back the loan with interest, $(1+R)$ times the amount, in the future.
+Each budget reads "spending plus saving equals income" for its own period. Saving may be negative. Then $f_{\text{future}} < 0$: the islander borrows today and repays $(1+R)$ times the loan in the future.
 
-**3. Free borrowing and lending.** Irving can save or borrow as much as he likes at the same real interest rate $R$. The third block drops this assumption.
+**3. Free borrowing and lending.** He can save or borrow any amount at one and the same real interest rate $R$. The third block removes this rule.
 
-**4. Flow utility with diminishing marginal utility.** Consuming $c$ in a period gives Irving $u(c)$ units of utility. More is always better, $u'(c) > 0$, but each extra unit adds less than the one before: the **marginal utility** $u'(c)$ falls as $c$ rises. The workhorse case is log utility,
+**4. Flow utility with diminishing marginal utility.** Consuming $c$ in a period yields $u(c)$ units of utility. More consumption always helps, $u'(c) > 0$, yet each extra unit helps less than the previous one: the **marginal utility** $u'(c)$ falls as $c$ grows. Our main case is log utility,
 
 $$u(c) = \log c \qquad\text{with}\qquad u'(c) = \frac{1}{c},$$
 
-where $u'(c)$ is the derivative of the log ([Appendix C.7](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.7-derivatives-and-marginal-thinking)). As a second example we use the square root, $u(c) = c^{1/2}$, whose marginal utility by the power rule is $u'(c) = \tfrac{1}{2}c^{-1/2} = 1/(2\sqrt{c})$. Fig. 1 draws both curves.
+where $u'(c)$ is the derivative of the log ([Appendix C.7](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.7-derivatives-and-marginal-thinking)). Our second case is the square root, $u(c) = c^{1/2}$. By the power rule its marginal utility is $u'(c) = \tfrac{1}{2}c^{-1/2} = 1/(2\sqrt{c})$. Fig. 1 plots both.
 
-**5. Lifetime utility.** Irving adds up the utility of the two periods and gives the future a weight $\beta$:
+**5. Lifetime utility.** The islander sums the utility of both periods, and weighs the future by $\beta$:
 
 $$U = u(c_{\text{today}}) + \beta\,u(c_{\text{future}}). \tag{1}$$
 
-The weight $\beta$ measures **patience**. With $\beta = 1$ a unit of utility counts the same whenever it arrives; with $\beta < 1$, say $0.9$, Irving would rather have it sooner.
+The weight $\beta$ is his **patience**. With $\beta = 1$, a unit of utility counts the same today and later. With $\beta < 1$, for example $0.9$, he prefers to get it sooner.
 
-**6. Optimization.** Irving chooses $c_{\text{today}}$ and $c_{\text{future}}$ to make $U$ as large as possible while paying for his plan.
+**6. Optimization.** He picks $c_{\text{today}}$ and $c_{\text{future}}$ to make $U$ as large as he can, subject to paying for the plan.
 
-| Building block | Equation | Taken as given by Irving |
+| Building block | Equation | Taken as given by the islander |
 |---|---|---|
 | budget today | $c_{\text{today}} + (f_{\text{future}} - f_{\text{today}}) = y_{\text{today}}$ | $f_{\text{today}}$, $y_{\text{today}}$ |
 | budget in the future | $c_{\text{future}} = y_{\text{future}} + (1+R)f_{\text{future}}$ | $y_{\text{future}}$, $R$ |
@@ -149,49 +182,87 @@ The weight $\beta$ measures **patience**. With $\beta = 1$ a unit of utility cou
 | lifetime utility | $U = u(c_{\text{today}}) + \beta u(c_{\text{future}})$ | $\beta$ |
 | behavior | choose $c_{\text{today}}$, $c_{\text{future}}$ to maximize $U$ | |
 
+::: {.mo-takeaway}
+Extra consumption brings less and less utility, so the islander gains from spreading his spending evenly over his life.
+:::
+
+::: {.callout-note .mo-check title="Check your understanding"}
+**1.** With log utility and $\beta = 1$, the islander consumes 3 today and 3 in the future. What is his lifetime utility $U$?
+
+<details><summary>Answer</summary>
+
+By equation (1), $U = \log 3 + 1 \times \log 3 = 2\log 3 \approx 2.197$.
+
+</details>
+
+**2.** With log utility, compare the marginal utility of the islander's first unit of income today with that of his future income of 5. What does the comparison suggest he should do?
+
+<details><summary>Answer</summary>
+
+Rule 4 gives $u'(1) = 1$ and $u'(5) = 1/5 = 0.2$. A unit spent when he is poor (today) is worth five times a unit spent when he is rich (the future). So moving some spending from the future to today, by borrowing, raises his lifetime utility.
+
+</details>
+:::
+
 <!-- cell -->
 
 #### Solving the model
 
-**Step 1: one budget for a whole lifetime.** The two budgets are linked by $f_{\text{future}}$, the wealth Irving carries from today into the future. Solve the future budget for it: subtract $y_{\text{future}}$ from both sides and divide by $1+R$,
+**Step 1: one budget for a whole lifetime.** The link between the two budgets is $f_{\text{future}}$, the wealth carried from today into the future. Solve the future budget for it, by subtracting $y_{\text{future}}$ and dividing by $1+R$:
 
 $$f_{\text{future}} = \frac{c_{\text{future}} - y_{\text{future}}}{1+R}.$$
 
-Put this into today's budget:
+Substitute it into today's budget:
 
 $$c_{\text{today}} + \frac{c_{\text{future}} - y_{\text{future}}}{1+R} - f_{\text{today}} = y_{\text{today}}.$$
 
-Split the fraction into $c_{\text{future}}/(1+R) - y_{\text{future}}/(1+R)$, then move the income terms and $f_{\text{today}}$ to the right-hand side:
+Split the fraction into $c_{\text{future}}/(1+R) - y_{\text{future}}/(1+R)$, and move $f_{\text{today}}$ and the income terms to the right:
 
-$$c_{\text{today}}+\frac{c_{\text{future}}}{1+R} \;=\; \underbrace{f_{\text{today}}}_{\text{financial wealth}}+\underbrace{y_{\text{today}}+\frac{y_{\text{future}}}{1+R}}_{\text{human wealth}} \;\equiv\; \bar{X}. \tag{2}$$
+$$c_{\text{today}}+\frac{c_{\text{future}}}{1+R} \;=\; \underbrace{f_{\text{today}}}_{\text{financial wealth}}+\underbrace{y_{\text{today}}+\frac{y_{\text{future}}}{1+R}}_{\text{human wealth}}.$$
 
-This is the **intertemporal budget constraint**. Dividing a future amount by $1+R$ turns it into a **present value** ([Appendix C.12](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.12-present-value-and-discounting)): one dollar put aside today grows to $1+R$ dollars, so $1+R$ future dollars are worth exactly one dollar now. Both sides of equation (2) are present values. The left side is the present value of everything Irving will spend. The right side is his **total wealth** $\bar{X}$: his **financial wealth** plus his **human wealth**, the present value of his labor income.
+Dividing a future amount by $1+R$ gives its **present value** ([Appendix C.12](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.12-present-value-and-discounting)). One dollar saved today becomes $1+R$ dollars later, so $1+R$ future dollars are worth one dollar now. Both sides are therefore present values.
 
-*Intuition.* Equation (2) does not tie spending in a period to income in that period. It only requires the lifetime plan to be paid for. A student who earns little today can spend more than he earns, as long as his later income can repay the loan with interest. For the baseline Irving, $\bar{X} = 0 + 1 + 5 = 6$ when $R = 0$, and $\bar{X} = 1 + 5/1.05 = 5.762$ when $R = 0.05$.
+::: {.callout-important .mo-key title="Key result: the intertemporal budget constraint"}
+$$c_{\text{today}}+\frac{c_{\text{future}}}{1+R} \;=\; f_{\text{today}}+y_{\text{today}}+\frac{y_{\text{future}}}{1+R} \;\equiv\; \bar{X} \tag{2}$$
 
-Equation (2) can also be read as a straight line in a diagram with $c_{\text{today}}$ on the horizontal axis: $c_{\text{future}} = (1+R)(\bar{X} - c_{\text{today}})$. Its slope is $-(1+R)$. Each unit consumed today costs $1+R$ units of future consumption, so $1+R$ is the **price of consumption today** in terms of consumption later.
+The present value of lifetime spending (left) equals **total wealth** $\bar{X}$ (right): **financial wealth** plus **human wealth**, the present value of labor income.
 
-**Step 2: the condition for the best plan.** We find it in two ways, first with a thought experiment and then with calculus.
+**Islandia in numbers.** For the baseline islander, $\bar{X} = 0 + 1 + 5 = 6$ when $R = 0$, and $\bar{X} = 1 + 5/1.05 = 5.762$ when $R = 0.05$.
+:::
 
-*A small move.* Start from any plan that satisfies the budget and let Irving spend one unit less today and save it. He loses $u'(c_{\text{today}})$ units of utility today. The saved unit becomes $1+R$ units in the future, and each of those is worth $\beta\,u'(c_{\text{future}})$ units of utility measured from today. If the gain is larger than the loss, the move raises $U$ and Irving should save more. If it is smaller, the opposite move, borrowing one more unit to spend today, raises $U$. Only when the two are equal is no move left that helps:
+::: {.callout-tip .mo-inwords title="In words"}
+Equation (2) does not ask the islander to pay for each period out of that period's income. It asks only that the whole lifetime plan be paid for. So the student may spend more than he earns today, as long as his later wages can repay the loan with interest.
+:::
 
-$$u'(c_{\text{today}}) = \beta(1+R)\,u'(c_{\text{future}}). \tag{3}$$
+Read equation (2) as a straight line, with $c_{\text{today}}$ on the horizontal axis: $c_{\text{future}} = (1+R)(\bar{X} - c_{\text{today}})$. Its slope is $-(1+R)$. Each unit eaten today costs $1+R$ units later, so $1+R$ is the **price of consumption today**, measured in future consumption.
 
-This is the **Euler equation** for consumption.
+**Step 2: the condition for the best plan.** We find it twice: with a thought experiment, then with calculus.
 
-*With calculus* ([Appendix C.8](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.8-optimization)). Use the budget line to replace $c_{\text{future}}$ by $(1+R)(\bar{X} - c_{\text{today}})$. Lifetime utility then depends on one choice only:
+*A small move.* Take any affordable plan, and let the islander spend one unit less today and save it. Today he loses $u'(c_{\text{today}})$ units of utility. The saved unit grows into $1+R$ units in the future, each worth $\beta\,u'(c_{\text{future}})$ in today's utility. If the gain beats the loss, saving more raises $U$. If the loss is larger, the reverse move (borrow one more unit and spend it today) raises $U$. No move helps only when gain and loss are equal:
+
+$$u'(c_{\text{today}}) = \beta(1+R)\,u'(c_{\text{future}}).$$
+
+*With calculus* ([Appendix C.8](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.8-optimization)). The budget line lets us replace $c_{\text{future}}$ by $(1+R)(\bar{X} - c_{\text{today}})$. Then lifetime utility depends on a single choice:
 
 $$U(c_{\text{today}}) = u(c_{\text{today}}) + \beta\,u\big((1+R)(\bar{X}-c_{\text{today}})\big).$$
 
-At the best $c_{\text{today}}$ the derivative of $U$ is zero. By the chain rule the derivative of the second term is $\beta\,u'(c_{\text{future}})$ times the derivative of the inside, $-(1+R)$. So
+At the best $c_{\text{today}}$, the derivative of $U$ is zero. By the chain rule, the second term's derivative is $\beta\,u'(c_{\text{future}})$ times the derivative of the inside, which is $-(1+R)$:
 
-$$\frac{dU}{dc_{\text{today}}} = u'(c_{\text{today}}) - \beta(1+R)\,u'(c_{\text{future}}) = 0,$$
+$$\frac{dU}{dc_{\text{today}}} = u'(c_{\text{today}}) - \beta(1+R)\,u'(c_{\text{future}}) = 0.$$
 
-which is equation (3). Since $u'$ falls as consumption rises, this derivative is positive when $c_{\text{today}}$ is small and negative when it is large, so the zero is a maximum.
+Both routes give the same condition. Because $u'$ falls as consumption rises, the derivative is positive for a small $c_{\text{today}}$ and negative for a large one, so its zero is a maximum.
 
-*Intuition.* The left side of equation (3) is the value of spending a marginal unit now; the right side is the value of saving it. A plan is best when Irving is indifferent at the margin. Because marginal utility falls with consumption, the Euler equation is also a statement about the shape of the plan: if $\beta(1+R) = 1$, it forces $u'(c_{\text{today}}) = u'(c_{\text{future}})$, and so equal consumption in both periods.
+::: {.callout-important .mo-key title="Key result: the Euler equation"}
+$$u'(c_{\text{today}}) = \beta(1+R)\,u'(c_{\text{future}}) \tag{3}$$
 
-**Step 3: the Euler equation with log utility.** Put $u'(c) = 1/c$ into equation (3):
+The value of spending one more unit today (left) equals the value of saving it for the future (right).
+:::
+
+::: {.callout-tip .mo-inwords title="In words"}
+At the best plan, the islander does not care whether he spends or saves his last unit. Since marginal utility falls with consumption, the Euler equation also fixes the shape of the plan. When $\beta(1+R) = 1$, it requires $u'(c_{\text{today}}) = u'(c_{\text{future}})$, which means equal consumption in both periods.
+:::
+
+**Step 3: the Euler equation with log utility.** Insert $u'(c) = 1/c$ into equation (3):
 
 $$\frac{1}{c_{\text{today}}} = \beta(1+R)\,\frac{1}{c_{\text{future}}}.$$
 
@@ -199,58 +270,90 @@ Multiply both sides by $c_{\text{future}}$:
 
 $$\frac{c_{\text{future}}}{c_{\text{today}}} = \beta(1+R). \tag{4}$$
 
-The left side is one plus the growth rate of consumption, $1 + g_c$ with $g_c \equiv (c_{\text{future}} - c_{\text{today}})/c_{\text{today}}$. Taking logs of both sides ([Appendix C.4](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.4-logarithms)) gives $\log(1+g_c) = \log\beta + \log(1+R)$, and since $\log(1+x) \approx x$ for small $x$ ([Appendix C.6](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.6-approximations)),
+The left side equals $1 + g_c$, one plus the growth rate of consumption. Take logs of both sides ([Appendix C.4](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.4-logarithms)): $\log(1+g_c) = \log\beta + \log(1+R)$. For small $x$, $\log(1+x) \approx x$ ([Appendix C.6](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.6-approximations)), so
 
 $$g_c \approx R + \log\beta.$$
 
-*Intuition.* Consumption grows faster when saving pays more (a higher $R$) and when Irving cares more about the future (a higher $\beta$; impatience makes $\log\beta$ negative and pulls growth down). Equation (4) fixes the *slope* of the consumption path, but not its *level*. Income does not appear in it at all.
+Consumption grows faster when saving pays more (a higher $R$) and when the islander values the future more (a higher $\beta$; with impatience, $\log\beta < 0$ and growth is lower). Equation (4) sets the *slope* of the consumption path, not its *level*, and income is absent from it.
 
-**Step 4: solving for consumption.** Equations (4) and (2) are two equations in the two unknowns $c_{\text{today}}$ and $c_{\text{future}}$. From (4), $c_{\text{future}} = \beta(1+R)\,c_{\text{today}}$. Substitute this into (2); the factor $1+R$ cancels:
+**Step 4: solving for consumption.** Equations (4) and (2) are two equations in the two unknowns. From (4), $c_{\text{future}} = \beta(1+R)\,c_{\text{today}}$. Substitute this into (2); the factor $1+R$ cancels:
 
 $$c_{\text{today}} + \frac{\beta(1+R)\,c_{\text{today}}}{1+R} = c_{\text{today}} + \beta\,c_{\text{today}} = (1+\beta)\,c_{\text{today}} = \bar{X}.$$
 
-Divide by $1+\beta$, then return to equation (4) for the future:
+Divide by $1+\beta$, and go back to equation (4) for the future. The textbook case $\beta = 1$ then has $1+\beta = 2$.
 
-$$c_{\text{today}} = \frac{1}{1+\beta}\,\bar{X}, \qquad c_{\text{future}} = \frac{\beta(1+R)}{1+\beta}\,\bar{X}. \tag{5}$$
+::: {.callout-important .mo-key title="Key result: the consumption plan with log utility"}
+$$c_{\text{today}} = \frac{1}{1+\beta}\,\bar{X}, \qquad c_{\text{future}} = \frac{\beta(1+R)}{1+\beta}\,\bar{X} \tag{5}$$
 
-The textbook solves the case $\beta = 1$, where $1+\beta = 2$:
+$$c_{\text{today}} = \tfrac{1}{2}\,\bar{X}, \qquad c_{\text{future}} = \tfrac{1}{2}\,(1+R)\,\bar{X} \quad\text{when } \beta = 1 \tag{6}$$
 
-$$c_{\text{today}} = \tfrac{1}{2}\,\bar{X}, \qquad c_{\text{future}} = \tfrac{1}{2}\,(1+R)\,\bar{X}. \tag{6}$$
+**Islandia in numbers.** With $R = 0$: $c_{\text{today}} = c_{\text{future}} = 6/2 = 3$. The islander earns 1 but spends 3, so he borrows 2 and repays it out of his later 5. With $R = 0.05$: $c_{\text{today}} = 5.762/2 = 2.881$ and $c_{\text{future}} = 1.05 \times 2.881 = 3.025$. He borrows $1.881$, repays $1.05 \times 1.881 = 1.975$, and has $5 - 1.975 = 3.025$ left to spend.
+:::
 
-*Intuition.* With log utility Irving spends a fixed share of his total wealth today, $1/(1+\beta)$, whatever the interest rate and whatever the timing of his income. A patient Irving ($\beta = 1$) spends half; a less patient one spends more than half. The rest he saves in present-value terms, and in the future he spends it together with the interest it earned.
+::: {.callout-tip .mo-inwords title="In words"}
+With log utility, the islander spends a fixed share $1/(1+\beta)$ of his total wealth today, whatever the interest rate and whenever his income arrives. A patient islander spends half; an impatient one spends more than half. What he does not spend today, he spends in the future, together with the interest it earned.
+:::
 
-For the baseline Irving with $R = 0$: $c_{\text{today}} = c_{\text{future}} = 6/2 = 3$. He earns 1 but spends 3, so he borrows 2 today and repays 2 out of the 5 he earns later. With $R = 0.05$: $c_{\text{today}} = 5.762/2 = 2.881$ and $c_{\text{future}} = 1.05 \times 2.881 = 3.025$. He borrows $2.881 - 1 = 1.881$ and repays $1.05 \times 1.881 = 1.975$, which leaves $5 - 1.975 = 3.025$ to spend, exactly the plan.
+**Step 5: the interest rate that matches a growth rate.** The islander takes $R$ as given and chooses how fast his consumption grows. For a whole economy the logic runs the other way. Growth models, such as the Solow–Romer model of [Chapter 6](https://quarcs-lab.github.io/macro102-site/notebooks/ch06-growth-and-ideas.html), decide how fast output and consumption per person grow. The Euler equation then gives the real interest rate at which islanders are happy to consume along that path. Write $1 + g_c$ for the left side of equation (4), divide by $\beta$ and subtract 1:
 
-**Step 5: the interest rate that matches a growth rate.** Irving takes $R$ as given and picks the growth of his consumption. For the economy as a whole the logic runs the other way. The long-run growth models, such as the Solow–Romer model of [Chapter 6](https://quarcs-lab.github.io/macro102-site/notebooks/ch06-growth-and-ideas.html), pin down how fast output and consumption per person grow. The Euler equation then tells us which real interest rate makes households content to consume along that path. Write $1 + g_c$ for the left side of equation (4), divide both sides by $\beta$ and subtract 1:
+$$1+R = \frac{1+g_c}{\beta}.$$
 
-$$1+R = \frac{1+g_c}{\beta} \qquad\Longrightarrow\qquad R = \frac{1+g_c}{\beta} - 1. \tag{7}$$
+::: {.callout-important .mo-key title="Key result: the interest rate that growth requires"}
+$$R = \frac{1+g_c}{\beta} - 1 \tag{7}$$
 
-Take one period to be one year and let consumption grow by 2 percent a year, $g_c = 0.02$:
+**Islandia in numbers.** Let one period be a year, and let consumption grow by 2 percent a year, $g_c = 0.02$. With $\beta = 1$, $R = 1.02 - 1 = 0.02$: the interest rate equals the growth rate, 2 percent. With $\beta = 0.99$, $R = 1.02/0.99 - 1 = 0.0303$, about 3.0 percent. The log approximation agrees: $R \approx g_c - \log\beta = 0.02 + 0.01005$.
+:::
 
-- with $\beta = 1$: $R = 1.02/1 - 1 = 0.02$, so the interest rate equals the growth rate, **2 percent**;
-- with $\beta = 0.99$: $R = 1.02/0.99 - 1 = 0.0303$, about **3.0 percent**. The log approximation of step 3 gives the same answer, $R \approx g_c - \log\beta = 0.02 + 0.01005 \approx 3.0\%$.
+::: {.callout-tip .mo-inwords title="In words"}
+An impatient islander accepts a rising consumption path only if saving pays a premium of about $-\log\beta$ a year. With $\beta$ close to 1 the premium is small. That is why real interest rates and growth rates tend to be of the same size, a few percent a year. Faster growth raises the required interest rate about one for one.
+:::
 
-*Intuition.* An impatient household must be paid a premium, about $-\log\beta$ per year, to accept a consumption path that rises over time. Since $\beta$ is close to 1, the premium is small, which is why real interest rates and growth rates tend to be numbers of the same size, a few percent a year. Faster growth raises the required interest rate roughly one for one.
+**Step 6: what a higher interest rate does.** With log utility, $R$ is absent from $c_{\text{today}} = \bar{X}/(1+\beta)$. It acts only through total wealth: a higher $R$ lowers the present value of future income, $y_{\text{future}}/(1+R)$, and so lowers $\bar{X}$ and $c_{\text{today}}$. This is the **wealth effect** of the interest rate.
 
-**Step 6: what a higher interest rate does.** With log utility, $R$ does not appear directly in $c_{\text{today}} = \bar{X}/(1+\beta)$. It works only through total wealth: a higher $R$ shrinks the present value of future income, $y_{\text{future}}/(1+R)$, so $\bar{X}$ and $c_{\text{today}}$ fall. This is the **wealth effect** of the interest rate.
+Beneath it, two forces push in opposite directions:
 
-Underneath, two other forces pull in opposite directions. The **substitution effect**: a higher $R$ raises the price of consumption today, $1+R$, so Irving shifts spending toward the future. The **income effect**: a saver earns more on what he saves and can afford more in both periods, including today. With log utility the two cancel exactly. To see it, take an Irving whose wealth is all financial, $y_{\text{today}} = y_{\text{future}} = 0$. Then $\bar{X} = f_{\text{today}}$ does not depend on $R$, and neither does $c_{\text{today}} = f_{\text{today}}/(1+\beta)$.
+- The **substitution effect.** A higher $R$ makes consumption today more expensive (its price is $1+R$), so the islander moves spending toward the future.
+- The **income effect.** A saver earns more on his savings and can afford more in both periods, today included.
 
-With square-root utility the two effects no longer cancel. Put $u'(c) = 1/(2\sqrt{c})$ into equation (3); the factors $1/2$ cancel:
+With log utility the two cancel exactly. To see it, take an islander whose wealth is all financial, $y_{\text{today}} = y_{\text{future}} = 0$. Then $\bar{X} = f_{\text{today}}$ does not depend on $R$, and neither does $c_{\text{today}} = f_{\text{today}}/(1+\beta)$.
+
+With square-root utility they do not cancel. Insert $u'(c) = 1/(2\sqrt{c})$ into equation (3); the factors $1/2$ drop out:
 
 $$\frac{1}{\sqrt{c_{\text{today}}}} = \beta(1+R)\frac{1}{\sqrt{c_{\text{future}}}} \quad\Longrightarrow\quad \sqrt{\frac{c_{\text{future}}}{c_{\text{today}}}} = \beta(1+R) \quad\Longrightarrow\quad \frac{c_{\text{future}}}{c_{\text{today}}} = \beta^2(1+R)^2.$$
 
-Substitute $c_{\text{future}} = \beta^2(1+R)^2 c_{\text{today}}$ into equation (2); one factor $1+R$ cancels, leaving $c_{\text{today}}\,[1 + \beta^2(1+R)] = \bar{X}$, so
+Substitute $c_{\text{future}} = \beta^2(1+R)^2 c_{\text{today}}$ into equation (2). One factor $1+R$ cancels, and $c_{\text{today}}\,[1 + \beta^2(1+R)] = \bar{X}$, so
 
 $$c_{\text{today}} = \frac{\bar{X}}{1+\beta^2(1+R)}.$$
 
-Now $R$ sits in the denominator too: even when $\bar{X}$ does not change, a higher $R$ lowers $c_{\text{today}}$. With this utility function the substitution effect wins. In general the sign of the effect of $R$ on consumption today depends on the shape of $u$, so it can go either way. For the baseline Irving with $R = 0.05$, square-root utility gives $c_{\text{today}} = 5.762/2.05 = 2.811$, a little less than the 2.881 of log utility.
+Now $R$ also sits in the denominator: even with $\bar{X}$ fixed, a higher $R$ lowers $c_{\text{today}}$, so the substitution effect wins. In general, the sign of the effect of $R$ on consumption today depends on the shape of $u$. For the baseline islander with $R = 0.05$, square-root utility gives $c_{\text{today}} = 5.762/2.05 = 2.811$, a bit below the 2.881 of log utility.
+
+::: {.mo-takeaway}
+The islander spends a fixed share of his total wealth today; patience and the interest rate set how his consumption grows.
+:::
+
+::: {.callout-note .mo-check title="Check your understanding"}
+**1.** The baseline islander faces $R = 0.05$ but is less patient, $\beta = 0.9$. How much does he consume today and in the future?
+
+<details><summary>Answer</summary>
+
+Total wealth is still $\bar{X} = 5.762$. Equation (5) gives $c_{\text{today}} = 5.762/1.9 \approx 3.033$ and $c_{\text{future}} = 0.9 \times 1.05 \times 3.033 \approx 2.866$. Since $\beta(1+R) = 0.945 < 1$, his consumption falls over time (equation 4).
+
+</details>
+
+**2.** His income is 1 today and 5 later, yet with $R = 0$ and $\beta = 1$ he consumes the same amount in both periods. Why does the timing of his income not matter?
+
+<details><summary>Answer</summary>
+
+Income enters only through total wealth $\bar{X}$ in equation (2). The Euler equation (4) then sets $c_{\text{future}}/c_{\text{today}} = \beta(1+R) = 1$, so consumption is flat. Borrowing and lending fill the gap between the income path and the consumption path.
+
+</details>
+:::
 
 <!-- cell -->
 
 #### What the model predicts
 
-**Comparative statics.** Equation (5) gives the effect of every parameter on consumption. Income and wealth enter $\bar{X}$ linearly, so their effects are constant numbers: the **marginal propensities to consume** (MPC), the rise in $c_{\text{today}}$ per extra unit of resources. For $R$ and $\beta$ we take logs of equation (5): $\log c_{\text{today}} = \log\bar{X} - \log(1+\beta)$ and $\log c_{\text{future}} = \log\beta + \log(1+R) + \log\bar{X} - \log(1+\beta)$. Write $\sigma \equiv [y_{\text{future}}/(1+R)]/\bar{X}$ for the share of total wealth that comes from future income. A 1 percent rise in $1+R$ lowers $y_{\text{future}}/(1+R)$ by about 1 percent, and so lowers $\bar{X}$ by about $\sigma$ percent. A 1 percent rise in $\beta$ raises $1+\beta$ by $\beta/(1+\beta)$ percent.
+**Comparative statics.** Equation (5) tells us how each parameter moves consumption. Income and wealth enter $\bar{X}$ linearly, so their effects are constants: the **marginal propensities to consume** (MPC), the rise in $c_{\text{today}}$ per extra unit of resources. For $R$ and $\beta$, take logs of equation (5): $\log c_{\text{today}} = \log\bar{X} - \log(1+\beta)$ and $\log c_{\text{future}} = \log\beta + \log(1+R) + \log\bar{X} - \log(1+\beta)$. Let $\sigma \equiv [y_{\text{future}}/(1+R)]/\bar{X}$ be the share of total wealth that comes from future income. A 1 percent rise in $1+R$ cuts $y_{\text{future}}/(1+R)$ by about 1 percent, and therefore cuts $\bar{X}$ by about $\sigma$ percent. A 1 percent rise in $\beta$ raises $1+\beta$ by $\beta/(1+\beta)$ percent.
 
 | Change | Effect on $c_{\text{today}}$ | Effect on $c_{\text{future}}$ | Baseline ($\beta = 1$, $R = 0.05$) | The budget line |
 |---|---|---|---|---|
@@ -259,16 +362,38 @@ Now $R$ sits in the denominator too: even when $\bar{X}$ does not change, a high
 | $1+R$ up by 1% | $-\sigma$ percent | $+(1-\sigma)$ percent | $-0.83\%$ and $+0.17\%$ | pivots around the no-borrowing point |
 | $\beta$ up by 1% | $-\dfrac{\beta}{1+\beta}$ percent | $+\dfrac{1}{1+\beta}$ percent | $-0.5\%$ and $+0.5\%$ | does not move |
 
-With baseline numbers, $\sigma = 4.762/5.762 = 0.83$. The two elasticities for $1+R$ differ by exactly 1, $(1-\sigma) - (-\sigma) = 1$, as equation (4) requires: a 1 percent rise in $1+R$ raises $c_{\text{future}}/c_{\text{today}}$ by 1 percent. The "no-borrowing point" is the plan $c_{\text{today}} = f_{\text{today}} + y_{\text{today}}$, $c_{\text{future}} = y_{\text{future}}$, which Irving can afford at any interest rate.
+In the baseline, $\sigma = 4.762/5.762 = 0.83$. The two elasticities for $1+R$ differ by exactly 1, $(1-\sigma) - (-\sigma) = 1$, just as equation (4) demands: a 1 percent rise in $1+R$ raises $c_{\text{future}}/c_{\text{today}}$ by 1 percent. The "no-borrowing point" is the plan $c_{\text{today}} = f_{\text{today}} + y_{\text{today}}$, $c_{\text{future}} = y_{\text{future}}$, which is affordable at any interest rate.
 
 **The model's main predictions.**
 
-- **Consumption follows total wealth, not current income.** What matters is $\bar{X}$, so a student with low income and high prospects consumes far more than he earns.
-- **Windfalls are spread out.** With $\beta = 1$, an extra unit of income today raises consumption today by only one half; the other half is saved for the future.
-- **Future income counts for a little less,** because it is discounted by $1+R$ before it enters total wealth.
-- **The growth of consumption is set by $\beta(1+R)$** (equation 4), whatever the timing of income.
-- **Interest rates and growth rates are linked** (equation 7): with $\beta = 1$ they are equal, and impatience adds a small premium.
-- **A higher interest rate** lowers consumption today through the wealth effect when Irving has future labor income. Its full effect depends on the substitution and income effects, which cancel only with log utility.
+- **Consumption follows total wealth, not current income.** Only $\bar{X}$ matters, so a student with low income and bright prospects consumes far more than he earns.
+- **Windfalls are spread out.** With $\beta = 1$, one extra unit of income today raises consumption today by just one half; the other half is saved for later.
+- **Future income weighs a little less,** because it is discounted by $1+R$ before it enters total wealth.
+- **$\beta(1+R)$ sets the growth of consumption** (equation 4), whenever the income arrives.
+- **Interest rates and growth rates move together** (equation 7): they are equal when $\beta = 1$, and impatience adds a small premium.
+- **A higher interest rate** lowers consumption today through the wealth effect when the islander has future labor income. Its full effect depends on the substitution and income effects, which cancel only with log utility.
+
+::: {.mo-takeaway}
+Consumption tracks lifetime wealth, so a windfall today is shared between today and the future.
+:::
+
+::: {.callout-note .mo-check title="Check your understanding"}
+**1.** With $\beta = 1$ and $R = 0.05$, the baseline islander receives a gift of 0.2 today. By how much do his consumption today and in the future rise?
+
+<details><summary>Answer</summary>
+
+The gift raises $\bar{X}$ by 0.2. By equation (6), $c_{\text{today}}$ rises by $0.2/2 = 0.1$, and $c_{\text{future}}$ by $1.05 \times 0.1 = 0.105$. The MPC today is one half.
+
+</details>
+
+**2.** The interest rate rises. Why does the student's consumption today fall, while that of an islander who lives on his bank balance alone does not change (log utility)?
+
+<details><summary>Answer</summary>
+
+By equation (5), $c_{\text{today}}$ moves only with $\bar{X}$. The student's $\bar{X}$ holds future wages, whose present value $y_{\text{future}}/(1+R)$ falls: the wealth effect. The other islander's $\bar{X} = f_{\text{today}}$ does not depend on $R$, and with log utility the substitution and income effects cancel.
+
+</details>
+:::
 
 <!-- cell -->
 
@@ -276,27 +401,53 @@ With baseline numbers, $\sigma = 4.762/5.762 = 0.83$. The two elasticities for $
 
 #### Assumptions
 
-Keep log utility and the Euler equation, but let Irving live for $T$ periods, $t = 1, 2, \dots, T$, with labor income $y_1, y_2, \dots, y_T$. To keep the algebra transparent, set $R = 0$ and $\beta = 1$. Irving can still borrow and lend freely, and he starts with financial wealth $f_{\text{today}}$.
+Keep log utility and the Euler equation, but now the islander lives for $T$ periods, $t = 1, 2, \dots, T$, and earns $y_1, y_2, \dots, y_T$. To keep the algebra simple, set $R = 0$ and $\beta = 1$. He still borrows and lends freely, and starts with financial wealth $f_{\text{today}}$.
 
 #### Solving the model
 
-**Step 1: a flat consumption path.** The small-move argument of step 2 above works between any two neighboring periods, so equation (4) holds for each pair: $c_{t+1}/c_t = \beta(1+R) = 1$. Consumption is the same number $c$ in every period.
+**Step 1: a flat consumption path.** The small-move argument of step 2 above works between any two neighboring periods. So equation (4) holds for every pair: $c_{t+1}/c_t = \beta(1+R) = 1$, and consumption is the same number $c$ in every period.
 
-**Step 2: the lifetime budget.** With $R = 0$ no present values are needed, and the budget of equation (2) becomes a simple sum: the total spent over a lifetime, $T \times c$, equals financial wealth plus all labor income, $\bar{X} = f_{\text{today}} + y_1 + y_2 + \dots + y_T$. Dividing by $T$:
+**Step 2: the lifetime budget.** With $R = 0$ there is no discounting, and the budget of equation (2) is a plain sum. Lifetime spending, $T \times c$, equals financial wealth plus all labor income, $\bar{X} = f_{\text{today}} + y_1 + y_2 + \dots + y_T$. Divide by $T$:
 
-$$c = \frac{\bar{X}}{T} = \frac{f_{\text{today}} + y_1 + y_2 + \dots + y_T}{T}. \tag{8}$$
+::: {.callout-important .mo-key title="Key result: permanent income"}
+$$c = \frac{\bar{X}}{T} = \frac{f_{\text{today}} + y_1 + y_2 + \dots + y_T}{T} \tag{8}$$
 
-With $T = 2$ this is equation (6) with $R = 0$.
+With $T = 2$ this is equation (6) with $R = 0$. An extra unit of income in a single period raises consumption by only $1/T$; a raise of 1 in every period raises it by $T/T = 1$.
+:::
 
-*Intuition.* Irving spends the per-period average of his lifetime resources, his **permanent income**, in every period. An extra unit of income in any single period raises $\bar{X}$ by 1 and consumption by only $1/T$: the MPC out of a temporary windfall is $1/T$, one half with two periods and $1/40$ with 40 periods left. A *permanent* raise of 1 in every period raises $\bar{X}$ by $T$ and consumption by $T/T = 1$.
+::: {.callout-tip .mo-inwords title="In words"}
+In every period the islander spends the per-period average of his lifetime resources, his **permanent income**. A one-time windfall is spread over his whole life: with 40 periods left, he spends only $1/40$ of it each period. A permanent raise, in contrast, is spent in full.
+:::
 
-**Step 3: saving for retirement.** Let Irving work for the first $W$ periods at income $y$ and then retire, with no labor income, for the last $T - W$ periods. By equation (8), $c = Wy/T$. While he works he saves $y - c = y(T-W)/T$ each period, so his wealth climbs to $W \times y(T-W)/T$ on the day he retires; in retirement he spends $c$ out of that wealth until it reaches zero in the last period. With $T = 60$, $W = 40$ and $y = 1$: $c = 40/60 = 0.667$, he saves $0.333$ a year, and his wealth peaks at $40 \times 0.333 = 13.3$, more than 13 years of income.
+**Step 3: saving for retirement.** Let the islander work for the first $W$ periods at income $y$, then retire with no labor income for the last $T - W$ periods. By equation (8), $c = Wy/T$. While working he saves $y - c = y(T-W)/T$ per period, so on the day he retires his wealth reaches $W \times y(T-W)/T$. In retirement he lives on $c$ out of that wealth until it hits zero in the last period. With $T = 60$, $W = 40$ and $y = 1$: $c = 40/60 = 0.667$, he saves $0.333$ a year, and his wealth peaks at $40 \times 0.333 = 13.3$, more than 13 years of income.
 
 #### What the model predicts
 
-- **Permanent-income hypothesis (Friedman).** Consumption depends on an average of lifetime resources, the present value of income, rather than on this period's income. Temporary changes in income have small effects on consumption (MPC $1/T$); permanent changes have large ones (MPC near 1).
-- **Anticipated changes do not move consumption when they arrive.** A raise that Irving expected is already part of $\bar{X}$, so his consumption does not jump on the day it is paid.
-- **Life-cycle hypothesis (Modigliani).** Because income has a hump over life and consumption is flat, people save in their working years and run down their wealth in retirement. Wealth is hump-shaped too, peaking around retirement.
+- **Permanent-income hypothesis (Friedman).** Consumption depends on an average of lifetime resources, the present value of income, not on this period's income. Temporary income changes move consumption little (MPC $1/T$); permanent ones move it a lot (MPC near 1).
+- **Expected changes do not move consumption when they arrive.** A raise the islander saw coming is already in $\bar{X}$, so his consumption does not jump on payday.
+- **Life-cycle hypothesis (Modigliani).** Income has a hump over life while consumption is flat, so people save during their working years and draw down wealth in retirement. Wealth is hump-shaped as well, with its peak near retirement.
+
+::: {.mo-takeaway}
+Islanders spend their permanent income: they save while working and live on their savings in retirement.
+:::
+
+::: {.callout-note .mo-check title="Check your understanding"}
+**1.** An islander lives $T = 60$ periods and works for $W = 45$ of them at income 1, with $R = 0$ and $\beta = 1$. How much does he consume each period, how much does he save while working, and how high does his wealth climb?
+
+<details><summary>Answer</summary>
+
+By equation (8), $c = 45/60 = 0.75$. He saves $1 - 0.75 = 0.25$ in each working period, so his wealth peaks at $45 \times 0.25 = 11.25$ on the day he retires: less than with 40 working periods, because his retirement is shorter.
+
+</details>
+
+**2.** The islander learns today that his wage will rise next year. When does his consumption go up: today, or when the raise is paid?
+
+<details><summary>Answer</summary>
+
+Today. The raise enters total wealth $\bar{X}$ as soon as he knows about it, and equation (8) spreads it evenly over all periods. When the raise is finally paid, nothing new has happened, so his consumption does not jump.
+
+</details>
+:::
 
 <!-- cell -->
 
@@ -304,13 +455,13 @@ With $T = 2$ this is equation (6) with $R = 0$.
 
 #### Assumptions
 
-Go back to two periods and log utility, and change one assumption at a time.
+Return to two periods and log utility, and change one rule at a time.
 
-**1. Taxes.** The government collects taxes $\tau_{\text{today}}$ and $\tau_{\text{future}}$, so the incomes in the budgets are incomes *after tax*, $y_{\text{today}} - \tau_{\text{today}}$ and $y_{\text{future}} - \tau_{\text{future}}$. The government borrows and lends at the same rate $R$ as Irving.
+**1. Taxes.** The Islandia Treasury collects taxes $\tau_{\text{today}}$ and $\tau_{\text{future}}$, so the incomes in the budgets are after-tax incomes, $y_{\text{today}} - \tau_{\text{today}}$ and $y_{\text{future}} - \tau_{\text{future}}$. The Treasury borrows and lends at the same rate $R$ as the islander.
 
-**2. A borrowing constraint.** Irving cannot borrow at all: $f_{\text{future}} \ge 0$. By today's budget, $f_{\text{future}} = f_{\text{today}} + y_{\text{today}} - c_{\text{today}}$, so the constraint says $c_{\text{today}} \le f_{\text{today}} + y_{\text{today}}$: he can spend no more than he has today. With no financial wealth, this is simply $c_{\text{today}} \le y_{\text{today}}$.
+**2. A borrowing constraint.** The islander cannot borrow at all: $f_{\text{future}} \ge 0$. Today's budget gives $f_{\text{future}} = f_{\text{today}} + y_{\text{today}} - c_{\text{today}}$, so the constraint reads $c_{\text{today}} \le f_{\text{today}} + y_{\text{today}}$: he cannot spend more than he holds today. With no financial wealth, it is simply $c_{\text{today}} \le y_{\text{today}}$.
 
-**3. Uncertainty.** Future income is not known today. Irving maximizes expected lifetime utility.
+**3. Uncertainty.** Future income is unknown today, and the islander maximizes expected lifetime utility.
 
 #### Solving the model
 
@@ -318,46 +469,89 @@ Go back to two periods and log utility, and change one assumption at a time.
 
 $$\bar{X} = f_{\text{today}} + (y_{\text{today}} - \tau_{\text{today}}) + \frac{y_{\text{future}} - \tau_{\text{future}}}{1+R}.$$
 
-Let the government cut today's tax by $\Delta$ and borrow to pay for it. In the future it must repay $(1+R)\Delta$, so it raises the future tax by that amount. The change in total wealth is
+Suppose the Treasury cuts today's tax by $\Delta$ and borrows to fund the cut. It must repay $(1+R)\Delta$ in the future, so it raises the future tax by that amount. Total wealth changes by
 
 $$\Delta\bar{X} = +\Delta - \frac{(1+R)\Delta}{1+R} = \Delta - \Delta = 0.$$
 
-Total wealth does not change, so by equation (5) neither does consumption. Irving saves the whole tax cut, and the saving, with its interest, exactly pays the higher future tax. This is **Ricardian equivalence**: for a given path of government spending, the *timing* of taxes does not matter.
+Since total wealth is unchanged, equation (5) says consumption is unchanged too. The islander saves the whole tax cut, and that saving, with its interest, pays exactly the higher future tax. This is **Ricardian equivalence**: for a given path of government spending, the *timing* of taxes does not matter.
 
-**The borrowing constraint.** The unconstrained plan of equation (5) is still the best choice whenever it is affordable today. When it is not, Irving gets as close to it as he can, by spending everything he has today. In one line:
+**The borrowing constraint.** Whenever the plan of equation (5) is affordable today, it is still the best choice. When it is not, the islander gets as close to it as he can, by spending all he holds today:
 
-$$c_{\text{today}} = \min\left\{\frac{\bar{X}}{1+\beta},\; f_{\text{today}} + y_{\text{today}}\right\}. \tag{9}$$
+::: {.callout-important .mo-key title="Key result: consumption with a borrowing constraint"}
+$$c_{\text{today}} = \min\left\{\frac{\bar{X}}{1+\beta},\; f_{\text{today}} + y_{\text{today}}\right\} \tag{9}$$
 
-When does the constraint bind? Take $\beta = 1$. The plan $\bar{X}/2$ is larger than $f_{\text{today}} + y_{\text{today}}$ exactly when
+**Islandia in numbers.** The baseline islander with $R = 0.05$ would like to spend 2.881 today but holds only 1. Constrained, he spends $c_{\text{today}} = 1$, and $c_{\text{future}} = y_{\text{future}} = 5$.
+:::
+
+When does the constraint bind? Take $\beta = 1$. The plan $\bar{X}/2$ exceeds $f_{\text{today}} + y_{\text{today}}$ exactly when
 
 $$f_{\text{today}} + y_{\text{today}} + \frac{y_{\text{future}}}{1+R} > 2\,(f_{\text{today}} + y_{\text{today}}) \quad\Longleftrightarrow\quad \frac{y_{\text{future}}}{1+R} > f_{\text{today}} + y_{\text{today}}.$$
 
-The constraint binds when the present value of future income is larger than what Irving has today: then he would like to borrow, and he cannot. The baseline Irving is such a case: $5/1.05 = 4.76 > 1$. Constrained, he spends $c_{\text{today}} = 1$ instead of 2.881, and $c_{\text{future}} = y_{\text{future}} = 5$. When the constraint binds, an extra unit of income today is spent in full, an MPC of 1, extra future income does nothing for him today, and a tax cut today raises his consumption one for one, so Ricardian equivalence fails.
+The constraint binds when the present value of future income exceeds what the islander holds today: he wants to borrow and cannot. The baseline islander is such a case, since $5/1.05 = 4.76 > 1$.
 
-**Uncertain income: the random walk.** With risky future income the small-move argument still works, but the gain from saving is now uncertain, so it is the *expected* marginal utility of the future that must balance:
+::: {.callout-tip .mo-inwords title="In words: when the constraint binds"}
+A constrained islander already wishes he could spend more today. So he spends an extra unit of income today in full, an MPC of 1. Extra future income does nothing for him today. A tax cut today raises his consumption one for one, and Ricardian equivalence fails.
+:::
+
+**Uncertain income: the random walk.** With risky future income the small-move argument still holds, but the gain from saving is now uncertain. So the *expected* marginal utility of the future is what must balance:
 
 $$u'(c_{\text{today}}) = \beta(1+R)\,E\big[u'(c_{\text{future}})\big],$$
 
-where $E[\cdot]$ is the average over the possible outcomes. When $\beta(1+R) = 1$ and marginal utility is close to a straight line over the relevant range, this says that the best forecast of tomorrow's consumption is today's consumption: $c_{\text{future}} = c_{\text{today}} + \text{surprise}$. Everything Irving knows today is already in his consumption, so only news moves it. Robert Hall called this the **random walk** of consumption.
+where $E[\cdot]$ averages over the possible outcomes. If $\beta(1+R) = 1$ and marginal utility is close to a straight line over the relevant range, the best forecast of next period's consumption is this period's: $c_{\text{future}} = c_{\text{today}} + \text{surprise}$. All that the islander knows today is already in his consumption, so only news can move it. Robert Hall named this the **random walk** of consumption.
 
-**Uncertain income: precautionary saving.** Marginal utility $1/c$ is not a straight line; it is steeper at low consumption. A spread of possible outcomes therefore raises the average of $1/c_{\text{future}}$ above $1/E[c_{\text{future}}]$: the bad outcome raises marginal utility by more than the good outcome lowers it. A higher right-hand side calls for a lower $c_{\text{today}}$, that is, for more saving. A worked example with $R = 0$, $\beta = 1$ and the baseline incomes: if $y_{\text{future}}$ is 3 or 7 with equal chance instead of a sure 5, then $c_{\text{future}}$ is $4 - c_{\text{today}}$ or $8 - c_{\text{today}}$, and the expected Euler equation reads
+**Uncertain income: precautionary saving.** Marginal utility $1/c$ is not a straight line: it is steeper at low consumption. So a spread of outcomes lifts the average of $1/c_{\text{future}}$ above $1/E[c_{\text{future}}]$. The bad outcome raises marginal utility by more than the good outcome lowers it. A larger right-hand side calls for a smaller $c_{\text{today}}$, that is, more saving. A worked example with $R = 0$, $\beta = 1$ and the baseline incomes: let $y_{\text{future}}$ be 3 or 7 with equal chances, instead of a sure 5. Then $c_{\text{future}}$ is $4 - c_{\text{today}}$ or $8 - c_{\text{today}}$, and the expected Euler equation is
 
 $$\frac{1}{c_{\text{today}}} = \frac{1}{2}\cdot\frac{1}{4 - c_{\text{today}}} + \frac{1}{2}\cdot\frac{1}{8 - c_{\text{today}}}.$$
 
-Multiply both sides by $c_{\text{today}}(4-c_{\text{today}})(8-c_{\text{today}})$ and collect terms ([Appendix C.9](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.9-solving-equations-and-systems)): $32 - 12c_{\text{today}} + c_{\text{today}}^2 = 6c_{\text{today}} - c_{\text{today}}^2$, or $c_{\text{today}}^2 - 9c_{\text{today}} + 16 = 0$. The root below 4 is $c_{\text{today}} = (9 - \sqrt{17})/2 = 2.44$. The risk lowers consumption today from 3 to 2.44, although average future income is still 5.
+Multiply both sides by $c_{\text{today}}(4-c_{\text{today}})(8-c_{\text{today}})$ and collect terms ([Appendix C.9](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.9-solving-equations-and-systems)): $32 - 12c_{\text{today}} + c_{\text{today}}^2 = 6c_{\text{today}} - c_{\text{today}}^2$, or $c_{\text{today}}^2 - 9c_{\text{today}} + 16 = 0$. The root below 4 is $c_{\text{today}} = (9 - \sqrt{17})/2 = 2.44$. Risk cuts consumption today from 3 to 2.44, although future income is still 5 on average.
+
+::: {.callout-tip .mo-inwords title="In words: saving for a rainy day"}
+A bad year hurts the islander more than a good year of the same size helps him, because marginal utility is steepest when consumption is low. So he insures himself by saving more today. The riskier his future wages, the more he puts aside.
+:::
 
 #### What the model predicts
 
-| Irving receives ... | MPC today, can borrow ($\beta = 1$) | MPC today, borrowing-constrained |
+| The islander receives ... | MPC today, can borrow ($\beta = 1$) | MPC today, borrowing-constrained |
 |---|---|---|
 | one more unit of income today | $1/2$ | $1$ |
 | one more unit of income in the future | $1/[2(1+R)]$ | $0$ |
 | a tax cut today, repaid by a tax rise later | $0$ (Ricardian equivalence) | $1$ |
 
-- **The timing of taxes does not matter** for households that can borrow and that pay the future taxes themselves. It does matter when they are constrained, and when the later taxes fall on someone else, such as other income groups or future generations.
-- **Constrained households spend what they earn.** Their consumption tracks their current income, and their MPC is 1, far above the $1/T$ of the permanent-income consumer. With a mix of both kinds of households, the economy's average MPC lies in between.
-- **Consumption should be hard to predict.** Under the random walk view, expected changes in income are already in today's consumption, and only surprises move it.
-- **Risk makes people save, even when their income is low.** Precautionary savers act much like constrained households, and their consumption also responds strongly to current income.
+- **The timing of taxes does not matter** for households that can borrow and that pay the later taxes themselves. It does matter when they are constrained, and when the later taxes fall on others, such as other income groups or future generations.
+- **Constrained households spend what they earn.** Their consumption tracks current income, with an MPC of 1, far above the $1/T$ of the permanent-income consumer. With both kinds of households, the economy's average MPC lies in between.
+- **Consumption should be hard to predict.** In the random walk view, expected income changes are already in today's consumption, and only surprises move it.
+- **Risk makes people save, even on low incomes.** Precautionary savers behave much like constrained households: their consumption also reacts strongly to current income.
+
+::: {.mo-takeaway}
+Tax cuts, windfalls and risk matter most for islanders who cannot borrow: they spend what they get.
+:::
+
+::: {.callout-note .mo-check title="Check your understanding"}
+**1.** With $R = 0.05$, the Islandia Treasury cuts today's tax by 0.1 and raises the future tax by 0.105. How does consumption today change for the baseline islander if he can borrow, and if he cannot?
+
+<details><summary>Answer</summary>
+
+If he can borrow, nothing changes: $\Delta\bar{X} = 0.1 - 0.105/1.05 = 0$, so by equation (5) he still consumes 2.881 and saves the cut (Ricardian equivalence). If he cannot borrow, equation (9) binds, so he spends everything he holds: $c_{\text{today}}$ rises from 1 to 1.1, an MPC of 1.
+
+</details>
+
+**2.** Future income is now 4 or 6 with equal chances, with $R = 0$, $\beta = 1$ and the baseline incomes. How much does the islander consume today? Compare with the sure case and with a spread of 3 or 7.
+
+<details><summary>Answer</summary>
+
+Now $c_{\text{future}}$ is $5 - c_{\text{today}}$ or $7 - c_{\text{today}}$. The expected Euler equation, $1/c_{\text{today}} = \tfrac{1}{2}/(5 - c_{\text{today}}) + \tfrac{1}{2}/(7 - c_{\text{today}})$, simplifies to $2c_{\text{today}}^2 - 18c_{\text{today}} + 35 = 0$, whose root below 5 is $c_{\text{today}} = (9 - \sqrt{11})/2 \approx 2.84$. That is below the 3 of the sure case but above the 2.44 of the wider spread: less risk, less precautionary saving.
+
+</details>
+:::
+
+::: {.callout-note .mo-recap title="Recap"}
+- **Diminishing marginal utility** makes an even consumption path better than an uneven one, so the islander wants to smooth ([Fig. 1](#fig.-1-flow-utility), [Fig. 2](#fig.-2-the-desire-to-smooth-consumption)).
+- **One lifetime budget:** spending in present value equals total wealth $\bar{X}$, financial plus human wealth (equation 2).
+- **The Euler equation** $u'(c_{\text{today}}) = \beta(1+R)\,u'(c_{\text{future}})$ sets the growth of consumption; with log utility, $c_{\text{today}} = \bar{X}/(1+\beta)$ ([Fig. 2](#fig.-2-the-desire-to-smooth-consumption)).
+- **Interest rates and growth rates** are linked by $R = (1+g_c)/\beta - 1$, which is why both are a few percent a year.
+- **Permanent income and the life cycle:** consumption follows lifetime resources, so households save while working and run down wealth in retirement ([Fig. 5](#fig.-5-household-wealth-as-a-ratio-to-income)).
+- **Borrowing constraints and risk** raise the MPC to 1 and break Ricardian equivalence; precautionary saving shows up in the data on saving and debt ([Fig. 4](#fig.-4-the-personal-saving-rate), [Fig. 3](#fig.-3-household-debt-as-a-percentage-of-gdp)).
+:::
 
 <!-- cell -->
 

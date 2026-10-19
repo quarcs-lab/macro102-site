@@ -99,13 +99,43 @@ def slider_figure(make_figure, name, values, start, label=None):
 
 ## Model overview
 
-The IS curve of [Chapter 11](https://quarcs-lab.github.io/macro102-site/notebooks/ch11-the-is-curve.html) tells us how much output the economy produces at a given real interest rate, but it leaves open who picks that rate and what happens to prices afterwards. This chapter fills both gaps and so completes the short-run model. The central bank sets a short-term **nominal** interest rate. Because inflation moves slowly, that choice also fixes the **real** rate for a while (the **MP curve**). The real rate fixes short-run output through the IS curve. Short-run output, in turn, pushes inflation up or down from one year to the next (the **Phillips curve**). Put together, the three equations form a small dynamic model: feed it a path for the interest rate and for the shocks, and it returns output and inflation year by year.
+Islandia is back, and this time we watch it in the short run. In [Chapter 11](https://quarcs-lab.github.io/macro102-site/notebooks/ch11-the-is-curve.html), Harbor Boatworks built fewer boats whenever borrowing got dearer, and Islandia's output slipped below potential. That left two questions open: who sets the interest rate, and what does a boom or a slump do to Islandia's prices? The Bank of Islandia answers the first, the Phillips curve the second, and together they complete the short-run model.
 
-We build the model in six blocks, each going from assumptions to solution to predictions: the MP curve (with the link from short to long interest rates), the IS/MP diagram, the Phillips curve, the full model and its dynamics (how a disinflation works and what it costs), a preview of the interest-rate rule of Chapter 13 (the Taylor rule), and the money market that lets the central bank set the nominal rate in the first place. At the end, `### The model in code` turns the key results into Python functions and checks each of them with numbers. The drawing tools and the data helpers come after it.
+::: {.callout-note .mo-bigidea title="The big idea"}
+**The question.** The Bank of Islandia controls only an overnight interest rate. How can that one lever move Islandia's output this year and its inflation in the years after?
 
-**Notation.** A bar over a letter marks a **parameter**, a number taken from outside the model, such as $\bar{b}$ or $\bar{\nu}$. $\tilde{Y}_t$ is **short-run output**, the percentage gap between actual and potential output: $\tilde{Y}_t > 0$ in a boom, $\tilde{Y}_t < 0$ in a slump. Interest rates and inflation are in percent per year, and $\Delta x_t \equiv x_t - x_{t-1}$ is the change of any variable from last year to this year.
+**The answer in one sentence.** Inflation is sticky, so the nominal rate the Bank sets also fixes the real rate (the **MP curve**), the real rate fixes short-run output (the IS curve), and output then nudges inflation up or down year after year (the **Phillips curve**).
 
-**One baseline for every diagram.** The textbook draws its diagrams without numbers, apart from a few examples. All the figures and worked examples of this notebook start from one set of values:
+**What goes in and what comes out.** We choose the path of the real interest rate, the demand shock $\bar{a}$, the price shock $\bar{o}$, the parameters $\bar{b}$, $\bar{r}$ and $\bar{\nu}$, and the inflation of the year before we start. The model gives back short-run output and inflation in every year, and the nominal rate the Bank must set to get there.
+
+**Road map.**
+
+1. [The MP curve](#the-mp-curve-a-nominal-rate-that-moves-the-real-rate): why a nominal rate moves the real rate, and how short rates shape long ones.
+2. [The IS/MP diagram](#the-ismp-diagram): from the policy rate to output, and the rate that keeps output at potential.
+3. [The Phillips curve](#the-phillips-curve): how a boom or a slump changes inflation.
+4. [The full short-run model](#the-full-short-run-model-is-mp-and-the-phillips-curve-together): the three equations together, [a planned disinflation and its cost](#solving-the-model-3), and [the dynamics after each kind of shock](#what-the-model-predicts-3).
+5. [An interest-rate rule](#looking-ahead-an-interest-rate-rule-the-taylor-rule): a first look at the Taylor rule of Chapter 13.
+6. [Money demand and money supply](#microfoundations-money-demand-money-supply-and-the-policy-rate): how the Bank makes its rate stick.
+7. [The model in code](#the-model-in-code): the key results as Python functions, checked with numbers. The drawing tools and the data helpers come after it.
+
+**Notation.** A bar over a letter marks a **parameter**, a number taken from outside the model. Letters without a bar are **endogenous variables**; the real rate $R_t$ is the Bank's choice in most blocks, and a rule sets it in the Taylor block. Rates and inflation are in percent per year.
+
+| Symbol | Meaning | Type |
+|---|---|---|
+| $i_t$ | the nominal interest rate (the overnight policy rate) | endogenous |
+| $R_t$ | the real interest rate, chosen by the Bank (the MP curve) | endogenous |
+| $\pi_t$, $\pi^e_t$ | inflation over the coming year, and the inflation firms expect | endogenous |
+| $\tilde{Y}_t$ | **short-run output**: the percentage gap between actual and potential output, $> 0$ in a boom, $< 0$ in a slump | endogenous |
+| $\bar{a}$ | aggregate demand shock (zero in normal times) | parameter |
+| $\bar{b}$ | how strongly spending reacts to the real rate | parameter |
+| $\bar{r}$ | the marginal product of capital | parameter |
+| $\bar{\nu}$, $\bar{o}$ | the slope of the Phillips curve, and the price shock | parameters |
+| $\bar{m}$, $\bar{\pi}$ | the rule's response to inflation, and the inflation target (Taylor block) | parameters |
+| $M^d$, $M^s$, $m_0$ | money demanded, money supplied, and the position of money demand (last block) | notation |
+| $\Delta x_t$ | the change $x_t - x_{t-1}$ of any variable from last year to this year | notation |
+:::
+
+**One baseline for every diagram.** The textbook draws these diagrams without numbers, except in a few examples. Every figure and worked example of this notebook, and every number in Islandia's story, starts from the same values:
 
 - the IS curve of Chapter 11's numerical example: no demand shock $\bar{a} = 0$, $\bar{b} = 2$ and a marginal
   product of capital $\bar{r} = 5$ percent. Then the textbook's "$-2$ percent" in Figs. 4, 5 and 10
@@ -125,43 +155,49 @@ We build the model in six blocks, each going from assumptions to solution to pre
 
 #### Assumptions
 
-**1. The policy instrument.** The central bank chooses a short-term nominal interest rate $i_t$: in the United States, the **federal funds rate** that banks charge each other on overnight loans. It makes that rate stick by offering to lend, or to borrow, any amount overnight at $i_t$. No bank can then charge a borrower more than $i_t$, since the borrower would go to the central bank instead. And no bank can lend for less for long: other banks would borrow at the cheap rate and lend the money straight back to the central bank at $i_t$, a riskless profit (an **arbitrage**), until the cheap lender ran out of funds.
+**1. The policy instrument.** The Bank of Islandia picks a short-term nominal interest rate $i_t$: the rate at which Islandia's banks lend to each other overnight. (In the United States this is the **federal funds rate** of Fig. 2.) The Bank makes its rate stick with a standing offer: it will lend, or borrow, any amount overnight at $i_t$. No bank can then charge a borrower more than $i_t$, because the borrower would simply go to the Bank. And no bank can lend for less for long. Other banks would borrow the cheap money and deposit it straight back at the Bank at $i_t$, a riskless gain (an **arbitrage**), until the cheap lender had no funds left.
 
-**2. The Fisher equation** of [Chapter 8](https://quarcs-lab.github.io/macro102-site/notebooks/ch08-inflation.html). A nominal interest rate pays for two things: the real return $R_t$ and the loss of purchasing power through inflation $\pi_t$,
+**2. The Fisher equation** of [Chapter 8](https://quarcs-lab.github.io/macro102-site/notebooks/ch08-inflation.html). A nominal interest rate covers two things: the real return $R_t$, and the purchasing power that inflation $\pi_t$ eats away,
 
 $$i_t = R_t + \pi_t.$$
 
-**3. Sticky inflation.** Inflation has inertia. Over a short horizon, about six months, $\pi_t$ does not react to a change in monetary policy: when the central bank moves $i_t$, it takes $\pi_t$ as given.
+**3. Sticky inflation.** Islandia's inflation has inertia. Over a short horizon, about six months, $\pi_t$ does not respond to a policy move: when the Bank changes $i_t$, it can treat $\pi_t$ as given.
 
 #### Solving the model
 
-**Step 1: the real interest rate.** Subtract $\pi_t$ from both sides of the Fisher equation:
+**Step 1: the real interest rate.** Take $\pi_t$ away from both sides of the Fisher equation. The real rate is then the nominal rate minus inflation, equation (1) in the box below.
 
-$$R_t = i_t - \pi_t. \tag{1}$$
+**Step 2: what a policy move does.** Compare Islandia just before and just after the Bank changes its rate. Write the real rate for both moments and subtract one from the other: $\Delta R_t = \Delta i_t - \Delta\pi_t$. Inflation is sticky, so $\Delta\pi_t = 0$ over that short horizon, and every point added to the nominal rate is a point added to the real rate.
 
-**Step 2: what a policy move does.** Compare the economy just before and just after the central bank changes its rate. Writing equation (1) for both moments and subtracting gives $\Delta R_t = \Delta i_t - \Delta\pi_t$. Sticky inflation means $\Delta\pi_t = 0$ over that short horizon, so
+::: {.callout-important .mo-key title="Key result: the Bank of Islandia sets the real rate"}
+$$R_t = i_t - \pi_t \tag{1}$$
 
-$$\Delta R_t = \Delta i_t:$$
+$$\Delta R_t = \Delta i_t \qquad\text{(while inflation is sticky)}$$
 
-every point on the nominal rate is a point on the real rate. In effect, the central bank **chooses the real interest rate**. To hit a target real rate $R^T$, it sets $i_t = R^T + \pi_t$. With inflation at 2 percent, a nominal rate of 7 percent gives $R = 5\% = \bar{r}$. With inflation at 10 percent, as in 1979, the same real rate needs a nominal rate of 15 percent, and 16 percent pushes the real rate to 6 percent.
+So the Bank in effect **chooses the real interest rate**: for a target $R^T$ it sets $i_t = R^T + \pi_t$. In a diagram with short-run output $\tilde{Y}$ on the horizontal axis and $R$ on the vertical one, this choice is the **MP curve**. It does not depend on output, so it is a **horizontal line** at the chosen $R_t$.
 
-The **MP curve** draws this choice in the diagram with short-run output $\tilde{Y}$ on the horizontal axis and $R$ on the vertical axis. Here the central bank's choice does not depend on output, so the curve is a **horizontal line** at the chosen $R_t$.
+**Islandia in numbers.** With inflation at 2 percent, a nominal rate of 7 percent gives $R = 5\% = \bar{r}$. With inflation at 10 percent, the same real rate needs a nominal rate of 15 percent, and 16 percent lifts the real rate to 6 percent.
+:::
 
-**Step 3: expected or actual inflation?** A borrower signs the loan before knowing how much prices will rise. So there are two real rates: the **ex ante** rate the borrower expects, $R^{\text{ex ante}}_t = i_t - \pi^e_t$, and the **ex post** rate that is realized, $R^{\text{ex post}}_t = i_t - \pi_t$. Subtracting the first from the second,
+::: {.callout-tip .mo-inwords title="In words"}
+What matters to Harbor Boatworks is what a loan costs in boats, not in money. Islandia's prices only creep, so on the day the Bank adds a point to the money rate, prices have not moved, and the cost of a loan in goods rises by a full point. A central bank that sets only a money rate can therefore steer the real rate, for as long as inflation stays put.
+:::
+
+**Step 3: expected or actual inflation?** A loan is signed before anyone knows how much prices will rise. So there are two real rates: the **ex ante** rate the borrower expects, $R^{\text{ex ante}}_t = i_t - \pi^e_t$, and the **ex post** rate that is actually paid, $R^{\text{ex post}}_t = i_t - \pi_t$. Subtract the first from the second:
 
 $$R^{\text{ex post}}_t - R^{\text{ex ante}}_t = \pi^e_t - \pi_t.$$
 
-Inflation above what was expected lowers the real rate actually paid: the borrower gains and the lender loses. With $i = 7$, expected inflation of 2 and actual inflation of 4 percent, the ex ante real rate is 5 percent but the ex post one only 3. Investment decisions depend on the ex ante rate. The short-run model ignores the difference and uses equation (1).
+Surprise inflation lowers the real rate actually paid: the borrower gains and the lender loses. Say Harbor Boatworks borrows at $i = 7$ expecting inflation of 2, and inflation turns out to be 4 percent. It planned on a real rate of 5 percent but pays only 3. Investment plans rest on the ex ante rate; the short-run model ignores the gap and uses equation (1).
 
-**Step 4: from the overnight rate to long-term rates.** Firms borrow for years, not overnight. Suppose you want to save for $n$ years. You can buy one $n$-year bond at the annual rate $i^{(n)}$, or a one-year bond now and a new one-year bond each year, at the rates $i_1, i^e_2, \dots, i^e_n$ you expect. If the two plans paid different amounts, everyone would choose the better one, so in equilibrium
+**Step 4: from the overnight rate to long-term rates.** Firms borrow for years, not for a night. Take an islander who saves for $n$ years. One plan is a single $n$-year bond at the yearly rate $i^{(n)}$. The other is a one-year bond now, then a fresh one-year bond each year, at the rates $i_1, i^e_2, \dots, i^e_n$ expected today. If one plan paid more, nobody would choose the other, so in equilibrium the two pay the same:
 
 $$(1 + i^{(n)})^n = (1 + i_1)(1 + i^e_2)\cdots(1 + i^e_n).$$
 
-Take logs of both sides ([Appendix C.4](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.4-logarithms)): the log of a power is the exponent times the log, and the log of a product is the sum of the logs, so $n\ln(1+i^{(n)}) = \ln(1+i_1) + \ln(1+i^e_2) + \dots + \ln(1+i^e_n)$. For small rates, $\ln(1+x) \approx x$ ([Appendix C.6](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.6-approximations)). Dividing by $n$:
+Now take logs of both sides ([Appendix C.4](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.4-logarithms)). The log of a power is the exponent times the log, and the log of a product is the sum of the logs: $n\ln(1+i^{(n)}) = \ln(1+i_1) + \ln(1+i^e_2) + \dots + \ln(1+i^e_n)$. For small rates, $\ln(1+x) \approx x$ ([Appendix C.6](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.6-approximations)). Divide by $n$:
 
 $$i^{(n)} \approx \frac{i_1 + i^e_2 + \dots + i^e_n}{n}.$$
 
-A long-term rate is about the **average of the short-term rates expected over its life**: the **term structure of interest rates**. If markets expect one-year rates of 2, 3, 4, 5 and 6 percent over the next five years, the five-year rate is about 4 percent.
+So a long-term rate is roughly the **average of the short-term rates expected over its life**. This link is the **term structure of interest rates**. If markets expect one-year rates of 2, 3, 4, 5 and 6 percent over the next five years, the five-year rate is close to 4 percent.
 
 #### What the model predicts
 
@@ -172,8 +208,30 @@ A long-term rate is about the **average of the short-term rates expected over it
 | $i_t$ and $\pi_t$ both up 1 point | $0$ | nothing moves |
 | short rates expected to stay high for years | long rates rise toward them | (the yield curve shifts up) |
 
-- Monetary policy has real effects only because inflation is sticky. If inflation jumped together with the nominal rate (the third row, the classical dichotomy), the real rate would not change.
-- A rise in today's short rate lifts long rates more when markets expect it to last. When the **yield curve**, the plot of rates against maturity, is **inverted**, markets expect short rates to fall (Fig. 6).
+- Monetary policy has real effects only because inflation is sticky. If inflation jumped along with the nominal rate (the third row, the classical dichotomy), the real rate would stay where it was.
+- A higher short rate today lifts long rates more when markets expect it to last. When the **yield curve**, the plot of interest rates against maturity, is **inverted**, markets expect short rates to fall (Fig. 6).
+
+::: {.mo-takeaway}
+Because Islandia's inflation is slow to move, the Bank of Islandia steers the real interest rate by setting a nominal one.
+:::
+
+::: {.callout-note .mo-check title="Check your understanding"}
+**1.** Islandia's inflation is 3 percent and the Bank wants a real rate of 5 percent. Which nominal rate must it set? A week later it raises that rate by half a point. What happens to the real rate?
+
+<details><summary>Answer</summary>
+
+By equation (1), $i_t = R^T + \pi_t$, so the Bank sets 8 percent. Inflation is sticky over a week, so $\Delta R_t = \Delta i_t$: the real rate rises by half a point too, to 5.5 percent.
+
+</details>
+
+**2.** Markets expect Islandia's one-year rate to be 4 percent this year and 6 percent next year. About what is the two-year rate, and does the yield curve slope up or down?
+
+<details><summary>Answer</summary>
+
+By the term structure, the two-year rate is about the average of the expected one-year rates, $(4 + 6)/2 = 5$ percent. That is above today's one-year rate, so the curve slopes up: markets expect short rates to rise.
+
+</details>
+:::
 
 <!-- cell -->
 
@@ -181,13 +239,15 @@ A long-term rate is about the **average of the short-term rates expected over it
 
 #### Assumptions
 
-**1. The IS curve** of [Chapter 11](https://quarcs-lab.github.io/macro102-site/notebooks/ch11-the-is-curve.html). Short-run output falls when the real interest rate rises above the marginal product of capital $\bar{r}$:
+**1. The IS curve** of [Chapter 11](https://quarcs-lab.github.io/macro102-site/notebooks/ch11-the-is-curve.html). When borrowing costs more than a new tool earns, Harbor Boatworks and the islanders put off investment, and output falls below potential.
 
-$$\tilde{Y}_t = \bar{a} - \bar{b}\,(R_t - \bar{r}). \tag{2}$$
+::: {.callout-important .mo-key title="Key result: the IS curve (from Chapter 11)"}
+$$\tilde{Y}_t = \bar{a} - \bar{b}\,(R_t - \bar{r}) \tag{2}$$
 
-Here $\bar{a}$ is the **aggregate demand shock** (zero in normal times) and $\bar{b}$ measures how strongly investment demand reacts to the interest rate. The intuition: when borrowing costs more than new capital earns, firms and households postpone investment, and output falls below potential.
+Short-run output falls when the real rate $R_t$ rises above the marginal product of capital $\bar{r}$. Here $\bar{a}$ is the **aggregate demand shock** (zero in normal times), and $\bar{b}$ measures how strongly investment demand reacts to the rate.
+:::
 
-**2. The MP curve.** The central bank sets $R_t$, as derived above.
+**2. The MP curve.** The Bank of Islandia sets $R_t$, as we just derived.
 
 #### Solving the model
 
@@ -195,19 +255,25 @@ Here $\bar{a}$ is the **aggregate demand shock** (zero in normal times) and $\ba
 
 $$\tilde{Y}_t = \bar{a} - \bar{b}\,(i_t - \pi_t - \bar{r}).$$
 
-With $\pi_t$ sticky, one more point on the nominal rate lowers short-run output by $\bar{b}$ percent. The economy sits where the MP line crosses the IS curve.
+With $\pi_t$ sticky, each extra point on the nominal rate costs $\bar{b}$ percent of short-run output. Islandia sits where the MP line crosses the IS curve.
 
-**Step 2: the rate that delivers a target for output.** Suppose the central bank wants output $\tilde{Y}^T$. Set $\tilde{Y}_t = \tilde{Y}^T$ in equation (2) and solve for $R_t$: move $\tilde{Y}^T$ to the right and $\bar{b}(R_t - \bar{r})$ to the left, $\bar{b}(R_t - \bar{r}) = \bar{a} - \tilde{Y}^T$, and divide by $\bar{b}$:
+**Step 2: the rate that delivers a target for output.** Suppose the Bank wants output $\tilde{Y}^T$. Set $\tilde{Y}_t = \tilde{Y}^T$ in equation (2) and solve for $R_t$. Move $\tilde{Y}^T$ to the right and $\bar{b}(R_t - \bar{r})$ to the left, $\bar{b}(R_t - \bar{r}) = \bar{a} - \tilde{Y}^T$, then divide by $\bar{b}$:
 
 $$R_t = \bar{r} + \frac{\bar{a} - \tilde{Y}^T}{\bar{b}}.$$
 
-To keep output at potential ($\tilde{Y}^T = 0$) the central bank needs
+The usual target is output at potential, $\tilde{Y}^T = 0$.
 
-$$R_t = \bar{r} + \frac{\bar{a}}{\bar{b}}, \tag{3}$$
+::: {.callout-important .mo-key title="Key result: the rate that keeps output at potential"}
+$$R_t = \bar{r} + \frac{\bar{a}}{\bar{b}} \tag{3}$$
 
-which by equation (1) means a nominal rate $i_t = \bar{r} + \bar{a}/\bar{b} + \pi_t$. Intuition: a fall in demand ($\bar{a} < 0$) is offset by cheaper borrowing, and each point of demand lost needs a cut of $1/\bar{b}$ points.
+By equation (1), the nominal rate is then $i_t = \bar{r} + \bar{a}/\bar{b} + \pi_t$. A fall in demand ($\bar{a} < 0$) is offset by cheaper credit, and each point of demand lost calls for a cut of $1/\bar{b}$ points.
 
-**Worked numbers.** With $\bar{a} = 0$ and $R = \bar{r} = 5$ percent, $\tilde{Y} = 0$ (point $A$ of Fig. 3). Raising $R$ to 6 percent gives $\tilde{Y} = -2 \times (6 - 5) = -2$ percent (Fig. 4). After a housing bust with $\bar{a}' = -2$, output at $R = 5$ is $-2$ percent, and equation (3) says a cut to $R' = 5 - 2/2 = 4$ percent brings it back to potential (Fig. 5).
+**Islandia in numbers.** With $\bar{a} = 0$ and $R = \bar{r} = 5$ percent, $\tilde{Y} = 0$ (point $A$ of Fig. 3). A real rate of 6 percent gives $\tilde{Y} = -2 \times (6 - 5) = -2$ percent (Fig. 4). After a housing bust with $\bar{a}' = -2$, output at $R = 5$ is $-2$ percent, and a cut to $R' = 5 - 2/2 = 4$ percent brings it back to potential (Fig. 5).
+:::
+
+::: {.callout-tip .mo-inwords title="In words"}
+Think of the IS curve as Harbor Boatworks' order book. When the Bank raises the real rate, a new boat has to earn more to be worth its loan, so fewer are ordered and Islandia's output slips below potential. When a housing bust drains demand, the Bank can cut the rate by just enough that cheaper credit fills the hole.
+:::
 
 #### What the model predicts
 
@@ -219,8 +285,30 @@ which by equation (1) means a nominal rate $i_t = \bar{r} + \bar{a}/\bar{b} + \p
 | the marginal product of capital $\bar{r}$ | $+\bar{b} = +2$ points at a given $R_t$ | the IS curve shifts up |
 | the sensitivity $\bar{b}$ | a larger effect of every rate change | the IS curve gets flatter |
 
-- In the model, monetary policy can fully offset any demand shock: it only has to set $R_t$ by equation (3).
-- In practice it is hard. It takes time to learn how large a shock is, and interest rates take roughly 6 to 18 months to move spending (Milton Friedman's "long and variable lags").
+- In the model, monetary policy can undo any demand shock completely: it only has to set $R_t$ by equation (3).
+- In practice this is hard. It takes time to learn how big a shock is, and a change in rates needs roughly 6 to 18 months to reach spending (Milton Friedman's "long and variable lags").
+
+::: {.mo-takeaway}
+By choosing the real rate, the Bank of Islandia can in principle offset any demand shock and hold output at potential.
+:::
+
+::: {.callout-note .mo-check title="Check your understanding"}
+**1.** A wave of optimism gives Islandia a demand shock $\bar{a} = 1$. With $\bar{b} = 2$ and $\bar{r} = 5$ percent, which real rate keeps output at potential? With inflation at 2 percent, which nominal rate is that?
+
+<details><summary>Answer</summary>
+
+Equation (3) gives $R = 5 + 1/2 = 5.5$ percent. By equation (1), the nominal rate is $5.5 + 2 = 7.5$ percent. The Bank leans against the boom with a higher rate.
+
+</details>
+
+**2.** If equation (3) is so simple, why does the Bank of Islandia not keep output at potential all the time?
+
+<details><summary>Answer</summary>
+
+Because it must know $\bar{a}$ when it sets the rate, and it does not. A shock is measured only with a delay, and a rate change takes many months to reach spending. By the time the cut works, the shock may have changed.
+
+</details>
+:::
 
 <!-- cell -->
 
@@ -228,40 +316,50 @@ which by equation (1) means a nominal rate $i_t = \bar{r} + \bar{a}/\bar{b} + \p
 
 #### Assumptions
 
-Inflation is the percentage rise of the price level over the coming year, $\pi_t \equiv (P_{t+1} - P_t)/P_t$, so it is set by firms during year $t$ when they choose next year's prices.
+Inflation $\pi_t \equiv (P_{t+1} - P_t)/P_t$ measures how much prices rise between this year and next. It is decided during year $t$, when firms choose next year's prices.
 
-**1. Price setting.** Each firm raises its prices by the inflation it expects in the rest of the economy, $\pi^e_t$, plus an adjustment for the demand it faces: more when demand is strong, less when it is weak. Adding up over all firms,
+**1. Price setting.** Each firm on Islandia raises its prices by the inflation it expects elsewhere in the economy, $\pi^e_t$, plus an adjustment for its own demand: a little more when orders are strong, a little less when they are weak. Adding up over all firms,
 
 $$\pi_t = \pi^e_t + \bar{\nu}\tilde{Y}_t, \qquad \bar{\nu} > 0.$$
 
-**2. Adaptive expectations.** Firms expect this year's inflation to equal last year's: $\pi^e_t = \pi_{t-1}$. This is the sticky-inflation assumption again, now in firms' forecasts.
+**2. Adaptive expectations.** Firms expect this year's inflation to equal last year's, $\pi^e_t = \pi_{t-1}$. This is sticky inflation once more, now inside firms' forecasts.
 
-**3. Price shocks.** Occasionally a shock $\bar{o}$ adds to inflation directly: a jump in oil or steel prices, or a large union wage settlement ($\bar{o} > 0$), or a wave of immigration that holds wages down ($\bar{o} < 0$). Most of the time $\bar{o} = 0$.
+**3. Price shocks.** Now and then a shock $\bar{o}$ adds to inflation directly. A jump in the price of fuel or steel, or a large union wage deal, gives $\bar{o} > 0$; a wave of immigration that holds wages down gives $\bar{o} < 0$. Most years, $\bar{o} = 0$.
 
 #### Solving the model
 
-**Step 1: the Phillips curve in levels.** Replace $\pi^e_t$ by $\pi_{t-1}$ in the price-setting equation and add the price shock:
+**Step 1: the Phillips curve in levels.** Replace $\pi^e_t$ by $\pi_{t-1}$ in the price-setting equation and add the price shock. This gives equation (4) below.
 
-$$\pi_t = \pi_{t-1} + \bar{\nu}\tilde{Y}_t + \bar{o}. \tag{4}$$
+**Step 2: in changes.** Take $\pi_{t-1}$ away from both sides of equation (4). This gives equation (5).
 
-**Step 2: in changes.** Subtract $\pi_{t-1}$ from both sides:
+::: {.callout-important .mo-key title="Key result: the Phillips curve"}
+$$\pi_t = \pi_{t-1} + \bar{\nu}\tilde{Y}_t + \bar{o} \tag{4}$$
 
-$$\Delta\pi_t = \bar{\nu}\tilde{Y}_t + \bar{o}. \tag{5}$$
+$$\Delta\pi_t = \bar{\nu}\tilde{Y}_t + \bar{o} \tag{5}$$
 
-Short-run output does not set the **level** of inflation; it sets its **change**. A boom makes inflation rise, a slump makes it fall, and at potential (with no price shock) inflation stays where it was. The slope $\bar{\nu}$ says how strongly prices react to demand: with $\bar{\nu} = 0.5$, output 2 percent above potential raises inflation by $0.5 \times 2 = 1$ point a year.
+Short-run output does not set the **level** of inflation; it sets its **change**. A boom pushes inflation up, a slump pulls it down, and at potential (with no price shock) inflation stays where it was. The slope $\bar{\nu}$ says how strongly prices react to demand.
+
+**Islandia in numbers.** With $\bar{\nu} = 0.5$, output 2 percent above potential raises inflation by $0.5 \times 2 = 1$ point a year.
+:::
+
+::: {.callout-tip .mo-inwords title="In words"}
+Every firm on Islandia starts from last year's price rise and adds a little when its order book is full, or takes a little off when it is thin. So a boom does not raise inflation once and for all: it pushes inflation up another notch in every year it lasts. When output is back at potential the pushing stops, but inflation stays wherever it got to.
+:::
 
 **Step 3: inflation as a running total.** Start from the inflation of the year before the first year, $\pi_{-1}$, and apply equation (4) one year at a time ([Appendix C.10](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.10-difference-equations-how-macro-variables-move-over-time)):
 
 $$\pi_0 = \pi_{-1} + \bar{\nu}\tilde{Y}_0 + \bar{o}_0, \qquad
-\pi_1 = \pi_0 + \bar{\nu}\tilde{Y}_1 + \bar{o}_1 = \pi_{-1} + \bar{\nu}(\tilde{Y}_0 + \tilde{Y}_1) + (\bar{o}_0 + \bar{o}_1),$$
+\pi_1 = \pi_0 + \bar{\nu}\tilde{Y}_1 + \bar{o}_1 = \pi_{-1} + \bar{\nu}(\tilde{Y}_0 + \tilde{Y}_1) + (\bar{o}_0 + \bar{o}_1).$$
 
-and after $t + 1$ years
+Carry on for $t + 1$ years, and each year adds one more output gap and one more price shock to the sums.
 
-$$\pi_t = \pi_{-1} + \bar{\nu}\sum_{s=0}^{t}\tilde{Y}_s + \sum_{s=0}^{t}\bar{o}_s. \tag{6}$$
+::: {.callout-important .mo-key title="Key result: inflation adds up the past"}
+$$\pi_t = \pi_{-1} + \bar{\nu}\sum_{s=0}^{t}\tilde{Y}_s + \sum_{s=0}^{t}\bar{o}_s \tag{6}$$
 
-Inflation adds up all past output gaps and price shocks. Nothing is ever forgotten: a gap that has closed leaves inflation at its new level.
+Inflation is the sum of all past output gaps and price shocks. Nothing is forgotten: once a gap has closed, inflation stays at its new level.
+:::
 
-**Step 4: when is inflation steady?** Set $\Delta\pi_t = 0$ in equation (5) and solve for output: $\tilde{Y}_t = -\bar{o}/\bar{\nu}$. With no price shock that is $\tilde{Y}_t = 0$. After an oil shock of $\bar{o} = 1$ point, holding inflation steady would take output of $-1/0.5 = -2$ percent.
+**Step 4: when is inflation steady?** Set $\Delta\pi_t = 0$ in equation (5) and solve for output: $\tilde{Y}_t = -\bar{o}/\bar{\nu}$. With no price shock, that is $\tilde{Y}_t = 0$. After an oil shock of $\bar{o} = 1$ point, steady inflation would take output of $-1/0.5 = -2$ percent.
 
 #### What the model predicts
 
@@ -271,9 +369,31 @@ Inflation adds up all past output gaps and price shocks. Nothing is ever forgott
 | the price shock $\bar{o}$ | $+1$ point at every $\tilde{Y}_t$ | the curve shifts up for one period |
 | the slope $\bar{\nu}$ | a larger effect of every output gap | the curve gets steeper |
 
-- **Demand-pull and cost-push.** The term $\bar{\nu}\tilde{Y}_t$ is **demand-pull inflation** (strong demand pulls prices up); $\bar{o}$ is **cost-push inflation** (higher costs push them up).
-- **No lasting trade-off.** Try to hold output above potential for ever, at $\tilde{Y}_s = x > 0$. Equation (6) gives $\pi_t = \pi_{-1} + \bar{\nu}x(t+1)$: inflation rises without limit. A permanently booming economy cannot be bought with a permanently higher but stable inflation rate, as the original Phillips curve of the 1960s suggested; this is the argument of Milton Friedman and Edmund Phelps.
-- **Phillips curve and quantity theory.** In the quantity theory of [Chapter 8](https://quarcs-lab.github.io/macro102-site/notebooks/ch08-inflation.html), faster growth of real GDP lowers inflation; here a boom raises it. There is no contradiction: the quantity theory is about the long run, where more output is more **supply**; here a positive $\tilde{Y}_t$ is **demand** above what the economy can normally supply.
+- **Demand-pull and cost-push.** The term $\bar{\nu}\tilde{Y}_t$ is **demand-pull inflation**: strong demand pulls prices up. The shock $\bar{o}$ is **cost-push inflation**: higher costs push them up.
+- **No lasting trade-off.** Try to keep output above potential for ever, at $\tilde{Y}_s = x > 0$. Equation (6) then gives $\pi_t = \pi_{-1} + \bar{\nu}x(t+1)$, and inflation climbs without limit. A permanent boom cannot be bought with a higher but stable inflation rate, as the original Phillips curve of the 1960s seemed to promise. This is the argument of Milton Friedman and Edmund Phelps.
+- **Phillips curve and quantity theory.** In the quantity theory of [Chapter 8](https://quarcs-lab.github.io/macro102-site/notebooks/ch08-inflation.html), faster growth of real GDP lowers inflation, while here a boom raises it. The two do not clash. The quantity theory speaks about the long run, where more output means more **supply**. Here a positive $\tilde{Y}_t$ is **demand** beyond what the economy can normally supply.
+
+::: {.mo-takeaway}
+Output sets the change in inflation, not its level, so a boom that never ends means inflation that never stops rising.
+:::
+
+::: {.callout-note .mo-check title="Check your understanding"}
+**1.** Islandia's inflation was 2 percent last year. This year output is 3 percent above potential, with no price shock and $\bar{\nu} = 0.5$. What is inflation this year? If output is back at potential next year, what is inflation then?
+
+<details><summary>Answer</summary>
+
+Equation (4) gives $\pi_t = 2 + 0.5 \times 3 = 3.5$ percent. Next year $\tilde{Y} = 0$, so by equation (5) $\Delta\pi = 0$: inflation stays at 3.5 percent. It does not go back to 2 on its own.
+
+</details>
+
+**2.** A smaller fuel-price shock, $\bar{o} = 0.5$, hits Islandia. Which output gap would hold inflation steady that year, and which kind of inflation is the shock?
+
+<details><summary>Answer</summary>
+
+By step 4, $\tilde{Y} = -\bar{o}/\bar{\nu} = -0.5/0.5 = -1$, a slump of 1 percent. The shock raises costs, so it is cost-push inflation.
+
+</details>
+:::
 
 <!-- cell -->
 
@@ -281,7 +401,7 @@ Inflation adds up all past output gaps and price shocks. Nothing is ever forgott
 
 #### Assumptions
 
-In every year $t$ three equations hold:
+Every year on Islandia, three things happen in turn: the Bank sets the rate, islanders and Harbor Boatworks decide how much to spend, and firms choose next year's prices. Three equations hold:
 
 | Block | Equation | Role |
 |---|---|---|
@@ -289,31 +409,49 @@ In every year $t$ three equations hold:
 | IS curve | $\tilde{Y}_t = \bar{a} - \bar{b}(R_t - \bar{r})$, equation (2) | $R_t \Rightarrow \tilde{Y}_t$ |
 | Phillips curve | $\pi_t = \pi_{t-1} + \bar{\nu}\tilde{Y}_t + \bar{o}$, equation (4) | $\tilde{Y}_t \Rightarrow \pi_t$ |
 
-The model takes as given the path of policy $R_t$, the shocks $\bar{a}$ and $\bar{o}$, the parameters $\bar{b}$, $\bar{r}$, $\bar{\nu}$, and the inflation of the year before the first year, $\pi_{-1}$. It determines short-run output $\tilde{Y}_t$ and inflation $\pi_t$ (and the nominal rate $i_t$) in every year. Within a year the chain runs in one direction: $R_t \Rightarrow \tilde{Y}_t \Rightarrow \pi_t$. Because $\pi_t$ is the price rise **over the coming year**, a recession in year 0 already lowers the inflation of year 0: firms choosing next year's prices see this year's weak demand.
+The model takes as given the path of policy $R_t$, the shocks $\bar{a}$ and $\bar{o}$, the parameters $\bar{b}$, $\bar{r}$, $\bar{\nu}$, and the inflation of the year before the first year, $\pi_{-1}$. It determines short-run output $\tilde{Y}_t$ and inflation $\pi_t$ (and the nominal rate $i_t$) in every year. Within a year the chain runs one way only: $R_t \Rightarrow \tilde{Y}_t \Rightarrow \pi_t$. Because $\pi_t$ is the price rise **over the coming year**, a recession in year 0 already lowers year 0's inflation: firms setting next year's prices see this year's weak demand.
 
 #### Solving the model
 
-**Step 1: one equation for inflation.** Substitute the IS curve (2) for $\tilde{Y}_t$ in the Phillips curve (4):
+**Step 1: one equation for inflation.** Replace $\tilde{Y}_t$ in the Phillips curve (4) by the IS curve (2).
 
-$$\pi_t = \pi_{t-1} + \bar{\nu}\left[\bar{a} - \bar{b}\,(R_t - \bar{r})\right] + \bar{o}. \tag{7}$$
+::: {.callout-important .mo-key title="Key result: the whole model in one line"}
+$$\pi_t = \pi_{t-1} + \bar{\nu}\left[\bar{a} - \bar{b}\,(R_t - \bar{r})\right] + \bar{o} \tag{7}$$
 
-This is the whole model in one line. It is a **difference equation**: given last year's inflation and this year's policy and shocks, it gives this year's inflation. Our `simulate` function below applies it year after year.
+This is a **difference equation**: from last year's inflation and this year's policy and shocks, it gives this year's inflation. Our `simulate` function below applies it year after year.
+:::
 
-**Step 2: a constant policy.** Let the central bank hold $R_t = R$ for some years, with $\bar{a} = \bar{o} = 0$. Then $\tilde{Y}_t = -\bar{b}(R - \bar{r})$ is the same every year, and equation (6) gives $\pi_t = \pi_{-1} + (t+1)\,\bar{\nu}\tilde{Y} = \pi_{-1} - (t+1)\,\bar{\nu}\bar{b}(R - \bar{r})$. Inflation falls by the same $\bar{\nu}\bar{b}(R - \bar{r})$ points every year: a straight line.
+**Step 2: a constant policy.** Let the Bank hold $R_t = R$ for some years, with $\bar{a} = \bar{o} = 0$. Then $\tilde{Y}_t = -\bar{b}(R - \bar{r})$ is the same in every year, and equation (6) gives $\pi_t = \pi_{-1} + (t+1)\,\bar{\nu}\tilde{Y} = \pi_{-1} - (t+1)\,\bar{\nu}\bar{b}(R - \bar{r})$. Inflation falls by the same $\bar{\nu}\bar{b}(R - \bar{r})$ points each year: a straight line.
 
-**Step 3: designing a disinflation.** The central bank wants inflation to fall from $\pi_{-1}$ to a target $\pi^T$ in $T$ years, with a constant real rate. After $T$ years (in year $T - 1$), step 2 says $\pi^T = \pi_{-1} + T\bar{\nu}\tilde{Y}$. Solve for the output gap: $\tilde{Y} = -(\pi_{-1} - \pi^T)/(\bar{\nu}T)$. Then solve the IS curve for the rate that delivers it, $R - \bar{r} = -\tilde{Y}/\bar{b}$:
+**Step 3: designing a disinflation.** The Bank wants inflation to go from $\pi_{-1}$ to a target $\pi^T$ in $T$ years, with a constant real rate. After $T$ years (in year $T - 1$), step 2 says $\pi^T = \pi_{-1} + T\bar{\nu}\tilde{Y}$. Solve for the output gap, $\tilde{Y} = -(\pi_{-1} - \pi^T)/(\bar{\nu}T)$, and then solve the IS curve for the rate that delivers it, $R - \bar{r} = -\tilde{Y}/\bar{b}$. That rate is equation (8) below.
 
-$$R = \bar{r} + \frac{\pi_{-1} - \pi^T}{\bar{\nu}\bar{b}\,T}. \tag{8}$$
+**Step 4: the cost.** The output lost is the sum of the gaps, $\sum_{t=0}^{T-1}(-\tilde{Y}) = T \times (\pi_{-1} - \pi^T)/(\bar{\nu}T)$. The $T$ cancels, which gives equation (9).
 
-**Step 4: the cost.** The output lost is the sum of the gaps, $\sum_{t=0}^{T-1}(-\tilde{Y}) = T \times (\pi_{-1} - \pi^T)/(\bar{\nu}T)$. The $T$ cancels:
+::: {.callout-important .mo-key title="Key result: the recipe and the price of a disinflation"}
+$$R = \bar{r} + \frac{\pi_{-1} - \pi^T}{\bar{\nu}\bar{b}\,T} \tag{8}$$
 
-$$\text{lost output} = \frac{\pi_{-1} - \pi^T}{\bar{\nu}} \quad\text{percent-years}. \tag{9}$$
+$$\text{lost output} = \frac{\pi_{-1} - \pi^T}{\bar{\nu}} \quad\text{percent-years} \tag{9}$$
 
-In fact, equation (6) with no price shocks says that **any** path of output with $\sum_s \tilde{Y}_s = (\pi^T - \pi_{-1})/\bar{\nu}$ does the job, so equation (9) holds whatever the shape of the recession. Each point of inflation removed costs $1/\bar{\nu}$ percent-years of output: a fast disinflation means a deep recession, a slow one a long recession, but the total is the same. Only a steeper Phillips curve makes it cheaper.
+Equation (6) with no price shocks says that **any** output path with $\sum_s \tilde{Y}_s = (\pi^T - \pi_{-1})/\bar{\nu}$ does the job. So equation (9) holds whatever the shape of the recession: each point of inflation removed costs $1/\bar{\nu}$ percent-years of output.
 
-**Worked numbers.** From $\pi_{-1} = 10$ to $\pi^T = 5$ percent in $T = 5$ years, with $\bar{\nu} = 0.5$, $\bar{b} = 2$ and $\bar{r} = 5$: equation (8) gives $R = 5 + 5/(0.5 \times 2 \times 5) = 6$ percent, so $\tilde{Y} = -2$ percent every year, and inflation runs 9, 8, 7, 6, 5. Equation (9) gives a cost of $5/0.5 = 10$ percent-years. This is Fig. 12.
+**Islandia in numbers.** From $\pi_{-1} = 10$ to $\pi^T = 5$ percent in $T = 5$ years, with $\bar{\nu} = 0.5$, $\bar{b} = 2$ and $\bar{r} = 5$: equation (8) gives $R = 5 + 5/(0.5 \times 2 \times 5) = 6$ percent, so $\tilde{Y} = -2$ percent every year, and inflation runs 9, 8, 7, 6, 5. Equation (9) puts the cost at $5/0.5 = 10$ percent-years. This is Fig. 12.
+:::
 
-**Step 5: where inflation comes to rest.** Once policy returns to $R_t = \bar{r} + \bar{a}/\bar{b}$ (equation 3), output is at potential and, with $\bar{o} = 0$, $\Delta\pi_t = 0$: inflation stays at whatever level it has reached. **Any** inflation rate can be a resting point. Nothing inside the model pulls inflation back to a particular level; only policy can move it.
+::: {.callout-tip .mo-inwords title="In words: the price of disinflation"}
+Lowering Islandia's inflation has a fixed price, paid in lost output. The Bank can pay it fast, with a short and deep recession, or slowly, with a long and shallow one, but the bill is the same. Only a steeper Phillips curve, prices that react more to slack, makes it cheaper.
+:::
+
+**Step 5: where inflation comes to rest.** Once policy is back at $R_t = \bar{r} + \bar{a}/\bar{b}$ (equation 3), output is at potential and, with $\bar{o} = 0$, $\Delta\pi_t = 0$: inflation stays at whatever level it has reached. **Any** inflation rate can be a resting point. Nothing in the model pulls inflation back toward a particular level; only policy can move it.
+
+::: {.callout-note .mo-check title="Check your understanding"}
+**1.** Islandia's inflation is 8 percent, and the Bank wants 4 percent in two years ($\bar{\nu} = 0.5$, $\bar{b} = 2$, $\bar{r} = 5$). Which real rate should it hold, and how much output does the plan cost?
+
+<details><summary>Answer</summary>
+
+Equation (8) gives $R = 5 + 4/(0.5 \times 2 \times 2) = 7$ percent, so $\tilde{Y} = -2 \times (7 - 5) = -4$ percent in each of the two years. Equation (9) puts the cost at $4/0.5 = 8$ percent-years, the same as a slower plan would cost.
+
+</details>
+:::
 
 #### What the model predicts
 
@@ -328,10 +466,24 @@ The dynamics after each kind of event, with the baseline $\bar{b} = 2$, $\bar{\n
 | the same shock, then the central bank undoes it | a recession of $\bar{o}/\bar{\nu} = 2$ percent-years in total | back to where it started |
 | a slowdown in potential mistaken for $\bar{a}' = -2$ | $\tilde{Y} = -\bar{a}' = +2$ | rises 1 point a year |
 
-The last row is the policy mistake of the 1970s (Figs. 13 and 21). Policymakers cut the rate by equation (3) to $R' = \bar{r} + \bar{a}'/\bar{b}$, but the true IS curve has $\bar{a} = 0$, so true output is $\tilde{Y} = -\bar{b}(R' - \bar{r}) = -\bar{b}\,\bar{a}'/\bar{b} = -\bar{a}'$: a boom instead of a return to potential.
+The last row is the policy mistake of the 1970s (Figs. 13 and 21). The policymakers cut the rate by equation (3) to $R' = \bar{r} + \bar{a}'/\bar{b}$. But the true IS curve still has $\bar{a} = 0$, so true output is $\tilde{Y} = -\bar{b}(R' - \bar{r}) = -\bar{b}\,\bar{a}'/\bar{b} = -\bar{a}'$: a boom, not a return to potential.
 
-- With sticky inflation and adaptive expectations, the **only** way to lower inflation is a period with output below potential (equation 9). Disinflation is a temporary recession, not a permanent loss.
-- Inflation keeps the memory of every shock (equation 6). Oil shocks, a too-loose policy and a misread productivity slowdown can therefore add up to a **Great Inflation**.
+- With sticky inflation and adaptive expectations, the **only** way to bring inflation down is a spell of output below potential (equation 9). Disinflation is a temporary recession, not a permanent loss.
+- Inflation keeps a memory of every shock (equation 6). Oil shocks, too-loose policy and a misread productivity slowdown can therefore pile up into a **Great Inflation**.
+
+::: {.mo-takeaway}
+Inflation remembers every shock, and the only way to bring it down is a spell of output below potential.
+:::
+
+::: {.callout-note .mo-check title="Check your understanding"}
+**1.** The Bank of Islandia thinks demand has fallen, $\bar{a}' = -1$, but in truth potential output has slowed and $\bar{a} = 0$. Which rate does it set by equation (3), and what happens to output and inflation?
+
+<details><summary>Answer</summary>
+
+It cuts to $R' = 5 - 1/2 = 4.5$ percent. The true IS curve (2) gives $\tilde{Y} = -2 \times (4.5 - 5) = +1$ percent: a boom. By equation (5), inflation then rises by $0.5 \times 1 = 0.5$ points a year for as long as the mistake lasts.
+
+</details>
+:::
 
 <!-- cell -->
 
@@ -339,37 +491,57 @@ The last row is the policy mistake of the 1970s (Figs. 13 and 21). Policymakers 
 
 #### Assumptions
 
-So far the central bank chooses each year's real rate by judgment. [Chapter 13](https://quarcs-lab.github.io/macro102-site/notebooks/ch13-stabilization-policy-and-the-as-ad-framework.html) lets it follow a **rule** instead: it sets the real rate above $\bar{r}$ by $\bar{m}$ points for every point that inflation is above an **inflation target** $\bar{\pi}$,
+Up to now the Bank of Islandia sets each year's real rate by judgment. [Chapter 13](https://quarcs-lab.github.io/macro102-site/notebooks/ch13-stabilization-policy-and-the-as-ad-framework.html) has it follow a **rule** instead: for every point that inflation sits above an **inflation target** $\bar{\pi}$, the real rate goes $\bar{m}$ points above $\bar{r}$,
 
 $$R_t - \bar{r} = \bar{m}\,(\pi_t - \bar{\pi}), \qquad \bar{m} > 0.$$
 
-In terms of the nominal rate, by the Fisher equation, $i_t = R_t + \pi_t = \bar{r} + \pi_t + \bar{m}(\pi_t - \bar{\pi})$. This is the inflation part of the **Taylor rule**; John Taylor's full rule also responds to short-run output. The IS curve (2) and the Phillips curve (4) stay as they are. Here we only preview the result, with this chapter's numbers.
+By the Fisher equation, the nominal rate is then $i_t = R_t + \pi_t = \bar{r} + \pi_t + \bar{m}(\pi_t - \bar{\pi})$. This is the inflation part of the **Taylor rule**; John Taylor's full rule also reacts to short-run output. The IS curve (2) and the Phillips curve (4) are unchanged. Here we only preview the result, with this chapter's numbers.
 
 #### Solving the model
 
 **Step 1: the rule in the IS curve.** Replace $R_t - \bar{r}$ in equation (2): $\tilde{Y}_t = \bar{a} - \bar{b}\bar{m}(\pi_t - \bar{\pi})$. Higher inflation now brings a higher real rate and lower output. Chapter 13 calls this the AD curve.
 
-**Step 2: into the Phillips curve.** Put it into equation (4) and subtract $\bar{\pi}$ from both sides. Writing the **inflation gap** as $x_t \equiv \pi_t - \bar{\pi}$,
+**Step 2: into the Phillips curve.** Put it into equation (4) and subtract $\bar{\pi}$ from both sides. With the **inflation gap** $x_t \equiv \pi_t - \bar{\pi}$,
 
 $$x_t = x_{t-1} + \bar{\nu}\bar{a} - \bar{\nu}\bar{b}\bar{m}\,x_t + \bar{o}.$$
 
-$x_t$ appears on both sides, because this year's inflation sets this year's interest rate. Collect the $x_t$ terms on the left, $(1 + \bar{\nu}\bar{b}\bar{m})\,x_t = x_{t-1} + \bar{\nu}\bar{a} + \bar{o}$, and divide:
+The gap $x_t$ shows up on both sides, because this year's inflation sets this year's rate. Gather the $x_t$ terms on the left, $(1 + \bar{\nu}\bar{b}\bar{m})\,x_t = x_{t-1} + \bar{\nu}\bar{a} + \bar{o}$, and divide by $1 + \bar{\nu}\bar{b}\bar{m}$. Call the result's factor $\lambda \equiv 1/(1 + \bar{\nu}\bar{b}\bar{m})$: this is equation (10) in the box below.
 
-$$\pi_t - \bar{\pi} = \lambda\left[(\pi_{t-1} - \bar{\pi}) + \bar{\nu}\bar{a} + \bar{o}\right], \qquad \lambda \equiv \frac{1}{1 + \bar{\nu}\bar{b}\bar{m}}. \tag{10}$$
+**Step 3: the path with no shocks.** With $\bar{a} = \bar{o} = 0$, the gap obeys $x_t = \lambda x_{t-1}$, so $x_0 = \lambda x_{-1}$, $x_1 = \lambda^2 x_{-1}$, and so on, one more factor $\lambda$ each year.
 
-**Step 3: the path with no shocks.** With $\bar{a} = \bar{o} = 0$, $x_t = \lambda x_{t-1}$, so $x_0 = \lambda x_{-1}$, $x_1 = \lambda^2 x_{-1}$, and in general
+::: {.callout-important .mo-key title="Key result: inflation under the rule"}
+$$\pi_t - \bar{\pi} = \lambda\left[(\pi_{t-1} - \bar{\pi}) + \bar{\nu}\bar{a} + \bar{o}\right], \qquad \lambda \equiv \frac{1}{1 + \bar{\nu}\bar{b}\bar{m}} \tag{10}$$
 
-$$\pi_t - \bar{\pi} = \lambda^{t+1}\,(\pi_{-1} - \bar{\pi}). \tag{11}$$
+$$\pi_t - \bar{\pi} = \lambda^{t+1}\,(\pi_{-1} - \bar{\pi}) \tag{11}$$
 
-Since $0 < \lambda < 1$, the gap shrinks by the same fraction every year and inflation converges to the target on its own ([Appendix C.10](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.10-difference-equations-how-macro-variables-move-over-time)). Output follows, $\tilde{Y}_t = -\bar{b}\bar{m}\,x_t$.
+Since $0 < \lambda < 1$, the gap shrinks by the same fraction every year, and inflation returns to the target by itself ([Appendix C.10](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.10-difference-equations-how-macro-variables-move-over-time)). Output follows the gap, $\tilde{Y}_t = -\bar{b}\bar{m}\,x_t$.
 
-**Worked numbers.** With $\bar{\nu} = 0.5$, $\bar{b} = 2$, Taylor's $\bar{m} = 1/2$ and a target of 2 percent, $\bar{\nu}\bar{b}\bar{m} = 0.5$ and $\lambda = 1/1.5 = 2/3$. Starting from 10 percent inflation, the gap of 8 points becomes $5.33$, $3.56$, $2.37$, …: inflation runs about $7.3$, $5.6$, $4.4$ percent, and output $-5.3$, $-3.6$, $-2.4$ percent. The total output lost is $8 \times (2/3)/(1 - 2/3) = 16$ percent-years, exactly $(\pi_{-1} - \bar{\pi})/\bar{\nu} = 8/0.5$, as equation (9) requires.
+**Islandia in numbers.** With $\bar{\nu} = 0.5$, $\bar{b} = 2$, Taylor's $\bar{m} = 1/2$ and a target of 2 percent, $\bar{\nu}\bar{b}\bar{m} = 0.5$ and $\lambda = 1/1.5 = 2/3$. From 10 percent inflation, the gap of 8 points becomes $5.33$, $3.56$, $2.37$, …: inflation runs about $7.3$, $5.6$, $4.4$ percent, and output $-5.3$, $-3.6$, $-2.4$ percent. The total output lost is $8 \times (2/3)/(1 - 2/3) = 16$ percent-years, exactly $(\pi_{-1} - \bar{\pi})/\bar{\nu} = 8/0.5$, as equation (9) requires.
+:::
+
+::: {.callout-tip .mo-inwords title="In words"}
+Under the rule, the Bank of Islandia leans harder the further inflation is from its target. High inflation brings a high real rate, a slump, and so falling inflation; as inflation nears the target, the Bank eases off. Each year the same share of the remaining gap disappears, so the return is fast at first and gentle at the end.
+:::
 
 #### What the model predicts
 
-- Each year the economy closes the share $1 - \lambda = \bar{\nu}\bar{b}\bar{m}/(1 + \bar{\nu}\bar{b}\bar{m})$ of the inflation gap: one third at the baseline. A tougher central bank (larger $\bar{m}$), more interest-sensitive spending (larger $\bar{b}$) or a steeper Phillips curve (larger $\bar{\nu}$) all make $\lambda$ smaller and the return faster.
-- A tougher rule front-loads the recession but does not make it cheaper: by equation (6) the total output lost is still $(\pi_{-1} - \bar{\pi})/\bar{\nu}$, whatever $\bar{m}$.
-- The nominal rate rises by $1 + \bar{m}$ points for each point of inflation, more than one for one, so that the **real** rate rises. This is the **Taylor principle**.
+- Each year Islandia closes the share $1 - \lambda = \bar{\nu}\bar{b}\bar{m}/(1 + \bar{\nu}\bar{b}\bar{m})$ of its inflation gap: one third at the baseline. A tougher Bank (larger $\bar{m}$), more rate-sensitive spending (larger $\bar{b}$) or a steeper Phillips curve (larger $\bar{\nu}$) all make $\lambda$ smaller and the return faster.
+- A tougher rule front-loads the recession but does not make it cheaper. By equation (6), the total output lost is still $(\pi_{-1} - \bar{\pi})/\bar{\nu}$, whatever $\bar{m}$.
+- The nominal rate rises by $1 + \bar{m}$ points for each point of inflation, more than one for one, so that the **real** rate goes up. This is the **Taylor principle**.
+
+::: {.mo-takeaway}
+A rule that raises the real rate when inflation is high brings inflation back to target on its own, but never for free.
+:::
+
+::: {.callout-note .mo-check title="Check your understanding"}
+**1.** The Bank of Islandia becomes tougher, $\bar{m} = 1$, with $\bar{\nu} = 0.5$ and $\bar{b} = 2$. Starting from 10 percent inflation and a target of 2 percent, what is $\lambda$, what is inflation in year 0, and how much output is lost in total?
+
+<details><summary>Answer</summary>
+
+Now $\bar{\nu}\bar{b}\bar{m} = 1$, so $\lambda = 1/2$. Equation (11) gives $\pi_0 = 2 + 0.5 \times 8 = 6$ percent, a faster fall than the 7.3 percent with $\bar{m} = 1/2$. The total cost is unchanged, $8/0.5 = 16$ percent-years: the recession is deeper but shorter.
+
+</details>
+:::
 
 <!-- cell -->
 
@@ -377,29 +549,37 @@ Since $0 < \lambda < 1$, the gap shrinks by the same fraction every year and inf
 
 #### Assumptions
 
-**1. Money demand.** Cash and checking accounts pay no interest, while a savings account pays $i$. The nominal interest rate is therefore the **opportunity cost** of holding money, and people hold less money when it is high. We use an illustrative straight line, $M^d = m_0 - i$, with $m_0 = 10$ at the baseline. Higher prices or output, or new ways of paying, shift $m_0$.
+**1. Money demand.** Cash and checking accounts pay no interest, while a savings account pays $i$. Holding money therefore means giving up $i$: the nominal rate is the **opportunity cost** of money, and islanders keep less of it when the rate is high. We use an illustrative straight line, $M^d = m_0 - i$, with $m_0 = 10$ at the baseline. Higher prices or output, or new ways of paying, shift $m_0$.
 
-**2. Money supply.** The central bank decides how much money to supply, $M^s$: a vertical line in a diagram with money on the horizontal axis and $i$ on the vertical axis.
+**2. Money supply.** The Bank of Islandia decides how much money to supply, $M^s$: a vertical line in a diagram with money on the horizontal axis and $i$ on the vertical one.
 
-**3. Sticky inflation.** In the short run the price level does not jump to clear the money market, as it would in the quantity theory. The market clears through the interest rate instead (and so through the velocity of money).
+**3. Sticky inflation.** In the short run the price level does not jump to clear the money market, as it would in the quantity theory. The interest rate does the clearing instead (and with it, the velocity of money).
 
 #### Solving the model
 
-**Step 1: the equilibrium rate.** Set money demand equal to money supply, $m_0 - i^* = M^s$, and solve for $i^*$:
+**Step 1: the equilibrium rate.** Set money demand equal to money supply, $m_0 - i^* = M^s$, and solve for $i^*$.
 
-$$i^* = m_0 - M^s. \tag{12}$$
+::: {.callout-important .mo-key title="Key result: the rate that clears the money market"}
+$$i^* = m_0 - M^s \tag{12}$$
 
-At the baseline, $i^* = 10 - 5 = 5$ percent. Above $i^*$ people want to hold less money than there is and the rate falls; below it they want more and the rate rises.
+Above $i^*$, islanders want to hold less money than there is, and the rate falls; below it, they want more, and the rate rises.
 
-**Step 2: comparative statics.** From equation (12), one unit less of money supply raises $i^*$ by one point, and one unit more of money demand also raises it by one point. Cutting the supply from 5 to 4 units lifts the rate from 5 to 6 percent: **tight money** means a higher interest rate (Fig. 19).
+**Islandia in numbers.** At the baseline, $i^* = 10 - 5 = 5$ percent.
+:::
 
-**Step 3: targeting the rate.** To keep the rate at a target $i^T$ whatever happens to demand, solve equation (12) for the supply: $M^s = m_0 - i^T$. The supply now moves one for one with demand, and the rate does not move at all. In the diagram the money supply becomes a **horizontal** line at $i^T$. If demand rises to $m_0 = 11$, the central bank supplies 6 units instead of 5 (Fig. 20).
+**Step 2: comparative statics.** By equation (12), one unit less money supply raises $i^*$ by one point, and one unit more money demand does the same. Cutting the supply from 5 to 4 units lifts the rate from 5 to 6 percent: **tight money** means a higher interest rate (Fig. 19).
 
-**Step 4: bonds and open-market operations.** The central bank changes the money supply by buying or selling government bonds. A bond that pays 100 dollars in one year and costs $P_B$ today earns $100 - P_B$ on an outlay of $P_B$, so its interest rate is
+**Step 3: targeting the rate.** To hold the rate at a target $i^T$ whatever happens to demand, solve equation (12) for the supply: $M^s = m_0 - i^T$. Supply now moves one for one with demand, and the rate does not move at all. In the diagram, money supply becomes a **horizontal** line at $i^T$. If demand rises to $m_0 = 11$, the Bank supplies 6 units instead of 5 (Fig. 20).
+
+::: {.callout-tip .mo-inwords title="In words"}
+The Bank of Islandia stands ready to swap money for bonds at its chosen rate. When islanders want more cash, it simply supplies more; when they want less, it takes some back. The quantity of money adjusts in the background, and the rate, the thing that matters for spending, stays put.
+:::
+
+**Step 4: bonds and open-market operations.** The Bank changes the money supply by buying or selling government bonds. A bond that pays 100 dollars in a year and costs $P_B$ today earns $100 - P_B$ on an outlay of $P_B$, so its interest rate is
 
 $$i = \frac{100 - P_B}{P_B} \quad\Longleftrightarrow\quad P_B = \frac{100}{1 + i}.$$
 
-A bond priced at 96 dollars yields $4/96 \approx 4.2$ percent. When the central bank sells bonds, it takes money out of the economy and pushes bond prices down, so the interest rate rises; buying bonds does the opposite.
+A bond priced at 96 dollars yields $4/96 \approx 4.2$ percent. When the Bank sells bonds, it takes money out of the economy and pushes bond prices down, so the interest rate rises; buying bonds does the opposite.
 
 #### What the model predicts
 
@@ -408,8 +588,39 @@ A bond priced at 96 dollars yields $4/96 \approx 4.2$ percent. When the central 
 | money supply down 1 unit | $+1$ point | (not used: $M^s$ follows demand) |
 | money demand $m_0$ up 1 unit | $+1$ point | $0$; $M^s$ rises by 1 unit |
 
-- With a fixed money supply, every shift in money demand would move the interest rate, and with sticky inflation also the real rate and output, although nothing real has happened. Targeting the rate shields the economy from such shocks, which is why modern central banks set an interest rate rather than a quantity of money.
+- With a fixed money supply, every swing in money demand would move the interest rate, and with sticky inflation also the real rate and output, though nothing real had happened. Targeting the rate shields the economy from such shocks. That is why modern central banks set an interest rate rather than a quantity of money.
 - **IS/LM.** Hold $M^s$ fixed and let higher output raise money demand: the rate then rises with output, an upward-sloping "LM" curve. A central bank that adjusts $M^s$ to hold its rate turns that curve into our flat MP line.
+
+::: {.mo-takeaway}
+The Bank of Islandia makes its rate stick by supplying whatever money islanders want at that rate.
+:::
+
+::: {.callout-note .mo-check title="Check your understanding"}
+**1.** Islanders' money demand rises to $M^d = 12 - i$. If the Bank keeps the supply at 5 units, what is the rate? Which supply would keep the rate at 5 percent?
+
+<details><summary>Answer</summary>
+
+Equation (12) gives $i^* = 12 - 5 = 7$ percent. To hold 5 percent, the Bank solves $M^s = m_0 - i^T = 12 - 5$, so it supplies 7 units.
+
+</details>
+
+**2.** A one-year bond that pays 100 dollars sells for 98 dollars. What is its interest rate? If the Bank sells bonds and the price falls, does the rate rise or fall?
+
+<details><summary>Answer</summary>
+
+The rate is $2/98 \approx 2.04$ percent, from $i = (100 - P_B)/P_B$. A lower price means a larger gain per dollar spent, so the rate rises.
+
+</details>
+:::
+
+::: {.callout-note .mo-recap title="Recap"}
+- **The MP curve:** with sticky inflation, the Bank of Islandia's nominal rate sets the real rate, $R_t = i_t - \pi_t$ ([Fig. 3](#fig.-3-the-mp-curve-in-the-ismp-diagram)).
+- **The IS/MP diagram:** each point on the real rate lowers output by $\bar{b}$, and equation (3) keeps output at potential after a demand shock ([Fig. 5](#fig.-5-stabilizing-the-economy-after-a-housing-bubble)).
+- **The Phillips curve:** output sets the change in inflation, $\Delta\pi_t = \bar{\nu}\tilde{Y}_t + \bar{o}$ ([Fig. 7](#fig.-7-the-phillips-curve), [Fig. 8](#fig.-8-an-oil-price-increase)).
+- **Disinflation has a fixed price:** $(\pi_{-1} - \pi^T)/\bar{\nu}$ percent-years of output, however the recession is spread ([Fig. 12](#fig.-12-the-disinflation-over-time)).
+- **A rule closes the gap step by step:** under the Taylor rule, the inflation gap shrinks by the factor $\lambda$ each year.
+- **The Bank makes its rate stick** by standing ready to supply any amount of money islanders want at its rate ([Fig. 20](#fig.-20-targeting-the-nominal-interest-rate)).
+:::
 
 <!-- cell -->
 
