@@ -79,7 +79,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
 <link href="../site_libs/bootstrap/bootstrap-2840b367f9d37dcce9d9b24382fd3cf8.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
-<link href="../site_libs/bootstrap/bootstrap-dark-f0500dbe79c8a5a7cc981923bbe27479.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
+<link href="../site_libs/bootstrap/bootstrap-dark-7e5c0dfdde2f864c236da0036358a3c3.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
 <script id="quarto-search-options" type="application/json">{
   "location": "sidebar",
   "copy-button": false,
@@ -320,7 +320,247 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   }
   function watch() { new MutationObserver(restyle).observe(document.body, { attributes: true, attributeFilter: ["class"] }); restyle(); }
   if (document.body) watch(); else document.addEventListener("DOMContentLoaded", watch);
-  window.bookPlotlyTheme = { darkFigure: darkFigure, mapColor: mapColor, restyle: restyle };
+  // walk and isDark are used by plotly-controls.html (menu arguments drawn as web controls)
+  window.bookPlotlyTheme = { darkFigure: darkFigure, mapColor: mapColor, restyle: restyle, walk: walk, isDark: isDark };
+})();
+</script>
+<script>
+/* Touch-friendly controls and responsive size for the saved Plotly charts (user decision, 2026-10-19).
+   Plotly draws its menus, buttons and sliders inside the chart's SVG. On a tablet or phone a long menu
+   cannot be scrolled with a finger and the charts (saved 860 px wide) do not fit the screen. So, on
+   every device, this script takes the menus and sliders out of each chart and draws them as ordinary
+   web controls above it (a <select>, buttons, a range slider), which call the same Plotly methods with
+   the same arguments. The chart then fills the width of the page, and on a narrow screen its legend
+   moves under the plot.
+   It must load right after plotly-theme.html: its wrapper of Plotly.newPlot runs first, so the theme
+   keeps a figure without in-chart controls, and its wrapper of Plotly.react re-applies the reader's
+   choices after every theme redraw. */
+(function () {
+  "use strict";
+  var P = window.Plotly;
+  if (!P || P.__bookControls) return;
+  P.__bookControls = true;
+
+  var NARROW = 640;                                       // px: below this, the legend goes under the plot
+  var touch = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
+  var parser = new DOMParser();
+
+  function clone(x) { return x === undefined ? x : JSON.parse(JSON.stringify(x)); }
+  function el(gd) { return typeof gd === "string" ? document.getElementById(gd) : gd; }
+  function text(label) {                                 // Plotly's pseudo-HTML label -> plain text
+    return parser.parseFromString(String(label == null ? "" : label), "text/html").body.textContent;
+  }
+  function theme() { return window.bookPlotlyTheme || null; }
+  function dark() { var t = theme(); return !!(t && t.isDark && t.isDark()); }
+
+  // ---- calling Plotly with a control's arguments ------------------------------------------------
+  function run(div, method, args) {
+    if (!/^(update|restyle|relayout|animate)$/.test(method)) return;
+    args = clone(args || []);
+    if (method !== "animate" && dark()) args = theme().walk(args);   // the theme no longer sees menu args
+    return P[method].apply(P, [div].concat(args));
+  }
+  function replay(div) {                                  // the reader's choices, in the order of the bar
+    var st = div.__bookControls;
+    if (!st) return;
+    st.controls.forEach(function (c) { if (c.changed && c.method !== "animate") run(div, c.method(), c.args()); });
+  }
+
+  // ---- the control bar ------------------------------------------------------------------------
+  function make(tag, cls, parent) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  function menuControl(div, bar, menu) {
+    var buttons = (menu.buttons || []).filter(function (b) { return b.visible !== false; });
+    if (!buttons.length) return null;
+    var active = menu.active == null ? 0 : menu.active;
+    var c = { changed: false, index: active };
+    c.method = function () { return buttons[c.index].method; };
+    c.args = function () { return buttons[c.index].args; };
+    var animate = buttons.some(function (b) { return b.method === "animate"; });
+    function pick(i) {
+      c.index = i; c.changed = true;
+      run(div, buttons[i].method, buttons[i].args);
+    }
+    if (menu.type === "buttons" && (buttons.length <= 4 || animate)) {
+      var group = make("div", "book-ctl-buttons", bar);
+      group.setAttribute("role", "group");
+      var show = menu.showactive !== false && !animate;
+      buttons.forEach(function (b, i) {
+        var btn = make("button", "book-ctl-button", group);
+        btn.type = "button";
+        btn.textContent = text(b.label);
+        if (animate) btn.setAttribute("aria-label", /9654|▶/.test(b.label) ? "Play" : "Pause");
+        if (show) btn.setAttribute("aria-pressed", String(i === active));
+        btn.addEventListener("click", function () {
+          pick(i);
+          if (show) Array.prototype.forEach.call(group.children, function (x, k) { x.setAttribute("aria-pressed", String(k === i)); });
+        });
+      });
+    } else {
+      var sel = make("select", "book-ctl-select", bar);
+      sel.setAttribute("aria-label", "Choose what the chart shows");
+      buttons.forEach(function (b, i) {
+        var o = make("option", null, sel);
+        o.value = String(i);
+        o.textContent = text(b.label);
+      });
+      sel.selectedIndex = active >= 0 ? active : 0;
+      sel.addEventListener("change", function () { pick(+sel.value); });
+    }
+    if (animate) c.method = function () { return "animate"; };
+    return c;
+  }
+  function sliderControl(div, bar, slider) {
+    var steps = (slider.steps || []).filter(function (s) { return s.visible !== false; });
+    if (!steps.length) return null;
+    var c = { changed: false, index: slider.active == null ? 0 : slider.active };
+    c.method = function () { return steps[c.index].method; };
+    c.args = function () { return steps[c.index].args; };
+    var box = make("div", "book-ctl-slider", bar);
+    var cv = slider.currentvalue || {};
+    var read = make("div", "book-ctl-readout", box);
+    function show() { read.textContent = (cv.visible === false ? "" : (cv.prefix || "")) + text(steps[c.index].label) + (cv.suffix || ""); }
+    var range = make("input", "book-ctl-range", box);
+    range.type = "range"; range.min = "0"; range.max = String(steps.length - 1); range.step = "1";
+    range.value = String(c.index);
+    range.setAttribute("aria-label", (cv.prefix || "").replace(/[=:]\s*$/, "").trim() || "slider");
+    if (steps.length <= 12) {                             // the step labels under the rail
+      var ticks = make("div", "book-ctl-ticks", box);
+      steps.forEach(function (s) { make("span", null, ticks).textContent = text(s.label); });
+    }
+    show();
+    range.addEventListener("input", function () {
+      c.index = +range.value; c.changed = true; show();
+      run(div, steps[c.index].method, steps[c.index].args);
+    });
+    // an animation moves the slider as it plays
+    if (steps.some(function (s) { return s.method === "animate"; }) && div.on) {
+      div.on("plotly_animatingframe", function (e) {
+        var name = e && e.name, k = steps.findIndex(function (s) { return s.args && s.args[0] && String(s.args[0][0]) === String(name); });
+        if (k >= 0) { c.index = k; range.value = String(k); show(); }
+      });
+    }
+    return c;
+  }
+  function buildBar(div, menus, sliders) {
+    var old = div.parentNode.querySelector(".book-controls");
+    if (old) old.remove();
+    var bar = document.createElement("div");
+    bar.className = "book-controls";
+    var controls = [];
+    menus.forEach(function (m) { var c = menuControl(div, bar, m); if (c) controls.push(c); });
+    sliders.forEach(function (s) { var c = sliderControl(div, bar, s); if (c) controls.push(c); });
+    var cap = div.previousElementSibling;                  // the bar goes above the narrow-screen title
+    div.parentNode.insertBefore(bar, cap && cap.classList.contains("book-ctl-title") ? cap : div);
+    div.__bookControls = { controls: controls };
+  }
+
+  // ---- size: fill the column; on a narrow screen, the legend under the plot and the title above it ------
+  // (Plotly does not wrap titles, so a narrow chart shows its title as page text, kept in step with the
+  // slider steps that change it, and grows by the height of its legend so the plot keeps its size)
+  function defaultLegend(layout) {
+    var l = layout.legend || {};
+    return l.orientation !== "h" && (l.x == null || l.x >= 1);
+  }
+  function caption(div) {
+    var c = div.previousElementSibling;
+    if (c && c.classList.contains("book-ctl-title")) return c;
+    c = document.createElement("div");
+    c.className = "book-ctl-title";
+    div.parentNode.insertBefore(c, div);
+    return c;
+  }
+  function fitNarrow(div) {
+    var base = div.__bookBase;
+    if (!base) return;
+    var narrow = div.clientWidth < NARROW;
+    if (narrow !== div.__bookNarrow) {
+      div.__bookNarrow = narrow;
+      div.classList.toggle("book-narrow", narrow);
+      var up = { height: base.height };
+      if (base.legendRight) {
+        if (narrow) Object.assign(up, { "legend.orientation": "h", "legend.x": 0, "legend.xanchor": "left",
+                                          "legend.yref": "container", "legend.y": 0, "legend.yanchor": "bottom" });
+        else up.legend = clone(base.legend) || {};
+        up["margin.r"] = narrow ? 20 : base.marginRight;  // the right margin held the legend
+      }
+      if (base.marginTop != null) up["margin.t"] = narrow ? 30 : base.marginTop;
+      P.relayout(div, up);
+      return;                                             // the redraw calls fitNarrow again (afterplot)
+    }
+    // the chart div keeps the saved inline height (480px) and its card clips: follow the drawn height
+    if (div._fullLayout && div._fullLayout.height) div.style.height = div._fullLayout.height + "px";
+    var t = div._fullLayout && div._fullLayout.title;
+    caption(div).textContent = narrow && t && t.text ? text(String(t.text).replace(/<br\s*\/?>/gi, " ")) : "";
+    if (narrow && base.legendRight && div._fullLayout.legend) {
+      var want = Math.round(base.height + (div._fullLayout.legend._height || 0));
+      if (Math.abs(div._fullLayout.height - want) > 8) P.relayout(div, { height: want });
+    }
+  }
+  var timer;
+  window.addEventListener("resize", function () {
+    clearTimeout(timer);
+    timer = setTimeout(function () {
+      Array.prototype.forEach.call(document.querySelectorAll(".js-plotly-plot"), fitNarrow);
+    }, 150);
+  });
+
+  // ---- the wrappers ---------------------------------------------------------------------------
+  var newPlot = P.newPlot, react = P.react;
+  P.newPlot = function (gd, data, layout, config) {
+    var div = el(gd);
+    if (!div) return newPlot.apply(P, arguments);
+    var fig = data && !Array.isArray(data) && typeof data === "object" ? data : { data: data, layout: layout, config: config };
+    var L = Object.assign({}, fig.layout || {});
+    var menus = L.updatemenus || [], sliders = L.sliders || [];
+    var above = menus.some(function (m) { return (m.y == null ? 1 : m.y) >= 1; });
+    delete L.updatemenus;
+    delete L.sliders;
+    if (above && L.margin && L.margin.t > 80) L.margin = Object.assign({}, L.margin, { t: 80 });
+    // the saved size is 860 x 480 (in the template); keep the height, take the width of the column
+    var tpl = L.template && L.template.layout ? L.template : null;
+    var height = L.height || (tpl && tpl.layout.height) || 480;
+    if (tpl && tpl.layout.width) {
+      L.template = Object.assign({}, tpl, { layout: Object.assign({}, tpl.layout) });
+      delete L.template.layout.width;
+    }
+    delete L.width;
+    L.height = height;
+    L.autosize = true;
+    if (touch) L.dragmode = false;                       // a finger scrolls the page; a tap still shows values
+    div.style.width = "100%";
+    var mt = L.margin && L.margin.t != null ? L.margin.t : tpl && tpl.layout.margin && tpl.layout.margin.t;
+    var mr = L.margin && L.margin.r != null ? L.margin.r : tpl && tpl.layout.margin && tpl.layout.margin.r;
+    div.__bookBase = { legend: clone(L.legend), legendRight: defaultLegend(L), height: height,
+                       marginRight: mr == null ? 80 : mr,
+                       marginTop: (L.title && (L.title.text || typeof L.title === "string")) ? (mt == null ? 100 : mt) : null };
+    div.__bookNarrow = false;
+    var cfg = Object.assign({}, fig.config || {}, { responsive: true });
+    if (touch) cfg.displayModeBar = false;               // zoom and pan tools need a mouse
+    var drawn = newPlot.call(P, div, { data: fig.data, layout: L, config: cfg, frames: fig.frames });
+    return Promise.resolve(drawn).then(function (res) {
+      if (menus.length || sliders.length) buildBar(div, menus, sliders);
+      if (div.on) div.on("plotly_afterplot", function () { fitNarrow(div); });
+      fitNarrow(div);
+      return res;
+    });
+  };
+  P.react = function (gd) {
+    var div = el(gd);
+    return Promise.resolve(react.apply(P, arguments)).then(function (res) {
+      if (div && div.__bookBase) {
+        div.__bookNarrow = false;                         // the redraw restored the saved legend and size
+        div.classList.remove("book-narrow");
+        replay(div);
+        fitNarrow(div);
+      }
+      return res;
+    });
+  };
 })();
 </script>
 <script src="https://cdn.jsdelivr.net/npm/requirejs@2.3.6/require.min.js" integrity="sha384-c9c+LnTbwQ3aujuU7ULEPVvgLs+Fn6fJUvIGTsuu1ZcCf11fiEubah0ttpca4ntM sha384-6V1/AdqZRWk1KAlWbKBlGhN7VG4iE/yAZcO6NZPMF8od0vukrvr0tg4qY6NSrItx" crossorigin="anonymous"></script>
