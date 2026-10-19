@@ -1322,66 +1322,155 @@ The financial crisis in four pictures: a boom and bust in house prices, the Fed'
 Robert Shiller's index measures the price of a typical U.S. house, divided by the consumer price index so that
 it is in **real** terms, with 1953 = 100. We read it with dates as row labels, as a Series called `house`.
 
-> **Python note.** `set_index("date")` makes the dates the row labels, and `.real_home_price_index` then picks
-> one column as a Series. `.tail()` shows the last five rows.
-
 ```{python}
+# Load the data of Fig. 1: one row per month, with the date and the real index
 housing = pd.read_csv(DATA_URL + "fig10-1.csv", parse_dates=["date"])
+# `set_index("date")` makes the dates the row labels, and `.real_home_price_index`
+# then picks one column as a Series, so that house["2005-12-01"] is one month
 house = housing.set_index("date").real_home_price_index
+# `.tail()` shows the last five rows
 housing.tail()
 ```
 
 The index has one value per month from January 1953 to July 2026. Each boom and bust gets a search window,
 and `peak_to_trough` finds the peak and trough inside it.
 
-> **Python note.** `BUSTS` is a dictionary: each name (the key) gives a pair of dates (the value), and
-> `BUSTS[bust]` looks one up. `start, end = ...` unpacks the pair into two variables. `px.line` draws the index
-> as a line, and `log_y=True` gives the ratio scale. `fig.add_vrect` shades the bust, and
-> `fig.add_trace(go.Scatter(...))` adds the two black dots for the peak and the trough. In an f-string,
-> `{peak:%b %Y}` prints a date as "Dec 2005", and `{change:+.1f}` a number with its sign. On a ratio (log) axis,
-> Plotly wants the axis range as powers of ten, so we pass `np.log10(...)`. With `xref="paper"` and `yref="paper"`,
-> a label's position is a share of the plot area (0 = left or bottom, 1 = right or top), not a date or a value.
+```{python}
+# The search window of each boom and bust. `BUSTS` is a dictionary: each name (the
+# key) gives a pair of dates (the value), and `BUSTS[bust]` looks one up.
+BUSTS = {
+    "1970s boom and bust": ("1977-01-01", "1985-12-01"),
+    "1980s boom and bust": ("1986-01-01", "1997-12-01"),
+    "2000s boom and bust": ("2000-01-01", "2015-12-01"),
+    "2020s so far": ("2021-01-01", "2026-07-01"),
+}
+```
+
+The chart function only looks up a window and calls `peak_to_trough` from "Model in code", so all of its code
+is drawing code. It draws the index on a ratio scale, shades the bust and marks its peak and trough.
 
 ```{python}
-BUSTS = {"1970s boom and bust": ("1977-01-01", "1985-12-01"),
-         "1980s boom and bust": ("1986-01-01", "1997-12-01"),
-         "2000s boom and bust": ("2000-01-01", "2015-12-01"),
-         "2020s so far": ("2021-01-01", "2026-07-01")}
+#| kind: drawing
+# @title Drawing code: Fig. 1, the shaded bust with its dots and label
+def mark_bust(fig, peak, trough, change):
+    """Shade one boom and bust of Fig. 1, and mark its peak and its trough.
 
+    The shading runs from the peak to the trough; a label in the top left corner
+    reports the dates and the percent change.
 
+    Arguments
+        fig    : the chart of Fig. 1
+        peak   : the date of the peak
+        trough : the date of the trough
+        change : the percent change from the peak to the trough
+    """
+    # Step 1: shade the bust; `fig.add_trace(go.Scatter(...))` adds one more set of
+    # points to the chart, here the two black dots for the peak and the trough
+    fig.add_vrect(x0=peak, x1=trough, fillcolor=TEAL, opacity=0.15, line_width=0)
+    fig.add_trace(
+        go.Scatter(
+            x=[peak, trough],
+            y=[house[peak], house[trough]],
+            mode="markers",
+            marker=dict(color="black", size=11),
+            showlegend=False,
+            name="Peak and trough",
+        )
+    )
+    # Step 2: the label. With xref="paper" and yref="paper", its position is a share
+    # of the plot area (0 = left or bottom, 1 = right or top), not a date or a value.
+    # In an f-string, {peak:%b %Y} prints a date as "Dec 2005", and {change:+.1f}
+    # a number with its sign
+    fig.add_annotation(
+        x=0.02,
+        y=0.97,
+        xref="paper",
+        yref="paper",
+        xanchor="left",
+        yanchor="top",
+        showarrow=False,
+        text=(
+            f"Shaded: {peak:%b %Y} to {trough:%b %Y}<br>"
+            f"real prices {change:+.1f}%"
+        ),
+        font=dict(size=13),
+    )
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 1, real home prices with one boom and bust
 def housing_chart(bust="2000s boom and bust"):
-    """Fig. 10.1: the real home price index (ratio scale), with one boom and bust shaded."""
+    """The real home price index on a ratio scale, with one boom and bust shaded.
+
+    Draws Fig. 1 (inspired by Fig. 10.1 in Jones). The fall from the peak to the
+    trough is equation (1), measured by peak_to_trough.
+
+    Arguments
+        bust : the name of the episode, a key of BUSTS
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the episode's window, then its peak, trough and percent change;
+    # `start, end = ...` unpacks the pair of dates into two variables
     start, end = BUSTS[bust]
     peak, trough, change = peak_to_trough(house, start, end)
-    fig = px.line(housing, x="date", y="real_home_price_index", log_y=True,
-                  labels={"date": "Year", "real_home_price_index": "Real home prices (1953 = 100)"},
-                  title=f"{bust}: real home prices fell {-change:.1f}% from {peak:%b %Y} to {trough:%b %Y}")
+
+    # Step 2: the index as a line; `log_y=True` gives a ratio (log) scale
+    fig = px.line(
+        housing,
+        x="date",
+        y="real_home_price_index",
+        log_y=True,
+        labels={
+            "date": "Year",
+            "real_home_price_index": "Real home prices (1953 = 100)",
+        },
+        title=(
+            f"{bust}: real home prices fell {-change:.1f}% "
+            f"from {peak:%b %Y} to {trough:%b %Y}"
+        ),
+    )
     fig.update_traces(line=dict(color=BLUE, width=3))
-    fig.add_vrect(x0=peak, x1=trough, fillcolor=TEAL, opacity=0.15, line_width=0)
-    fig.add_trace(go.Scatter(x=[peak, trough], y=[house[peak], house[trough]], mode="markers",
-                             marker=dict(color="black", size=11), showlegend=False, name="Peak and trough"))
-    fig.add_annotation(x=0.02, y=0.97, xref="paper", yref="paper", xanchor="left", yanchor="top", showarrow=False,
-                       text=f"Shaded: {peak:%b %Y} to {trough:%b %Y}<br>real prices {change:+.1f}%", font=dict(size=13))
+
+    # Step 3: the shaded bust, its dots and its label (mark_bust)
+    mark_bust(fig, peak, trough, change)
+
+    # Step 4: fixed axes. `update_xaxes` sets the dates shown; on a ratio axis,
+    # Plotly wants the range as powers of ten, so we pass np.log10(...)
     fig.update_xaxes(range=["1952-01-01", "2027-06-01"])
-    fig.update_yaxes(tickvals=[100, 120, 140, 160, 180, 200], range=[np.log10(84), np.log10(250)])
+    fig.update_yaxes(
+        tickvals=[100, 120, 140, 160, 180, 200],
+        range=[np.log10(84), np.log10(250)],
+    )
     return fig
 ```
 
-> **Python note.** `interact` calls `housing_chart` and shows the figure it returns. `bust=Dropdown(...)` turns
-> the argument `bust` into a menu (`list(BUSTS)` gives the names in the dictionary), and the figure is drawn
-> again each time you pick an episode. The `;` at the end only hides an extra line of text.
-
 ```{python}
 #| kind: widget
-interact(housing_chart, bust=Dropdown(options=list(BUSTS), value="2000s boom and bust",
-                                      description="boom and bust", style=WIDE));
+# Fig. 1 with a menu. `interact` calls housing_chart and shows the figure it
+# returns; `bust=Dropdown(...)` turns the argument `bust` into a menu (`list(BUSTS)`
+# gives the names in the dictionary), and the figure is drawn again each time you
+# pick an episode. The `;` at the end only hides an extra line of text.
+interact(
+    housing_chart,
+    bust=Dropdown(options=list(BUSTS), value="2000s boom and bust",
+                  description="boom and bust", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 1 with a precomputed slider for the boom and bust
-slider_figure(housing_chart, "bust", ["1970s boom and bust", "1980s boom and bust", "2000s boom and bust",
-                                      "2020s so far"], start="2000s boom and bust", label="episode")
+# one picture of Fig. 1 per episode; the slider shows one at a time
+slider_figure(
+    housing_chart,
+    "bust",
+    ["1970s boom and bust", "1980s boom and bust", "2000s boom and bust",
+     "2020s so far"],
+    start="2000s boom and bust",
+    label="episode",
+)
 ```
 
 **Sources.** Data: [Robert J. Shiller, U.S. Home Price and Related Data, real home price index (from 1987 the
@@ -1411,12 +1500,27 @@ The textbook gives three numbers: a decline of 36 percent from the middle of 200
 latest record, called the **drawdown**.
 
 ```{python}
+# Step 1: the drawdown, the fall from the latest record, in percent;
+# `house.cummax()` is the highest value reached so far
 drawdown = 100 * (house / house.cummax() - 1)
-print(f"Largest drawdown since 1953: {drawdown.min():.1f}% in {drawdown.idxmin():%b %Y}")
-mid_2006, early_2012 = house["2006-04-01":"2006-06-01"].mean(), house["2012-01-01":"2012-03-01"].mean()
-print(f"2006Q2 to 2012Q1 (quarterly averages): {percent_change(early_2012, mid_2006):.1f}%")
+print(
+    f"Largest drawdown since 1953: {drawdown.min():.1f}% "
+    f"in {drawdown.idxmin():%b %Y}"
+)
+# Step 2: the textbook's dates as quarterly averages, 2006Q2 and 2012Q1, and the
+# percent change between them (equation 1)
+mid_2006 = house["2006-04-01":"2006-06-01"].mean()
+early_2012 = house["2012-01-01":"2012-03-01"].mean()
+print(
+    "2006Q2 to 2012Q1 (quarterly averages): "
+    f"{percent_change(early_2012, mid_2006):.1f}%"
+)
+# Step 3: the factor from 1996 to 2006, and the growth rate per year (equation 2)
 factor = house["2006"].mean() / house["1996"].mean()
-print(f"1996 to 2006 (annual averages): prices x {factor:.2f}, or {100 * (factor ** (1 / 10) - 1):.1f}% a year")
+print(
+    f"1996 to 2006 (annual averages): prices x {factor:.2f}, "
+    f"or {100 * (factor ** (1 / 10) - 1):.1f}% a year"
+)
 ```
 
 The first two numbers match the textbook. The third does not: in this real index, prices rose by a factor of
@@ -1434,40 +1538,76 @@ different house-price index than Shiller, but it tells the same story: a fall of
 against Shiller's 35.3 percent in quarterly averages.
 
 ```{python}
+# Load the BIS house prices: one row per country and quarter (a long table)
 house_panel = pd.read_csv(DATA_URL + "house_prices_panel.csv", parse_dates=["date"])
 house_panel.tail(3)
 ```
 
-> **Python note.** `SelectMultiple` is a list from which you can pick several entries: hold Ctrl (Cmd on a Mac)
-> and click. It hands the function a *tuple* of names, such as `("United States", "Spain")`. `color="country"`
-> draws one line per country, and `color_discrete_map=COUNTRY_COLORS` gives each its fixed color.
+The chart function only calls tools from "Model in code" (`pick`, `largest_fall` and `no_data_note`), so all of
+its code is drawing code. It draws one line per chosen country, and its title reports the largest bust of 2000–15.
 
 ```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 1, house prices in the chosen countries
 def house_world(names=("United States",)):
-    """Fig. 10.1 beyond the U.S.: BIS real house prices (2010 = 100, ratio scale) in the chosen countries."""
+    """BIS real house prices (2010 = 100, ratio scale) in the chosen countries.
+
+    Draws Fig. 1 beyond the U.S. (inspired by Fig. 10.1 in Jones), with the largest
+    bust of 2000-15 among the chosen countries in the title.
+
+    Arguments
+        names : the chosen countries (a tuple of names)
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the rows of the chosen countries, and the countries without data
     chosen, missing = pick(house_panel, names, "real_house_price")
-    fig = px.line(chosen, x="date", y="real_house_price", color="country", log_y=True, hover_name="country",
-                  color_discrete_map=COUNTRY_COLORS,
-                  labels={"date": "Year", "real_house_price": "Real house prices (2010 = 100)", "country": "Country"})
+    # Step 2: `color="country"` draws one line per country, and
+    # `color_discrete_map=COUNTRY_COLORS` gives each its fixed color
+    fig = px.line(
+        chosen,
+        x="date",
+        y="real_house_price",
+        color="country",
+        log_y=True,
+        hover_name="country",
+        color_discrete_map=COUNTRY_COLORS,
+        labels={
+            "date": "Year",
+            "real_house_price": "Real house prices (2010 = 100)",
+            "country": "Country",
+        },
+    )
+    # Step 3: the title reports the largest bust of 2000-15 (largest_fall)
     worst = largest_fall(chosen, "real_house_price", "2000-01-01", "2015-12-31")
     title = "No data between 2000 and 2015"
     if worst is not None:
         name, peak, trough, change = worst
-        title = (f"Largest 2000–15 bust: {name}, {change:.1f}% "
-                 f"({peak.year}Q{peak.quarter} to {trough.year}Q{trough.quarter})")
+        # `peak.quarter` is the quarter of a date, 1 to 4
+        title = (
+            f"Largest 2000–15 bust: {name}, {change:.1f}% "
+            f"({peak.year}Q{peak.quarter} to {trough.year}Q{trough.quarter})"
+        )
     fig.update_layout(title=title + no_data_note(missing))
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(house_world, names=SelectMultiple(options=sorted(house_panel.country.unique()), value=("United States",),
-                                           rows=8, description="countries"));
+# Fig. 1 beyond the U.S., with a list of countries. `SelectMultiple` is a list from
+# which you can pick several entries: hold Ctrl (Cmd on a Mac) and click. It hands
+# the function a tuple of names, such as ("United States", "Spain").
+interact(
+    house_world,
+    names=SelectMultiple(options=sorted(house_panel.country.unique()),
+                         value=("United States",), rows=8, description="countries"),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: house prices in every country (click a country in the legend to add it)
+# @title Website version: house prices in every country (click a country to add it)
+# every country at once, with only the U.S. shown at the start (all_countries)
 all_countries(house_world, sorted(house_panel.country.unique()), ["United States"])
 ```
 
@@ -1514,54 +1654,137 @@ The **Fed funds rate** is the interest rate banks charge one another for overnig
 sets a target for it, and the data show the **effective** rate, the monthly average of what banks actually paid.
 
 ```{python}
+# Load the data of Fig. 2: the effective Fed funds rate, one row per month
 fed = pd.read_csv(DATA_URL + "fig10-2.csv", parse_dates=["date"])
+# the same rate as a Series, with the months as row labels
 fed_rate = fed.set_index("date").fed_funds
 fed.head()
 ```
 
-Four periods tell the story. The menu zooms in on one of them, and the title reports the lowest and highest
-rate in that window.
-
-> **Python note.** `px.area` draws a line with the area below it filled in. `fig.update_xaxes(range=[a, b])`
-> sets the dates shown. `shade_recessions(fig)` is our function from "Model in code".
+Four periods tell the story, and the menu zooms in on one of them. `lowest_and_highest` finds the months of
+the lowest and the highest rate in a period, which the title reports.
 
 ```{python}
-PERIODS = {"2000–2026": ("2000-01-01", "2026-09-01"),
-           "2004–06 hikes": ("2003-06-01", "2007-06-01"),
-           "2007–08 cuts": ("2007-06-01", "2009-06-01"),
-           "2022–23 hikes": ("2021-06-01", "2024-06-01")}
+# The four periods of the menu: a name, then the first and the last month
+PERIODS = {
+    "2000–2026": ("2000-01-01", "2026-09-01"),
+    "2004–06 hikes": ("2003-06-01", "2007-06-01"),
+    "2007–08 cuts": ("2007-06-01", "2009-06-01"),
+    "2022–23 hikes": ("2021-06-01", "2024-06-01"),
+}
 
 
-def fed_chart(period="2000–2026"):
-    """Fig. 10.2: the effective Fed funds rate, with recessions shaded, over one period."""
+def lowest_and_highest(period):
+    """The months of the lowest and the highest Fed funds rate in one period (Fig. 2).
+
+    Arguments
+        period : the name of the period, a key of PERIODS
+    Returns
+        low  : the month of the lowest rate in the period
+        high : the month of the highest rate in the period
+    """
+    # Step 1: with the months as row labels, fed_rate[start:end] keeps the period
     start, end = PERIODS[period]
     window = fed_rate[start:end]
-    low, high = window.idxmin(), window.idxmax()
-    fig = px.area(fed, x="date", y="fed_funds", labels={"date": "Year", "fed_funds": "Percent"},
-                  title=f"{period}: lowest {window[low]:.2f}% ({low:%b %Y}), highest {window[high]:.2f}% ({high:%b %Y})")
-    fig.update_traces(line=dict(color=BLUE, width=3), fillcolor="rgba(138, 150, 163, 0.3)")
+    # Step 2: `.idxmin()` and `.idxmax()` give the months of the smallest and the
+    # largest value
+    return window.idxmin(), window.idxmax()
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 2, the Fed funds rate over one period
+def fed_chart(period="2000–2026"):
+    """The effective Fed funds rate, with the recessions shaded, over one period.
+
+    Draws Fig. 2 (inspired by Fig. 10.2 in Jones), with the lowest and the highest
+    rate of the period in the title.
+
+    Arguments
+        period : the name of the period, a key of PERIODS
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the numbers of the title (lowest_and_highest), and the period's dates
+    low, high = lowest_and_highest(period)
+    start, end = PERIODS[period]
+
+    # Step 2: `px.area` draws a line with the area below it filled in
+    fig = px.area(
+        fed,
+        x="date",
+        y="fed_funds",
+        labels={"date": "Year", "fed_funds": "Percent"},
+        title=(
+            f"{period}: lowest {fed_rate[low]:.2f}% ({low:%b %Y}), "
+            f"highest {fed_rate[high]:.2f}% ({high:%b %Y})"
+        ),
+    )
+    fig.update_traces(
+        line=dict(color=BLUE, width=3),
+        fillcolor="rgba(138, 150, 163, 0.3)",     # a light gray area
+    )
+    # Step 3: the recessions, with shade_recessions from "Model in code"
     shade_recessions(fig)
-    fig.update_xaxes(range=[pd.Timestamp(start) - pd.DateOffset(months=6), pd.Timestamp(end) + pd.DateOffset(months=3)])
-    fig.update_yaxes(range=[0, 8], tickvals=[1, 2, 3, 4, 5, 6, 7])   # no 0 label: it would crowd the first year
+
+    # Step 4: `fig.update_xaxes(range=[a, b])` sets the dates shown: the period,
+    # with six months of room before it and three after it
+    fig.update_xaxes(
+        range=[
+            pd.Timestamp(start) - pd.DateOffset(months=6),
+            pd.Timestamp(end) + pd.DateOffset(months=3),
+        ]
+    )
+    # no 0 label: it would crowd the first year
+    fig.update_yaxes(range=[0, 8], tickvals=[1, 2, 3, 4, 5, 6, 7])
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(fed_chart, period=Dropdown(options=list(PERIODS), value="2000–2026", description="period", style=WIDE));
+# Fig. 2 with a menu of the four periods
+interact(
+    fed_chart,
+    period=Dropdown(options=list(PERIODS), value="2000–2026",
+                    description="period", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 2 with buttons for the four periods
+# Step 1: the whole chart, and one button per period. A button moves the x-axis
+# to its period and changes the title ("relayout" changes only the layout)
 fig = fed_chart()
 buttons = []
 for name in PERIODS:
     zoomed = fed_chart(name)
-    buttons.append(dict(label=name, method="relayout",
-                        args=[{"xaxis.range": list(zoomed.layout.xaxis.range), "title.text": zoomed.layout.title.text}]))
-fig.update_layout(updatemenus=[dict(type="buttons", direction="right", x=0.99, y=0.98, xanchor="right",
-                                    yanchor="top", buttons=buttons)])
+    buttons.append(
+        dict(
+            label=name,
+            method="relayout",
+            args=[
+                {
+                    "xaxis.range": list(zoomed.layout.xaxis.range),
+                    "title.text": zoomed.layout.title.text,
+                }
+            ],
+        )
+    )
+# Step 2: the row of buttons, in the top right corner
+fig.update_layout(
+    updatemenus=[
+        dict(
+            type="buttons",
+            direction="right",
+            x=0.99,
+            y=0.98,
+            xanchor="right",
+            yanchor="top",
+            buttons=buttons,
+        )
+    ]
+)
 fig
 ```
 
@@ -1589,10 +1812,20 @@ Chart: inspired by Fig. 10.2 in Jones (2024), [*Macroeconomics*, 6th ed.](https:
 The textbook says that between May 2004 and May 2006 the Fed raised its rate "from 1.25 percent to 5.25 percent".
 
 ```{python}
+# Step 1: the effective rate in the months of the textbook's target changes
 for month in ["2004-05-01", "2004-07-01", "2006-05-01", "2006-07-01"]:
     print(f"{pd.Timestamp(month):%b %Y}: {fed_rate[month]:.2f}%")
-print(f"Highest rate from Jan 2009 to Nov 2015: {fed_rate['2009-01-01':'2015-11-01'].max():.2f}%")
-print(f"Dec 2015: {fed_rate['2015-12-01']:.2f}%   Latest ({fed_rate.index[-1]:%b %Y}): {fed_rate.iloc[-1]:.2f}%")
+# Step 2: the highest rate while the target stayed near zero
+print(
+    "Highest rate from Jan 2009 to Nov 2015: "
+    f"{fed_rate['2009-01-01':'2015-11-01'].max():.2f}%"
+)
+# Step 3: the first rise, and the latest month; `.iloc[-1]` picks the last value
+# by its position
+print(
+    f"Dec 2015: {fed_rate['2015-12-01']:.2f}%   "
+    f"Latest ({fed_rate.index[-1]:%b %Y}): {fed_rate.iloc[-1]:.2f}%"
+)
 ```
 
 The textbook's numbers are the Fed's **targets**. The effective rate follows the target with a short delay:
@@ -1608,28 +1841,57 @@ the **end** of each month. For the U.S. the BIS uses the middle of the Fed's tar
 the effective rate of Fig. 2 moves smoothly; the two differ by 0.04 points in a typical month.
 
 ```{python}
+# Load the BIS policy rates: one row per country and month
 rates_panel = pd.read_csv(DATA_URL + "policy_rates_panel.csv", parse_dates=["date"])
 rates_panel.tail(3)
 ```
 
-The title measures the rate hikes of 2021–24 with `largest_rise`: the rise from the lowest rate to the highest
-later rate, in percentage points.
-
-> **Python note.** `line_shape="hv"` draws each line as steps (horizontal, then vertical), because a policy rate
-> stays put until the central bank changes it. `fig.add_hline(y=0, ...)` draws a horizontal line at zero.
+The chart function only calls tools from "Model in code", so all of its code is drawing code. Its title
+measures the rate hikes of 2021–24 with `largest_rise`: the rise from the lowest rate to the highest later rate,
+in percentage points.
 
 ```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 2, policy rates in the chosen countries
 def policy_world(names=("United States",)):
-    """Fig. 10.2 beyond the U.S.: BIS central bank policy rates (end of month) in the chosen countries."""
+    """BIS central bank policy rates (end of month) in the chosen countries.
+
+    Draws Fig. 2 beyond the U.S. (inspired by Fig. 10.2 in Jones), with the largest
+    rate hike of 2021-24 among the chosen countries in the title.
+
+    Arguments
+        names : the chosen countries (a tuple of names)
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the rows of the chosen countries, and the countries without data
     chosen, missing = pick(rates_panel, names, "policy_rate")
-    fig = px.line(chosen, x="date", y="policy_rate", color="country", hover_name="country",
-                  color_discrete_map=COUNTRY_COLORS, line_shape="hv",          # rates change in steps
-                  labels={"date": "Year", "policy_rate": "Policy rate (percent)", "country": "Country"})
+    # Step 2: one line per country. `line_shape="hv"` draws each line as steps
+    # (horizontal, then vertical): a policy rate stays put until the bank moves it
+    fig = px.line(
+        chosen,
+        x="date",
+        y="policy_rate",
+        color="country",
+        hover_name="country",
+        color_discrete_map=COUNTRY_COLORS,
+        line_shape="hv",
+        labels={
+            "date": "Year",
+            "policy_rate": "Policy rate (percent)",
+            "country": "Country",
+        },
+    )
+    # Step 3: the title reports the largest hike of 2021-24 (largest_rise)
     most = largest_rise(chosen, "policy_rate", "2021-01-01", "2024-12-31")
     title = "No data for 2021–24"
     if most is not None:
         name, low, high, rise = most
-        title = f"Largest 2021–24 hike: {name}, +{rise:.2f} points ({low:%b %Y} to {high:%b %Y})"
+        title = (
+            f"Largest 2021–24 hike: {name}, +{rise:.2f} points "
+            f"({low:%b %Y} to {high:%b %Y})"
+        )
+    # Step 4: `fig.add_hline` draws a horizontal line, here a dashed line at zero
     fig.add_hline(y=0, line_dash="dash", line_color="black", line_width=1)
     fig.update_layout(title=title + no_data_note(missing))
     return fig
@@ -1637,13 +1899,18 @@ def policy_world(names=("United States",)):
 
 ```{python}
 #| kind: widget
-interact(policy_world, names=SelectMultiple(options=sorted(rates_panel.country.unique()), value=("United States",),
-                                            rows=8, description="countries"));
+# Fig. 2 beyond the U.S., with a list of countries (Ctrl- or Cmd-click to pick several)
+interact(
+    policy_world,
+    names=SelectMultiple(options=sorted(rates_panel.country.unique()),
+                         value=("United States",), rows=8, description="countries"),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: policy rates in every country (click a country in the legend to add it)
+# @title Website version: policy rates in every country (click a country to add it)
+# every country at once, with only the U.S. shown at the start
 all_countries(policy_world, sorted(rates_panel.country.unique()), ["United States"])
 ```
 
@@ -1694,8 +1961,11 @@ it rises when banks fear that other banks might not repay (equation 10). LIBOR w
 adds a second, similar spread that continues: AA-rated financial commercial paper minus the Treasury bill.
 
 ```{python}
+# Load the data of Fig. 3: two spreads, one row per month
 spreads = pd.read_csv(DATA_URL + "fig10-3.csv", parse_dates=["date"])
 spread = spreads.set_index("date")
+# the rows with a missing value: `spreads.isna()` is True where a value is NaN,
+# and `.any(axis=1)` is True for a row with at least one of them
 spreads[spreads.isna().any(axis=1)].head(3)
 ```
 
@@ -1704,26 +1974,66 @@ missing value, so the cell shows the first three of them. The TED spread stops i
 spread has one gap, April 2020, when the Federal Reserve published no commercial-paper rate. Plotly simply
 leaves a small gap in the line.
 
-> **Python note.** `rename(columns={...})` gives the columns readable names, which then appear in the legend.
-> `px.line` with a list `y=[...]` draws one line per column. `fig.add_annotation` writes a label with an arrow
-> that points at a data point; `ax` and `ay` set where the label sits, in pixels from that point.
+Before we draw, we give the two spreads readable names and find the month of the TED spread's peak.
 
 ```{python}
-named = spreads.rename(columns={"ted_spread": "TED spread: LIBOR minus T-bill",
-                                "cp_tbill_spread": "Commercial paper minus T-bill"})
+# `rename(columns={...})` gives the columns readable names, which then appear in
+# the legend
+named = spreads.rename(
+    columns={
+        "ted_spread": "TED spread: LIBOR minus T-bill",
+        "cp_tbill_spread": "Commercial paper minus T-bill",
+    }
+)
+# the month of the highest TED spread
 peak_date = spread.ted_spread.idxmax()
-fig = px.line(named, x="date", y=["TED spread: LIBOR minus T-bill", "Commercial paper minus T-bill"],
-              color_discrete_sequence=[BLUE, TEAL],
-              labels={"date": "Year", "value": "Percentage points", "variable": "Spread"},
-              title=f"Banks stopped trusting each other: the TED spread reached {spread.ted_spread.max():.2f} points")
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 3, the TED spread and the commercial-paper spread
+# Step 1: `px.line` with a list `y=[...]` draws one line per column; the title
+# reports the peak of the TED spread
+fig = px.line(
+    named,
+    x="date",
+    y=["TED spread: LIBOR minus T-bill", "Commercial paper minus T-bill"],
+    color_discrete_sequence=[BLUE, TEAL],
+    labels={"date": "Year", "value": "Percentage points", "variable": "Spread"},
+    title=(
+        "Banks stopped trusting each other: the TED spread reached "
+        f"{spread.ted_spread.max():.2f} points"
+    ),
+)
+# Step 2: a thick line for the TED spread and a thin one for the other;
+# `selector=dict(name=...)` changes only the line with that name
 fig.update_traces(selector=dict(name="TED spread: LIBOR minus T-bill"), line_width=3)
 fig.update_traces(selector=dict(name="Commercial paper minus T-bill"), line_width=1.5)
-fig.add_annotation(x=peak_date, y=spread.ted_spread.max(), text=f"Lehman Brothers fails:<br>{peak_date:%B %Y}",
-                   showarrow=True, arrowhead=2, ax=90, ay=10, font=dict(size=13))
+# Step 3: `fig.add_annotation` writes a label with an arrow that points at the
+# peak; `ax` and `ay` set where the label sits, in pixels from that point
+fig.add_annotation(
+    x=peak_date,
+    y=spread.ted_spread.max(),
+    text=f"Lehman Brothers fails:<br>{peak_date:%B %Y}",
+    showarrow=True,
+    arrowhead=2,
+    ax=90,
+    ay=10,
+    font=dict(size=13),
+)
+# Step 4: the recessions, fixed axes, and the legend in the top right corner
 shade_recessions(fig)
 fig.update_xaxes(range=["1999-07-01", "2026-12-01"])
 fig.update_yaxes(range=[0, 3.6], tickvals=[0.5, 1, 1.5, 2, 2.5, 3, 3.5])
-fig.update_layout(legend=dict(x=0.99, y=0.99, xanchor="right", yanchor="top", bgcolor="rgba(255,255,255,0.8)"))
+fig.update_layout(
+    legend=dict(
+        x=0.99,
+        y=0.99,
+        xanchor="right",
+        yanchor="top",
+        bgcolor="rgba(255,255,255,0.8)",          # white, a little see-through
+    )
+)
 fig.show()
 ```
 
@@ -1751,14 +2061,30 @@ Chart: inspired by Fig. 10.3 in Jones (2024), [*Macroeconomics*, 6th ed.](https:
 #### Key numbers: three phases of the crisis
 
 ```{python}
+# Step 1: the TED spread in the calm phase and in the first year of stress
 ted = spread.ted_spread
 calm, stress = ted["2002-01-01":"2007-07-01"], ted["2007-08-01":"2008-08-01"]
-print(f"Jan 2002 - Jul 2007: average {calm.mean():.2f}, range {calm.min():.2f} to {calm.max():.2f} points")
-print(f"Aug 2007 - Aug 2008: average {stress.mean():.2f}, range {stress.min():.2f} to {stress.max():.2f} points")
+print(
+    f"Jan 2002 - Jul 2007: average {calm.mean():.2f}, "
+    f"range {calm.min():.2f} to {calm.max():.2f} points"
+)
+print(
+    f"Aug 2007 - Aug 2008: average {stress.mean():.2f}, "
+    f"range {stress.min():.2f} to {stress.max():.2f} points"
+)
+# Step 2: the peak, and how closely the two spreads move together (a correlation
+# of 1 would mean exactly together)
 print(f"Peak: {ted.max():.2f} points in {ted.idxmax():%b %Y}")
-print(f"Correlation of the two spreads, 2000-2022: {spread.ted_spread.corr(spread.cp_tbill_spread):.2f}")
+print(
+    "Correlation of the two spreads, 2000-2022: "
+    f"{spread.ted_spread.corr(spread.cp_tbill_spread):.2f}"
+)
+# Step 3: the commercial-paper spread after LIBOR ended
 recent = spread.cp_tbill_spread["2022-02-01":]
-print(f"Commercial-paper spread since Feb 2022: highest {recent.max():.2f} points ({recent.idxmax():%b %Y})")
+print(
+    "Commercial-paper spread since Feb 2022: "
+    f"highest {recent.max():.2f} points ({recent.idxmax():%b %Y})"
+)
 ```
 
 The textbook's "modest premium of 0.2 to 0.4 percentage points" is the calm phase, on average 0.33 points.
@@ -1778,29 +2104,80 @@ moves when banks expect the policy rate to change. For the U.S. it peaks in the 
 October 2008, but at 2.22 instead of 3.35 points.
 
 ```{python}
-spreads_panel = pd.read_csv(DATA_URL + "interbank_spreads_panel.csv", parse_dates=["date"])
+# Load the OECD money-market spreads: one row per country and month
+spreads_panel = pd.read_csv(
+    DATA_URL + "interbank_spreads_panel.csv", parse_dates=["date"]
+)
 spreads_panel.tail(3)
 ```
 
 The euro-area countries share the euro area's money-market rates once they adopt the euro, so the file keeps them
 only for the years when they had rates of their own (Greece in 2000, for example); choose "Euro area" for the rest.
 
-> **Python note.** `chosen.date.dt.year.between(2007, 2009)` is true for the dates in the years 2007 to 2009.
-> `crisis.spread.idxmax()` is the row label of the largest spread, and `crisis.loc[...]` picks that whole row, so
-> `top.country` and `top.date` say where and when it happened.
+`crisis_peak` finds, among the chosen countries, the largest spread of 2007–09: where and when it happened.
 
 ```{python}
-def spread_world(names=("United States",)):
-    """Fig. 10.3 beyond the U.S.: 3-month interbank rate minus the overnight rate, in the chosen countries."""
+def crisis_peak(names):
+    """The largest interbank spread of 2007-09 among the chosen countries (Fig. 3).
+
+    Arguments
+        names : the chosen countries (a tuple of names)
+    Returns
+        chosen  : the rows of the chosen countries that have a spread
+        missing : the chosen countries without data
+        top     : the row with the largest spread in 2007-09 (None if no data)
+    """
+    # Step 1: the rows of the chosen countries (pick, from "Model in code")
     chosen, missing = pick(spreads_panel, names, "spread")
-    fig = px.line(chosen, x="date", y="spread", color="country", hover_name="country",
-                  color_discrete_map=COUNTRY_COLORS,
-                  labels={"date": "Year", "spread": "Spread (percentage points)", "country": "Country"})
+    # Step 2: the crisis years; `chosen.date.dt.year.between(2007, 2009)` is True
+    # for the dates in the years 2007 to 2009
     crisis = chosen[chosen.date.dt.year.between(2007, 2009)]
-    title = "No data for 2007–09"
+    top = None
     if len(crisis) > 0:
-        top = crisis.loc[crisis.spread.idxmax()]                 # the row with the largest spread
-        title = f"Largest spread in 2007–09: {top.country}, {top.spread:.2f} points ({top.date:%b %Y})"
+        # `.idxmax()` is the row label of the largest spread, and `.loc[...]` picks
+        # that whole row, so top.country and top.date say where and when
+        top = crisis.loc[crisis.spread.idxmax()]
+    return chosen, missing, top
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 3, interbank spreads in the chosen countries
+def spread_world(names=("United States",)):
+    """The 3-month interbank rate minus the overnight rate, in the chosen countries.
+
+    Draws Fig. 3 beyond the U.S. (inspired by Fig. 10.3 in Jones), with the largest
+    spread of 2007-09 in the title.
+
+    Arguments
+        names : the chosen countries (a tuple of names)
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the numbers of the figure (crisis_peak)
+    chosen, missing, top = crisis_peak(names)
+    # Step 2: one line per country, in its fixed color
+    fig = px.line(
+        chosen,
+        x="date",
+        y="spread",
+        color="country",
+        hover_name="country",
+        color_discrete_map=COUNTRY_COLORS,
+        labels={
+            "date": "Year",
+            "spread": "Spread (percentage points)",
+            "country": "Country",
+        },
+    )
+    # Step 3: the title reports the largest spread of 2007-09
+    title = "No data for 2007–09"
+    if top is not None:
+        title = (
+            f"Largest spread in 2007–09: {top.country}, {top.spread:.2f} points "
+            f"({top.date:%b %Y})"
+        )
+    # Step 4: the U.S. recessions, shaded
     shade_recessions(fig)
     fig.update_layout(title=title + no_data_note(missing))
     return fig
@@ -1808,13 +2185,18 @@ def spread_world(names=("United States",)):
 
 ```{python}
 #| kind: widget
-interact(spread_world, names=SelectMultiple(options=sorted(spreads_panel.country.unique()), value=("United States",),
-                                            rows=8, description="countries"));
+# Fig. 3 beyond the U.S., with a list of countries (Ctrl- or Cmd-click to pick several)
+interact(
+    spread_world,
+    names=SelectMultiple(options=sorted(spreads_panel.country.unique()),
+                         value=("United States",), rows=8, description="countries"),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: interbank spreads in every country (click a country in the legend to add it)
+# @title Website version: interbank spreads in every country (click to add one)
+# every country at once, with only the U.S. shown at the start
 all_countries(spread_world, sorted(spreads_panel.country.unique()), ["United States"])
 ```
 
@@ -1860,45 +2242,107 @@ is in **real** terms. Our file uses September 2026 dollars, so its levels are ab
 textbook's, which uses 2023 dollars. Percent changes are the same.
 
 ```{python}
+# Load the data of Fig. 4: the real S&P 500, one row per month
 stocks = pd.read_csv(DATA_URL + "fig10-4.csv", parse_dates=["date"])
 sp500 = stocks.set_index("date").sp500_real
 stocks.tail(3)
 ```
 
+As for house prices, each crash gets a search window, and `peak_to_trough` finds its peak and trough.
+
 ```{python}
-CRASHES = {"Dot-com bust, 2000–03": ("1999-01-01", "2003-12-01"),
-           "Financial crisis, 2007–09": ("2007-01-01", "2009-12-01"),
-           "Covid-19, 2020": ("2020-01-01", "2020-06-01"),     # ends before prices pass the January peak
-           "Rate hikes, 2022": ("2021-06-01", "2022-12-01")}
+# The search window of each crash: a name, then the first and the last month
+CRASHES = {
+    "Dot-com bust, 2000–03": ("1999-01-01", "2003-12-01"),
+    "Financial crisis, 2007–09": ("2007-01-01", "2009-12-01"),
+    # ends before prices pass the January peak
+    "Covid-19, 2020": ("2020-01-01", "2020-06-01"),
+    "Rate hikes, 2022": ("2021-06-01", "2022-12-01"),
+}
+```
 
+The chart function only looks up a window and calls `peak_to_trough`, so all of its code is drawing code. It
+draws the index on a ratio scale, shades the crash and marks its peak and trough.
 
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 4, the real S&P 500 with one crash
 def stock_chart(crash="Financial crisis, 2007–09"):
-    """Fig. 10.4: the real S&P 500 (ratio scale), with one crash shaded and measured."""
+    """The real S&P 500 on a ratio scale, with one crash shaded and measured.
+
+    Draws Fig. 4 (inspired by Fig. 10.4 in Jones). The fall from the peak to the
+    trough is equation (1), measured by peak_to_trough.
+
+    Arguments
+        crash : the name of the crash, a key of CRASHES
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the crash's window, then its peak, trough and percent change
     start, end = CRASHES[crash]
     peak, trough, change = peak_to_trough(sp500, start, end)
-    fig = px.area(stocks, x="date", y="sp500_real", log_y=True,
-                  labels={"date": "Year", "sp500_real": "Real stock price index (ratio scale)"},
-                  title=f"{crash}: real stock prices fell {-change:.1f}% from {peak:%b %Y} to {trough:%b %Y}")
-    fig.update_traces(line=dict(color=BLUE, width=3), fillcolor="rgba(138, 150, 163, 0.3)")
+
+    # Step 2: the index as a filled area, on a ratio scale
+    fig = px.area(
+        stocks,
+        x="date",
+        y="sp500_real",
+        log_y=True,
+        labels={"date": "Year", "sp500_real": "Real stock price index (ratio scale)"},
+        title=(
+            f"{crash}: real stock prices fell {-change:.1f}% "
+            f"from {peak:%b %Y} to {trough:%b %Y}"
+        ),
+    )
+    fig.update_traces(
+        line=dict(color=BLUE, width=3),
+        fillcolor="rgba(138, 150, 163, 0.3)",
+    )
+
+    # Step 3: shade the crash, and mark its peak and trough with black dots
     fig.add_vrect(x0=peak, x1=trough, fillcolor=BLUE, opacity=0.15, line_width=0)
-    fig.add_trace(go.Scatter(x=[peak, trough], y=[sp500[peak], sp500[trough]], mode="markers",
-                             marker=dict(color="black", size=10), showlegend=False, name="Peak and trough"))
+    fig.add_trace(
+        go.Scatter(
+            x=[peak, trough],
+            y=[sp500[peak], sp500[trough]],
+            mode="markers",
+            marker=dict(color="black", size=10),
+            showlegend=False,
+            name="Peak and trough",
+        )
+    )
+
+    # Step 4: fixed axes; each tick of the ratio scale doubles the one below it
     fig.update_xaxes(range=["1989-07-01", "2027-06-01"])
-    fig.update_yaxes(tickvals=[640, 1280, 2560, 5120, 10240], range=[np.log10(700), np.log10(9500)])
+    fig.update_yaxes(
+        tickvals=[640, 1280, 2560, 5120, 10240],
+        range=[np.log10(700), np.log10(9500)],
+    )
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(stock_chart, crash=Dropdown(options=list(CRASHES), value="Financial crisis, 2007–09",
-                                     description="crash", style=WIDE));
+# Fig. 4 with a menu of the four crashes
+interact(
+    stock_chart,
+    crash=Dropdown(options=list(CRASHES), value="Financial crisis, 2007–09",
+                   description="crash", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 4 with a precomputed slider for the crash
-slider_figure(stock_chart, "crash", ["Dot-com bust, 2000–03", "Financial crisis, 2007–09", "Covid-19, 2020",
-                                     "Rate hikes, 2022"], start="Financial crisis, 2007–09", label="crash")
+# one picture of Fig. 4 per crash
+slider_figure(
+    stock_chart,
+    "crash",
+    ["Dot-com bust, 2000–03", "Financial crisis, 2007–09", "Covid-19, 2020",
+     "Rate hikes, 2022"],
+    start="Financial crisis, 2007–09",
+    label="crash",
+)
 ```
 
 **Sources.** Data: [Robert J. Shiller, U.S. Stock Market Data, S&P Composite price index and consumer price index
@@ -1923,13 +2367,31 @@ Chart: inspired by Fig. 10.4 in Jones (2024), [*Macroeconomics*, 6th ed.](https:
 #### Key numbers: the textbook's crash and the long recovery
 
 ```{python}
-print(f"Nov 2007 to Mar 2009: {percent_change(sp500['2009-03-01'], sp500['2007-11-01']):.1f}%")
+# Step 1: the textbook's dates, Nov 2007 to Mar 2009 (equation 1)
+print(
+    "Nov 2007 to Mar 2009: "
+    f"{percent_change(sp500['2009-03-01'], sp500['2007-11-01']):.1f}%"
+)
+# Step 2: the monthly peak and trough of the crash
 peak, trough, change = peak_to_trough(sp500, "2007-01-01", "2009-12-01")
 print(f"Monthly peak {peak:%b %Y} to trough {trough:%b %Y}: {change:.1f}%")
-print(f"March 2009 level {sp500[trough]:,.0f}; lowest month of 1997-1999 {sp500['1997':'1999'].min():,.0f}")
+# Step 3: March 2009 against the lowest month of 1997-1999; {x:,.0f} rounds to a
+# whole number with thousands separators
+print(
+    f"March 2009 level {sp500[trough]:,.0f}; "
+    f"lowest month of 1997-1999 {sp500['1997':'1999'].min():,.0f}"
+)
+# Step 4: the first month after the trough above the old peak
 after = sp500[trough:]
-print(f"Back above the {peak:%b %Y} level in {after[after > sp500[peak]].index[0]:%b %Y}")
-print(f"Fall from the Aug 2000 record to Mar 2009: {percent_change(sp500[trough], sp500['2000-08-01']):.1f}%")
+print(
+    f"Back above the {peak:%b %Y} level in "
+    f"{after[after > sp500[peak]].index[0]:%b %Y}"
+)
+# Step 5: the fall from the record of August 2000
+print(
+    "Fall from the Aug 2000 record to Mar 2009: "
+    f"{percent_change(sp500[trough], sp500['2000-08-01']):.1f}%"
+)
 ```
 
 From November 2007 to March 2009, the textbook's dates, the real index fell 48.9 percent; from the monthly peak
@@ -1946,35 +2408,72 @@ index (from the IMF) gives **real** stock prices, which the file stores as an in
 broad index fell 54.1 percent from October 2007 to March 2009, close to the S&P 500's 51.7 percent.
 
 ```{python}
+# Load the OECD real share prices: one row per country and month
 stocks_panel = pd.read_csv(DATA_URL + "share_prices_panel.csv", parse_dates=["date"])
 stocks_panel.tail(3)
 ```
 
+The chart function only calls tools from "Model in code", so all of its code is drawing code. It draws one line
+per chosen country, and its title reports the largest crash of 2007–09.
+
 ```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 4, real stock prices in the chosen countries
 def stocks_world(names=("United States",)):
-    """Fig. 10.4 beyond the U.S.: real share prices (2015 = 100, ratio scale) in the chosen countries."""
+    """Real share prices (2015 = 100, ratio scale) in the chosen countries.
+
+    Draws Fig. 4 beyond the U.S. (inspired by Fig. 10.4 in Jones), with the largest
+    crash of 2007-09 among the chosen countries in the title.
+
+    Arguments
+        names : the chosen countries (a tuple of names)
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the rows of the chosen countries, and the countries without data
     chosen, missing = pick(stocks_panel, names, "real_share_price")
-    fig = px.line(chosen, x="date", y="real_share_price", color="country", log_y=True, hover_name="country",
-                  color_discrete_map=COUNTRY_COLORS,
-                  labels={"date": "Year", "real_share_price": "Real stock prices (2015 = 100)", "country": "Country"})
+    # Step 2: one line per country, in its fixed color, on a ratio scale
+    fig = px.line(
+        chosen,
+        x="date",
+        y="real_share_price",
+        color="country",
+        log_y=True,
+        hover_name="country",
+        color_discrete_map=COUNTRY_COLORS,
+        labels={
+            "date": "Year",
+            "real_share_price": "Real stock prices (2015 = 100)",
+            "country": "Country",
+        },
+    )
+    # Step 3: the title reports the largest crash of 2007-09 (largest_fall)
     worst = largest_fall(chosen, "real_share_price", "2007-01-01", "2009-12-31")
     title = "No data for 2007–09"
     if worst is not None:
         name, peak, trough, change = worst
-        title = f"Largest 2007–09 crash: {name}, {change:.1f}% ({peak:%b %Y} to {trough:%b %Y})"
+        title = (
+            f"Largest 2007–09 crash: {name}, {change:.1f}% "
+            f"({peak:%b %Y} to {trough:%b %Y})"
+        )
     fig.update_layout(title=title + no_data_note(missing))
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(stocks_world, names=SelectMultiple(options=sorted(stocks_panel.country.unique()), value=("United States",),
-                                            rows=8, description="countries"));
+# Fig. 4 beyond the U.S., with a list of countries (Ctrl- or Cmd-click to pick several)
+interact(
+    stocks_world,
+    names=SelectMultiple(options=sorted(stocks_panel.country.unique()),
+                         value=("United States",), rows=8, description="countries"),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: real stock prices in every country (click a country in the legend to add it)
+# @title Website version: real stock prices in every country (click to add one)
+# every country at once, with only the U.S. shown at the start
 all_countries(stocks_world, sorted(stocks_panel.country.unique()), ["United States"])
 ```
 
@@ -2029,38 +2528,101 @@ by quarter from 2020Q1, how far real GDP was below its level of 2019Q4, in perce
 means the country lost as much output as 6 percent of one year's GDP.
 
 ```{python}
+# Load the data of Fig. 5: one row per country
 covid = pd.read_csv(DATA_URL + "fig10-5.csv")
 covid.head()
 ```
 
-> **Python note.** `.isin([...])` is true for the rows whose value is in a list. `.where(condition, "")` keeps a
-> value where the condition is true and puts `""` elsewhere, so only some countries get a label (hover shows
-> them all). `.map(SIDES)` looks up each country in the dictionary `SIDES` to choose where its label goes, and
-> `.fillna("middle right")` gives every other country the usual place: labels are moved only where they would be
-> cut off at the edge or overlap a neighbor. In the widget cell, `ToggleButtons` shows the two dates as a row of
-> buttons.
+The chart can count the deaths to two dates. `death_columns` picks the two columns for a date and computes their
+correlation across countries, which the title reports.
 
 ```{python}
-LABELED = ["United States", "Spain", "United Kingdom", "Iceland", "Portugal", "Mexico", "Italy", "India",
-           "Saudi Arabia", "China", "Japan", "S. Korea", "Norway", "Ireland", "Brazil", "Sweden", "Bulgaria",
-           "Hungary", "Slovenia", "Germany"]
-covid["label"] = covid.country.where(covid.country.isin(LABELED), "")
-SIDES = {"Bulgaria": "middle left", "Hungary": "middle left", "Norway": "top right", "Japan": "top right",
-         "United States": "bottom left"}                # avoid overlaps
-covid["side"] = covid.country.map(SIDES).fillna("middle right")
+def death_columns(date):
+    """The two columns of Fig. 5 for one date, and their correlation.
 
-
-def covid_chart(date="March 2023"):
-    """Fig. 10.5: Covid-19 deaths per million and GDP loss, with deaths counted to `date`."""
+    Arguments
+        date : "March 2023" (the textbook's date) or "August 2026" (the latest)
+    Returns
+        x : the column of deaths per million to that date
+        y : the column of the GDP loss (equation 12) to the matching quarter
+        r : the correlation of the two across countries (from -1 to 1)
+    """
+    # Step 1: deaths to March 2023 go with the GDP loss to 2022Q3, as in the textbook
     if date == "March 2023":
         x, y = "deaths_pm_2023_03_22", "gdp_loss_2022q3"
     else:
         x, y = "deaths_pm_2026_08_30", "gdp_loss_2026q2"
+    # Step 2: the correlation; close to 0 means no straight-line relation
     r = covid[x].corr(covid[y])
-    fig = px.scatter(covid, x=x, y=y, text="label", hover_name="country", color_discrete_sequence=[TEAL],
-                     labels={x: "Covid-19 deaths per million people", y: "GDP loss (percent of a year's GDP)"},
-                     title=f"Deaths to {date}: more deaths did not mean more lost GDP (correlation {r:.2f})")
-    fig.update_traces(marker_size=10, textposition=covid.side, textfont=dict(size=11, color=TEAL))
+    return x, y, r
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 5, which countries get a label, and where
+# Step 1: only these countries get a label (hover shows them all).
+# `.isin([...])` is True for the rows whose value is in a list, and
+# `.where(condition, "")` keeps the name where it is True and puts "" elsewhere
+LABELED = [
+    "United States", "Spain", "United Kingdom", "Iceland", "Portugal", "Mexico",
+    "Italy", "India", "Saudi Arabia", "China", "Japan", "S. Korea", "Norway",
+    "Ireland", "Brazil", "Sweden", "Bulgaria", "Hungary", "Slovenia", "Germany",
+]
+covid["label"] = covid.country.where(covid.country.isin(LABELED), "")
+# Step 2: where each label goes. `.map(SIDES)` looks up each country in the
+# dictionary SIDES, and `.fillna("middle right")` gives every other country the
+# usual place: labels move only where they would be cut off at the edge or overlap
+# a neighbor
+SIDES = {
+    "Bulgaria": "middle left",
+    "Hungary": "middle left",
+    "Norway": "top right",
+    "Japan": "top right",
+    "United States": "bottom left",
+}
+covid["side"] = covid.country.map(SIDES).fillna("middle right")
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 5, Covid-19 deaths and lost GDP
+def covid_chart(date="March 2023"):
+    """Covid-19 deaths per million and the GDP loss, one dot per country.
+
+    Draws Fig. 5 (inspired by Fig. 10.5 in Jones), with the deaths counted to
+    `date` and their correlation with the GDP loss in the title.
+
+    Arguments
+        date : "March 2023" (the textbook's date) or "August 2026" (the latest)
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the numbers of the figure (death_columns)
+    x, y, r = death_columns(date)
+    # Step 2: one dot per country, with the name from the `label` column
+    fig = px.scatter(
+        covid,
+        x=x,
+        y=y,
+        text="label",
+        hover_name="country",
+        color_discrete_sequence=[TEAL],
+        labels={
+            x: "Covid-19 deaths per million people",
+            y: "GDP loss (percent of a year's GDP)",
+        },
+        title=(
+            f"Deaths to {date}: more deaths did not mean more lost GDP "
+            f"(correlation {r:.2f})"
+        ),
+    )
+    # Step 3: bigger dots, and each label on its own side (the `side` column)
+    fig.update_traces(
+        marker_size=10,
+        textposition=covid.side,
+        textfont=dict(size=11, color=TEAL),
+    )
+    # Step 4: fixed axes, the same for both dates
     fig.update_xaxes(range=[0, 6300], tickvals=[1000, 2000, 3000, 4000, 5000, 6000])
     fig.update_yaxes(range=[0, 19.5], tickvals=[0, 2, 4, 6, 8, 10, 12, 14, 16, 18])
     return fig
@@ -2068,14 +2630,25 @@ def covid_chart(date="March 2023"):
 
 ```{python}
 #| kind: widget
-interact(covid_chart, date=ToggleButtons(options=["March 2023", "August 2026"], value="March 2023",
-                                         description="deaths counted to"));
+# Fig. 5 with two buttons: `ToggleButtons` shows the two dates as a row of buttons
+interact(
+    covid_chart,
+    date=ToggleButtons(options=["March 2023", "August 2026"], value="March 2023",
+                       description="deaths counted to"),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: Fig. 5 with a precomputed slider for the date of the death count
-slider_figure(covid_chart, "date", ["March 2023", "August 2026"], start="March 2023", label="deaths counted to")
+# @title Website version: Fig. 5 with a precomputed slider for the date
+# one picture of Fig. 5 per date of the death count
+slider_figure(
+    covid_chart,
+    "date",
+    ["March 2023", "August 2026"],
+    start="March 2023",
+    label="deaths counted to",
+)
 ```
 
 **Sources.** Data: [Our World in Data, Covid-19 deaths (cumulative confirmed deaths per million people)](https://ourworldindata.org/covid-deaths),
@@ -2103,15 +2676,23 @@ Chart: inspired by Fig. 10.5 in Jones (2024), [*Macroeconomics*, 6th ed.](https:
 The textbook says that around 3,300 per million Americans had died by March 2023, "1 out of every 300
 people". One out of every $X$ people means $X = 1{,}000{,}000 / \text{deaths per million}$.
 
-> **Python note.** `set_index("country")` labels the rows by country, so `.loc[["Spain", "Japan"]]` picks rows
-> by name. A new column computed from another one, here `1e6 / deaths`, is calculated row by row.
-
 ```{python}
+# Step 1: `set_index("country")` labels the rows by country, so that `.loc[...]`
+# can pick rows by name
 deaths = covid.set_index("country")
+# Step 2: two new columns, each computed row by row from another column: one out
+# of every X people died, X = 1,000,000 / deaths per million, and how many times
+# the U.S. death rate is each country's
 deaths["one_in"] = 1e6 / deaths.deaths_pm_2023_03_22
-deaths["us_times_more"] = deaths.loc["United States", "deaths_pm_2023_03_22"] / deaths.deaths_pm_2023_03_22
-deaths.loc[["United States", "Brazil", "United Kingdom", "Spain", "Italy", "Norway", "Japan", "S. Korea"],
-           ["deaths_pm_2023_03_22", "one_in", "us_times_more", "gdp_loss_2022q3"]].round(1)
+deaths["us_times_more"] = (
+    deaths.loc["United States", "deaths_pm_2023_03_22"] / deaths.deaths_pm_2023_03_22
+)
+# Step 3: eight countries and four columns, rounded to one decimal
+deaths.loc[
+    ["United States", "Brazil", "United Kingdom", "Spain", "Italy", "Norway", "Japan",
+     "S. Korea"],
+    ["deaths_pm_2023_03_22", "one_in", "us_times_more", "gdp_loss_2022q3"]
+].round(1)
 ```
 
 The United States lost 1 in 306 people and Brazil 1 in 300. U.S. death rates were 3.4 times Norway's, 5.5 times
@@ -2122,10 +2703,16 @@ percent of a year's GDP with today's data; the textbook's 3.7 percent used GDP a
 dollars, with 40 more years to live:
 
 ```{python}
+# The textbook's numbers: a life worth 10 million dollars, 40 years left to live,
+# and 3 years of life expectancy lost
 value_of_life, years_left, years_lost = 10e6, 40, 3
+# the value of one year of life, without discounting
 per_year = value_of_life / years_left
 print(f"Value of one year of life: {per_year:,.0f} dollars")
-print(f"Three years of life expectancy lost: {years_lost * per_year:,.0f} dollars per person")
+print(
+    "Three years of life expectancy lost: "
+    f"{years_lost * per_year:,.0f} dollars per person"
+)
 ```
 
 At 250,000 dollars per year of life, the 3 years of life expectancy the pandemic took are worth about 750,000
@@ -2134,8 +2721,12 @@ dollars per person: far more than the lost GDP, which is about 3 percent of one 
 **Data hygiene.** Cumulative deaths can only rise, yet one country's count falls between the two dates:
 
 ```{python}
+# The change in each country's death count between the two dates: a true
+# cumulative count can only rise, so we list the countries where it fell
 covid["rise"] = covid.deaths_pm_2026_08_30 - covid.deaths_pm_2023_03_22
-covid[covid.rise < 0][["country", "deaths_pm_2023_03_22", "deaths_pm_2026_08_30", "rise"]]
+covid[covid.rise < 0][
+    ["country", "deaths_pm_2023_03_22", "deaths_pm_2026_08_30", "rise"]
+]
 ```
 
 Chile's count fell by 78 deaths per million, because Chile later revised its earlier reports and the WHO
@@ -2163,6 +2754,7 @@ Each column is real GDP of one country, as an index with 2019Q4 = 100. A value o
 below its pre-pandemic level.
 
 ```{python}
+# Load the data of Fig. 6: real GDP of six countries, one column per country
 oecd = pd.read_csv(DATA_URL + "fig10-6.csv", parse_dates=["date"])
 oecd.head(3)
 ```
@@ -2170,14 +2762,20 @@ oecd.head(3)
 The file is **wide**: one column per country. Plotly Express prefers a **long** (tidy) table, with one row per
 country and quarter, so that `color="country"` can draw one line per country.
 
-> **Python note.** `melt(id_vars="date", ...)` stacks the country columns into two columns, `country` (the old
-> column name) and `index` (its value). `.map({...})` then replaces each code by a readable name, using a
-> dictionary. In the chart, `fig.add_hline` and `fig.add_vline` draw a horizontal and a vertical reference line.
-
 ```{python}
-NAMES = {"gdp_index_usa": "U.S.", "gdp_index_kor": "S. Korea", "gdp_index_swe": "Sweden",
-         "gdp_index_deu": "Germany", "gdp_index_gbr": "U.K.", "gdp_index_esp": "Spain"}
+# Step 1: a readable name for each column code
+NAMES = {
+    "gdp_index_usa": "U.S.",
+    "gdp_index_kor": "S. Korea",
+    "gdp_index_swe": "Sweden",
+    "gdp_index_deu": "Germany",
+    "gdp_index_gbr": "U.K.",
+    "gdp_index_esp": "Spain",
+}
+# Step 2: `melt(id_vars="date", ...)` stacks the country columns into two columns,
+# `country` (the old column name) and `index` (its value)
 long = oecd.melt(id_vars="date", var_name="country", value_name="index")
+# Step 3: `.map({...})` replaces each code by its readable name, using the dictionary
 long["country"] = long.country.map(NAMES)
 long.tail(3)
 ```
@@ -2186,55 +2784,125 @@ The OECD publishes the same quarterly GDP for 49 economies. The file `gdp_quarte
 the same index (2019Q4 = 100); its six textbook countries are identical to `fig10-6.csv`.
 
 ```{python}
+# Load the OECD panel: real GDP of 49 economies (2019Q4 = 100), one row per quarter
 gdp_panel = pd.read_csv(DATA_URL + "gdp_quarterly_panel.csv", parse_dates=["date"])
 gdp_panel.tail(3)
 ```
 
-The chart function takes the countries to show; the title compares the deepest fall in 2020 with the mildest.
-
-> **Python note.** `groupby("country").gdp_index.min()` gives each country's lowest index, and `.sort_values()`
-> sorts them from small to large, so `.index[0]` is the country with the deepest fall and `.index[-1]` the one with
-> the mildest. `fig.add_vline` draws a vertical line.
+The chart function takes the countries to show, and its title compares the deepest fall in 2020 with the
+mildest. First, `lowest_2020` finds the lowest index of 2020 in each chosen country.
 
 ```{python}
-BOOK_SIX = ("Germany", "S. Korea", "Spain", "Sweden", "United Kingdom", "United States")
+# The textbook's six countries, shown at the start
+BOOK_SIX = (
+    "Germany", "S. Korea", "Spain", "Sweden", "United Kingdom", "United States"
+)
 
 
-def gdp_chart(names=BOOK_SIX):
-    """Fig. 10.6: real GDP (index, 2019Q4 = 100) in the chosen countries, from 2019Q4 to today."""
+def lowest_2020(names):
+    """The lowest GDP index of 2020 in each of the chosen countries (Fig. 6).
+
+    Arguments
+        names : the chosen countries (a tuple of names)
+    Returns
+        chosen  : the rows of the chosen countries that have a GDP index
+        missing : the chosen countries without data
+        lowest  : each country's lowest index in 2020, from the deepest fall to
+                  the mildest
+    """
+    # Step 1: the rows of the chosen countries (pick, from "Model in code")
     chosen, missing = pick(gdp_panel, names, "gdp_index")
-    fig = px.line(chosen, x="date", y="gdp_index", color="country", hover_name="country",
-                  color_discrete_map=COUNTRY_COLORS,
-                  labels={"date": "Quarter", "gdp_index": "Real GDP (index, 2019Q4 = 100)", "country": "Country"})
+    # Step 2: `groupby("country").gdp_index.min()` gives each country's lowest
+    # index, and `.sort_values()` sorts them from small to large
+    lowest = (
+        chosen[chosen.date.dt.year == 2020]
+        .groupby("country")
+        .gdp_index.min()
+        .sort_values()
+    )
+    return chosen, missing, lowest
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 6, GDP in the chosen countries since 2019Q4
+def gdp_chart(names=BOOK_SIX):
+    """Real GDP (index, 2019Q4 = 100) in the chosen countries, from 2019Q4 to today.
+
+    Draws Fig. 6 (inspired by Fig. 10.6 in Jones), with the deepest and the mildest
+    fall of 2020 in the title.
+
+    Arguments
+        names : the chosen countries (a tuple of names)
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the numbers of the figure (lowest_2020)
+    chosen, missing, lowest = lowest_2020(names)
+    # Step 2: one thick line per country, in its fixed color
+    fig = px.line(
+        chosen,
+        x="date",
+        y="gdp_index",
+        color="country",
+        hover_name="country",
+        color_discrete_map=COUNTRY_COLORS,
+        labels={
+            "date": "Quarter",
+            "gdp_index": "Real GDP (index, 2019Q4 = 100)",
+            "country": "Country",
+        },
+    )
     fig.update_traces(line_width=3)
-    lowest = chosen[chosen.date.dt.year == 2020].groupby("country").gdp_index.min().sort_values()
+    # Step 3: the title. `.index[0]` is the country with the deepest fall and
+    # `.index[-1]` the one with the mildest; `.iloc[0]` is the first value
     title = "No data for 2020"
     if len(lowest) > 0:
         title = f"Lowest point in 2020: {lowest.index[0]} {lowest.iloc[0] - 100:.1f}%"
     if len(lowest) > 1:
         title = title + f", {lowest.index[-1]} only {lowest.iloc[-1] - 100:.1f}%"
+    # Step 4: a dashed line at the 2019Q4 level, and a dotted vertical line where
+    # the textbook's data end (`fig.add_vline` draws a vertical line)
     fig.add_hline(y=100, line_dash="dash", line_color="black", line_width=1)
     fig.add_vline(x="2022-10-01", line_dash="dot", line_color=GRAY)
-    fig.add_annotation(x="2022-10-01", y=80, text="The textbook's data end here", showarrow=False, xshift=95,
-                       font=dict(size=12, color=GRAY))
+    fig.add_annotation(
+        x="2022-10-01",
+        y=80,
+        text="The textbook's data end here",
+        showarrow=False,
+        xshift=95,
+        font=dict(size=12, color=GRAY),
+    )
+    # Step 5: fixed axes: the textbook's range, or a wider one for fast growers
     fig.update_xaxes(range=["2019-09-01", "2026-06-01"])
-    if chosen.gdp_index.max() < 117:            # the textbook's range, or a wider one for fast growers
-        fig.update_yaxes(range=[75, 119], tickvals=[80, 85, 90, 95, 100, 105, 110, 115])
+    if chosen.gdp_index.max() < 117:
+        fig.update_yaxes(
+            range=[75, 119],
+            tickvals=[80, 85, 90, 95, 100, 105, 110, 115],
+        )
     else:
-        fig.update_yaxes(range=[75, 155], tickvals=[80, 90, 100, 110, 120, 130, 140, 150])
+        fig.update_yaxes(
+            range=[75, 155],
+            tickvals=[80, 90, 100, 110, 120, 130, 140, 150],
+        )
     fig.update_layout(title=title + no_data_note(missing))
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(gdp_chart, names=SelectMultiple(options=sorted(gdp_panel.country.unique()), value=BOOK_SIX, rows=8,
-                                         description="countries"));
+# Fig. 6 with a list of countries (Ctrl- or Cmd-click to pick several)
+interact(
+    gdp_chart,
+    names=SelectMultiple(options=sorted(gdp_panel.country.unique()), value=BOOK_SIX,
+                         rows=8, description="countries"),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: Fig. 6 with every country (click a country in the legend to add it)
+# @title Website version: Fig. 6 with every country (click a country to add it)
+# every country at once, with only the textbook's six shown at the start
 all_countries(gdp_chart, sorted(gdp_panel.country.unique()), list(BOOK_SIX))
 ```
 
@@ -2268,20 +2936,32 @@ We can now compute the **GDP loss** of Fig. 5 ourselves. In each quarter from 20
 $100 - \text{index}$ when the index is below 100, and zero otherwise. Each quarter is a quarter of a year, so the
 loss in percent of a year's GDP is the sum of the shortfalls divided by 4, as in equation (12).
 
-> **Python note.** `(100 - level).clip(lower=0)` replaces negative numbers by 0, so quarters above the 2019 level
-> count as no loss. `level[level >= 100]` keeps the quarters at or above the 2019 level, and `.index[0]` is the
-> first of them.
-
 ```{python}
+# One row per country: the lowest index, the first quarter back at 100, the GDP
+# loss of equation (12) and the latest index
 wide = oecd.set_index("date")
 rows = []
 for code, name in NAMES.items():
     level = wide[code]
+    # Step 1: `level[level >= 100]` keeps the quarters at or above the 2019 level,
+    # and `.index[0]` is the first of them (from 2020Q3 on)
     after = level["2020-07-01":]
     back = after[after >= 100].index[0]
+    # Step 2: the loss, 2020Q1 to 2022Q3; `(100 - level).clip(lower=0)` replaces
+    # negative numbers by 0, so quarters above the 2019 level count as no loss
     loss = (100 - level["2020-01-01":"2022-07-01"]).clip(lower=0).sum() / 4
     rows.append([name, level.min(), back.strftime("%Y-%m"), loss, level.iloc[-1]])
-table = pd.DataFrame(rows, columns=["Country", "Lowest index", "Back at 100", "GDP loss to 2022Q3", "Index 2026Q2"])
+# Step 3: `pd.DataFrame(rows, columns=[...])` turns the list of rows into a table
+table = pd.DataFrame(
+    rows,
+    columns=[
+        "Country",
+        "Lowest index",
+        "Back at 100",
+        "GDP loss to 2022Q3",
+        "Index 2026Q2",
+    ],
+)
 table.round(1)
 ```
 
@@ -2317,19 +2997,38 @@ How deep were the two recessions, and how fast did the economy recover? We measu
 
 The data are total nonfarm payroll employment in millions of jobs, monthly, seasonally adjusted.
 
-> **Python note.** `fig.update_xaxes(rangeslider_visible=True)` adds a small copy of the chart below it. Drag its
-> handles to zoom in on a period; this works on the website too.
-
 ```{python}
+# Load the data of Fig. 7: nonfarm employment in millions, one row per month
 jobs = pd.read_csv(DATA_URL + "fig10-7.csv", parse_dates=["date"])
 emp = jobs.set_index("date").nonfarm_emp
+# the peak and the trough of employment in each recession, and the percent change
 gr_peak, gr_trough, gr_change = peak_to_trough(emp, "2007-01-01", "2011-12-01")
 cv_peak, cv_trough, cv_change = peak_to_trough(emp, "2020-01-01", "2020-12-01")
-fig = px.area(jobs, x="date", y="nonfarm_emp", labels={"date": "Year", "nonfarm_emp": "Millions of jobs"},
-              title=f"Jobs lost: {emp[gr_peak] - emp[gr_trough]:.1f} million in 2008–10, "
-                    f"{emp[cv_peak] - emp[cv_trough]:.1f} million in two months of 2020")
-fig.update_traces(line=dict(color=BLUE, width=3), fillcolor="rgba(138, 150, 163, 0.3)")
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 7, nonfarm employment
+# Step 1: employment as a filled area; the title reports the jobs lost, peak
+# minus trough, in each recession
+fig = px.area(
+    jobs,
+    x="date",
+    y="nonfarm_emp",
+    labels={"date": "Year", "nonfarm_emp": "Millions of jobs"},
+    title=(
+        f"Jobs lost: {emp[gr_peak] - emp[gr_trough]:.1f} million in 2008–10, "
+        f"{emp[cv_peak] - emp[cv_trough]:.1f} million in two months of 2020"
+    ),
+)
+fig.update_traces(
+    line=dict(color=BLUE, width=3),
+    fillcolor="rgba(138, 150, 163, 0.3)",
+)
+# Step 2: the recessions, shaded
 shade_recessions(fig)
+# Step 3: fixed axes. `rangeslider_visible=True` adds a small copy of the chart
+# below it: drag its handles to zoom in on a period (this works on the website too)
 fig.update_xaxes(range=["1999-07-01", "2026-12-01"], rangeslider_visible=True)
 fig.update_yaxes(range=[125, 162], tickvals=[130, 135, 140, 145, 150, 155, 160])
 fig.show()
@@ -2355,20 +3054,32 @@ Chart: inspired by Fig. 10.7 in Jones (2024), [*Macroeconomics*, 6th ed.](https:
 
 #### Key numbers: jobs lost and months to recover
 
-> **Python note.** The list `[(gr_peak, gr_trough), (cv_peak, cv_trough)]` holds two pairs of dates, and the loop
-> visits one pair at a time. The number of months between two dates is
-> 12 × (difference in years) + (difference in months).
-
 ```{python}
+# One row per recession. The list holds two pairs of dates, and the loop visits
+# one pair at a time
 rows = []
 for peak, trough in [(gr_peak, gr_trough), (cv_peak, cv_trough)]:
     after = emp[trough:]
-    back = after[after >= emp[peak]].index[0]           # first month at or above the old peak
+    # the first month at or above the old peak
+    back = after[after >= emp[peak]].index[0]
+    # months between two dates: 12 x (difference in years) + (difference in months)
     months = 12 * (back.year - peak.year) + back.month - peak.month
-    rows.append([peak.strftime("%Y-%m"), trough.strftime("%Y-%m"), emp[peak] - emp[trough],
-                 percent_change(emp[trough], emp[peak]), back.strftime("%Y-%m"), months])
-pd.DataFrame(rows, columns=["Peak", "Trough", "Jobs lost (millions)", "Change (%)", "Back at peak",
-                            "Months from peak"]).round(2)
+    rows.append(
+        [
+            peak.strftime("%Y-%m"),
+            trough.strftime("%Y-%m"),
+            emp[peak] - emp[trough],
+            percent_change(emp[trough], emp[peak]),
+            back.strftime("%Y-%m"),
+            months,
+        ]
+    )
+# the table, rounded to two decimals
+pd.DataFrame(
+    rows,
+    columns=["Peak", "Trough", "Jobs lost (millions)", "Change (%)", "Back at peak",
+             "Months from peak"],
+).round(2)
 ```
 
 The Great Recession cost 8.7 million jobs, 6.3 percent of employment, and it took 77 months, more than six years,
@@ -2384,30 +3095,62 @@ country has is a **labour force survey** of households, which counts the employe
 OECD publishes it quarterly and seasonally adjusted, in thousands of people. Countries differ hugely in size, so we
 compare **indexes**: employment divided by its level in 2019Q4, times 100.
 
-> **Python note.** `base` holds each country's employment in 2019Q4, with the country names as labels.
-> `jobs_panel.country.map(base)` looks up that value for every row, so the division compares each quarter with
-> the same country's 2019Q4. A country with no 2019Q4 value gets `NaN`.
-
 ```{python}
+# Step 1: load employment from the labour force surveys, one row per country and
+# quarter
 jobs_panel = pd.read_csv(DATA_URL + "employment_panel.csv", parse_dates=["date"])
+# Step 2: each country's employment in 2019Q4, with the country names as labels
 base = jobs_panel[jobs_panel.date == "2019-10-01"].set_index("country").employment
+# Step 3: the index. `jobs_panel.country.map(base)` looks up the 2019Q4 value for
+# every row, so each quarter is compared with the same country's 2019Q4; a country
+# with no 2019Q4 value gets NaN
 jobs_panel["index_2019q4"] = 100 * jobs_panel.employment / jobs_panel.country.map(base)
 jobs_panel.tail(3)
 ```
 
+The chart function only calls tools from "Model in code", so all of its code is drawing code. It draws one line
+per chosen country, and its title reports the largest fall in employment during Covid-19.
+
 ```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 7, employment in the chosen countries
 def jobs_world(names=("United States",)):
-    """Fig. 10.7 beyond the U.S.: household-survey employment (2019Q4 = 100) in the chosen countries."""
+    """Household-survey employment (2019Q4 = 100) in the chosen countries.
+
+    Draws Fig. 7 beyond the U.S. (inspired by Fig. 10.7 in Jones), with the largest
+    Covid-19 fall in employment among the chosen countries in the title.
+
+    Arguments
+        names : the chosen countries (a tuple of names)
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the rows of the chosen countries, and the countries without data
     chosen, missing = pick(jobs_panel, names, "index_2019q4")
-    fig = px.line(chosen, x="date", y="index_2019q4", color="country", hover_name="country",
-                  color_discrete_map=COUNTRY_COLORS,
-                  labels={"date": "Year", "index_2019q4": "Employment (index, 2019Q4 = 100)", "country": "Country"})
+    # Step 2: one line per country, in its fixed color
+    fig = px.line(
+        chosen,
+        x="date",
+        y="index_2019q4",
+        color="country",
+        hover_name="country",
+        color_discrete_map=COUNTRY_COLORS,
+        labels={
+            "date": "Year",
+            "index_2019q4": "Employment (index, 2019Q4 = 100)",
+            "country": "Country",
+        },
+    )
+    # Step 3: the title reports the largest fall from 2019Q4 to 2020 (largest_fall)
     worst = largest_fall(chosen, "index_2019q4", "2019-10-01", "2020-12-31")
     title = "No data for 2019–20"
     if worst is not None:
         name, peak, trough, change = worst
-        title = (f"Largest Covid-19 fall in employment: {name}, {change:.1f}% "
-                 f"({peak.year}Q{peak.quarter} to {trough.year}Q{trough.quarter})")
+        title = (
+            f"Largest Covid-19 fall in employment: {name}, {change:.1f}% "
+            f"({peak.year}Q{peak.quarter} to {trough.year}Q{trough.quarter})"
+        )
+    # Step 4: a dashed line at the 2019Q4 level
     fig.add_hline(y=100, line_dash="dash", line_color="black", line_width=1)
     fig.update_layout(title=title + no_data_note(missing))
     return fig
@@ -2415,13 +3158,18 @@ def jobs_world(names=("United States",)):
 
 ```{python}
 #| kind: widget
-interact(jobs_world, names=SelectMultiple(options=sorted(jobs_panel.country.unique()), value=("United States",),
-                                          rows=8, description="countries"));
+# Fig. 7 beyond the U.S., with a list of countries (Ctrl- or Cmd-click to pick several)
+interact(
+    jobs_world,
+    names=SelectMultiple(options=sorted(jobs_panel.country.unique()),
+                         value=("United States",), rows=8, description="countries"),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: employment in every country (click a country in the legend to add it)
+# @title Website version: employment in every country (click a country to add it)
+# every country at once, with only the U.S. shown at the start
 all_countries(jobs_world, sorted(jobs_panel.country.unique()), ["United States"])
 ```
 
@@ -2474,6 +3222,7 @@ February 2023, when the textbook was written. Since then the BEA has revised GDP
 Office (CBO) has re-estimated potential output.
 
 ```{python}
+# Load the data of Fig. 8: short-run output in two vintages, one row per quarter
 gap = pd.read_csv(DATA_URL + "fig10-8.csv", parse_dates=["date"])
 srun = gap.set_index("date")
 gap.tail(3)
@@ -2482,19 +3231,53 @@ gap.tail(3)
 The older vintage stops in 2022Q4, so its last rows are `NaN`.
 
 ```{python}
-named = gap.rename(columns={"short_run_output": "Data as of 2026",
-                            "short_run_output_vintage2023": "Data as published in 2023"})
-fig = px.line(named, x="date", y=["Data as of 2026", "Data as published in 2023"],
-              color_discrete_sequence=[BLUE, GRAY],
-              labels={"date": "Year", "value": "Short-run output, Ỹ (percent)", "variable": "Data vintage"},
-              title="Below potential for years after 2009, for about a year after 2020")
+# `rename(columns={...})` gives the two vintages readable names for the legend
+named = gap.rename(
+    columns={
+        "short_run_output": "Data as of 2026",
+        "short_run_output_vintage2023": "Data as published in 2023",
+    }
+)
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 8, short-run output in two data vintages
+# Step 1: one line per vintage
+fig = px.line(
+    named,
+    x="date",
+    y=["Data as of 2026", "Data as published in 2023"],
+    color_discrete_sequence=[BLUE, GRAY],
+    labels={
+        "date": "Year",
+        "value": "Short-run output, Ỹ (percent)",
+        "variable": "Data vintage",
+    },
+    title="Below potential for years after 2009, for about a year after 2020",
+)
+# Step 2: today's data thick, the 2023 vintage dashed
 fig.update_traces(selector=dict(name="Data as of 2026"), line_width=3)
-fig.update_traces(selector=dict(name="Data as published in 2023"), line_dash="dash", line_width=2)
+fig.update_traces(
+    selector=dict(name="Data as published in 2023"),
+    line_dash="dash",
+    line_width=2,
+)
+# Step 3: a dashed line at zero, where output equals potential, and the recessions
 fig.add_hline(y=0, line_dash="dash", line_color="black", line_width=1)
 shade_recessions(fig)
+# Step 4: fixed axes, and the legend in the bottom left corner
 fig.update_xaxes(range=["1999-07-01", "2026-12-01"])
 fig.update_yaxes(range=[-12, 4.5], tickvals=[-10, -8, -6, -4, -2, 0, 2, 4])
-fig.update_layout(legend=dict(x=0.01, y=0.02, xanchor="left", yanchor="bottom", bgcolor="rgba(255,255,255,0.8)"))
+fig.update_layout(
+    legend=dict(
+        x=0.01,
+        y=0.02,
+        xanchor="left",
+        yanchor="bottom",
+        bgcolor="rgba(255,255,255,0.8)",          # white, a little see-through
+    )
+)
 fig.show()
 ```
 
@@ -2520,18 +3303,25 @@ Chart: inspired by Fig. 10.8 in Jones (2024), [*Macroeconomics*, 6th ed.](https:
 
 #### Key numbers: depth and length in two vintages
 
-> **Python note.** `series[series > 0]` keeps the quarters with positive short-run output, and `.index[0]` gives the
-> first one.
-
 ```{python}
+# For each vintage: the depth of the two slumps, the mean of the 2010s, and the
+# first quarter above zero after each slump
 for column in ["short_run_output", "short_run_output_vintage2023"]:
     y = srun[column]
     after_2009, after_2020 = y["2009-07-01":], y["2020-07-01":]
     print(f"{column}:")
-    print(f"  lowest 2008-09: {y['2008':'2009'].min():.2f}%   lowest 2020: {y['2020'].min():.2f}%")
+    print(
+        f"  lowest 2008-09: {y['2008':'2009'].min():.2f}%   "
+        f"lowest 2020: {y['2020'].min():.2f}%"
+    )
     print(f"  mean 2010-2019: {y['2010':'2019'].mean():.2f}%")
-    print(f"  first quarter above zero after 2009: {after_2009[after_2009 > 0].index[0]:%Y-%m}; "
-          f"after 2020: {after_2020[after_2020 > 0].index[0]:%Y-%m}")
+    # `series[series > 0]` keeps the quarters with positive short-run output, and
+    # `.index[0]` gives the first one
+    print(
+        "  first quarter above zero after 2009: "
+        f"{after_2009[after_2009 > 0].index[0]:%Y-%m}; "
+        f"after 2020: {after_2020[after_2020 > 0].index[0]:%Y-%m}"
+    )
 ```
 
 With the 2023 data, $\tilde{Y}$ fell to $-5.48$ percent in 2009 and to $-10.42$ percent in 2020, the textbook's
@@ -2549,6 +3339,7 @@ The CBO estimates potential output only for the U.S. The OECD estimates it for i
 file is annual, from 1990 to 2027; the values for 2026 and 2027 are the OECD's **projections**.
 
 ```{python}
+# Load the OECD output gaps: one row per country and year, 1990 to 2027
 gaps_panel = pd.read_csv(DATA_URL + "output_gap_panel.csv")
 gaps_panel.tail(3)
 ```
@@ -2557,43 +3348,111 @@ Two estimates of the same U.S. gap can differ, because potential output is never
 annual gap with the yearly average of the CBO-based $\tilde{Y}$ of Fig. 8.
 
 ```{python}
-us_oecd = gaps_panel[gaps_panel.country == "United States"].set_index("year").output_gap
+# Step 1: the OECD's U.S. gap by year, and the yearly average of the CBO-based
+# short-run output of Fig. 8 (`groupby(srun.index.year)` groups the quarters by year)
+us_oecd = (
+    gaps_panel[gaps_panel.country == "United States"].set_index("year").output_gap
+)
 us_cbo = srun.short_run_output.groupby(srun.index.year).mean()
-pd.DataFrame({"OECD": us_oecd, "CBO-based": us_cbo}).loc[[2009, 2010, 2019, 2020, 2022, 2025]].round(2)
+# Step 2: the two side by side, in six years; `pd.DataFrame({...})` makes a table
+# with one column per entry of the dictionary
+pd.DataFrame({"OECD": us_oecd, "CBO-based": us_cbo}).loc[
+    [2009, 2010, 2019, 2020, 2022, 2025]
+].round(2)
 ```
 
-> **Python note.** `x="year"` with `markers=True` draws one dot per year joined by lines. `fig.add_vrect` shades the
-> projection years, from 2025.5 to 2027.5, so the band covers the dots of 2026 and 2027.
+`deepest_gap` finds the deepest output gap since 2007 among the chosen countries, which the title reports.
 
 ```{python}
-def gap_world(names=("United States",)):
-    """Fig. 10.8 beyond the U.S.: OECD output gaps (percent of potential output) in the chosen countries."""
+def deepest_gap(names):
+    """The deepest output gap since 2007 among the chosen countries (Fig. 8).
+
+    Arguments
+        names : the chosen countries (a tuple of names)
+    Returns
+        chosen  : the rows of the chosen countries that have an output gap
+        missing : the chosen countries without data
+        low     : the row with the most negative gap since 2007 (None if no data)
+    """
+    # Step 1: the rows of the chosen countries (pick, from "Model in code")
     chosen, missing = pick(gaps_panel, names, "output_gap")
-    fig = px.line(chosen, x="year", y="output_gap", color="country", hover_name="country", markers=True,
-                  color_discrete_map=COUNTRY_COLORS,
-                  labels={"year": "Year", "output_gap": "Output gap, Ỹ (percent)", "country": "Country"})
+    # Step 2: the row with the lowest gap since 2007
     since_2007 = chosen[chosen.year >= 2007]
-    title = "No data since 2007"
+    low = None
     if len(since_2007) > 0:
         low = since_2007.loc[since_2007.output_gap.idxmin()]
-        title = f"Deepest output gap since 2007: {low.country}, {low.output_gap:.1f}% in {low.year}"
+    return chosen, missing, low
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 8, output gaps in the chosen countries
+def gap_world(names=("United States",)):
+    """OECD output gaps (percent of potential output) in the chosen countries.
+
+    Draws Fig. 8 beyond the U.S. (inspired by Fig. 10.8 in Jones), with the deepest
+    gap since 2007 in the title and the OECD's projections shaded.
+
+    Arguments
+        names : the chosen countries (a tuple of names)
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the numbers of the figure (deepest_gap)
+    chosen, missing, low = deepest_gap(names)
+    # Step 2: `x="year"` with `markers=True` draws one dot per year, joined by lines
+    fig = px.line(
+        chosen,
+        x="year",
+        y="output_gap",
+        color="country",
+        hover_name="country",
+        markers=True,
+        color_discrete_map=COUNTRY_COLORS,
+        labels={
+            "year": "Year",
+            "output_gap": "Output gap, Ỹ (percent)",
+            "country": "Country",
+        },
+    )
+    # Step 3: the title reports the deepest gap since 2007
+    title = "No data since 2007"
+    if low is not None:
+        title = (
+            f"Deepest output gap since 2007: {low.country}, "
+            f"{low.output_gap:.1f}% in {low.year}"
+        )
+    # Step 4: a dashed line at zero, and a gray band over the projection years, from
+    # 2025.5 to 2027.5, so that it covers the dots of 2026 and 2027
     fig.add_hline(y=0, line_dash="dash", line_color="black", line_width=1)
     fig.add_vrect(x0=2025.5, x1=2027.5, fillcolor=GRAY, opacity=0.2, line_width=0)
-    fig.add_annotation(x=2026.5, y=1, yref="paper", yanchor="top", text="OECD<br>projections", showarrow=False,
-                       font=dict(size=12, color=GRAY))
+    fig.add_annotation(
+        x=2026.5,
+        y=1,
+        yref="paper",
+        yanchor="top",
+        text="OECD<br>projections",
+        showarrow=False,
+        font=dict(size=12, color=GRAY),
+    )
     fig.update_layout(title=title + no_data_note(missing))
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(gap_world, names=SelectMultiple(options=sorted(gaps_panel.country.unique()), value=("United States",),
-                                         rows=8, description="countries"));
+# Fig. 8 beyond the U.S., with a list of countries (Ctrl- or Cmd-click to pick several)
+interact(
+    gap_world,
+    names=SelectMultiple(options=sorted(gaps_panel.country.unique()),
+                         value=("United States",), rows=8, description="countries"),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: output gaps in every OECD country (click a country in the legend to add it)
+# @title Website version: output gaps in every OECD country (click to add one)
+# every country at once, with only the U.S. shown at the start
 all_countries(gap_world, sorted(gaps_panel.country.unique()), ["United States"])
 ```
 
@@ -2637,12 +3496,12 @@ use `.max()` and `.idxmax()`.
 The **unemployment rate** is the share of the labor force (the people who have a job or are looking for one) who
 have no job but are looking for one. The data are monthly and seasonally adjusted.
 
-> **Python note.** `unemployment.date.between(a, b)` is true for the dates from `a` to `b`, so the first cell shows
-> the months from August to December 2025.
-
 ```{python}
+# Load the data of Fig. 9: the unemployment rate, one row per month
 unemployment = pd.read_csv(DATA_URL + "fig10-9.csv", parse_dates=["date"])
 unemp = unemployment.set_index("date").unemp_rate
+# `unemployment.date.between(a, b)` is True for the dates from a to b: here the
+# months from August to December 2025
 unemployment[unemployment.date.between("2025-08-01", "2025-12-01")]
 ```
 
@@ -2653,25 +3512,75 @@ To measure the rise in unemployment we use `low_to_high` from "Model in code", t
 `peak_to_trough`: the highest unemployment rate in a window and the lowest rate *before* it.
 
 ```{python}
-RISES = {"2001 recession": ("2000-01-01", "2003-12-01"),
-         "Great Recession": ("2007-01-01", "2010-12-01"),
-         "Covid-19 recession": ("2019-01-01", "2020-12-01")}
+# The search window of each recession: a name, then the first and the last month
+RISES = {
+    "2001 recession": ("2000-01-01", "2003-12-01"),
+    "Great Recession": ("2007-01-01", "2010-12-01"),
+    "Covid-19 recession": ("2019-01-01", "2020-12-01"),
+}
 ```
 
+The chart function only looks up a window and calls `low_to_high`, so all of its code is drawing code. It marks
+the low and the high of one recession and writes the rise next to the high.
+
 ```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 9, the unemployment rate with the rise in one recession
 def unemployment_chart(recession="Great Recession"):
-    """Fig. 10.9: the U.S. unemployment rate, with the rise in one recession marked."""
+    """The U.S. unemployment rate, with the rise in one recession marked.
+
+    Draws Fig. 9 (inspired by Fig. 10.9 in Jones). The rise from the low to the high
+    is measured by low_to_high, in percentage points.
+
+    Arguments
+        recession : the name of the recession, a key of RISES
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the recession's window, then the low, the high and the rise
     start, end = RISES[recession]
     low, high, rise = low_to_high(unemp, start, end)
-    fig = px.area(unemployment, x="date", y="unemp_rate", labels={"date": "Year", "unemp_rate": "Percent"},
-                  title=f"{recession}: unemployment rose from {unemp[low]:.1f}% ({low:%b %Y}) "
-                        f"to {unemp[high]:.1f}% ({high:%b %Y})")
-    fig.update_traces(line=dict(color=BLUE, width=3), fillcolor="rgba(138, 150, 163, 0.3)")
+
+    # Step 2: the rate as a filled area, with the recessions shaded
+    fig = px.area(
+        unemployment,
+        x="date",
+        y="unemp_rate",
+        labels={"date": "Year", "unemp_rate": "Percent"},
+        title=(
+            f"{recession}: unemployment rose from {unemp[low]:.1f}% ({low:%b %Y}) "
+            f"to {unemp[high]:.1f}% ({high:%b %Y})"
+        ),
+    )
+    fig.update_traces(
+        line=dict(color=BLUE, width=3),
+        fillcolor="rgba(138, 150, 163, 0.3)",
+    )
     shade_recessions(fig)
-    fig.add_trace(go.Scatter(x=[low, high], y=[unemp[low], unemp[high]], mode="markers", showlegend=False,
-                             marker=dict(color="black", size=10), name="Low and high"))
-    fig.add_annotation(x=high, y=unemp[high], text=f"+{rise:.1f} points", showarrow=True, arrowhead=2, ax=60,
-                       ay=-10, font=dict(size=13))
+
+    # Step 3: black dots at the low and the high, and the rise next to the high
+    fig.add_trace(
+        go.Scatter(
+            x=[low, high],
+            y=[unemp[low], unemp[high]],
+            mode="markers",
+            showlegend=False,
+            marker=dict(color="black", size=10),
+            name="Low and high",
+        )
+    )
+    fig.add_annotation(
+        x=high,
+        y=unemp[high],
+        text=f"+{rise:.1f} points",
+        showarrow=True,
+        arrowhead=2,
+        ax=60,
+        ay=-10,
+        font=dict(size=13),
+    )
+
+    # Step 4: fixed axes
     fig.update_xaxes(range=["1999-07-01", "2026-12-01"])
     fig.update_yaxes(range=[3, 16], tickvals=[4, 6, 8, 10, 12, 14, 16])
     return fig
@@ -2679,15 +3588,25 @@ def unemployment_chart(recession="Great Recession"):
 
 ```{python}
 #| kind: widget
-interact(unemployment_chart, recession=Dropdown(options=list(RISES), value="Great Recession",
-                                                description="recession", style=WIDE));
+# Fig. 9 with a menu of the three recessions
+interact(
+    unemployment_chart,
+    recession=Dropdown(options=list(RISES), value="Great Recession",
+                       description="recession", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 9 with a precomputed slider for the recession
-slider_figure(unemployment_chart, "recession", ["2001 recession", "Great Recession", "Covid-19 recession"],
-              start="Great Recession", label="recession")
+# one picture of Fig. 9 per recession
+slider_figure(
+    unemployment_chart,
+    "recession",
+    ["2001 recession", "Great Recession", "Covid-19 recession"],
+    start="Great Recession",
+    label="recession",
+)
 ```
 
 **Sources.** Data: [U.S. Bureau of Labor Statistics, Unemployment Rate (`UNRATE`), via FRED](https://fred.stlouisfed.org/series/UNRATE);
@@ -2717,24 +3636,30 @@ and a change in percentage points for the unemployment rate. The wider file `us_
 data, and `recessions.csv` the quarterly peaks and troughs.
 
 ```{python}
-quarterly = pd.read_csv(DATA_URL + "us_quarterly.csv", parse_dates=["date"]).set_index("date")
+# Load the quarterly U.S. data of Table 10.1, with the quarters as row labels
+quarterly = pd.read_csv(
+    DATA_URL + "us_quarterly.csv", parse_dates=["date"]
+).set_index("date")
 quarterly.head(3)
 ```
 
 The columns are real GDP and its components (billions of 2017 dollars), employment (millions) and the unemployment
 rate (percent), as quarterly averages.
 
-> **Python note.** `quarterly.loc[peak]` is a whole row. `percent_change(after, before)` then works on all the
-> columns at once. Each pass of the loop stores one recession's changes in the dictionary `changes`, under the year
-> of its peak, and `pd.DataFrame(changes)` makes one column per recession.
-
 ```{python}
+# One column of changes per recession, from the NBER peak quarter to the trough;
+# `zip(...)` hands the loop one (peak, trough) pair at a time
 changes = {}
 for peak, trough in zip(recessions.peak_quarter, recessions.trough_quarter):
+    # `quarterly.loc[peak]` is a whole row, so percent_change (equation 1) works
+    # on all the columns at once
     before, after = quarterly.loc[peak], quarterly.loc[trough]
     change = percent_change(after, before)
-    change["unemployment"] = after.unemployment - before.unemployment     # points, not percent
+    # the unemployment rate changes in points, not percent
+    change["unemployment"] = after.unemployment - before.unemployment
+    # store this recession's changes under the year of its peak
     changes[peak.year] = change
+# `pd.DataFrame(changes)` makes one column per recession
 changes = pd.DataFrame(changes)
 changes.round(1)
 ```
@@ -2742,20 +3667,43 @@ changes.round(1)
 The first nine columns are the recessions from 1953 to 2001. Their average, next to the Great Recession (peak
 2007Q4) and the Covid-19 recession (peak 2019Q4), is the table. We put the textbook's numbers next to ours.
 
-> **Python note.** `changes.iloc[:, :9]` keeps all rows and the first nine columns, and `.mean(axis=1)` averages
-> across each row. `pd.concat([a, b], axis=1)` puts two tables side by side.
+```{python}
+# Step 1: the rows of the table, with readable names
+ROWS = {
+    "gdp": "GDP",
+    "employment": "Nonfarm employment",
+    "unemployment": "Unemployment rate (points)",
+    "consumption": "Consumption",
+    "investment": "Investment",
+    "government": "Government purchases",
+    "exports": "Exports",
+    "imports": "Imports",
+}
+# Step 2: our table. `changes.iloc[:, :9]` keeps all rows and the first nine
+# columns (1953 to 2001), and `.mean(axis=1)` averages across each row
+table = pd.DataFrame(
+    {
+        "Previous (average)": changes.iloc[:, :9].mean(axis=1),
+        "Great Recession": changes[2007],
+        "Covid-19": changes[2019],
+    }
+)
+table = table.loc[list(ROWS)].rename(index=ROWS)
+```
+
+Then we put the textbook's numbers, in the same order of rows, next to ours.
 
 ```{python}
-ROWS = {"gdp": "GDP", "employment": "Nonfarm employment", "unemployment": "Unemployment rate (points)",
-        "consumption": "Consumption", "investment": "Investment", "government": "Government purchases",
-        "exports": "Exports", "imports": "Imports"}
-table = pd.DataFrame({"Previous (average)": changes.iloc[:, :9].mean(axis=1),
-                      "Great Recession": changes[2007], "Covid-19": changes[2019]})
-table = table.loc[list(ROWS)].rename(index=ROWS)
-book = pd.DataFrame({"Previous, textbook": [-1.7, -2.5, 2.5, 0.4, -14.4, 1.2, -1.5, -4.2],
-                     "Great Recession, textbook": [-4.7, -6.3, 4.5, -3.4, -34.0, 5.5, -10.3, -18.7],
-                     "Covid-19, textbook": [-9.6, -11.9, 9.4, -10.6, -16.5, 2.6, -24.1, -20.2]},
-                    index=table.index)
+# Step 1: the textbook's Table 10.1
+book = pd.DataFrame(
+    {
+        "Previous, textbook": [-1.7, -2.5, 2.5, 0.4, -14.4, 1.2, -1.5, -4.2],
+        "Great Recession, textbook": [-4.7, -6.3, 4.5, -3.4, -34.0, 5.5, -10.3, -18.7],
+        "Covid-19, textbook": [-9.6, -11.9, 9.4, -10.6, -16.5, 2.6, -24.1, -20.2],
+    },
+    index=table.index,
+)
+# Step 2: `pd.concat([a, b], axis=1)` puts two tables side by side
 pd.concat([table.round(1), book], axis=1)
 ```
 
@@ -2779,12 +3727,27 @@ not have their data, so we copy their averages and put our U.S. numbers next to 
 prices of Figs. 1 and 4, the rise in unemployment of Fig. 9, and the fall in GDP from Table 10.1.
 
 ```{python}
+# Step 1: the rise in unemployment in the Great Recession (low_to_high)
 gr_low, gr_high, gr_rise = low_to_high(unemp, "2007-01-01", "2010-12-01")
-crises = pd.DataFrame({
-    "U.S. 2007-09": [peak_to_trough(house, "2000-01-01", "2015-12-01")[2],
-                     peak_to_trough(sp500, "2007-01-01", "2009-12-01")[2], gr_rise, table.loc["GDP", "Great Recession"]],
-    "Average crisis (Table 10.2)": [-35, -56, 7, -9.3]},
-    index=["Real house prices (%)", "Real stock prices (%)", "Unemployment (points)", "Real GDP (%)"])
+# Step 2: our U.S. numbers next to the average crisis; `[2]` picks the third
+# result of peak_to_trough, the percent change
+crises = pd.DataFrame(
+    {
+        "U.S. 2007-09": [
+            peak_to_trough(house, "2000-01-01", "2015-12-01")[2],
+            peak_to_trough(sp500, "2007-01-01", "2009-12-01")[2],
+            gr_rise,
+            table.loc["GDP", "Great Recession"],
+        ],
+        "Average crisis (Table 10.2)": [-35, -56, 7, -9.3],
+    },
+    index=[
+        "Real house prices (%)",
+        "Real stock prices (%)",
+        "Unemployment (points)",
+        "Real GDP (%)",
+    ],
+)
 crises.round(1)
 ```
 
@@ -2801,21 +3764,71 @@ the same international definition, monthly and seasonally adjusted. For the U.S.
 of Fig. 9 (the largest difference over 320 months is 0.0).
 
 ```{python}
+# Load the OECD unemployment rates: one row per country and month
 unemp_panel = pd.read_csv(DATA_URL + "unemployment_panel.csv", parse_dates=["date"])
 unemp_panel.tail(3)
 ```
 
+`highest_unemployment` finds the highest unemployment rate among the chosen countries, which the title reports.
+
 ```{python}
-def unemployment_world(names=("United States",)):
-    """Fig. 10.9 beyond the U.S.: OECD harmonised unemployment rates in the chosen countries."""
+def highest_unemployment(names):
+    """The highest unemployment rate among the chosen countries (Fig. 9).
+
+    Arguments
+        names : the chosen countries (a tuple of names)
+    Returns
+        chosen  : the rows of the chosen countries that have a rate
+        missing : the chosen countries without data
+        top     : the row with the highest rate (None if no data)
+    """
+    # Step 1: the rows of the chosen countries (pick, from "Model in code")
     chosen, missing = pick(unemp_panel, names, "unemployment_rate")
-    fig = px.line(chosen, x="date", y="unemployment_rate", color="country", hover_name="country",
-                  color_discrete_map=COUNTRY_COLORS,
-                  labels={"date": "Year", "unemployment_rate": "Unemployment rate (percent)", "country": "Country"})
-    title = "No data"
+    # Step 2: the row with the highest rate
+    top = None
     if len(chosen) > 0:
-        top = chosen.loc[chosen.unemployment_rate.idxmax()]       # the row with the highest rate
-        title = f"Highest unemployment since 2000: {top.country}, {top.unemployment_rate:.1f}% ({top.date:%b %Y})"
+        top = chosen.loc[chosen.unemployment_rate.idxmax()]
+    return chosen, missing, top
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 9, unemployment rates in the chosen countries
+def unemployment_world(names=("United States",)):
+    """OECD harmonised unemployment rates in the chosen countries.
+
+    Draws Fig. 9 beyond the U.S. (inspired by Fig. 10.9 in Jones), with the highest
+    rate since 2000 in the title.
+
+    Arguments
+        names : the chosen countries (a tuple of names)
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the numbers of the figure (highest_unemployment)
+    chosen, missing, top = highest_unemployment(names)
+    # Step 2: one line per country, in its fixed color
+    fig = px.line(
+        chosen,
+        x="date",
+        y="unemployment_rate",
+        color="country",
+        hover_name="country",
+        color_discrete_map=COUNTRY_COLORS,
+        labels={
+            "date": "Year",
+            "unemployment_rate": "Unemployment rate (percent)",
+            "country": "Country",
+        },
+    )
+    # Step 3: the title reports the highest rate
+    title = "No data"
+    if top is not None:
+        title = (
+            f"Highest unemployment since 2000: {top.country}, "
+            f"{top.unemployment_rate:.1f}% ({top.date:%b %Y})"
+        )
+    # Step 4: the U.S. recessions, shaded
     shade_recessions(fig)
     fig.update_layout(title=title + no_data_note(missing))
     return fig
@@ -2823,14 +3836,21 @@ def unemployment_world(names=("United States",)):
 
 ```{python}
 #| kind: widget
-interact(unemployment_world, names=SelectMultiple(options=sorted(unemp_panel.country.unique()),
-                                                  value=("United States",), rows=8, description="countries"));
+# Fig. 9 beyond the U.S., with a list of countries (Ctrl- or Cmd-click to pick several)
+interact(
+    unemployment_world,
+    names=SelectMultiple(options=sorted(unemp_panel.country.unique()),
+                         value=("United States",), rows=8, description="countries"),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: unemployment rates in every country (click a country in the legend to add it)
-all_countries(unemployment_world, sorted(unemp_panel.country.unique()), ["United States"])
+# @title Website version: unemployment rates in every country (click to add one)
+# every country at once, with only the U.S. shown at the start
+all_countries(
+    unemployment_world, sorted(unemp_panel.country.unique()), ["United States"]
+)
 ```
 
 **Sources.** Data: [OECD, harmonised unemployment rates, monthly (dataflow `DSD_LFS@DF_IALFS_UNE_M`), OECD Data
@@ -2876,59 +3896,140 @@ textbook's figure, which uses the **log change** $100 \times \ln(P_t / P_{t-12})
 almost the same as the percent change $100 \times (P_t / P_{t-12} - 1)$, but for large ones it is a bit smaller (equation 4).
 
 ```{python}
+# Load the data of Fig. 10: 12-month inflation in three economies, one row per month
 cpi = pd.read_csv(DATA_URL + "fig10-10.csv", parse_dates=["date"])
+# the months with a missing value (NaN) in at least one column
 cpi[cpi.isna().any(axis=1)]
 ```
 
 Two months have a gap: the U.S. has no CPI for October 2025 (prices were not collected during the government
 shutdown), and the U.K. figure for September 2026 was not yet published.
 
-> **Python note.** If $L = 100 \ln(P_t/P_{t-12})$, then $P_t/P_{t-12} = e^{L/100}$, and the percent change is
-> $100\,(e^{L/100} - 1)$. `np.exp` is the exponential function $e^x$, and it works on a whole column at once.
-> In the chart function, `data.date.dt.year == 2022` is true for the months of 2022, so `data[...].max()` gives the
-> highest value of each column in 2022.
+`percent_from_log` turns a log change into a percent change, with equation (4). We try it on two numbers.
 
 ```{python}
 def percent_from_log(log_change):
-    """Turn a log change 100 ln(P_t / P_t-12) into a percent change 100 (P_t / P_t-12 - 1)."""
+    """Turn a log change into a percent change.
+
+    Equation (4): if L = 100 ln(P_t / P_t-12), then P_t / P_t-12 = e^(L/100), and
+    the percent change is 100 (e^(L/100) - 1)
+
+    Arguments
+        log_change : the log change, L = 100 ln(P_t / P_t-12)
+    Returns
+        the percent change, 100 (P_t / P_t-12 - 1)
+    """
+    # `np.exp` is e^x, and it works on a whole column at once
     return 100 * (np.exp(log_change / 100) - 1)
 
 
-AREAS = {"inflation_us": "U.S.", "inflation_uk": "U.K.", "inflation_euro_area": "Euro area"}
-AREA_COLORS = {"U.S.": BLUE, "U.K.": GREEN, "Euro area": TEAL}
-print(f"Log change 2.00 -> percent change {percent_from_log(2.0):.2f};  log change 10.00 -> {percent_from_log(10.0):.2f}")
+# Readable names for the columns of the three economies
+AREAS = {
+    "inflation_us": "U.S.",
+    "inflation_uk": "U.K.",
+    "inflation_euro_area": "Euro area",
+}
+# a check: for small changes the two measures are almost the same
+print(
+    f"Log change 2.00 -> percent change {percent_from_log(2.0):.2f};  "
+    f"log change 10.00 -> {percent_from_log(10.0):.2f}"
+)
 ```
 
+`inflation_rates` gives the three series in the chosen measure, and their peaks in 2022, which the title reports.
+
 ```{python}
-def inflation_chart(measure="log change"):
-    """Fig. 10.10: 12-month CPI inflation in the U.S., the U.K. and the euro area, 2015-2026."""
+def inflation_rates(measure):
+    """The three inflation series of Fig. 10 in one measure, and their 2022 peaks.
+
+    Arguments
+        measure : "log change" (as in the data) or "percent change" (equation 4)
+    Returns
+        data  : the table of Fig. 10, one column per economy (U.S., U.K., Euro area)
+        peaks : the highest value of each column in 2022
+    """
+    # Step 1: readable column names, then the percent change if asked for
     data = cpi.rename(columns=AREAS)
     if measure == "percent change":
         for area in AREAS.values():
             data[area] = percent_from_log(data[area])
+    # Step 2: `data.date.dt.year == 2022` is True for the months of 2022, so
+    # `.max()` gives the highest value of each column in 2022
     peaks = data[data.date.dt.year == 2022].max()
-    fig = px.line(data, x="date", y=list(AREAS.values()), color_discrete_map=AREA_COLORS,
-                  labels={"date": "Year", "value": "Percent", "variable": "Economy"},
-                  title=f"{measure.capitalize()}: 2022 peaks U.S. {peaks['U.S.']:.1f}%, "
-                        f"U.K. {peaks['U.K.']:.1f}%, euro area {peaks['Euro area']:.1f}%")
+    return data, peaks
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 10, inflation in the U.S., the U.K. and the euro area
+# a fixed color for each of the three economies (Figs. 10 and 11)
+AREA_COLORS = {"U.S.": BLUE, "U.K.": GREEN, "Euro area": TEAL}
+
+
+def inflation_chart(measure="log change"):
+    """12-month CPI inflation in the U.S., the U.K. and the euro area, 2015-2026.
+
+    Draws Fig. 10 (inspired by Fig. 10.10 in Jones), with the 2022 peaks in the
+    title.
+
+    Arguments
+        measure : "log change" (as in the data) or "percent change" (equation 4)
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the numbers of the figure (inflation_rates)
+    data, peaks = inflation_rates(measure)
+    # Step 2: one thick line per economy; `.capitalize()` writes the first letter
+    # of the measure in upper case
+    fig = px.line(
+        data,
+        x="date",
+        y=list(AREAS.values()),
+        color_discrete_map=AREA_COLORS,
+        labels={"date": "Year", "value": "Percent", "variable": "Economy"},
+        title=(
+            f"{measure.capitalize()}: 2022 peaks U.S. {peaks['U.S.']:.1f}%, "
+            f"U.K. {peaks['U.K.']:.1f}%, euro area {peaks['Euro area']:.1f}%"
+        ),
+    )
     fig.update_traces(line_width=3)
+    # Step 3: a dashed line at zero, fixed axes, and the legend in the top left
     fig.add_hline(y=0, line_dash="dash", line_color="black", line_width=1)
     fig.update_xaxes(range=["2014-10-01", "2026-12-01"])
     fig.update_yaxes(range=[-1.5, 12], tickvals=[0, 2, 4, 6, 8, 10, 12])
-    fig.update_layout(legend=dict(x=0.01, y=0.99, xanchor="left", yanchor="top", bgcolor="rgba(255,255,255,0.8)"))
+    fig.update_layout(
+        legend=dict(
+            x=0.01,
+            y=0.99,
+            xanchor="left",
+            yanchor="top",
+            bgcolor="rgba(255,255,255,0.8)",
+        )
+    )
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(inflation_chart, measure=ToggleButtons(options=["log change", "percent change"], value="log change",
-                                                description="measure"));
+# Fig. 10 with two buttons: `ToggleButtons` shows the two measures as a row of buttons
+interact(
+    inflation_chart,
+    measure=ToggleButtons(options=["log change", "percent change"], value="log change",
+                          description="measure"),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 10 with a precomputed slider for the measure of inflation
-slider_figure(inflation_chart, "measure", ["log change", "percent change"], start="log change", label="measure")
+# one picture of Fig. 10 per measure
+slider_figure(
+    inflation_chart,
+    "measure",
+    ["log change", "percent change"],
+    start="log change",
+    label="measure",
+)
 ```
 
 **Sources.** Data: [U.S. Bureau of Labor Statistics, Consumer Price Index for All Urban Consumers: All Items (`CPIAUCNS`), via FRED](https://fred.stlouisfed.org/series/CPIAUCNS);
@@ -2955,13 +4056,19 @@ Chart: inspired by Fig. 10.10 in Jones (2024), [*Macroeconomics*, 6th ed.](https
 #### Key numbers: when inflation returned
 
 ```{python}
+# For each economy: the peak, the first month above 3 percent since 2020, and the
+# latest value
 by_date = cpi.set_index("date")
 for column, area in AREAS.items():
     rate = by_date[column]
     above = rate["2020-01-01":][rate["2020-01-01":] > 3]
-    print(f"{area:9} peak {rate.max():5.2f}% ({rate.idxmax():%b %Y}), percent change "
-          f"{percent_from_log(rate.max()):5.2f}%; first above 3%: {above.index[0]:%b %Y}; "
-          f"latest {rate.dropna().iloc[-1]:.2f}% ({rate.dropna().index[-1]:%b %Y})")
+    # `.dropna()` drops the missing months, so that `.iloc[-1]` is the latest value
+    print(
+        f"{area:9} peak {rate.max():5.2f}% ({rate.idxmax():%b %Y}), percent change "
+        f"{percent_from_log(rate.max()):5.2f}%; "
+        f"first above 3%: {above.index[0]:%b %Y}; "
+        f"latest {rate.dropna().iloc[-1]:.2f}% ({rate.dropna().index[-1]:%b %Y})"
+    )
 ```
 
 The textbook says inflation "peaked at more than 8 percent in the United States and at more than 10 percent in the
@@ -2980,57 +4087,127 @@ countries, and the IMF's national consumer price indexes for the rest. It also h
 Fig. 11.
 
 ```{python}
+# Load the inflation panel: 61 economies, one row per country and month
 world_cpi = pd.read_csv(DATA_URL + "inflation_panel.csv", parse_dates=["date"])
+# how many economies come from each source
 world_cpi.groupby("source").country.nunique()
+```
+
+`highest_inflation` finds the highest inflation rate of 2021–23 among the chosen countries, which the title
+reports. The chart starts with the textbook's three economies, `BOOK_THREE`.
+
+```{python}
+# The textbook's three economies, shown at the start
+BOOK_THREE = ("Euro area", "United Kingdom", "United States")
+
+
+def highest_inflation(names):
+    """The highest inflation rate of 2021-23 among the chosen countries (Fig. 10).
+
+    Arguments
+        names : the chosen countries (a tuple of names)
+    Returns
+        chosen  : the rows of the chosen countries that have an inflation rate
+        missing : the chosen countries without data
+        top     : the row with the highest rate in 2021-23 (None if no data)
+    """
+    # Step 1: the rows of the chosen countries (pick, from "Model in code")
+    chosen, missing = pick(world_cpi, names, "inflation")
+    # Step 2: the row with the highest rate in the years 2021 to 2023
+    recent = chosen[chosen.date.dt.year.between(2021, 2023)]
+    top = None
+    if len(recent) > 0:
+        top = recent.loc[recent.inflation.idxmax()]
+    return chosen, missing, top
 ```
 
 The y-axis keeps the textbook's range up to 12 percent and widens in a few fixed steps only when a chosen
 country needs it, so the chart does not jump around with every country you add.
 
-> **Python note.** `axis_top` walks through a short list of possible tops and returns the first one that is not
-> below the highest value. Fixed steps keep the axis still while you add countries with similar inflation.
-
 ```{python}
+#| kind: drawing
+# @title Drawing code: Figs. 10 and 11, the top of the y-axis
 def axis_top(value, tops=(12, 25, 50, 100, 150)):
-    """The smallest of a few fixed axis tops that is at least `value`."""
+    """The smallest of a few fixed axis tops that is at least `value`.
+
+    Fixed steps keep the axis still while you add countries with similar inflation.
+
+    Arguments
+        value : the highest value to show
+        tops  : the possible tops, from small to large
+    Returns
+        the first top that is not below value (the largest top if none is)
+    """
+    # walk through the tops; `return` leaves the loop at the first one that fits
     for top in tops:
         if value <= top:
             return top
     return tops[-1]
-
-
-BOOK_THREE = ("Euro area", "United Kingdom", "United States")
 ```
 
 ```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 10, inflation in the chosen countries
 def inflation_world(names=BOOK_THREE):
-    """Fig. 10.10 beyond the textbook's economies: 12-month CPI inflation in the chosen countries."""
-    chosen, missing = pick(world_cpi, names, "inflation")
-    fig = px.line(chosen, x="date", y="inflation", color="country", hover_name="country",
-                  color_discrete_map=COUNTRY_COLORS,
-                  labels={"date": "Year", "inflation": "Inflation (percent)", "country": "Country"})
-    recent = chosen[chosen.date.dt.year.between(2021, 2023)]
+    """12-month CPI inflation in the chosen countries.
+
+    Draws Fig. 10 beyond the textbook's economies (inspired by Fig. 10.10 in Jones),
+    with the highest inflation of 2021-23 in the title.
+
+    Arguments
+        names : the chosen countries (a tuple of names)
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the numbers of the figure (highest_inflation)
+    chosen, missing, top = highest_inflation(names)
+    # Step 2: one line per country, in its fixed color
+    fig = px.line(
+        chosen,
+        x="date",
+        y="inflation",
+        color="country",
+        hover_name="country",
+        color_discrete_map=COUNTRY_COLORS,
+        labels={
+            "date": "Year",
+            "inflation": "Inflation (percent)",
+            "country": "Country",
+        },
+    )
+    # Step 3: the title reports the highest inflation of 2021-23
     title = "No data for 2021–23"
-    if len(recent) > 0:
-        top = recent.loc[recent.inflation.idxmax()]
-        title = f"Highest inflation in 2021–23: {top.country}, {top.inflation:.1f}% ({top.date:%b %Y})"
+    if top is not None:
+        title = (
+            f"Highest inflation in 2021–23: {top.country}, {top.inflation:.1f}% "
+            f"({top.date:%b %Y})"
+        )
+    # Step 4: a dashed line at zero, and fixed axes: the top from axis_top, and
+    # room below zero for deflation too
     fig.add_hline(y=0, line_dash="dash", line_color="black", line_width=1)
     fig.update_xaxes(range=["2014-10-01", "2026-12-01"])
-    top = axis_top(chosen.inflation.max())
-    fig.update_yaxes(range=[min(-1.5 * top / 12, chosen.inflation.min() - 0.5), top])   # room for deflation too
+    y_top = axis_top(chosen.inflation.max())
+    fig.update_yaxes(
+        range=[min(-1.5 * y_top / 12, chosen.inflation.min() - 0.5), y_top]
+    )
     fig.update_layout(title=title + no_data_note(missing))
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(inflation_world, names=SelectMultiple(options=sorted(world_cpi.country.unique()), value=BOOK_THREE,
-                                               rows=8, description="countries"));
+# Fig. 10 around the world, with a list of countries (Ctrl- or Cmd-click for several)
+interact(
+    inflation_world,
+    names=SelectMultiple(options=sorted(world_cpi.country.unique()), value=BOOK_THREE,
+                         rows=8, description="countries"),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: inflation in every country (click a country in the legend to add it)
+# @title Website version: inflation in every country (click a country to add it)
+# every country at once, with only the textbook's three shown at the start
 all_countries(inflation_world, sorted(world_cpi.country.unique()), list(BOOK_THREE))
 ```
 
@@ -3076,10 +4253,11 @@ Keep the rows of 2020 with `cpi[(cpi.date.dt.year == 2020) & (cpi.inflation_euro
 **Core inflation** leaves out food and energy, whose prices jump around with harvests and oil markets. We join the
 core rates to the headline rates of Fig. 10, so we can compare the two in each economy.
 
-> **Python note.** `merge(other, on="date")` joins two tables row by row, matching the dates.
-
 ```{python}
+# Load the core inflation rates of Fig. 11, one row per month
 core = pd.read_csv(DATA_URL + "fig10-11.csv", parse_dates=["date"])
+# `merge(other, on="date")` joins two tables row by row, matching the dates: here
+# the headline rates of Fig. 10 and the core rates
 both = cpi.merge(core, on="date")
 both.tail(3)
 ```
@@ -3088,68 +4266,182 @@ The menu shows the core rates of all three economies, as in the textbook, or the
 economy. Besides the textbook's three, it offers every economy of `world_cpi` (the panel of Fig. 10) that has a core
 inflation series: 46 in all, with the textbook's three.
 
-> **Python note.** `world_cpi.dropna(subset=["core_inflation"])` drops the rows without core inflation, and
-> `.country.unique()` lists the countries that remain. `pd.isna(gap)` is true when `gap` is missing, for a country
-> with no 2022 data.
+```{python}
+# Step 1: the columns of the core and the headline rates of the three economies
+CORE = {
+    "U.S.": "core_inflation_us",
+    "U.K.": "core_inflation_uk",
+    "Euro area": "core_inflation_euro_area",
+}
+HEADLINE = {
+    "U.S.": "inflation_us",
+    "U.K.": "inflation_uk",
+    "Euro area": "inflation_euro_area",
+}
+# Step 2: the menu: the textbook's view, then every country with core inflation.
+# `dropna(subset=["core_inflation"])` drops the rows without core inflation, and
+# `.country.unique()` lists the countries that remain
+VIEWS = ["core, all three"] + sorted(
+    world_cpi.dropna(subset=["core_inflation"]).country.unique()
+)
+```
+
+`core_view` gives the data of one view, and the number its title reports: the U.S. core peak, or the largest gap
+in 2022 between headline and core inflation, the part due to food and energy.
 
 ```{python}
-CORE = {"U.S.": "core_inflation_us", "U.K.": "core_inflation_uk", "Euro area": "core_inflation_euro_area"}
-HEADLINE = {"U.S.": "inflation_us", "U.K.": "inflation_uk", "Euro area": "inflation_euro_area"}
-VIEWS = ["core, all three"] + sorted(world_cpi.dropna(subset=["core_inflation"]).country.unique())
+def core_view(view):
+    """The data of one view of Fig. 11, and the number its title reports.
 
-
-def core_chart(view="core, all three"):
-    """Fig. 10.11: core inflation in three economies, or headline and core inflation in one."""
+    Arguments
+        view : "core, all three" or the name of one country (an entry of VIEWS)
+    Returns
+        data   : the table to draw
+        series : the columns of data to draw
+        number : the U.S. core peak (all three), or the largest 2022 gap between
+                 headline and core inflation (one country; NaN without 2022 data)
+    """
+    # Step 1: the core rates of the three economies, with readable names
     if view == "core, all three":
-        data = both.rename(columns={CORE["U.S."]: "U.S.", CORE["U.K."]: "U.K.", CORE["Euro area"]: "Euro area"})
-        series, colors = ["U.S.", "U.K.", "Euro area"], AREA_COLORS
-        title = f"Core inflation peaked at {both[CORE['U.S.']].max():.1f}% in the U.S., the highest of the three"
+        data = both.rename(
+            columns={
+                CORE["U.S."]: "U.S.",
+                CORE["U.K."]: "U.K.",
+                CORE["Euro area"]: "Euro area",
+            }
+        )
+        series = ["U.S.", "U.K.", "Euro area"]
+        number = both[CORE["U.S."]].max()
+    # Step 2, for one country: headline and core inflation, and the gap between
+    # them, which food and energy add to inflation
     else:
-        data = world_cpi[world_cpi.country == view].rename(columns={"inflation": "Headline", "core_inflation": "Core"})
-        series, colors = ["Headline", "Core"], {"Headline": GRAY, "Core": COUNTRY_COLORS[view]}
-        gap = (data.Headline - data.Core)[data.date.dt.year == 2022].max()
-        title = f"{view}: in 2022, food and energy added up to {gap:.1f} points to inflation"
-        if pd.isna(gap):
+        data = world_cpi[world_cpi.country == view].rename(
+            columns={"inflation": "Headline", "core_inflation": "Core"}
+        )
+        series = ["Headline", "Core"]
+        number = (data.Headline - data.Core)[data.date.dt.year == 2022].max()
+    return data, series, number
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 11, core and headline inflation
+def core_chart(view="core, all three"):
+    """Core inflation in three economies, or headline and core inflation in one.
+
+    Draws Fig. 11 (inspired by Fig. 10.11 in Jones).
+
+    Arguments
+        view : "core, all three" or the name of one country (an entry of VIEWS)
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the numbers of the figure (core_view)
+    data, series, number = core_view(view)
+    # Step 2: the colors and the title of the view; `pd.isna(number)` is True when
+    # the number is missing, for a country with no 2022 data
+    if view == "core, all three":
+        colors = AREA_COLORS
+        title = (
+            f"Core inflation peaked at {number:.1f}% in the U.S., "
+            "the highest of the three"
+        )
+    else:
+        colors = {"Headline": GRAY, "Core": COUNTRY_COLORS[view]}
+        title = (
+            f"{view}: in 2022, food and energy added up to {number:.1f} points "
+            "to inflation"
+        )
+        if pd.isna(number):
             title = f"{view}: no headline and core inflation for 2022"
-    fig = px.line(data, x="date", y=series, color_discrete_map=colors, title=title,
-                  labels={"date": "Year", "value": "Percent", "variable": "Inflation"})
+    # Step 3: one thick line per series, and a dashed line at zero
+    fig = px.line(
+        data,
+        x="date",
+        y=series,
+        color_discrete_map=colors,
+        title=title,
+        labels={"date": "Year", "value": "Percent", "variable": "Inflation"},
+    )
     fig.update_traces(line_width=3)
     fig.add_hline(y=0, line_dash="dash", line_color="black", line_width=1)
+    # Step 4: fixed axes; the top is 12, or wider for high-inflation countries
+    # (axis_top), and `.max().max()` is the largest value of all the columns
     fig.update_xaxes(range=["2014-10-01", "2026-12-01"])
-    top = axis_top(data[series].max().max())                # 12, or wider for high-inflation countries
+    top = axis_top(data[series].max().max())
     fig.update_yaxes(range=[min(-1.5 * top / 12, data[series].min().min() - 0.5), top])
-    fig.update_layout(legend=dict(x=0.01, y=0.99, xanchor="left", yanchor="top", bgcolor="rgba(255,255,255,0.8)"))
+    fig.update_layout(
+        legend=dict(
+            x=0.01,
+            y=0.99,
+            xanchor="left",
+            yanchor="top",
+            bgcolor="rgba(255,255,255,0.8)",
+        )
+    )
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(core_chart, view=Dropdown(options=VIEWS, value="core, all three", description="show", style=WIDE));
+# Fig. 11 with a menu of the views: the textbook's three, or one country
+interact(
+    core_chart,
+    view=Dropdown(options=VIEWS, value="core, all three", description="show",
+                  style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: Fig. 11 with a menu of the views (the textbook's three and every country)
+# @title Website version: Fig. 11 with a menu of the views (every country)
+# Step 1: draw every view once
 figures = []
 for view in VIEWS:
     figures.append(core_chart(view))
+# Step 2: copy every line into one figure; only the first view's lines are visible
 fig = go.Figure(layout=figures[0].layout)
 owner = []                                      # which view each trace belongs to
 for i, f in enumerate(figures):
     for trace in f.data:
         trace.visible = (i == 0)
-        trace.x = [d.strftime("%Y-%m") for d in pd.to_datetime(trace.x)]      # a lighter page: months only
+        # a lighter page: months only, and values rounded to 2 decimals
+        trace.x = [d.strftime("%Y-%m") for d in pd.to_datetime(trace.x)]
         trace.y = np.round(np.asarray(trace.y, dtype=float), 2)
         fig.add_trace(trace)
         owner.append(i)
+# Step 3: one menu entry per view: its lines, its title and its y-axis
 buttons = []
 for i, f in enumerate(figures):
     visible = [o == i for o in owner]
-    buttons.append(dict(label=VIEWS[i], method="update",
-                        args=[{"visible": visible}, {"title.text": f.layout.title.text,
-                                                     "yaxis.range": list(f.layout.yaxis.range)}]))
-fig.update_layout(margin=dict(t=120), updatemenus=[dict(type="dropdown", direction="down", x=0, y=1.02,
-                                                        xanchor="left", yanchor="bottom", buttons=buttons)])
+    buttons.append(
+        dict(
+            label=VIEWS[i],
+            method="update",
+            args=[
+                {"visible": visible},
+                {
+                    "title.text": f.layout.title.text,
+                    "yaxis.range": list(f.layout.yaxis.range),
+                },
+            ],
+        )
+    )
+# Step 4: the menu, above the plot on the left
+fig.update_layout(
+    margin=dict(t=120),
+    updatemenus=[
+        dict(
+            type="dropdown",
+            direction="down",
+            x=0,
+            y=1.02,
+            xanchor="left",
+            yanchor="bottom",
+            buttons=buttons,
+        )
+    ],
+)
 fig
 ```
 
@@ -3184,12 +4476,18 @@ Chart: inspired by Fig. 10.11 in Jones (2024), [*Macroeconomics*, 6th ed.](https
 #### Key numbers: food and energy
 
 ```{python}
+# For each economy: the core peak, the highest core rate of 2022, and the largest
+# 2022 gap between headline and core inflation (food and energy)
 by_date = both.set_index("date")
 for area in ["U.S.", "U.K.", "Euro area"]:
     c, h = by_date[CORE[area]], by_date[HEADLINE[area]]
     gap = (h - c)["2022"]
-    print(f"{area:9} core peak {c.max():.2f}% ({c.idxmax():%b %Y}); highest 2022 core {c['2022'].max():.2f}%; "
-          f"largest 2022 gap headline - core {gap.max():.2f} points ({gap.idxmax():%b %Y})")
+    print(
+        f"{area:9} core peak {c.max():.2f}% ({c.idxmax():%b %Y}); "
+        f"highest 2022 core {c['2022'].max():.2f}%; "
+        f"largest 2022 gap headline - core {gap.max():.2f} points "
+        f"({gap.idxmax():%b %Y})"
+    )
 ```
 
 U.S. core inflation peaked at 6.42 percent in September 2022, "just over 6 percent". In 2022 core inflation reached

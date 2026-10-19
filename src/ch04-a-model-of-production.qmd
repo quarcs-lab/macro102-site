@@ -783,38 +783,130 @@ Hold the number of workers fixed at $L$ and draw output against capital. The cur
 gets flatter: going from 1 to 2 machines adds much more output than going from 7 to 8 machines. The
 slope of the curve is the marginal product of capital, and it falls as $K$ rises.
 
-> **Python note.** `np.linspace(0, 10.4, 300)` creates 300 evenly spaced numbers from 0 to 10.4:
-> the values of $K$ at which we draw the curve. `np.arange(1, 11)` gives the whole numbers 1, 2, …, 10
-> (the end value 11 is left out). A `for` loop repeats the indented lines once for each value in a list.
-> `go.Figure()` starts an empty chart, and each `add_trace(go.Scatter(...))` adds one line or set of dots
-> to it. `add_annotation` writes a piece of text at a point of the chart, here the name of the curve at its end.
-> `K[-1]` is the last value of `K`, and `max(60, 1.1 * Y_end)` is the larger of the two numbers: the vertical
-> axis stays at 0 to 60 unless the curve would leave it.
+First we compute the two numbers the title reports. `output_gains` gives the extra output from the
+second machine and from the eighth: the drop between them is the diminishing marginal product of capital.
 
 ```{python}
-def production_curve(A=1.0, L=64, alpha=1 / 3):
-    """Fig. 4.1: output against capital with labor held fixed; dots at K = 1, ..., 10."""
-    K = np.linspace(0, 10.4, 300)
-    dots = np.arange(1, 11)
-    fig = go.Figure()
-    # Dashed guides at K = 1, 2, 7 and 8: the two output gains reported in the title
-    for K0 in [1, 2, 7, 8]:
-        Y0 = production(K0, L, A, alpha)
-        fig.add_trace(go.Scatter(x=[K0, K0, 0], y=[0, Y0, Y0], mode="lines", showlegend=False,
-                                 line=dict(color=GRAY, width=1, dash="dash")))
-    fig.add_trace(go.Scatter(x=K, y=production(K, L, A, alpha), name="Output, Y", line=dict(color=GREEN, width=4)))
-    fig.add_trace(go.Scatter(x=dots, y=production(dots, L, A, alpha), name="K = 1, 2, ..., 10", mode="markers",
-                             marker=dict(color="black", size=10)))
-    # The curve's name, written above its right end
-    Y_end = production(K[-1], L, A, alpha)             # the axis grows only if the curve ends above 54
-    fig.add_annotation(x=K[-1], y=Y_end, text="Y = A K<sup>α</sup> L<sup>1−α</sup>",
-                       showarrow=False, xanchor="right", yanchor="bottom", yshift=8)
+def output_gains(A, L, alpha):
+    """The output gains of Fig. 1: from K = 1 to 2 and from K = 7 to 8.
+
+    Equation (1), Y = A K^alpha L^(1 - alpha), at two pairs of capital stocks. One more
+    machine adds about the marginal product of capital, equation (2).
+
+    Arguments
+        A     : productivity, A-bar
+        L     : number of workers, L-bar
+        alpha : the exponent on capital
+    Returns
+        gain_1_2 : extra output from the 2nd machine, Y(K = 2) - Y(K = 1)
+        gain_7_8 : extra output from the 8th machine, Y(K = 8) - Y(K = 7)
+    """
+    # the same L workers in both cases: only capital changes
     gain_1_2 = production(2, L, A, alpha) - production(1, L, A, alpha)
     gain_7_8 = production(8, L, A, alpha) - production(7, L, A, alpha)
-    fig.update_layout(title=f"Output gain from K = 1 to 2: {gain_1_2:.2f} tons;  from K = 7 to 8: {gain_7_8:.2f} tons",
-                      xaxis=dict(title="Capital, K", range=[0, 10.4], tickvals=dots),
-                      yaxis=dict(title="Tons of ice cream, Y", range=[0, max(60, 1.1 * Y_end)], dtick=10),
-                      showlegend=False)
+    return gain_1_2, gain_7_8
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 1, the dashed guides at K = 1, 2, 7 and 8
+def add_guides(fig, L, A, alpha):
+    """The dashed guides of Fig. 1, from the axes to the curve at K = 1, 2, 7 and 8.
+
+    They mark the two output gains reported in the title.
+
+    Arguments
+        fig   : the figure to draw in
+        L     : number of workers, L-bar
+        A     : productivity, A-bar
+        alpha : the exponent on capital
+    """
+    # a `for` loop repeats the indented lines once for each value in the list
+    for K0 in [1, 2, 7, 8]:
+        Y0 = production(K0, L, A, alpha)
+        # a gray dashed line from (K0, 0) up to the curve and left to (0, Y0)
+        fig.add_trace(
+            go.Scatter(
+                x=[K0, K0, 0],
+                y=[0, Y0, Y0],
+                mode="lines",
+                showlegend=False,
+                line=dict(color=GRAY, width=1, dash="dash"),
+            )
+        )
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 1, output against capital
+def production_curve(A=1.0, L=64, alpha=1 / 3):
+    """Output against capital, with the number of workers held fixed.
+
+    Draws Fig. 1 (adapted from Fig. 4.1 in Jones), with dots at K = 1, 2, ..., 10.
+
+    Arguments
+        A     : productivity, A-bar
+        L     : number of workers, L-bar
+        alpha : the exponent on capital
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the values of K. `np.linspace(0, 10.4, 300)` creates 300 evenly
+    # spaced numbers from 0 to 10.4, the points at which we draw the curve;
+    # `np.arange(1, 11)` gives the whole numbers 1, 2, ..., 10 (11 is left out)
+    K = np.linspace(0, 10.4, 300)
+    dots = np.arange(1, 11)
+
+    # Step 2: `go.Figure()` starts an empty chart, and each `add_trace` adds one
+    # line or set of dots to it: the dashed guides, the curve and the dots
+    fig = go.Figure()
+    add_guides(fig, L, A, alpha)
+    fig.add_trace(
+        go.Scatter(
+            x=K,
+            y=production(K, L, A, alpha),
+            name="Output, Y",
+            line=dict(color=GREEN, width=4),
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=dots,
+            y=production(dots, L, A, alpha),
+            name="K = 1, 2, ..., 10",
+            mode="markers",
+            marker=dict(color="black", size=10),
+        )
+    )
+
+    # Step 3: the curve's name, written above its right end. `add_annotation`
+    # writes a piece of text at a point of the chart; `K[-1]` is the last value of K.
+    # The axis grows only if the curve ends above 54
+    Y_end = production(K[-1], L, A, alpha)
+    fig.add_annotation(
+        x=K[-1],
+        y=Y_end,
+        text="Y = A K<sup>α</sup> L<sup>1−α</sup>",
+        showarrow=False,
+        xanchor="right",
+        yanchor="bottom",
+        yshift=8,
+    )
+
+    # Step 4: the title reports the two output gains (output_gains).
+    # `max(60, 1.1 * Y_end)` is the larger of the two numbers: the vertical axis
+    # stays at 0 to 60 unless the curve would leave it
+    gain_1_2, gain_7_8 = output_gains(A, L, alpha)
+    y_top = max(60, 1.1 * Y_end)
+    fig.update_layout(
+        title=(
+            f"Output gain from K = 1 to 2: {gain_1_2:.2f} tons;  "
+            f"from K = 7 to 8: {gain_7_8:.2f} tons"
+        ),
+        xaxis=dict(title="Capital, K", range=[0, 10.4], tickvals=dots),
+        yaxis=dict(title="Tons of ice cream, Y", range=[0, y_top], dtick=10),
+        showlegend=False,
+    )
     return fig
 ```
 
@@ -825,32 +917,49 @@ $16 \cdot 8^{1/3} = 32$ tons.
 For the exponent we use a `SelectionSlider`. It is a slider that moves through a fixed list of values,
 here a few simple fractions.
 
-> **Python note.** A *dictionary* such as `{"1/3": 1 / 3}` links a label (the *key*) to a value.
-> `ALPHAS.items()` gives the (label, value) pairs, which is what `SelectionSlider` needs: it shows the
-> label and passes the value to the function.
-
 ```{python}
-ALPHAS = {"1/4": 1 / 4, "1/3": 1 / 3, "1/2": 1 / 2, "2/3": 2 / 3, "3/4": 3 / 4, "1": 1.0}
+# The exponents of the capital slider. A dictionary such as {"1/3": 1 / 3} links a
+# label (the key) to a value. `ALPHAS.items()` gives the (label, value) pairs, which
+# is what `SelectionSlider` needs: it shows the label and passes the value on
+ALPHAS = {
+    "1/4": 1 / 4,
+    "1/3": 1 / 3,
+    "1/2": 1 / 2,
+    "2/3": 2 / 3,
+    "3/4": 3 / 4,
+    "1": 1.0,
+}
 ```
 
 Now the interactive version. Move the sliders and watch the two readouts in the title.
 
-> **Python note.** `interact` turns each argument of a function into a slider and calls the
-> function again every time you move one. The `;` at the end only hides an extra line of text.
-
 ```{python}
 #| kind: widget
-interact(production_curve,
-         A=FloatSlider(value=1.0, min=0.5, max=1.5, step=0.1, description="productivity A", style=WIDE),
-         L=FloatSlider(value=64, min=8, max=120, step=8, description="workers L", style=WIDE),
-         alpha=SelectionSlider(options=list(ALPHAS.items()), value=1 / 3, description="capital exponent α", style=WIDE));
+# Fig. 1 with sliders. `interact` turns each argument of production_curve into a
+# slider, and draws the figure again every time you move one. The `;` at the end
+# only hides an extra line of text.
+interact(
+    production_curve,
+    A=FloatSlider(value=1.0, min=0.5, max=1.5, step=0.1,
+                  description="productivity A", style=WIDE),
+    L=FloatSlider(value=64, min=8, max=120, step=8,
+                  description="workers L", style=WIDE),
+    alpha=SelectionSlider(options=list(ALPHAS.items()), value=1 / 3,
+                          description="capital exponent α", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 1 with a precomputed slider for the number of workers
-slider_figure(production_curve, "L", [8, 16, 32, 48, 64, 80, 96, 112], start=64,
-              label="workers L")
+# one picture of Fig. 1 per value of L; the slider shows one at a time
+slider_figure(
+    production_curve,
+    "L",
+    [8, 16, 32, 48, 64, 80, 96, 112],     # the values of L
+    start=64,
+    label="workers L",
+)
 ```
 
 **Source.** Adapted from Fig. 4.1 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -893,65 +1002,228 @@ w^* = \frac{2}{3}\,\bar{A}\left(\frac{\bar{K}}{\bar{L}}\right)^{1/3}$$
 
 Both panels have the same parts, so one function draws a panel and we call it twice.
 
-> **Python note.** `make_subplots(rows=1, cols=2)` creates a figure with two panels side by side,
-> and `row=..., col=...` tells `add_trace` which panel to draw in. `names[0]` is the first item of the
-> list `names`, and `"solid" if col == 1 else "dot"` gives `"solid"` in the first panel and `"dot"` in the
-> second. `demand <= 0.65 * top` is True where the demand curve is in the lower part of the panel;
-> `x[low]` keeps those values of `x`, and `[0]` takes the first of them: there we write the curve's name.
+First the economics. `factor_prices` finds the prices that clear the two markets, equation (4), and
+the shares of output they pay to capital and to labor, equation (5).
 
 ```{python}
+def factor_prices(K_bar, L_bar, A, alpha):
+    """The equilibrium of Fig. 2: the prices of capital and labor, and their shares.
+
+    Equation (4): r* = MPK and w* = MPL at the supplies K-bar and L-bar.
+    Equation (5): capital gets r* K-bar / Y* of output, and labor w* L-bar / Y*.
+
+    Arguments
+        K_bar : supply of capital, K-bar
+        L_bar : supply of labor, L-bar
+        A     : productivity, A-bar
+        alpha : the exponent on capital
+    Returns
+        r_star, w_star             : the rental price of capital and the real wage
+        capital_share, labor_share : the shares of output paid to capital and labor
+    """
+    # Step 1: each market clears where demand (the marginal product) meets supply
+    r_star, w_star = mpk(K_bar, L_bar, A, alpha), mpl(K_bar, L_bar, A, alpha)
+    Y_star = production(K_bar, L_bar, A, alpha)
+    # Step 2: the payments to each factor, as a share of output
+    capital_share = r_star * K_bar / Y_star
+    labor_share = w_star * L_bar / Y_star
+    return r_star, w_star, capital_share, labor_share
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 2, the names of the curves in one panel
+def label_market(fig, col, x, demand, supply, top, names):
+    """The names of the demand curve and the supply line in one panel of Fig. 2.
+
+    Arguments
+        fig    : the two-panel figure
+        col    : the panel, 1 (capital) or 2 (labor)
+        x      : the quantities of the demand curve
+        demand : the demand curve, the marginal product at each x
+        supply : the fixed supply, K-bar or L-bar
+        top    : the top of the vertical axis
+        names  : the two names, of the demand curve and of the supply line
+    """
+    # `demand <= 0.65 * top` is True where the demand curve is in the lower part of
+    # the panel; `x[low]` keeps those values of x, and `[0]` takes the first of
+    # them: there we write the curve's name, below the name of the supply line
+    low = demand <= 0.65 * top
+    # `names[0]` is the first item of the list `names`
+    fig.add_annotation(
+        x=x[low][0],
+        y=demand[low][0],
+        text=names[0],
+        showarrow=False,
+        yanchor="bottom",
+        yshift=6,
+        row=1,
+        col=col,
+    )
+    # the supply line's name, above its top end
+    fig.add_annotation(
+        x=supply,
+        y=0.8 * top,
+        text=names[1],
+        showarrow=False,
+        yanchor="bottom",
+        row=1,
+        col=col,
+    )
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 2, one market panel
 def add_market(fig, col, x, demand, supply, price, top, names):
-    """One panel of Fig. 4.2: the demand curve, the vertical supply line and the equilibrium."""
+    """One panel of Fig. 2: the demand curve, the supply line and the equilibrium.
+
+    Arguments
+        fig    : the two-panel figure
+        col    : the panel, 1 (capital) or 2 (labor)
+        x      : the quantities of the demand curve
+        demand : the demand curve, the marginal product at each x
+        supply : the fixed supply, K-bar or L-bar
+        price  : the equilibrium price, r* or w*
+        top    : the top of the vertical axis
+        names  : the two names, of the demand curve and of the supply line
+    """
+    # Step 1: `a if condition else b` gives a when the condition is true and b
+    # otherwise: solid lines in the first panel, dotted ones in the second
     dash = "solid" if col == 1 else "dot"
-    fig.add_trace(go.Scatter(x=x, y=demand, name="Demand", line=dict(color=BLUE, width=4, dash=dash)), row=1, col=col)
-    fig.add_trace(go.Scatter(x=[supply, supply], y=[0.05, 0.8 * top], name="Supply", mode="lines",
-                             line=dict(color=TEAL, width=4, dash=dash)), row=1, col=col)
-    fig.add_trace(go.Scatter(x=[0, supply], y=[price, price], mode="lines", line=dict(color=GRAY, dash="dash")),
-                  row=1, col=col)
-    fig.add_trace(go.Scatter(x=[supply], y=[price], name="Equilibrium", mode="markers",
-                             marker=dict(color="black", size=12)), row=1, col=col)
-    low = demand <= 0.65 * top                       # the name goes below the name of the supply line
-    fig.add_annotation(x=x[low][0], y=demand[low][0], text=names[0], showarrow=False, yanchor="bottom", yshift=6,
-                       row=1, col=col)
-    fig.add_annotation(x=supply, y=0.8 * top, text=names[1], showarrow=False, yanchor="bottom", row=1, col=col)
+    # Step 2: the demand curve and the vertical supply line. `row=..., col=...`
+    # tells `add_trace` which panel to draw in
+    demand_curve = go.Scatter(
+        x=x,
+        y=demand,
+        name="Demand",
+        line=dict(color=BLUE, width=4, dash=dash),
+    )
+    fig.add_trace(demand_curve, row=1, col=col)
+    supply_line = go.Scatter(
+        x=[supply, supply],
+        y=[0.05, 0.8 * top],
+        name="Supply",
+        mode="lines",
+        line=dict(color=TEAL, width=4, dash=dash),
+    )
+    fig.add_trace(supply_line, row=1, col=col)
+    # Step 3: the equilibrium: a dashed guide to the price axis, and a black dot
+    guide = go.Scatter(
+        x=[0, supply],
+        y=[price, price],
+        mode="lines",
+        line=dict(color=GRAY, dash="dash"),
+    )
+    fig.add_trace(guide, row=1, col=col)
+    dot = go.Scatter(
+        x=[supply],
+        y=[price],
+        name="Equilibrium",
+        mode="markers",
+        marker=dict(color="black", size=12),
+    )
+    fig.add_trace(dot, row=1, col=col)
+    # Step 4: the names of the curves (label_market), and the panel's vertical axis
+    label_market(fig, col, x, demand, supply, top, names)
     fig.update_yaxes(range=[0, top], row=1, col=col)
 ```
 
 ```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 2, the capital market and the labor market
 def factor_markets(K_bar=1.0, L_bar=1.0, A=1.0, alpha=1 / 3):
-    """Fig. 4.2: (a) the capital market and (b) the labor market, with the curve names on the plot."""
-    K = L = np.linspace(0.3, 2.2, 200)               # capital and labor demanded, for the demand curves
-    r_star, w_star = mpk(K_bar, L_bar, A, alpha), mpl(K_bar, L_bar, A, alpha)
-    Y_star = production(K_bar, L_bar, A, alpha)
-    fig = make_subplots(rows=1, cols=2, subplot_titles=("(a) The capital market", "(b) The labor market"))
-    # Fixed vertical axes, which grow only when an equilibrium price is high
-    add_market(fig, 1, K, mpk(K, L_bar, A, alpha), K_bar, r_star, max(1.15, 2.2 * r_star),
-               ["Demand<br>MPK", "Supply of<br>capital"])
-    add_market(fig, 2, L, mpl(K_bar, L, A, alpha), L_bar, w_star, max(1.7, 2.2 * w_star),
-               ["Demand<br>MPL", "Supply of<br>labor"])
-    fig.update_xaxes(title_text="Capital, K", range=[0, 2.2], tickvals=[0.5, 1, 1.5, 2], row=1, col=1)
+    """Supply and demand in (a) the capital market and (b) the labor market.
+
+    Draws Fig. 2 (adapted from Fig. 4.2 in Jones), with the curve names on the plot.
+
+    Arguments
+        K_bar : supply of capital, K-bar
+        L_bar : supply of labor, L-bar
+        A     : productivity, A-bar
+        alpha : the exponent on capital
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the capital and labor demanded, for the demand curves, and the
+    # equilibrium (factor_prices)
+    K = L = np.linspace(0.3, 2.2, 200)
+    r_star, w_star, capital_share, labor_share = factor_prices(K_bar, L_bar, A, alpha)
+
+    # Step 2: `make_subplots(rows=1, cols=2)` creates a figure with two panels
+    # side by side
+    fig = make_subplots(
+        rows=1,
+        cols=2,
+        subplot_titles=("(a) The capital market", "(b) The labor market"),
+    )
+    # Step 3: the two markets (add_market). The vertical axes are fixed, and grow
+    # only when an equilibrium price is high
+    add_market(
+        fig, 1, K, mpk(K, L_bar, A, alpha), K_bar, r_star, max(1.15, 2.2 * r_star),
+        ["Demand<br>MPK", "Supply of<br>capital"],
+    )
+    add_market(
+        fig, 2, L, mpl(K_bar, L, A, alpha), L_bar, w_star, max(1.7, 2.2 * w_star),
+        ["Demand<br>MPL", "Supply of<br>labor"],
+    )
+
+    # Step 4: the axes of the two panels
+    fig.update_xaxes(
+        title_text="Capital, K",
+        range=[0, 2.2],
+        tickvals=[0.5, 1, 1.5, 2],
+        row=1,
+        col=1,
+    )
     fig.update_yaxes(title_text="Rental price, r", dtick=0.2, row=1, col=1)
-    fig.update_xaxes(title_text="Labor, L", range=[0, 2.2], tickvals=[0.5, 1, 1.5, 2], row=1, col=2)
+    fig.update_xaxes(
+        title_text="Labor, L",
+        range=[0, 2.2],
+        tickvals=[0.5, 1, 1.5, 2],
+        row=1,
+        col=2,
+    )
     fig.update_yaxes(title_text="Real wage, w", dtick=0.5, row=1, col=2)
-    fig.update_layout(title=f"r* = {r_star:.3f}   w* = {w_star:.3f}   |   capital gets {r_star * K_bar / Y_star:.0%} "
-                            f"of output, labor {w_star * L_bar / Y_star:.0%}", showlegend=False)
+
+    # Step 5: the title reports both prices and the two shares of output
+    fig.update_layout(
+        title=(
+            f"r* = {r_star:.3f}   w* = {w_star:.3f}   |   "
+            f"capital gets {capital_share:.0%} of output, labor {labor_share:.0%}"
+        ),
+        showlegend=False,
+    )
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(factor_markets,
-         K_bar=FloatSlider(value=1.0, min=0.5, max=2.0, step=0.1, description="supply of capital K̄", style=WIDE),
-         L_bar=FloatSlider(value=1.0, min=0.5, max=2.0, step=0.1, description="supply of labor L̄", style=WIDE),
-         A=FloatSlider(value=1.0, min=0.5, max=1.5, step=0.1, description="productivity A", style=WIDE),
-         alpha=SelectionSlider(options=list(ALPHAS.items()), value=1 / 3, description="capital exponent α", style=WIDE));
+# Fig. 2 with sliders for the two supplies, productivity and the exponent
+interact(
+    factor_markets,
+    K_bar=FloatSlider(value=1.0, min=0.5, max=2.0, step=0.1,
+                      description="supply of capital K̄", style=WIDE),
+    L_bar=FloatSlider(value=1.0, min=0.5, max=2.0, step=0.1,
+                      description="supply of labor L̄", style=WIDE),
+    A=FloatSlider(value=1.0, min=0.5, max=1.5, step=0.1,
+                  description="productivity A", style=WIDE),
+    alpha=SelectionSlider(options=list(ALPHAS.items()), value=1 / 3,
+                          description="capital exponent α", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 2 with a precomputed slider for the supply of capital
-slider_figure(factor_markets, "K_bar", [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0], start=1.0,
-              label="supply of capital K̄")
+# one picture of Fig. 2 per value of K-bar
+slider_figure(
+    factor_markets,
+    "K_bar",
+    [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0],     # the values of K-bar
+    start=1.0,
+    label="supply of capital K̄",
+)
 ```
 
 **Source.** Adapted from Fig. 4.2 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -987,12 +1259,23 @@ Payments to capital, $r^*K^*$, and to labor, $w^*L^*$, use up all of output (equ
 So firms make zero economic profit, and income equals production.
 
 ```{python}
+# The factor payments with K-bar = L-bar = 1 (and the default A-bar and alpha)
+# Step 1: output in equilibrium
 K_bar, L_bar = 1.0, 1.0
 Y_star = production(K_bar, L_bar)
+# Step 2: the payments r* K* and w* L*: each price times its quantity
 capital_income, labor_income = mpk(K_bar, L_bar) * K_bar, mpl(K_bar, L_bar) * L_bar
+# Step 3: print them with their shares of output (":.0%" shows a share as a
+# percentage), and the profit left over, zero by equation (6)
 print(f"Output Y*:                 {Y_star:.3f}")
-print(f"Capital income r*K*:       {capital_income:.3f}   ({capital_income / Y_star:.0%} of output)")
-print(f"Labor income w*L*:         {labor_income:.3f}   ({labor_income / Y_star:.0%} of output)")
+print(
+    f"Capital income r*K*:       {capital_income:.3f}   "
+    f"({capital_income / Y_star:.0%} of output)"
+)
+print(
+    f"Labor income w*L*:         {labor_income:.3f}   "
+    f"({labor_income / Y_star:.0%} of output)"
+)
 print(f"Economic profit Y - rK - wL: {Y_star - capital_income - labor_income:.3f}")
 ```
 
@@ -1011,61 +1294,142 @@ of its current and future capital income, so a stock price index measures the va
 economy's capital stock. The S&P 500 covers 500 large U.S. companies. Dividing it by the consumer price
 index gives a **real** index, in dollars of the same purchasing power.
 
-> **Python note.** `pd.read_csv` reads a data file into a *DataFrame*, a table with named columns, and
-> `.tail()` shows its last five rows. `parse_dates=["date"]` tells pandas that the `date` column holds dates, not
-> plain text. Then `.dt.year` extracts the year of each date, and we store it as a new column.
-
 ```{python}
+# Load the S&P 500 data of Fig. 3. `pd.read_csv` reads a data file into a
+# DataFrame, a table with named columns; `parse_dates=["date"]` tells pandas that
+# the `date` column holds dates, not plain text
 stocks = pd.read_csv(DATA_URL + "fig4-3.csv", parse_dates=["date"])
+# `.dt.year` extracts the year of each date; we store it as a new column
 stocks["year"] = stocks.date.dt.year
+# `.tail()` shows the last five rows
 stocks.tail()
 ```
 
 The index is in September 2026 dollars, so it is about 10 percent higher than in the textbook, which
 uses 2023 dollars.
 
-> **Python note.** An `IntRangeSlider` has two handles and gives back a *tuple*, a pair of values
-> written `(1920, 2026)`. The line `start, end = period` unpacks the pair into two variables.
-> `stocks[condition]` keeps only the rows where the condition is true, and `&` means "and".
-> `px.area` draws a line with the area below it shaded; `log_y=True` gives a ratio scale. A `ToggleButtons`
-> widget shows one button per option.
+The title of the chart reports two numbers for the chosen period: by what factor the real index
+changed, and its average growth a year. `stock_growth` computes both.
 
 ```{python}
-def stock_chart(period=(1920, 2026), scale="ratio"):
-    """Fig. 4.3: the real S&P 500 index over a chosen period, on a ratio or linear scale."""
+def stock_growth(period):
+    """The real S&P 500 over a period, and how much it grew (Fig. 3).
+
+    Average annual growth, in percent:  100 ((last / first)^(1 / years) - 1)
+
+    Arguments
+        period : (start, end), the first and the last year
+    Returns
+        chosen : the rows of `stocks` from start to end
+        factor : the last value of the real index divided by the first
+        growth : the average annual growth of the real index, in percent
+    """
+    # Step 1: `start, end = period` unpacks the pair of years into two variables.
+    # `stocks[condition]` keeps only the rows where the condition is true, and
+    # `&` means "and"
     start, end = period
     chosen = stocks[(stocks.year >= start) & (stocks.year <= end)]
+    # Step 2: the first and the last value, and the years between them
     first, last = chosen.sp500_real.iloc[0], chosen.sp500_real.iloc[-1]
     years = (chosen.date.iloc[-1] - chosen.date.iloc[0]).days / 365.25
-    growth = 100 * ((last / first) ** (1 / years) - 1)          # average annual growth, percent
-    fig = px.area(chosen, x="date", y="sp500_real", log_y=(scale == "ratio"),
-                  labels={"date": "Year", "sp500_real": "Real index (Sep 2026 dollars)"},
-                  title=f"{start}–{end}: the real index changed by a factor of {last / first:.1f}, "
-                        f"or {growth:+.1f}% a year")
+    # Step 3: the factor, and the average annual growth in percent
+    factor = last / first
+    growth = 100 * ((last / first) ** (1 / years) - 1)
+    return chosen, factor, growth
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 3, the real S&P 500 index
+def stock_chart(period=(1920, 2026), scale="ratio"):
+    """The real S&P 500 index over a chosen period, on a ratio or linear scale.
+
+    Draws Fig. 3 (inspired by Fig. 4.3 in Jones).
+
+    Arguments
+        period : (start, end), the first and the last year
+        scale  : "ratio" or "linear", the vertical scale
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the data and the two numbers of the title (stock_growth)
+    start, end = period
+    chosen, factor, growth = stock_growth(period)
+    # Step 2: `px.area` draws a line with the area below it shaded; `log_y=True`
+    # gives a ratio scale (here: when the scale is "ratio")
+    fig = px.area(
+        chosen,
+        x="date",
+        y="sp500_real",
+        log_y=(scale == "ratio"),
+        labels={"date": "Year", "sp500_real": "Real index (Sep 2026 dollars)"},
+        title=(
+            f"{start}–{end}: the real index changed by a factor of {factor:.1f}, "
+            f"or {growth:+.1f}% a year"
+        ),
+    )
+    # Step 3: the book's blue, with a light shade of it below the line
     fig.update_traces(line_color=BLUE, fillcolor="rgba(22, 82, 140, 0.15)")
-    fig.update_xaxes(dtick="M120", tick0="1930-01-01")             # a tick every 10 years, none in the corner
+    # a tick every 10 years (120 months), none in the corner
+    fig.update_xaxes(dtick="M120", tick0="1930-01-01")
     if scale == "ratio":
-        fig.update_yaxes(tickvals=[80, 160, 320, 640, 1280, 2560, 5120, 10240])   # each tick doubles
+        # each tick doubles the one below it
+        fig.update_yaxes(tickvals=[80, 160, 320, 640, 1280, 2560, 5120, 10240])
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(stock_chart,
-         period=IntRangeSlider(value=(1920, 2026), min=1920, max=2026, step=1, description="period", style=WIDE),
-         scale=ToggleButtons(options=["ratio", "linear"], description="vertical scale"));
+# Fig. 3 with a period slider and scale buttons. An `IntRangeSlider` has two
+# handles and gives back a tuple, a pair of values written (1920, 2026). A
+# `ToggleButtons` widget shows one button per option.
+interact(
+    stock_chart,
+    period=IntRangeSlider(value=(1920, 2026), min=1920, max=2026, step=1,
+                          description="period", style=WIDE),
+    scale=ToggleButtons(options=["ratio", "linear"], description="vertical scale"),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: Fig. 3 with buttons for the vertical scale and a range slider under the chart
+# @title Website version: Fig. 3 with buttons for the vertical scale and a range slider
+# Step 1: the default chart, with a small range slider under the axis to zoom in
 fig = stock_chart()
 fig.update_xaxes(rangeslider_visible=True)
-fig.update_layout(updatemenus=[dict(type="buttons", direction="right", x=0.01, y=0.98, xanchor="left", yanchor="top", buttons=[
-    dict(label="ratio scale", method="relayout", args=[{"yaxis.type": "log", "yaxis.autorange": True,
-                                                        "yaxis.tickvals": [80, 160, 320, 640, 1280, 2560, 5120, 10240]}]),
-    dict(label="linear scale", method="relayout", args=[{"yaxis.type": "linear", "yaxis.autorange": True,
-                                                         "yaxis.tickvals": None}])])])
+# Step 2: two buttons switch the vertical axis between a ratio and a linear scale
+fig.update_layout(
+    updatemenus=[
+        dict(
+            type="buttons",
+            direction="right",
+            x=0.01,
+            y=0.98,
+            xanchor="left",
+            yanchor="top",
+            buttons=[
+                dict(
+                    label="ratio scale",
+                    method="relayout",
+                    args=[{
+                        "yaxis.type": "log",
+                        "yaxis.autorange": True,
+                        "yaxis.tickvals": [80, 160, 320, 640, 1280, 2560, 5120, 10240],
+                    }],
+                ),
+                dict(
+                    label="linear scale",
+                    method="relayout",
+                    args=[{
+                        "yaxis.type": "linear",
+                        "yaxis.autorange": True,
+                        "yaxis.tickvals": None,
+                    }],
+                ),
+            ],
+        )
+    ]
+)
 fig
 ```
 
@@ -1093,9 +1457,13 @@ index equal to 100 in 2015. We deflate each by its country's consumer price inde
 `regions.csv`, which gives each country of the chapter its World Bank region.
 
 ```{python}
+# Load the real share prices of 40 countries, and the regions of the chapter's countries
 shares = pd.read_csv(DATA_URL + "share_prices.csv", parse_dates=["date"])
 shares["year"] = shares.date.dt.year
 regions = pd.read_csv(DATA_URL + "regions.csv")
+# The first month of each country's series, earliest first. `.groupby("country")`
+# splits the table into one piece per country, `.date.min()` takes the first date
+# of each piece, and `.sort_values()` sorts them
 shares.groupby("country").date.min().sort_values().head()
 ```
 
@@ -1106,74 +1474,128 @@ website, countries are shown in groups: all 40 share-price countries at once her
 region at a time in Fig. 8. The function `group_colors` gives the countries of each group different colors.
 
 ```{python}
-LIGHT = {"#F7E1A0", "#E2E2E2", "#FBE426", "#16FF32", "#1CFFCE", "#2ED9FF"}      # too pale on white
-PALETTE = []                                                                   # 44 colors
+#| kind: drawing
+# @title Drawing code: Fig. 3, the palette of country colors
+# too pale on white
+LIGHT = {"#F7E1A0", "#E2E2E2", "#FBE426", "#16FF32", "#1CFFCE", "#2ED9FF"}
+# 44 colors from two of Plotly's palettes
+PALETTE = []
 for c in px.colors.qualitative.Dark24 + px.colors.qualitative.Alphabet:
     if c not in LIGHT and c != "#2E91E5":
         PALETTE.append(c)
-PALETTE.append("#2E91E5")                       # too close to the book's U.S. blue: used last
+PALETTE.append("#2E91E5")              # too close to the book's U.S. blue: used last
 ```
 
-> **Python note.** `group_colors` gives the countries their colors one at a time. For each country, the list
-> `used` collects the colors already given to the countries shown together with it, and the country takes the
-> first palette color that is not in `used`, preferring one that no country has yet. If every color is taken, it
-> takes the one that `used` counts least often (`.count`), searching from the end of the palette (`reversed`).
-> `dict(fixed or {})` starts from a copy of the fixed colors (or an empty dictionary), and `continue` skips to
-> the next country.
-
 ```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 3, a color for every country
 def group_colors(names, groups, fixed=None):
-    """Give each country a color that no other country in its groups uses, as far as the palette allows.
+    """Give each country a color that no other country in its groups uses.
 
-    groups: the lists of countries shown together (menu views); fixed: {country: color} for the book's countries."""
+    As far as the palette allows: when every color is taken, the country gets the one
+    that its groups use least.
+
+    Arguments
+        names  : the countries to color, one at a time
+        groups : the lists of countries shown together (the website's menu views)
+        fixed  : {country: color} for the book's countries, or None
+    Returns
+        a dictionary {country: color}
+    """
+    # start from a copy of the fixed colors (or an empty dictionary)
     colors = dict(fixed or {})
     for name in names:
         if name in colors:
-            continue
-        used = []                                       # the colors of the countries shown with `name`
+            continue                    # `continue` skips to the next country
+        # Step 1: the list `used` collects the colors of the countries shown with it
+        used = []
         for group in groups:
             for other in group:
                 if name in group and other in colors:
                     used.append(colors[other])
+        # Step 2: the palette colors not in `used`; best of all, one no country has yet
         free, unused = [], []
         for c in PALETTE:
             if c not in used:
                 free.append(c)
                 if c not in colors.values():
-                    unused.append(c)                    # no country has this color yet: the best choice
+                    unused.append(c)
+        # Step 3: no free color: the one `used` counts least often (`.count`),
+        # searching from the end of the palette (`reversed`)
         least = PALETTE[-1]
-        for c in reversed(PALETTE):                     # no free color: the one used least, from the end
+        for c in reversed(PALETTE):
             if used.count(c) < used.count(least):
                 least = c
+        # the first of: an unused color, a free one, the least used one
         colors[name] = (unused + free + [least])[0]
     return colors
+```
+
+Before the colors, we express the S&P 500 in the unit of the other countries: a real index equal to
+100 in 2015.
+
+```{python}
+# The S&P 500 in the unit of the share-price data: a real index, 2015 = 100.
+# `.assign(name=values)` adds a column: the real index over its 2015 average, times 100
+sp500 = stocks.assign(
+    country="S&P 500 (U.S.)",
+    real_index=100 * stocks.sp500_real / stocks[stocks.year == 2015].sp500_real.mean(),
+)
 ```
 
 The S&P 500 is black, and China and Russia keep their colors of Fig. 8. The share-price countries get their
 colors first, because each of them is also shown with its region. `short` shortens long official names for the titles.
 
-> **Python note.** `.assign(name=values)` adds a column. `set(a) - set(b)` keeps the names of `a` that are not
-> in `b`. In `short`, `name.split(" (")[0]` cuts the text at " (" and
-> keeps the first piece, and `SHORT_NAMES.get(name, name)` returns the name unchanged when it is not in the dictionary.
-
 ```{python}
-sp500 = stocks.assign(country="S&P 500 (U.S.)",
-                      real_index=100 * stocks.sp500_real / stocks[stocks.year == 2015].sp500_real.mean())
+#| kind: drawing
+# @title Drawing code: Fig. 3, the colors and the short names of the countries
+# Step 1: the groups of countries shown together. `.set_index("country").region`
+# gives each country's region, with the countries as labels
 SHARE_COUNTRIES = sorted(shares.country.unique())
 region_of = regions.set_index("country").region
-COLOR_GROUPS = [SHARE_COUNTRIES]                                  # Fig. 3 shows all 40 together
-for region in sorted(region_of.unique()):                         # Fig. 8: China and Russia with one region
-    COLOR_GROUPS.append(["China", "Russian Federation"] + list(region_of[region_of == region].index))
+COLOR_GROUPS = [SHARE_COUNTRIES]                  # Fig. 3 shows all 40 together
+# Fig. 8 shows China and Russia with one region at a time
+for region in sorted(region_of.unique()):
+    COLOR_GROUPS.append(
+        ["China", "Russian Federation"] + list(region_of[region_of == region].index)
+    )
+# Step 2: the share-price countries get their colors first.
+# `set(a) - set(b)` keeps the names of a that are not in b
 COLOR_ORDER = SHARE_COUNTRIES + sorted(set(region_of.index) - set(SHARE_COUNTRIES))
-COLORS = group_colors(COLOR_ORDER, COLOR_GROUPS, {"S&P 500 (U.S.)": "black", "China": BLUE, "Russian Federation": TEAL})
-SHORT_NAMES = {"Republic of Korea": "South Korea", "Russian Federation": "Russia", "D.R. of the Congo": "DR Congo",
-               "Taiwan, Province of China": "Taiwan", "China, Hong Kong SAR": "Hong Kong", "Lao People's DR": "Laos",
-               "U.R. of Tanzania": "Tanzania", "Syrian Arab Republic": "Syria", "Republic of Moldova": "Moldova"}
+COLORS = group_colors(
+    COLOR_ORDER,
+    COLOR_GROUPS,
+    {"S&P 500 (U.S.)": "black", "China": BLUE, "Russian Federation": TEAL},
+)
+# Step 3: short names for the titles
+SHORT_NAMES = {
+    "Republic of Korea": "South Korea",
+    "Russian Federation": "Russia",
+    "D.R. of the Congo": "DR Congo",
+    "Taiwan, Province of China": "Taiwan",
+    "China, Hong Kong SAR": "Hong Kong",
+    "Lao People's DR": "Laos",
+    "U.R. of Tanzania": "Tanzania",
+    "Syrian Arab Republic": "Syria",
+    "Republic of Moldova": "Moldova",
+}
 
 
 def short(name):
-    """A short country name for titles, e.g. 'Bolivia (Plurinational State of)' -> 'Bolivia'."""
-    name = name.split(" (")[0].split(":")[0]                      # drop '(...)' and ': Mainland'
+    """A short country name for titles.
+
+    For example 'Bolivia (Plurinational State of)' -> 'Bolivia'.
+
+    Arguments
+        name : the country's name in the data
+    Returns
+        the short name
+    """
+    # `name.split(" (")[0]` cuts the text at " (" and keeps the first piece:
+    # this drops '(...)' and ': Mainland'
+    name = name.split(" (")[0].split(":")[0]
+    # `SHORT_NAMES.get(name, name)` looks the name up in the dictionary, and
+    # returns it unchanged when it is not there
     return SHORT_NAMES.get(name, name)
 ```
 
@@ -1182,42 +1604,103 @@ real S&P 500 and their real share prices, all equal to 100 in 2015, and reports 
 and slowest over the period. The helper `real_growth` computes each series' average growth a year. The
 menu below starts with Japan; click a country while holding Ctrl (or Cmd) to add or remove it.
 
-> **Python note.** `.groupby("country")` splits the table into one piece per country, and the loop
-> `for name, one in ...` visits each piece with its name. `pd.concat([a, b])` stacks two tables on top of
-> each other. `max(rates, key=rates.get)` returns the key of the
-> dictionary `rates` with the largest value: `key=` tells `max` to compare the values, not the names.
-
 ```{python}
 def real_growth(chosen):
-    """Average real growth a year (percent) of each series, from its first to its last month (one year or more)."""
+    """Average real growth a year, in percent, of each series in a table (Fig. 3).
+
+    From the first to the last month of each series that spans one year or more:
+    100 ((last / first)^(1 / years) - 1)
+
+    Arguments
+        chosen : rows of real share prices, with the columns country, date, real_index
+    Returns
+        a dictionary {short country name: growth a year in percent, rounded to 0.1}
+    """
     rates = {}
+    # `.groupby("country")` splits the table into one piece per country, and the
+    # loop `for name, one in ...` visits each piece with its name
     for name, one in chosen.groupby("country"):
         years = (one.date.iloc[-1] - one.date.iloc[0]).days / 365.25
         if years >= 1:
-            growth = 100 * ((one.real_index.iloc[-1] / one.real_index.iloc[0]) ** (1 / years) - 1)
+            factor = one.real_index.iloc[-1] / one.real_index.iloc[0]
+            growth = 100 * (factor ** (1 / years) - 1)
             rates[short(name)] = round(growth, 1) + 0.0          # + 0.0: no "-0.0"
     return rates
 ```
 
+`share_price_data` collects the data of the chart: the S&P 500 and the chosen countries over the period, their
+growth rates, and the countries that have no data in it.
+
 ```{python}
-def compare_share_prices(period=(1920, 2026), scale="ratio", countries=()):
-    """Fig. 4.3 across countries: real share prices, 2015 = 100 (no country chosen: the textbook figure)."""
-    if not countries:
-        return stock_chart(period, scale)
+def share_price_data(period, countries):
+    """The real share prices of Fig. 3 for the chosen countries, and their growth.
+
+    Arguments
+        period    : (start, end), the first and the last year
+        countries : the countries chosen next to the S&P 500
+    Returns
+        chosen  : the rows of the S&P 500 and of the countries, from start to end
+        rates   : {short name: average real growth a year in percent} (real_growth)
+        missing : the short names of the chosen countries with no data in the period
+    """
+    # Step 1: `pd.concat([a, b])` stacks two tables on top of each other: the
+    # S&P 500 and the chosen countries (`.isin(countries)` is True for their rows)
     start, end = period
     chosen = pd.concat([sp500, shares[shares.country.isin(countries)]])
     chosen = chosen[(chosen.year >= start) & (chosen.year <= end)]
-    fig = px.line(chosen, x="date", y="real_index", color="country", log_y=(scale == "ratio"),
-                  color_discrete_map=COLORS, labels={"date": "Year", "real_index": "Real share prices (2015 = 100)"})
+    # Step 2: the average real growth a year of each series
     rates = real_growth(chosen)
-    title = f"{start}–{end}: choose a period of at least one year"
-    if rates:
-        best, worst = max(rates, key=rates.get), min(rates, key=rates.get)
-        title = f"{start}–{end}, real growth a year: fastest {best} {rates[best]:+.1f}%, slowest {worst} {rates[worst]:+.1f}%"
+    # Step 3: the chosen countries with no data in the period
     missing = []
     for name in countries:
         if name not in set(chosen.country):
             missing.append(short(name))
+    return chosen, rates, missing
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 3, real share prices across countries
+def compare_share_prices(period=(1920, 2026), scale="ratio", countries=()):
+    """Real share prices across countries, 2015 = 100.
+
+    Draws Fig. 3 across countries (inspired by Fig. 4.3 in Jones). With no country
+    chosen, it draws the textbook figure (stock_chart).
+
+    Arguments
+        period    : (start, end), the first and the last year
+        scale     : "ratio" or "linear", the vertical scale
+        countries : the countries drawn next to the S&P 500
+    Returns
+        a Plotly figure
+    """
+    # Step 1: no country chosen: the textbook figure
+    if not countries:
+        return stock_chart(period, scale)
+    start, end = period
+    chosen, rates, missing = share_price_data(period, countries)
+
+    # Step 2: one line per series, each country in its color of COLORS
+    fig = px.line(
+        chosen,
+        x="date",
+        y="real_index",
+        color="country",
+        log_y=(scale == "ratio"),
+        color_discrete_map=COLORS,
+        labels={"date": "Year", "real_index": "Real share prices (2015 = 100)"},
+    )
+
+    # Step 3: the title names the fastest and the slowest series.
+    # `max(rates, key=rates.get)` returns the key of the dictionary `rates` with
+    # the largest value: `key=` tells `max` to compare the values, not the names
+    title = f"{start}–{end}: choose a period of at least one year"
+    if rates:
+        best, worst = max(rates, key=rates.get), min(rates, key=rates.get)
+        title = (
+            f"{start}–{end}, real growth a year: fastest {best} {rates[best]:+.1f}%, "
+            f"slowest {worst} {rates[worst]:+.1f}%"
+        )
     if missing:
         title = f"No share price data for {', '.join(missing)} in {start}–{end}"
     fig.update_layout(title=title, legend_title_text="")
@@ -1228,24 +1711,59 @@ def compare_share_prices(period=(1920, 2026), scale="ratio", countries=()):
 
 ```{python}
 #| kind: widget
-interact(compare_share_prices,
-         period=IntRangeSlider(value=(1920, 2026), min=1920, max=2026, step=1, description="period", style=WIDE),
-         scale=ToggleButtons(options=["ratio", "linear"], description="vertical scale"),
-         countries=SelectMultiple(options=sorted(shares.country.unique()), value=("Japan",), rows=8,
-                                  description="other countries", style=WIDE));
+# Fig. 3 with other countries. A `SelectMultiple` is a list from which you can
+# pick several entries (hold Ctrl, or Cmd on a Mac); it gives back a tuple
+interact(
+    compare_share_prices,
+    period=IntRangeSlider(value=(1920, 2026), min=1920, max=2026, step=1,
+                          description="period", style=WIDE),
+    scale=ToggleButtons(options=["ratio", "linear"], description="vertical scale"),
+    countries=SelectMultiple(options=sorted(shares.country.unique()), value=("Japan",),
+                             rows=8, description="other countries", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: Fig. 3 with every country (click the legend), scale buttons and a range slider
+# @title Website version: Fig. 3 with every country, scale buttons and a range slider
+# Step 1: every country, with the title of the textbook view
 fig = compare_share_prices(countries=tuple(sorted(shares.country.unique())))
-fig.update_layout(title=stock_chart().layout.title.text)           # the title of the textbook view
+fig.update_layout(title=stock_chart().layout.title.text)
 fig.update_xaxes(rangeslider_visible=True)
-fig.update_layout(updatemenus=[dict(type="buttons", direction="right", x=0.01, y=0.98, xanchor="left", yanchor="top", buttons=[
-    dict(label="ratio scale", method="relayout", args=[{"yaxis.type": "log", "yaxis.autorange": True,
-                                                        "yaxis.tickvals": [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000]}]),
-    dict(label="linear scale", method="relayout", args=[{"yaxis.type": "linear", "yaxis.autorange": True,
-                                                         "yaxis.tickvals": None}])])])
+# Step 2: two buttons switch the vertical axis between a ratio and a linear scale
+fig.update_layout(
+    updatemenus=[
+        dict(
+            type="buttons",
+            direction="right",
+            x=0.01,
+            y=0.98,
+            xanchor="left",
+            yanchor="top",
+            buttons=[
+                dict(
+                    label="ratio scale",
+                    method="relayout",
+                    args=[{
+                        "yaxis.type": "log",
+                        "yaxis.autorange": True,
+                        "yaxis.tickvals": [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000],
+                    }],
+                ),
+                dict(
+                    label="linear scale",
+                    method="relayout",
+                    args=[{
+                        "yaxis.type": "linear",
+                        "yaxis.autorange": True,
+                        "yaxis.tickvals": None,
+                    }],
+                ),
+            ],
+        )
+    ]
+)
+# Step 3: the region menu (country_menu); the countries are a click away in the legend
 country_menu(fig, [], regions.set_index("country").region)
 ```
 
@@ -1305,12 +1823,13 @@ variables by their U.S. values, so the United States equals 1.
 We load the wider data file of this chapter. It has one row per country and year from the Penn World
 Table 11.0, with capital per person built from each country's past investment.
 
-> **Python note.** `pwt.columns` lists the columns of a table, and `pwt.shape` gives its number of rows and
-> columns. The columns ending in `_rel` are relative to the United States in the same year.
-
 ```{python}
+# Load the wider data file: one row per country and year. `pwt.shape` gives its
+# number of rows and columns (and `pwt.columns` would list the columns). The
+# columns ending in `_rel` are relative to the United States in the same year.
 pwt = pd.read_csv(DATA_URL + "pwt_production.csv")
 print(pwt.shape)
+# the first five countries in 2023
 pwt[pwt.year == 2023].head()
 ```
 
@@ -1318,66 +1837,189 @@ The function below picks the eight countries of the textbook figure, or any othe
 year and places them on the curve. All the other countries of the textbook's sample are one click away:
 click "Other countries" in the legend to show them as gray dots.
 
-> **Python note.** `.isin(countries)` is true for the rows whose country appears in the list `countries`,
-> and `~` means "not". `.copy()` makes a separate table, so that we can add a column to it safely.
-> `.replace(SHORT)` swaps long names for the short ones in the dictionary `SHORT`. `.map(POSITIONS)` looks
-> up each country in `POSITIONS`, and `.fillna("top left")` fills in the countries that are not in it.
-> `visible="legendonly"` hides a trace until you click its name in the legend. `a if condition else b` gives
-> `a` when the condition is true and `b` otherwise. Below, a `Dropdown` widget
-> shows a menu of years, and a `SelectMultiple` a list of countries (hold Ctrl or Cmd to pick several).
-
 ```{python}
-EIGHT = ["United States", "Switzerland", "Japan", "Italy", "United Kingdom", "China", "Brazil", "Burundi"]
-SHORT = {"United States": "U.S.", "United Kingdom": "U.K."}
-POSITIONS = {"Japan": "bottom right", "Italy": "bottom right", "Brazil": "bottom right",
-             "Burundi": "middle right"}                                 # where to put labels that would overlap
+# The eight countries of the textbook figure
+EIGHT = ["United States", "Switzerland", "Japan", "Italy",
+         "United Kingdom", "China", "Brazil", "Burundi"]
+
+
+def predicted_incomes(year, countries):
+    """The model's predicted incomes of Fig. 4, y* = k^(1/3), with U.S. = 1.
+
+    Equation (7) with the same productivity everywhere, A-bar = 1.
+
+    Arguments
+        year      : the year of the data
+        countries : the chosen countries
+    Returns
+        chosen : the chosen countries, with their predicted income in `predicted`
+        rest   : the other countries of the textbook's sample
+    """
+    # Step 1: the textbook's sample in that year
+    in_year = pwt[(pwt.year == year) & pwt.in_sample]
+    # Step 2: the chosen countries. `.isin(countries)` is True for the rows whose
+    # country is in the list; `.copy()` makes a separate table, so that we can add
+    # a column to it safely
+    chosen = in_year[in_year.country.isin(countries)].copy()
+    chosen["predicted"] = chosen.k_rel ** (1 / 3)          # equation (7), A-bar = 1
+    # Step 3: the other countries; `~` means "not"
+    rest = in_year[~in_year.country.isin(countries)]
+    return chosen, rest
 ```
 
 ```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 4, the other countries and the curve
+# short labels, and where to put the labels that would overlap
+SHORT = {"United States": "U.S.", "United Kingdom": "U.K."}
+POSITIONS = {
+    "Japan": "bottom right",
+    "Italy": "bottom right",
+    "Brazil": "bottom right",
+    "Burundi": "middle right",
+}
+
+
+def add_rest_and_curve(fig, rest):
+    """The gray dots of the other countries and the curve y* = k^(1/3) (Fig. 4).
+
+    Arguments
+        fig  : the figure to draw in
+        rest : the other countries of the sample (predicted_incomes)
+    """
+    # `visible="legendonly"` hides the gray dots until you click their name in
+    # the legend
+    fig.add_trace(
+        go.Scatter(
+            x=rest.k_rel,
+            y=rest.k_rel ** (1 / 3),
+            mode="markers",
+            name="Other countries",
+            text=rest.country,
+            hoverinfo="text",
+            visible="legendonly",
+            marker=dict(color=GRAY, size=8),
+        )
+    )
+    # the model's curve, in blue
+    k = np.linspace(0, 2, 300)
+    fig.add_trace(
+        go.Scatter(
+            x=k,
+            y=k ** (1 / 3),
+            name="y* = k^(1/3)",
+            mode="lines",
+            line=dict(color=BLUE, width=3),
+        )
+    )
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 4, predicted income against capital per person
 def predicted_income_chart(year=2023, countries=tuple(EIGHT)):
-    """Fig. 4.4: predicted income y* = k^(1/3) for the chosen countries (U.S. = 1)."""
-    in_year = pwt[(pwt.year == year) & pwt.in_sample]
-    chosen = in_year[in_year.country.isin(countries)].copy()
-    chosen["predicted"] = chosen.k_rel ** (1 / 3)
+    """Predicted income y* = k^(1/3) for the chosen countries, with U.S. = 1.
+
+    Draws Fig. 4 (inspired by Fig. 4.4 in Jones).
+
+    Arguments
+        year      : the year of the data
+        countries : the countries drawn as black dots
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the predictions (predicted_incomes). `.replace(SHORT)` swaps long
+    # names for the short ones; `.map(POSITIONS)` looks up each country in
+    # POSITIONS, and `.fillna("top left")` fills in the countries that are not in it
+    chosen, rest = predicted_incomes(year, countries)
     chosen["label"] = chosen.country.replace(SHORT)
     chosen["position"] = chosen.country.map(POSITIONS).fillna("top left")
-    fig = px.scatter(chosen, x="k_rel", y="predicted", text="label", hover_name="country",
-                     labels={"k_rel": "Capital per person, k (U.S. = 1)", "predicted": "Predicted income, y* (U.S. = 1)"})
-    fig.update_traces(textposition=list(chosen.position), marker=dict(color="black", size=11), name="Chosen countries")
-    rest = in_year[~in_year.country.isin(countries)]
-    fig.add_trace(go.Scatter(x=rest.k_rel, y=rest.k_rel ** (1 / 3), mode="markers", name="Other countries",
-                             text=rest.country, hoverinfo="text", visible="legendonly", marker=dict(color=GRAY, size=8)))
-    k = np.linspace(0, 2, 300)
-    fig.add_trace(go.Scatter(x=k, y=k ** (1 / 3), name="y* = k^(1/3)", mode="lines", line=dict(color=BLUE, width=3)))
+
+    # Step 2: the chosen countries as black dots with their labels
+    fig = px.scatter(
+        chosen,
+        x="k_rel",
+        y="predicted",
+        text="label",
+        hover_name="country",
+        labels={
+            "k_rel": "Capital per person, k (U.S. = 1)",
+            "predicted": "Predicted income, y* (U.S. = 1)",
+        },
+    )
+    fig.update_traces(
+        textposition=list(chosen.position),
+        marker=dict(color="black", size=11),
+        name="Chosen countries",
+    )
+    # Step 3: the other countries and the curve (add_rest_and_curve)
+    add_rest_and_curve(fig, rest)
+
+    # Step 4: the title reports China, or else the first chosen country
     others = chosen[chosen.country != "United States"]
     title = f"{year}: choose a country to compare with the United States"
     if len(others) > 0:
-        focus = others[others.country == "China"].iloc[0] if "China" in set(others.country) else others.iloc[0]
-        title = (f"{year}: {short(focus.country)} has {focus.k_rel:.0%} of U.S. capital per person, "
-                 f"predicted income {focus.predicted:.0%}")
-    fig.update_layout(title=title, xaxis_range=[0, 2], yaxis=dict(range=[0, 1.3], tickvals=[0.2, 0.4, 0.6, 0.8, 1.0, 1.2]))
+        if "China" in set(others.country):
+            focus = others[others.country == "China"].iloc[0]
+        else:
+            focus = others.iloc[0]
+        title = (
+            f"{year}: {short(focus.country)} has {focus.k_rel:.0%} of U.S. capital "
+            f"per person, predicted income {focus.predicted:.0%}"
+        )
+    fig.update_layout(
+        title=title,
+        xaxis_range=[0, 2],
+        yaxis=dict(range=[0, 1.3], tickvals=[0.2, 0.4, 0.6, 0.8, 1.0, 1.2]),
+    )
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(predicted_income_chart,
-         year=Dropdown(options=[1980, 1990, 2000, 2010, 2019, 2023], value=2023, description="year", style=WIDE),
-         countries=SelectMultiple(options=sorted(pwt[pwt.in_sample & (pwt.year == 2023)].country), value=tuple(EIGHT),
-                                  rows=8, description="countries", style=WIDE));
+# Fig. 4 with a menu of years and a list of countries. A `Dropdown` widget shows a
+# menu; a `SelectMultiple` a list (hold Ctrl or Cmd to pick several)
+interact(
+    predicted_income_chart,
+    year=Dropdown(options=[1980, 1990, 2000, 2010, 2019, 2023], value=2023,
+                  description="year", style=WIDE),
+    countries=SelectMultiple(
+        options=sorted(pwt[pwt.in_sample & (pwt.year == 2023)].country),
+        value=tuple(EIGHT),
+        rows=8,
+        description="countries",
+        style=WIDE,
+    ),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: Fig. 4 with a precomputed slider for the year ("Other countries" in the legend)
-fig = slider_figure(predicted_income_chart, "year", [1980, 1990, 2000, 2010, 2019, 2023], start=2023, label="year")
+# @title Website version: Fig. 4 with a precomputed slider for the year
+# Step 1: one picture of Fig. 4 per year
+fig = slider_figure(
+    predicted_income_chart,
+    "year",
+    [1980, 1990, 2000, 2010, 2019, 2023],
+    start=2023,
+    label="year",
+)
+# Step 2: "Other countries" stays hidden until it is clicked in the legend
 others = [trace.name == "Other countries" for trace in fig.data]
 for trace, other in zip(fig.data, others):
     if other and trace.visible:
-        trace.visible = "legendonly"                               # hidden until clicked in the legend
-for step in fig.layout.sliders[0].steps:                           # ... in every year of the slider
+        trace.visible = "legendonly"           # hidden until clicked in the legend
+for step in fig.layout.sliders[0].steps:       # ... in every year of the slider
     visible = step.args[0]["visible"]
-    step.args = [{"visible": ["legendonly" if v and other else v for v, other in zip(visible, others)]}, step.args[1]]
+    step.args = [
+        {
+            "visible": [
+                "legendonly" if v and other else v
+                for v, other in zip(visible, others)
+            ]
+        },
+        step.args[1],
+    ]
 fig
 ```
 
@@ -1407,22 +2049,24 @@ The textbook lists the numbers behind the figure for 11 countries in 2019. We re
 data and put the textbook's values next to it. Our data come from a newer release of the Penn World
 Table, so the numbers differ a little, but the pattern is the same.
 
-> **Python note.** `.set_index("country")` uses the country names as row labels, and `.loc[ELEVEN]`
-> picks the rows in the order of the list. `pd.DataFrame({...})` builds a table from a dictionary:
-> each key becomes a column name.
-
 ```{python}
+# Table 4.3: the textbook's 11 countries in 2019, next to the textbook's values.
+# `.set_index("country")` uses the country names as row labels, and `.loc[ELEVEN]`
+# picks the rows in the order of the list
 ELEVEN = ["United States", "Switzerland", "Japan", "Italy", "Spain", "United Kingdom",
           "Brazil", "China", "South Africa", "India", "Burundi"]
 y2019 = pwt[pwt.year == 2019].set_index("country").loc[ELEVEN]
+# `pd.DataFrame({...})` builds a table from a dictionary: each key becomes a column
 table_4_3 = pd.DataFrame({
     "capital per person k": y2019.k_rel,
-    "predicted y* = k^(1/3)": y2019.k_rel ** (1 / 3),
+    "predicted y* = k^(1/3)": y2019.k_rel ** (1 / 3),     # equation (7), A-bar = 1
     "observed y": y2019.y_rel,
-    "textbook: k": [1.000, 1.488, 0.914, 0.792, 0.716, 0.714, 0.195, 0.275, 0.165, 0.082, 0.005],
-    "textbook: observed y": [1.000, 1.203, 0.634, 0.651, 0.645, 0.707, 0.233, 0.226, 0.200, 0.107, 0.013],
+    "textbook: k": [1.000, 1.488, 0.914, 0.792, 0.716, 0.714,
+                    0.195, 0.275, 0.165, 0.082, 0.005],
+    "textbook: observed y": [1.000, 1.203, 0.634, 0.651, 0.645, 0.707,
+                             0.233, 0.226, 0.200, 0.107, 0.013],
 })
-table_4_3.round(3)
+table_4_3.round(3)                 # rounded to three decimals
 ```
 
 Compare the second and third columns: for almost every country the model predicts a higher income
@@ -1455,6 +2099,8 @@ First, a quick look at the data. We keep the 111 countries that have data since 
 sample, and sort them from poorest to richest.
 
 ```{python}
+# The textbook's sample in 2023: the countries with data since 1960. Then the
+# poorest five: `.sort_values("y_rel")` sorts by income relative to the U.S.
 sample = pwt[(pwt.year == 2023) & pwt.in_sample]
 sample.sort_values("y_rel").head()
 ```
@@ -1465,6 +2111,7 @@ behind this number broke down. **Always look at your data before using it.** We 
 with 110 countries.
 
 ```{python}
+# Drop Venezuela, whose income data broke down; `len(sample)` counts the rows left
 sample = sample[sample.country != "Venezuela (Bolivarian Republic of)"]
 len(sample)
 ```
@@ -1472,45 +2119,127 @@ len(sample)
 Both axes use a **ratio scale**, labeled with fractions of the U.S. level. We also let you change the
 exponent $\alpha$ on capital, to test the textbook's argument about it.
 
-> **Python note.** With `log_x=True`, Plotly expects the axis `range` in powers of ten, so we pass
-> `np.log10(1 / 110)` rather than `1 / 110`. `tickvals` says where to put the ticks, and `ticktext`
-> what to write there.
+The title reports two numbers for each exponent: the share of countries that lie above the 45-degree
+line, and how many times richer the model predicts the typical country to be. `prediction_gap` computes
+them.
 
 ```{python}
-FRACTIONS = [1 / 256, 1 / 128, 1 / 64, 1 / 32, 1 / 16, 1 / 8, 1 / 4, 1 / 2, 1, 2]
-FRACTION_NAMES = ["1/256", "1/128", "1/64", "1/32", "1/16", "1/8", "1/4", "1/2", "1", "2"]
+def prediction_gap(alpha):
+    """The model's predictions of Fig. 5 against the data, y* = k^alpha (U.S. = 1).
 
-
-def prediction_chart(alpha=1 / 3):
-    """Fig. 4.5: predicted income k^alpha against actual income (U.S. = 1), with the 45-degree line."""
+    Arguments
+        alpha : the exponent on capital
+    Returns
+        chosen : the sample, with the predicted income in the column `predicted`
+        above  : the share of countries above the 45-degree line (predicted > actual)
+        gap    : the median of predicted over actual income: how far off the
+                 typical country is
+    """
+    # Step 1: the prediction for every country of the sample
     chosen = sample.copy()
     chosen["predicted"] = chosen.k_rel ** alpha
-    above = (chosen.predicted > chosen.y_rel).mean()            # share of countries above the line
-    gap = (chosen.predicted / chosen.y_rel).median()            # how far off the typical country is
-    fig = px.scatter(chosen, x="y_rel", y="predicted", hover_name="country", log_x=True, log_y=True,
-                     labels={"y_rel": "Per capita GDP in 2023 (U.S. = 1, ratio scale)",
-                             "predicted": "Predicted, y* = k^α (ratio scale)"})
+    # Step 2: the mean of a True/False column is the share of True values
+    above = (chosen.predicted > chosen.y_rel).mean()
+    gap = (chosen.predicted / chosen.y_rel).median()
+    return chosen, above, gap
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Figs. 5 and 7, the ticks of the ratio scales
+# the ticks, as fractions of the U.S. level, and the text written at each
+FRACTIONS = [1 / 256, 1 / 128, 1 / 64, 1 / 32, 1 / 16, 1 / 8, 1 / 4, 1 / 2, 1, 2]
+FRACTION_NAMES = ["1/256", "1/128", "1/64", "1/32", "1/16",
+                  "1/8", "1/4", "1/2", "1", "2"]
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 5, predicted against actual income
+def prediction_chart(alpha=1 / 3):
+    """Predicted income k^alpha against actual income, with the 45-degree line.
+
+    Draws Fig. 5 (inspired by Fig. 4.5 in Jones); both incomes relative to the U.S.
+
+    Arguments
+        alpha : the exponent on capital
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the predictions and the two numbers of the title (prediction_gap)
+    chosen, above, gap = prediction_gap(alpha)
+    # Step 2: one green point per country; `log_x=True` and `log_y=True` put both
+    # axes on a ratio scale
+    fig = px.scatter(
+        chosen,
+        x="y_rel",
+        y="predicted",
+        hover_name="country",
+        log_x=True,
+        log_y=True,
+        labels={
+            "y_rel": "Per capita GDP in 2023 (U.S. = 1, ratio scale)",
+            "predicted": "Predicted, y* = k^α (ratio scale)",
+        },
+    )
     fig.update_traces(marker=dict(color=GREEN, size=9))
-    fig.add_trace(go.Scatter(x=[1 / 256, 2], y=[1 / 256, 2], name="45-degree line: model = data",
-                             mode="lines", line=dict(color=BLUE, width=3)))
-    fig.update_xaxes(range=[np.log10(1 / 110), np.log10(2.5)], tickvals=FRACTIONS, ticktext=FRACTION_NAMES)
-    fig.update_yaxes(range=[np.log10(1 / 256), np.log10(2.5)], tickvals=FRACTIONS, ticktext=FRACTION_NAMES)
-    fig.update_layout(title=f"α = {alpha:.2f}: {above:.0%} of countries lie above the line; typical gap: {gap:.1f} times")
+    # Step 3: the 45-degree line, where the model equals the data
+    fig.add_trace(
+        go.Scatter(
+            x=[1 / 256, 2],
+            y=[1 / 256, 2],
+            name="45-degree line: model = data",
+            mode="lines",
+            line=dict(color=BLUE, width=3),
+        )
+    )
+    # Step 4: on a log axis Plotly expects the `range` in powers of ten, so we
+    # pass `np.log10(1 / 110)` rather than 1 / 110. `tickvals` says where to put
+    # the ticks, and `ticktext` what to write there
+    fig.update_xaxes(
+        range=[np.log10(1 / 110), np.log10(2.5)],
+        tickvals=FRACTIONS,
+        ticktext=FRACTION_NAMES,
+    )
+    fig.update_yaxes(
+        range=[np.log10(1 / 256), np.log10(2.5)],
+        tickvals=FRACTIONS,
+        ticktext=FRACTION_NAMES,
+    )
+    # Step 5: the title reports the share above the line and the typical gap
+    fig.update_layout(
+        title=(
+            f"α = {alpha:.2f}: {above:.0%} of countries lie above the line; "
+            f"typical gap: {gap:.1f} times"
+        )
+    )
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(prediction_chart,
-         alpha=SelectionSlider(options=list(ALPHAS.items()), value=1 / 3, description="capital exponent α", style=WIDE));
+# Fig. 5 with a slider for the capital exponent
+interact(
+    prediction_chart,
+    alpha=SelectionSlider(options=list(ALPHAS.items()), value=1 / 3,
+                          description="capital exponent α", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 5 with a precomputed slider for the capital exponent
-fig = slider_figure(prediction_chart, "alpha", list(ALPHAS.values()), start=1 / 3, label="capital exponent α")
+# Step 1: one picture of Fig. 5 per exponent of ALPHAS
+fig = slider_figure(
+    prediction_chart,
+    "alpha",
+    list(ALPHAS.values()),
+    start=1 / 3,
+    label="capital exponent α",
+)
+# Step 2: label each step with its fraction; `zip` pairs each step with a key of ALPHAS
 for step, name in zip(fig.layout.sliders[0].steps, ALPHAS):
-    step.label = name                                          # show 1/3 rather than 0.333...
+    step.label = name                  # show 1/3 rather than 0.333...
 fig
 ```
 
@@ -1566,38 +2295,133 @@ $$\bar{A} = \frac{y^*}{\bar{k}^{1/3}}$$
 This is **total factor productivity (TFP)**. It is already in our data as the column `tfp`. A lower TFP shifts
 the whole production function down.
 
+First the numbers of the figure. `tfp_comparison` reads a country's capital, income and implied TFP in
+2023, and computes the income it would have with U.S. TFP.
+
 ```{python}
-def compare_with_us(country="China"):
-    """Fig. 4.6: the U.S. production function (A = 1) and another country's (its implied TFP), 2023."""
+def tfp_comparison(country):
+    """The numbers of Fig. 6 for one country in 2023, with U.S. = 1.
+
+    Equation (8): A-bar = y* / k^(1/3). With U.S. TFP (A-bar = 1), equation (7) gives
+    income k^(1/3).
+
+    Arguments
+        country : the country compared with the United States
+    Returns
+        A        : its implied TFP, A-bar
+        k, y     : its capital and income per person
+        y_us_tfp : the income it would have with U.S. TFP, k^(1/3)
+    """
+    # the country's row; `.iloc[0]` takes the first (only) row
     row = sample[sample.country == country].iloc[0]
     A, k, y = row.tfp, row.k_rel, row.y_rel
-    points = pd.DataFrame({"label": ["U.S.", f"{short(country)} with U.S. TFP", short(country)],
-                           "k": [1.0, k, k], "y": [1.0, k ** (1 / 3), y]})
-    fig = px.scatter(points, x="k", y="y", text="label", hover_name="label",
-                     labels={"k": "Capital per person, k (U.S. = 1)", "y": "Output per person, y (U.S. = 1)"})
-    fig.update_traces(marker=dict(color="black", size=12), textposition=["top center", "bottom right", "bottom right"])
-    grid = np.linspace(0, 2, 300)
-    fig.add_trace(go.Scatter(x=grid, y=grid ** (1 / 3), name="U.S. production function, A = 1",
-                             line=dict(color=BLUE, width=3)))
-    fig.add_trace(go.Scatter(x=grid, y=A * grid ** (1 / 3), name=f"{short(country)}'s production function, A = {A:.2f}",
-                             line=dict(color=TEAL, width=3)))
-    fig.update_layout(title=f"{short(country)}: {k ** (1 / 3):.0%} of U.S. income with U.S. TFP, {y:.0%} with its own (A = {A:.2f})",
-                      xaxis_range=[0, max(1.3, 1.2 * k)],
-                      yaxis=dict(range=[0, 1.6], tickvals=[0.25, 0.5, 0.75, 1.0, 1.25, 1.5]))   # no tick in the corner
+    # equation (7) with A-bar = 1
+    y_us_tfp = k ** (1 / 3)
+    return A, k, y, y_us_tfp
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 6, the two production functions
+def add_production_functions(fig, country, A):
+    """The U.S. production function (A = 1) and the country's (its TFP), Fig. 6.
+
+    Arguments
+        fig     : the figure to draw in
+        country : the country compared with the United States
+        A       : its implied TFP, A-bar
+    """
+    grid = np.linspace(0, 2, 300)              # capital per person, 0 to 2
+    # the U.S. curve, y = k^(1/3), in blue
+    fig.add_trace(
+        go.Scatter(
+            x=grid,
+            y=grid ** (1 / 3),
+            name="U.S. production function, A = 1",
+            line=dict(color=BLUE, width=3),
+        )
+    )
+    # the country's curve, y = A k^(1/3), in teal: lower by the factor A
+    fig.add_trace(
+        go.Scatter(
+            x=grid,
+            y=A * grid ** (1 / 3),
+            name=f"{short(country)}'s production function, A = {A:.2f}",
+            line=dict(color=TEAL, width=3),
+        )
+    )
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 6, the United States and another country
+def compare_with_us(country="China"):
+    """The U.S. production function (A = 1) and another country's, in 2023.
+
+    Draws Fig. 6 (adapted from Fig. 4.6 in Jones); the country's production function
+    uses its implied TFP.
+
+    Arguments
+        country : the country compared with the United States
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the numbers of the figure (tfp_comparison)
+    A, k, y, y_us_tfp = tfp_comparison(country)
+    # Step 2: three points: the U.S., the country with U.S. TFP, and the country
+    names = ["U.S.", f"{short(country)} with U.S. TFP", short(country)]
+    points = pd.DataFrame({"label": names, "k": [1.0, k, k], "y": [1.0, y_us_tfp, y]})
+    fig = px.scatter(
+        points,
+        x="k",
+        y="y",
+        text="label",
+        hover_name="label",
+        labels={
+            "k": "Capital per person, k (U.S. = 1)",
+            "y": "Output per person, y (U.S. = 1)",
+        },
+    )
+    fig.update_traces(
+        marker=dict(color="black", size=12),
+        textposition=["top center", "bottom right", "bottom right"],
+    )
+    # Step 3: the two production functions (add_production_functions)
+    add_production_functions(fig, country, A)
+    # Step 4: the title reports the country's income with U.S. TFP and with its own
+    fig.update_layout(
+        title=(
+            f"{short(country)}: {y_us_tfp:.0%} of U.S. income with U.S. TFP, "
+            f"{y:.0%} with its own (A = {A:.2f})"
+        ),
+        xaxis_range=[0, max(1.3, 1.2 * k)],
+        # no tick in the corner
+        yaxis=dict(range=[0, 1.6], tickvals=[0.25, 0.5, 0.75, 1.0, 1.25, 1.5]),
+    )
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(compare_with_us,
-         country=Dropdown(options=sorted(sample.country), value="China", description="country", style=WIDE));
+# Fig. 6 with a menu of the countries of the sample
+interact(
+    compare_with_us,
+    country=Dropdown(options=sorted(sample.country), value="China",
+                     description="country", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: Fig. 6 with a precomputed slider for the country compared with the United States
-slider_figure(compare_with_us, "country", ["China", "India", "Brazil", "Mexico", "Nigeria", "Japan"],
-              start="China", label="compared with")
+# @title Website version: Fig. 6 with a precomputed slider for the country
+# one picture of Fig. 6 per country compared with the United States
+slider_figure(
+    compare_with_us,
+    "country",
+    ["China", "India", "Brazil", "Mexico", "Nigeria", "Japan"],
+    start="China",
+    label="compared with",
+)
 ```
 
 **Sources.** Data: [Penn World Table 11.0](https://www.rug.nl/ggdc/productivity/pwt/), Groningen Growth and Development Centre ([DOI 10.34894/FABVLR](https://doi.org/10.34894/FABVLR)), variables `rgdpo` (real GDP), `pop` (population) and `csh_i` (investment share); cite as Feenstra, Inklaar and Timmer (2015), ["The Next Generation of the Penn World Table"](https://doi.org/10.1257/aer.20130954), *American Economic Review* 105(10). Capital per person is our own perpetual-inventory estimate from PWT investment, and TFP is computed from it.
@@ -1636,17 +2460,42 @@ means a lower $\bar{A}$. Check with `sample[sample.country == "India"]`.
 We plot implied TFP against income, both on ratio scales. Press the play button to move through the
 years. Capital per person in the earliest years depends heavily on a starting guess, so we begin in 1980.
 
-> **Python note.** `animation_frame="year"` draws one chart per year and adds a play button and a slider.
-> `range_x` and `range_y` fix the axes, so that the points move but the axes do not.
+First the data: the textbook's sample in six years, without Venezuela as in Fig. 5.
 
 ```{python}
+# The sample in six years, one picture each; `.isin([...])` keeps the rows whose
+# year is in the list. Then drop Venezuela, as in Fig. 5
 years = pwt[pwt.in_sample & pwt.year.isin([1980, 1990, 2000, 2010, 2019, 2023])]
 years = years[years.country != "Venezuela (Bolivarian Republic of)"]
-fig = px.scatter(years, x="y_rel", y="tfp", hover_name="country", animation_frame="year",
-                 log_x=True, log_y=True, range_x=[1 / 110, 2.5], range_y=[1 / 40, 2.5],
-                 labels={"y_rel": "Per capita GDP (U.S. = 1, ratio scale)",
-                         "tfp": "Implied TFP (U.S. = 1, ratio scale)", "year": "Year"},
-                 title="Rich countries have high TFP; in the poorest it is below 1/10 of the U.S. level")
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 7, implied TFP against income, year by year
+# Step 1: one point per country. `animation_frame="year"` draws one picture per
+# year and adds a play button and a slider; `range_x` and `range_y` fix the axes,
+# so that the points move but the axes do not
+fig = px.scatter(
+    years,
+    x="y_rel",
+    y="tfp",
+    hover_name="country",
+    animation_frame="year",
+    log_x=True,
+    log_y=True,
+    range_x=[1 / 110, 2.5],
+    range_y=[1 / 40, 2.5],
+    labels={
+        "y_rel": "Per capita GDP (U.S. = 1, ratio scale)",
+        "tfp": "Implied TFP (U.S. = 1, ratio scale)",
+        "year": "Year",
+    },
+    title=(
+        "Rich countries have high TFP; "
+        "in the poorest it is below 1/10 of the U.S. level"
+    ),
+)
+# Step 2: teal points, and the fraction ticks of Fig. 5 on both axes
 fig.update_traces(marker=dict(color=TEAL, size=9))
 fig.update_xaxes(tickvals=FRACTIONS, ticktext=FRACTION_NAMES)
 fig.update_yaxes(tickvals=FRACTIONS, ticktext=FRACTION_NAMES)
@@ -1671,13 +2520,16 @@ Chart: inspired by Fig. 4.7 in Jones (2024), [*Macroeconomics*, 6th ed.](https:/
 Per capita GDP equals $\bar{k}^{1/3}$ times implied TFP. The textbook's values for 2019 are in the last column.
 
 ```{python}
+# Table 4.4: income, the capital part k^(1/3) and implied TFP (equation 8) in 2019,
+# next to the textbook's TFP
 table_4_4 = pd.DataFrame({
     "observed y": y2019.y_rel,
     "k^(1/3)": y2019.k_rel ** (1 / 3),
     "implied TFP": y2019.tfp,
-    "textbook: implied TFP": [1.000, 1.054, 0.654, 0.703, 0.721, 0.792, 0.402, 0.347, 0.365, 0.247, 0.074],
+    "textbook: implied TFP": [1.000, 1.054, 0.654, 0.703, 0.721, 0.792,
+                              0.402, 0.347, 0.365, 0.247, 0.074],
 })
-table_4_4.round(3)
+table_4_4.round(3)                 # rounded to three decimals
 ```
 
 #### Key numbers: capital or TFP?
@@ -1690,11 +2542,15 @@ The textbook compares the five richest and the five poorest countries in 2019: i
 of 75, capital explains a factor of about 5 and TFP a factor of about 15. We redo the calculation for 2023.
 
 ```{python}
+# Rich and poor in 2023: how much of the income gap do capital and TFP explain?
+# Step 1: the five poorest and the five richest countries of the sample
 ranked = sample.sort_values("y_rel")
 poorest, richest = ranked.head(5), ranked.tail(5)
+# Step 2: equation (9): the income ratio is the TFP ratio times (k ratio)^(1/3)
 income_ratio = richest.y_rel.mean() / poorest.y_rel.mean()
 capital_factor = (richest.k_rel.mean() / poorest.k_rel.mean()) ** (1 / 3)
-tfp_factor = income_ratio / capital_factor                     # whatever capital does not explain
+tfp_factor = income_ratio / capital_factor          # whatever capital does not explain
+# Step 3: show them. `", ".join(...)` glues a list of names into one line of text
 print("Five richest:", ", ".join(richest.country))
 print("Five poorest:", ", ".join(poorest.country))
 print(f"Income ratio, rich / poor:   {income_ratio:.0f}")
@@ -1710,16 +2566,22 @@ We can do the same for Burundi and the United States. With capital differences o
 would be $\bar{k}^{1/3}$ of the U.S. level. With TFP differences only, it would be its TFP.
 
 ```{python}
+# Burundi against the United States: capital differences only, or TFP only
+# Step 1: Burundi's row; `.iloc[0]` takes the first (only) row
 burundi = sample[sample.country == "Burundi"].iloc[0]
+# Step 2: its income with only capital differences, k^(1/3), and with only TFP
 capital_only, tfp_only = burundi.k_rel ** (1 / 3), burundi.tfp
+# Step 3: print them as fractions of U.S. income
 print(f"Actual income relative to the U.S.: 1/{1 / burundi.y_rel:.0f}")
 print(f"With capital differences only:      1/{1 / capital_only:.1f}")
 print(f"With TFP differences only:          1/{1 / tfp_only:.1f}")
-print(f"Share of the (log) gap due to capital: {np.log(capital_only) / np.log(burundi.y_rel):.0%}")
+# Because y = A k^(1/3), log y is the sum log A + log k^(1/3): the logs split the
+# gap into shares (`np.log` is the natural logarithm)
+print(
+    "Share of the (log) gap due to capital: "
+    f"{np.log(capital_only) / np.log(burundi.y_rel):.0%}"
+)
 ```
-
-> **Python note.** `np.log` is the natural logarithm. Because $y = \bar{A}\bar{k}^{1/3}$, the logarithm of $y$
-> is the sum of two parts, $\log \bar{A} + \log \bar{k}^{1/3}$, which lets us split the gap into shares.
 
 **Your turn.** Repeat the rich–poor calculation with the *ten* richest and *ten* poorest countries. Does
 the split between capital and TFP change much?
@@ -1759,35 +2621,91 @@ Two large economies changed their institutions after 1990 in very different ways
 Russia reformed quickly, a "big bang" that swept away the old institutions at once. China reformed
 gradually. The figure shows what happened to income per person.
 
-> **Python note.** A `SelectMultiple` widget is a list from which you can pick several entries:
-> hold Ctrl (or Cmd on a Mac) while clicking. It gives back a tuple of the chosen countries, in the order of
-> the list. The loop computes each country's average growth from its first to its last year, and
-> `", ".join(parts[:2])` glues the first two results into the title.
+First the economics. `income_growth` picks the chosen countries since 1990 and computes the average growth
+of GDP per person a year of each.
 
 ```{python}
-RATIO_TICKS = [100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000, 100000, 200000]
+def income_growth(countries):
+    """GDP per person since 1990, and its average growth a year (Fig. 8).
 
+    Average annual growth, in percent:  100 ((last / first)^(1 / years) - 1)
 
-def income_paths(countries=("China", "Russian Federation"), scale="linear"):
-    """Fig. 4.9: GDP per person since 1990 for the chosen countries (2021 dollars)."""
-    chosen = pwt[pwt.country.isin(countries) & (pwt.year >= 1990)].dropna(subset=["gdp_pc"])
-    fig = px.line(chosen, x="year", y="gdp_pc", color="country", log_y=(scale == "ratio"),
-                  color_discrete_map=COLORS, category_orders={"country": list(countries)},
-                  labels={"gdp_pc": "Per capita GDP (2021 dollars)", "year": "Year", "country": "Country"})
-    fig.update_traces(line_width=3)
-    parts, missing = [], []
+    Arguments
+        countries : the chosen countries
+    Returns
+        chosen  : their rows of `pwt` since 1990 that have GDP per person
+        growth  : {country: average growth a year in percent, rounded to 0.1}
+        missing : the short names of the countries with no data since 1990
+    """
+    # Step 1: the rows since 1990; `.dropna(subset=["gdp_pc"])` drops the rows
+    # without GDP per person
+    chosen = pwt[pwt.country.isin(countries) & (pwt.year >= 1990)]
+    chosen = chosen.dropna(subset=["gdp_pc"])
+    # Step 2: each country's growth from its first to its last year
+    growth, missing = {}, []
     for name in countries:
         one = chosen[chosen.country == name]
         if len(one) > 1:
             years = one.year.iloc[-1] - one.year.iloc[0]
-            growth = round(100 * ((one.gdp_pc.iloc[-1] / one.gdp_pc.iloc[0]) ** (1 / years) - 1), 1) + 0.0
-            parts.append(f"{short(name)} {growth:+.1f}%")
+            factor = one.gdp_pc.iloc[-1] / one.gdp_pc.iloc[0]
+            # rounded to 0.1; + 0.0 avoids "-0.0"
+            growth[name] = round(100 * (factor ** (1 / years) - 1), 1) + 0.0
         else:
             missing.append(short(name))
-    title = "Growth of GDP per person a year since 1990: " + ", ".join(parts[:2])   # the first two countries
+    return chosen, growth, missing
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 8, GDP per person since 1990
+# the ticks of the ratio scale
+RATIO_TICKS = [100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000, 100000, 200000]
+
+
+def income_paths(countries=("China", "Russian Federation"), scale="linear"):
+    """GDP per person since 1990 for the chosen countries, in 2021 dollars.
+
+    Draws Fig. 8 (inspired by Fig. 4.9 in Jones).
+
+    Arguments
+        countries : the countries drawn, in this order
+        scale     : "linear" or "ratio", the vertical scale
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the data and the growth rates (income_growth)
+    chosen, growth, missing = income_growth(countries)
+    # Step 2: one line per country, each in its color of COLORS, in the chosen order
+    fig = px.line(
+        chosen,
+        x="year",
+        y="gdp_pc",
+        color="country",
+        log_y=(scale == "ratio"),
+        color_discrete_map=COLORS,
+        category_orders={"country": list(countries)},
+        labels={
+            "gdp_pc": "Per capita GDP (2021 dollars)",
+            "year": "Year",
+            "country": "Country",
+        },
+    )
+    fig.update_traces(line_width=3)
+    # Step 3: the title reports the growth of the first two countries;
+    # `parts[:2]` keeps the first two items of the list
+    parts = []
+    for name in growth:
+        parts.append(f"{short(name)} {growth[name]:+.1f}%")
+    title = "Growth of GDP per person a year since 1990: " + ", ".join(parts[:2])
     if missing or not parts:
-        title = f"No data since 1990 for {', '.join(missing) or 'the chosen countries'}"
-    fig.update_layout(title=title, xaxis=dict(range=[1990, 2023], tickvals=[1995, 2000, 2005, 2010, 2015, 2020]))
+        title = (
+            "No data since 1990 for "
+            f"{', '.join(missing) or 'the chosen countries'}"
+        )
+    fig.update_layout(
+        title=title,
+        xaxis=dict(range=[1990, 2023], tickvals=[1995, 2000, 2005, 2010, 2015, 2020]),
+    )
     if scale == "ratio":
         fig.update_yaxes(tickvals=RATIO_TICKS)
     return fig
@@ -1795,23 +2713,66 @@ def income_paths(countries=("China", "Russian Federation"), scale="linear"):
 
 ```{python}
 #| kind: widget
-interact(income_paths,
-         countries=SelectMultiple(options=sorted(pwt.country.unique()), value=("China", "Russian Federation"),
-                                  rows=8, description="countries", style=WIDE),
-         scale=ToggleButtons(options=["linear", "ratio"], description="vertical scale"));
+# Fig. 8 with a list of countries and buttons for the vertical scale
+interact(
+    income_paths,
+    countries=SelectMultiple(options=sorted(pwt.country.unique()),
+                             value=("China", "Russian Federation"),
+                             rows=8, description="countries", style=WIDE),
+    scale=ToggleButtons(options=["linear", "ratio"],
+                        description="vertical scale"),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: Fig. 8 with every country (region menu and legend) and scale buttons
-fig = income_paths(countries=("China", "Russian Federation") + tuple(sorted(set(pwt.country) - {"China", "Russian Federation"})))
-fig.update_layout(title=income_paths().layout.title.text)           # the title of the textbook view
-fig.update_layout(updatemenus=[dict(type="buttons", direction="right", x=0.01, y=0.98, xanchor="left", yanchor="top", buttons=[
-    dict(label="linear scale", method="relayout", args=[{"yaxis.type": "linear", "yaxis.autorange": True,
-                                                         "yaxis.tickvals": None}]),
-    dict(label="ratio scale", method="relayout", args=[{"yaxis.type": "log", "yaxis.autorange": True,
-                                                        "yaxis.tickvals": RATIO_TICKS}])])])
-country_menu(fig, ["China", "Russian Federation"], regions.set_index("country").region)
+# @title Website version: Fig. 8 with every country, region menu and scale buttons
+# Step 1: China and Russia first, then every other country, A to Z.
+# `set(a) - {...}` drops the two from the set of all countries
+fig = income_paths(
+    countries=("China", "Russian Federation")
+    + tuple(sorted(set(pwt.country) - {"China", "Russian Federation"}))
+)
+fig.update_layout(title=income_paths().layout.title.text)   # the textbook view's title
+# Step 2: two buttons switch the vertical axis between a linear and a ratio scale
+fig.update_layout(
+    updatemenus=[
+        dict(
+            type="buttons",
+            direction="right",
+            x=0.01,
+            y=0.98,
+            xanchor="left",
+            yanchor="top",
+            buttons=[
+                dict(
+                    label="linear scale",
+                    method="relayout",
+                    args=[{
+                        "yaxis.type": "linear",
+                        "yaxis.autorange": True,
+                        "yaxis.tickvals": None,
+                    }],
+                ),
+                dict(
+                    label="ratio scale",
+                    method="relayout",
+                    args=[{
+                        "yaxis.type": "log",
+                        "yaxis.autorange": True,
+                        "yaxis.tickvals": RATIO_TICKS,
+                    }],
+                ),
+            ],
+        )
+    ]
+)
+# Step 3: the region menu: China and Russia are drawn, the others a click away
+country_menu(
+    fig,
+    ["China", "Russian Federation"],
+    regions.set_index("country").region,
+)
 ```
 
 **Sources.** Data: [Penn World Table 11.0](https://www.rug.nl/ggdc/productivity/pwt/), Groningen Growth and Development Centre ([DOI 10.34894/FABVLR](https://doi.org/10.34894/FABVLR)), variables `rgdpo` (real GDP), `pop` (population) and `csh_i` (investment share); cite as Feenstra, Inklaar and Timmer (2015), ["The Next Generation of the Penn World Table"](https://doi.org/10.1257/aer.20130954), *American Economic Review* 105(10). GDP per person is `rgdpo` / `pop`, in 2021 dollars. Regions for the website menu: [World Bank country and lending groups](https://datahelpdesk.worldbank.org/knowledgebase/articles/906519-world-bank-country-and-lending-groups).
@@ -1831,14 +2792,26 @@ Chart: inspired by Fig. 4.9 in Jones (2024), [*Macroeconomics*, 6th ed.](https:/
 #### Key numbers: Russia and China
 
 ```{python}
+# Key numbers for Russia and China. `.set_index("year").gdp_pc` gives GDP per
+# person with the years as labels, so that russia[1990] is its value in 1990
 russia = pwt[pwt.country == "Russian Federation"].set_index("year").gdp_pc
 china = pwt[pwt.country == "China"].set_index("year").gdp_pc
+# the first year after 1990 in which Russia's income is above its 1990 level
 recovered = russia[(russia.index > 1990) & (russia > russia[1990])].index[0]
-print(f"Russia, 1990: {russia[1990]:,.0f} dollars; lowest point {russia.min():,.0f} in {russia.idxmin()}")
+# ":,.0f" writes a number with a comma for thousands and no decimals, and
+# `.idxmin()` gives the label (here the year) of the lowest value
+print(
+    f"Russia, 1990: {russia[1990]:,.0f} dollars; "
+    f"lowest point {russia.min():,.0f} in {russia.idxmin()}"
+)
 print(f"Russia's fall from 1990 to 1999: {1 - russia[1999] / russia[1990]:.0%}")
 print(f"First year above the 1990 level: {recovered}")
 print(f"China, 1990 and 2019: {china[1990]:,.0f} and {china[2019]:,.0f} dollars")
-print(f"China's average growth, 1990-2019: {100 * ((china[2019] / china[1990]) ** (1 / 29) - 1):.1f}% a year")
+# average annual growth over the 29 years from 1990 to 2019
+print(
+    "China's average growth, 1990-2019: "
+    f"{100 * ((china[2019] / china[1990]) ** (1 / 29) - 1):.1f}% a year"
+)
 ```
 
 The textbook says Russia's income fell by 40 percent, but its own data show a fall of about 48 percent

@@ -730,6 +730,9 @@ The figure shows GDP per person over the last 2,000 years for six countries, mea
 section you can add any of the 169 countries of the Maddison Project.
 
 ```{python}
+# Load the data of Fig. 1: GDP per person in six countries, as a multiple of 500
+# dollars. `pd.read_csv` reads a data file into a table (a DataFrame), and
+# `.tail()` shows its last five rows
 longrun = pd.read_csv(DATA_URL + "fig3-1.csv")
 longrun.tail()
 ```
@@ -737,15 +740,23 @@ longrun.tail()
 The table is **wide**: one column per country. Plotly Express prefers **long** tables, with one row per
 country and year.
 
-> **Python note.** `.melt(id_vars="year")` turns the country columns into rows: the old column names go
-> into a new column (`var_name`) and the numbers into another (`value_name`). `.map(NAMES)` then replaces
-> each column name with a readable country name, using the dictionary `NAMES`. `.dropna()` removes the
-> few years without an estimate, so that the lines join their neighbors.
-
 ```{python}
-NAMES = {"gdppc_x500_usa": "United States", "gdppc_x500_jpn": "Japan", "gdppc_x500_gbr": "United Kingdom",
-         "gdppc_x500_arg": "Argentina", "gdppc_x500_chn": "China", "gdppc_x500_gha": "Ghana"}
+# From the wide table to a long one, with a readable country name in every row.
+# The dictionary NAMES gives the country of each column of the file
+NAMES = {
+    "gdppc_x500_usa": "United States",
+    "gdppc_x500_jpn": "Japan",
+    "gdppc_x500_gbr": "United Kingdom",
+    "gdppc_x500_arg": "Argentina",
+    "gdppc_x500_chn": "China",
+    "gdppc_x500_gha": "Ghana",
+}
+# Step 1: `.melt(id_vars="year")` turns the country columns into rows: the old
+# column names go into a new column (`var_name`) and the numbers into another
+# (`value_name`). `.dropna()` removes the few years without an estimate, so that
+# the lines join their neighbors
 longrun = longrun.melt(id_vars="year", var_name="series", value_name="gdp").dropna()
+# Step 2: `.map(NAMES)` replaces each column name with its country, using NAMES
 longrun["country"] = longrun.series.map(NAMES)
 longrun.head()
 ```
@@ -755,15 +766,18 @@ a second file with every country at the same benchmark years, and keep the count
 already in `longrun`. For the six textbook countries we keep `longrun`, which also uses Maddison's older
 estimates for the earliest years (the textbook's data).
 
-> **Python note.** `~` means "not", so `~table.country.isin(names)` keeps the rows whose country is *not*
-> in `names`. `pd.concat([a, b])` stacks two tables on top of each other; columns that exist in only one of
-> them are filled with `NaN` (missing). `.rename(columns={old: new})` renames a column so the two tables match.
-
 ```{python}
+# Every other country of the Maddison Project, at the same benchmark years
 world_longrun = pd.read_csv(DATA_URL + "maddison_longrun.csv")
+# Step 1: `~` means "not", so `~world_longrun.country.isin(longrun.country)` keeps
+# the rows whose country is not among the names already in `longrun`
 others = world_longrun[~world_longrun.country.isin(longrun.country)]
+# Step 2: `pd.concat([a, b])` stacks two tables on top of each other; columns that
+# exist in only one of them are filled with `NaN` (missing).
+# `.rename(columns={old: new})` renames a column so that the two tables match
 everyone = pd.concat([longrun, others.rename(columns={"gdppc_x500": "gdp"})])
 print(everyone.country.nunique(), "countries")
+# the first countries with an estimate for the year 1
 others[others.year == 1].head()
 ```
 
@@ -775,45 +789,59 @@ add others. On the website, a menu shows the textbook's countries together with 
 countries of each region need colors that differ from each other. The function `group_colors` hands them out.
 
 ```{python}
-LIGHT = {"#F7E1A0", "#E2E2E2", "#FBE426", "#16FF32", "#1CFFCE", "#2ED9FF"}      # too pale on white
-PALETTE = []                                                                   # 44 colors
+#| kind: drawing
+# @title Drawing code: Fig. 1, the palette of country colors
+# too pale on white
+LIGHT = {"#F7E1A0", "#E2E2E2", "#FBE426", "#16FF32", "#1CFFCE", "#2ED9FF"}
+# 44 colors from two of Plotly's palettes
+PALETTE = []
 for c in px.colors.qualitative.Dark24 + px.colors.qualitative.Alphabet:
     if c not in LIGHT and c != "#2E91E5":
         PALETTE.append(c)
-PALETTE.append("#2E91E5")                       # too close to the book's U.S. blue: used last
+PALETTE.append("#2E91E5")              # too close to the book's U.S. blue: used last
 ```
 
-> **Python note.** `group_colors` gives the countries their colors one at a time. For each country, the list
-> `used` collects the colors already given to the countries shown together with it, and the country takes the
-> first palette color that is not in `used`, preferring one that no country has yet. If every color is taken, it
-> takes the one that `used` counts least often (`.count`), searching from the end of the palette (`reversed`).
-> `dict(fixed or {})` starts from a copy of the fixed colors (or an empty dictionary), and `continue` skips to
-> the next country.
-
 ```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 1, a color for every country
 def group_colors(names, groups, fixed=None):
-    """Give each country a color that no other country in its groups uses, as far as the palette allows.
+    """Give each country a color that no other country in its groups uses.
 
-    groups: the lists of countries shown together (menu views); fixed: {country: color} for the book's countries."""
+    As far as the palette allows: when every color is taken, the country gets the one
+    that its groups use least.
+
+    Arguments
+        names  : the countries to color, one at a time
+        groups : the lists of countries shown together (the website's menu views)
+        fixed  : {country: color} for the book's countries, or None
+    Returns
+        a dictionary {country: color}
+    """
+    # start from a copy of the fixed colors (or an empty dictionary)
     colors = dict(fixed or {})
     for name in names:
         if name in colors:
-            continue
-        used = []                                       # the colors of the countries shown with `name`
+            continue                    # `continue` skips to the next country
+        # Step 1: the list `used` collects the colors of the countries shown with it
+        used = []
         for group in groups:
             for other in group:
                 if name in group and other in colors:
                     used.append(colors[other])
+        # Step 2: the palette colors not in `used`; best of all, one no country has yet
         free, unused = [], []
         for c in PALETTE:
             if c not in used:
                 free.append(c)
                 if c not in colors.values():
-                    unused.append(c)                    # no country has this color yet: the best choice
+                    unused.append(c)
+        # Step 3: no free color: the one `used` counts least often (`.count`),
+        # searching from the end of the palette (`reversed`)
         least = PALETTE[-1]
-        for c in reversed(PALETTE):                     # no free color: the one used least, from the end
+        for c in reversed(PALETTE):
             if used.count(c) < used.count(least):
                 least = c
+        # the first of: an unused color, a free one, the least used one
         colors[name] = (unused + free + [least])[0]
     return colors
 ```
@@ -821,61 +849,159 @@ def group_colors(names, groups, fixed=None):
 The eight countries of the textbook's figures get fixed colors of our palette. Each group lists the countries
 that one region view shows together: the eight, plus the countries of that region.
 
-> **Python note.** `.groupby("country").region.first()` gives each country's region, taken from its first row.
-> `region_of[region_of == region].index` lists the countries of one region.
-
 ```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 1, the region groups and the colors
+# the textbook's six countries of Fig. 1, and the eight of all its figures
 BOOK_SIX = ["United States", "Japan", "United Kingdom", "Argentina", "China", "Ghana"]
-FIRST = BOOK_SIX + ["South Africa", "India"]                  # the countries of the textbook's figures
-BOOK_COLORS = {"United States": BLUE, "Japan": TEAL, "United Kingdom": GREEN, "Argentina": "#5aa0d8",
-               "China": "#0b4f47", "Ghana": "#e0a33b", "South Africa": "#b04a5a", "India": "#6c5b9e"}
+FIRST = BOOK_SIX + ["South Africa", "India"]
+# the eight get fixed colors of our palette
+BOOK_COLORS = {
+    "United States": BLUE,
+    "Japan": TEAL,
+    "United Kingdom": GREEN,
+    "Argentina": "#5aa0d8",
+    "China": "#0b4f47",
+    "Ghana": "#e0a33b",
+    "South Africa": "#b04a5a",
+    "India": "#6c5b9e",
+}
+# each country's region: `.groupby("country")` takes one country at a time, and
+# `.region.first()` gives its region, taken from its first row
 region_of = world_longrun.groupby("country").region.first()
-REGION_GROUPS = []                                            # one group per region view
+# one group per region view: the eight, plus the countries of the region.
+# `region_of[region_of == region].index` lists the countries of one region
+REGION_GROUPS = []
 for region in sorted(region_of.unique()):
     REGION_GROUPS.append(FIRST + list(region_of[region_of == region].index))
 COLORS = group_colors(sorted(region_of.index), REGION_GROUPS, BOOK_COLORS)
 ```
 
 The title of the chart reports how many times GDP per person grew in one of the chosen countries: the
-United Kingdom when it is chosen, otherwise the first country in your list. The function `short` turns a long
-official name into the usual short one, so that titles stay on one line.
-
-> **Python note.** `px.line` draws one line per value of `color=`; `markers=True` adds a dot for each
-> estimate, and `log_y=True` gives a ratio scale (Fig. 4 explains it). `color_discrete_map=COLORS` gives each
-> country its own color. `interact` calls the function and draws the figure again every time you change a
-> control: a `Dropdown` is a menu of choices, `ToggleButtons` is a row of buttons, and a `SelectMultiple` is a
-> list from which you pick several countries by holding Ctrl (Cmd on a Mac) while clicking. The `;` at the end
-> only hides an extra line of text. In `short`, `name.split(" (")[0]` cuts the text at " (" and keeps the
-> first piece, and `SHORT_NAMES.get(name, name)` looks the name up in the dictionary, returning it unchanged
-> when it is not there. `a if condition else b` gives `a` when the condition is true and `b` otherwise.
+United Kingdom when it is chosen, otherwise the first country in your list. `long_run_growth` picks the rows
+to draw and computes that growth factor.
 
 ```{python}
-SHORT_NAMES = {"Republic of Korea": "South Korea", "D.R. of the Congo": "DR Congo", "Russian Federation": "Russia",
-               "Taiwan, Province of China": "Taiwan", "China, Hong Kong SAR": "Hong Kong", "U.R. of Tanzania": "Tanzania",
-               "Lao People's DR": "Laos", "Republic of Moldova": "Moldova", "Syrian Arab Republic": "Syria"}
+def long_run_growth(start, countries):
+    """The data of Fig. 1, and how many times GDP per person grew in one country.
+
+    The growth factor:  y_last / y_first, GDP per person in the last year with an
+    estimate over GDP per person in the first one
+
+    Arguments
+        start     : the first year to show
+        countries : the countries to show
+    Returns
+        chosen : the rows of `everyone` for those countries, from `start` on
+        name   : the country of the title: the U.K. when it is chosen, otherwise
+                 the first country (None when there are no data)
+        one    : the rows of that country
+        factor : its growth factor, y_last / y_first
+    """
+    # Step 1: the rows of the chosen countries from the year `start` on. `&` means
+    # "and", and `.isin(countries)` keeps the rows whose country is in the list
+    chosen = everyone[(everyone.year >= start) & everyone.country.isin(countries)]
+    if chosen.empty:
+        return chosen, None, None, None          # no data: nothing to compare
+    # Step 2: the country of the title. `a if condition else b` gives a when the
+    # condition is true and b otherwise
+    name = (
+        "United Kingdom"
+        if "United Kingdom" in set(chosen.country)
+        else chosen.country.iloc[0]
+    )
+    # Step 3: its growth factor: the last estimate over the first one
+    one = chosen[chosen.country == name]
+    factor = one.gdp.iloc[-1] / one.gdp.iloc[0]
+    return chosen, name, one, factor
+```
+
+The function `short` turns a long official name into the usual short one, so that titles stay on one line.
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 1, short country names for the title
+SHORT_NAMES = {
+    "Republic of Korea": "South Korea",
+    "D.R. of the Congo": "DR Congo",
+    "Russian Federation": "Russia",
+    "Taiwan, Province of China": "Taiwan",
+    "China, Hong Kong SAR": "Hong Kong",
+    "U.R. of Tanzania": "Tanzania",
+    "Lao People's DR": "Laos",
+    "Republic of Moldova": "Moldova",
+    "Syrian Arab Republic": "Syria",
+}
 
 
 def short(name):
-    """A short country name for titles, e.g. 'Bolivia (Plurinational State of)' -> 'Bolivia'."""
-    name = name.split(" (")[0].split(":")[0]                      # drop '(...)' and ': Mainland'
+    """A short country name for titles.
+
+    For example 'Bolivia (Plurinational State of)' -> 'Bolivia'.
+
+    Arguments
+        name : the country's name in the data
+    Returns
+        the short name
+    """
+    # `name.split(" (")[0]` cuts the text at " (" and keeps the first piece:
+    # this drops '(...)' and ': Mainland'
+    name = name.split(" (")[0].split(":")[0]
+    # `SHORT_NAMES.get(name, name)` looks the name up in the dictionary, and
+    # returns it unchanged when it is not there
     return SHORT_NAMES.get(name, name)
+```
 
-
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 1, economic growth over the very long run
 def very_long_run(start=1, scale="linear", countries=tuple(BOOK_SIX)):
-    """Fig. 3.1: GDP per person (multiples of $500) from the year `start` to 2022."""
-    chosen = everyone[(everyone.year >= start) & everyone.country.isin(countries)]
-    fig = px.line(chosen, x="year", y="gdp", color="country", markers=True, log_y=(scale == "ratio"),
-                  color_discrete_map=COLORS, category_orders={"country": list(countries)},
-                  labels={"year": "Year", "gdp": "GDP per person (multiple of 500 dollars)", "country": "Country"})
+    """GDP per person over the very long run, one line per country.
+
+    Draws Fig. 1 (inspired by Fig. 3.1 in Jones): GDP per person in multiples of
+    500 dollars, from the year `start` to 2022.
+
+    Arguments
+        start     : the first year
+        scale     : "linear" or "ratio", the vertical scale
+        countries : the countries to draw
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the data and the growth factor of the title (long_run_growth)
+    chosen, name, one, factor = long_run_growth(start, countries)
+
+    # Step 2: `px.line` draws one line per value of `color=`, here one per country
+    fig = px.line(
+        chosen,
+        x="year",
+        y="gdp",
+        color="country",
+        markers=True,                    # `markers=True`: a dot for each estimate
+        log_y=(scale == "ratio"),        # `log_y=True` gives a ratio scale (Fig. 4)
+        color_discrete_map=COLORS,       # `color_discrete_map`: one color per country
+        category_orders={"country": list(countries)},
+        labels={
+            "year": "Year",
+            "gdp": "GDP per person (multiple of 500 dollars)",
+            "country": "Country",
+        },
+    )
     if chosen.empty:
-        fig.update_layout(title=f"No data for the chosen countries since the year {start}")
+        fig.update_layout(
+            title=f"No data for the chosen countries since the year {start}"
+        )
         return fig
-    name = "United Kingdom" if "United Kingdom" in set(chosen.country) else chosen.country.iloc[0]
-    one = chosen[chosen.country == name]
-    factor = one.gdp.iloc[-1] / one.gdp.iloc[0]
+
+    # Step 3: the title reports the growth factor of one country
     label = "U.K." if name == "United Kingdom" else short(name)
-    fig.update_layout(title=f"{label} GDP per person in {one.year.iloc[-1]} was {factor:.0f} times "
-                            f"its level in the year {one.year.iloc[0]}")
+    fig.update_layout(
+        title=(
+            f"{label} GDP per person in {one.year.iloc[-1]} was {factor:.0f} times "
+            f"its level in the year {one.year.iloc[0]}"
+        )
+    )
+    # Step 4: on the ratio scale, tick values that are easy to read
     if scale == "ratio":
         fig.update_yaxes(tickvals=[1, 2, 5, 10, 20, 50, 100, 200, 500])
     return fig
@@ -883,24 +1009,60 @@ def very_long_run(start=1, scale="linear", countries=tuple(BOOK_SIX)):
 
 ```{python}
 #| kind: widget
-interact(very_long_run,
-         start=Dropdown(options=[1, 1500, 1700, 1820, 1900, 1950], value=1, description="first year", style=WIDE),
-         scale=ToggleButtons(options=["linear", "ratio"], description="vertical scale"),
-         countries=SelectMultiple(options=sorted(set(everyone.country)), value=tuple(BOOK_SIX), rows=8,
-                                  description="countries", style=WIDE));
+# Fig. 1 with menus. `interact` calls very_long_run and draws the figure again
+# every time you change a control: a `Dropdown` is a menu of choices,
+# `ToggleButtons` is a row of buttons, and a `SelectMultiple` is a list from which
+# you pick several countries by holding Ctrl (Cmd on a Mac) while clicking. The
+# `;` at the end only hides an extra line of text.
+interact(
+    very_long_run,
+    start=Dropdown(options=[1, 1500, 1700, 1820, 1900, 1950], value=1,
+                   description="first year", style=WIDE),
+    scale=ToggleButtons(options=["linear", "ratio"],
+                        description="vertical scale"),
+    countries=SelectMultiple(options=sorted(set(everyone.country)),
+                             value=tuple(BOOK_SIX), rows=8,
+                             description="countries", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: Fig. 1 with every country (region menu and legend), scale buttons and a range slider
+# @title Website version: Fig. 1 with every country, scale buttons and a range slider
+# Step 1: every country of the Maddison Project, the textbook's six first
 fig = very_long_run(countries=tuple(BOOK_SIX) + tuple(sorted(set(others.country))))
-fig.update_layout(title=very_long_run().layout.title.text)       # the title of the textbook view
+# the title of the textbook view
+fig.update_layout(title=very_long_run().layout.title.text)
+# Step 2: a small chart under the axis, to zoom in on a period (a range slider)
 fig.update_xaxes(rangeslider_visible=True)
-fig.update_layout(updatemenus=[dict(type="buttons", direction="right", x=0.01, y=0.98, xanchor="left", yanchor="top", buttons=[
-    dict(label="linear scale", method="relayout", args=[{"yaxis.type": "linear", "yaxis.autorange": True,
-                                                         "yaxis.tickvals": None}]),
-    dict(label="ratio scale", method="relayout", args=[{"yaxis.type": "log", "yaxis.autorange": True,
-                                                        "yaxis.tickvals": [1, 2, 5, 10, 20, 50, 100, 200, 500]}])])])
+# Step 3: two buttons switch the vertical axis between a linear and a ratio scale
+fig.update_layout(
+    updatemenus=[
+        dict(
+            type="buttons",
+            direction="right",
+            x=0.01,
+            y=0.98,
+            xanchor="left",
+            yanchor="top",
+            buttons=[
+                dict(
+                    label="linear scale",
+                    method="relayout",
+                    args=[{"yaxis.type": "linear", "yaxis.autorange": True,
+                           "yaxis.tickvals": None}],
+                ),
+                dict(
+                    label="ratio scale",
+                    method="relayout",
+                    args=[{"yaxis.type": "log", "yaxis.autorange": True,
+                           "yaxis.tickvals": [1, 2, 5, 10, 20, 50, 100, 200, 500]}],
+                ),
+            ],
+        )
+    ]
+)
+# Step 4: the region menu; the textbook's six are drawn, the others a click away
 country_menu(fig, BOOK_SIX, world_longrun.groupby("country").region.first())
 ```
 
@@ -932,6 +1094,8 @@ Chart: inspired by Fig. 3.1 in Jones (2024), [*Macroeconomics*, 6th ed.](https:/
 #### Key numbers: the Great Divergence
 
 ```{python}
+# GDP per person in 2022 relative to the United States. `.set_index("country")`
+# uses the countries as row labels, so that `latest["United States"]` is one value
 latest = longrun[longrun.year == 2022].set_index("country").gdp
 print((latest / latest["United States"]).round(2))
 ```
@@ -965,6 +1129,8 @@ accounts of the Bureau of Economic Analysis (BEA) from 1929 to 2025, joined to M
 every available year from 1870 to 2022, in the same 2022 dollars.
 
 ```{python}
+# Load the data of Fig. 2: the official U.S. series, and the Maddison Project's
+# GDP per person and population of every country
 us = pd.read_csv(DATA_URL + "fig3-2.csv")
 world = pd.read_csv(DATA_URL + "maddison_world.csv")
 world.tail()
@@ -973,52 +1139,124 @@ world.tail()
 The function draws the U.S. alone from the official series, as the textbook does. As soon as you add a
 country, every line, the U.S. one included, comes from the Maddison Project, so that all countries are
 measured in the same way. The title then compares the richest and the poorest country you chose.
-
-> **Python note.** `tuple(countries) == ("United States",)` checks whether the U.S. is the only country
-> chosen. `.assign(country="United States")` adds a column with the same value in every row.
-> `.groupby("country").last()` keeps the last row of each country, here its latest year, and `.idxmax()`
-> gives the label of the largest value.
+`income_data` picks the rows and computes the number in the title.
 
 ```{python}
-def income_chart(countries=("United States",)):
-    """Fig. 3.2: GDP per person (2022 dollars); the U.S. alone uses the official series to 2025."""
+def income_data(countries):
+    """The data of Fig. 2, and the comparison its title reports.
+
+    One country: its growth factor, y_last / y_first. Several countries: the income
+    ratio of the richest to the poorest in their latest year, y_rich / y_poor.
+
+    Arguments
+        countries : the countries to show
+    Returns
+        chosen : their rows (the official series when the U.S. is alone)
+        latest : the last row of each country
+        factor : the growth factor or the income ratio (None when there are no data)
+    """
+    # Step 1: the U.S. alone uses the official series. `tuple(countries) ==
+    # ("United States",)` checks whether it is the only country chosen, and
+    # `.assign(country="United States")` adds a column with that name in every row
     if tuple(countries) == ("United States",):
         chosen = us.assign(country="United States")
     else:
         chosen = world[world.country.isin(countries)]
-    fig = px.line(chosen, x="year", y="gdppc", color="country", color_discrete_map=COLORS,
-                  labels={"year": "Year", "gdppc": "GDP per person (2022 dollars)", "country": "Country"})
-    fig.update_traces(line_width=3)
+    # Step 2: `.groupby("country").last()` keeps the last row of each country,
+    # here its latest year
     latest = chosen.groupby("country").last()
+    # Step 3: the number of the title
+    if chosen.empty:
+        factor = None                                    # no data
+    elif len(latest) == 1:
+        # one country: how many times its GDP per person grew
+        factor = chosen.iloc[-1].gdppc / chosen.iloc[0].gdppc
+    else:
+        # several: the richest over the poorest, in their latest year
+        factor = latest.gdppc.max() / latest.gdppc.min()
+    return chosen, latest, factor
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 2, per capita GDP
+def income_chart(countries=("United States",)):
+    """GDP per person (2022 dollars), one line per country.
+
+    Draws Fig. 2 (inspired by Fig. 3.2 in Jones). The U.S. alone uses the official
+    series to 2025; with other countries, every line comes from the Maddison Project.
+
+    Arguments
+        countries : the countries to draw
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the data and the number of the title (income_data)
+    chosen, latest, factor = income_data(countries)
+
+    # Step 2: one thick line per country, in its own color
+    fig = px.line(
+        chosen,
+        x="year",
+        y="gdppc",
+        color="country",
+        color_discrete_map=COLORS,
+        labels={
+            "year": "Year",
+            "gdppc": "GDP per person (2022 dollars)",
+            "country": "Country",
+        },
+    )
+    fig.update_traces(line_width=3)
+
+    # Step 3: the title: growth in one country, or the richest against the poorest
     if chosen.empty:
         fig.update_layout(title="Choose at least one country")
     elif len(latest) == 1:
         first, last = chosen.iloc[0], chosen.iloc[-1]
         label = "U.S." if first.country == "United States" else short(first.country)
-        fig.update_layout(title=f"{label} GDP per person grew about {last.gdppc / first.gdppc:.0f}-fold "
-                                f"from {first.year} to {last.year}")
+        fig.update_layout(
+            title=(
+                f"{label} GDP per person grew about {factor:.0f}-fold "
+                f"from {first.year} to {last.year}"
+            )
+        )
     else:
+        # `.idxmax()` gives the label of the largest value: the richest country
         rich, poor = latest.gdppc.idxmax(), latest.gdppc.idxmin()
-        fig.update_layout(title=f"{latest.year.max()}: GDP per person {latest.gdppc.max() / latest.gdppc.min():.0f} "
-                                f"times higher in {short(rich)} than in {short(poor)}")
+        fig.update_layout(
+            title=(
+                f"{latest.year.max()}: GDP per person {factor:.0f} "
+                f"times higher in {short(rich)} than in {short(poor)}"
+            )
+        )
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(income_chart,
-         countries=SelectMultiple(options=sorted(world.country.unique()), value=("United States",), rows=8,
-                                  description="countries", style=WIDE));
+# Fig. 2 with a list of countries. `.unique()` keeps each name once, and
+# `sorted(...)` puts them A to Z
+interact(
+    income_chart,
+    countries=SelectMultiple(options=sorted(world.country.unique()),
+                             value=("United States",), rows=8,
+                             description="countries", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: Fig. 2 with every country of the Maddison Project (region menu and legend)
+# @title Website version: Fig. 2 with every country (region menu and legend)
+# Step 1: one line per country of the Maddison Project
 fig = income_chart(tuple(sorted(world.country.unique())))
+# Step 2: add the official U.S. series, the line of the textbook view
 official = income_chart().data[0]
 official.name = "United States, official data"
 fig.add_trace(official)
-fig.update_layout(title=income_chart().layout.title.text)          # the title of the textbook view
+# the title of the textbook view
+fig.update_layout(title=income_chart().layout.title.text)
+# Step 3: the region menu; only the official series is drawn at the start
 country_menu(fig, [], world.groupby("country").region.first())
 ```
 
@@ -1048,13 +1286,17 @@ legend to add it; "United States" in the legend is the Maddison estimate.*
   are within 3 percent. Both convert to 2022 dollars, but with different price indices: compare growth
   *within* a source, and levels across countries only within one source.
 
-> **Python note.** `us.set_index("year")` uses the years as row labels, so that `gdp[1870]` gives the value
-> for 1870.
+The official series gives the numbers behind the steep U.S. curve.
 
 ```{python}
+# U.S. GDP per person in four years, and two ratios. `us.set_index("year")` uses
+# the years as row labels, so that `gdp[1870]` gives the value for 1870; `:,`
+# writes a number with commas between the thousands
 gdp = us.set_index("year").gdppc
-print(f"1870: ${gdp[1870]:,}   2022: ${gdp[2022]:,}   ratio: {gdp[2022] / gdp[1870]:.1f}")
-print(f"1970: ${gdp[1970]:,}   2000: ${gdp[2000]:,}   ratio: {gdp[2000] / gdp[1970]:.1f}")
+print(f"1870: ${gdp[1870]:,}   2022: ${gdp[2022]:,}   "
+      f"ratio: {gdp[2022] / gdp[1870]:.1f}")
+print(f"1970: ${gdp[1970]:,}   2000: ${gdp[2000]:,}   "
+      f"ratio: {gdp[2000] / gdp[1970]:.1f}")
 ```
 
 GDP per person rose almost 17-fold between 1870 and 2022. Our 1870 value is about 10 percent higher than
@@ -1095,10 +1337,9 @@ $$L_{t+1} = L_t\,(1+\bar{n})$$
 This is equation (1) written for the population. Applying it year after year gives $L_t = L_0(1+\bar{n})^t$ (equation 2). The cell below checks this with a
 loop: it multiplies by $1.02$ one hundred times and compares the result with the formula.
 
-> **Python note.** A `for` loop repeats the indented lines once for each value. `range(100)` gives the
-> numbers 0, 1, …, 99, so the loop runs exactly 100 times.
-
 ```{python}
+# Equation (1) applied 100 times, against formula (2). `range(100)` gives the
+# numbers 0, 1, ..., 99, so the loop runs exactly 100 times
 L = 6.0
 for year in range(100):
     L = L * (1 + 0.02)                     # equation (1), applied once per year
@@ -1106,38 +1347,76 @@ print(f"Year by year:  L_100 = {L:.2f} billion")
 print(f"Formula (2):   L_100 = {constant_growth(6.0, 0.02, 100):.2f} billion")
 ```
 
-> **Python note.** `np.arange(0, 101)` gives the whole numbers 0, 1, …, 100. `go.Figure()` starts an empty
-> chart, and `add_trace` adds a curve to it. In the widget cell, a `FloatSlider` chooses a number between `min`
-> and `max` in steps of `step`; `readout_format=".3f"` shows it with three decimals.
-> `L[-1]` is the last value of the array, and `max(100, 1.05 * L[-1])` is the larger of the two numbers: the
-> vertical axis stays at 0 to 100 unless the curve would leave it.
+The function below draws the path of equation (2) for 100 years. It only needs `constant_growth`, so
+all of its code is drawing code.
 
 ```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 3, population over time
 def population_path(L0=6.0, n=0.02):
-    """Fig. 3.3: population L_t = L0 (1 + n)^t over 100 years."""
+    """The population path L_t = L0 (1 + n)^t over 100 years.
+
+    Draws Fig. 3 (adapted from Fig. 3.3 in Jones), with equation (2).
+
+    Arguments
+        L0 : the starting population in billions, L_0
+        n  : the constant growth rate, n-bar
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the path, equation (2), in the years 0 to 100
     t = np.arange(0, 101)
     L = constant_growth(L0, n, t)
+
+    # Step 2: `go.Figure()` starts an empty chart, and `add_trace` adds a curve to it
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=t, y=L, name="Population", line=dict(color=BLUE, width=4)))
-    fig.update_layout(title=f"L0 = {L0:.0f} billion growing at {100 * n:.1f}% a year: after 100 years, L = {L[-1]:.1f} billion",
-                      xaxis=dict(title="Year", range=[0, 102], tickvals=[20, 40, 60, 80, 100]),
-                      yaxis=dict(title="Population L (billions)", range=[0, max(100, 1.05 * L[-1])]))
+    fig.add_trace(
+        go.Scatter(x=t, y=L, name="Population", line=dict(color=BLUE, width=4))
+    )
+
+    # Step 3: the title reports the population after 100 years; `L[-1]` is the
+    # last value of the array
+    fig.update_layout(
+        title=(
+            f"L0 = {L0:.0f} billion growing at {100 * n:.1f}% a year: "
+            f"after 100 years, L = {L[-1]:.1f} billion"
+        ),
+        xaxis=dict(title="Year", range=[0, 102], tickvals=[20, 40, 60, 80, 100]),
+        # `max(100, 1.05 * L[-1])` is the larger of the two numbers: the vertical
+        # axis stays at 0 to 100 unless the curve would leave it
+        yaxis=dict(
+            title="Population L (billions)",
+            range=[0, max(100, 1.05 * L[-1])],
+        ),
+    )
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(population_path,
-         L0=FloatSlider(value=6, min=1, max=10, step=1, description="starting population L0", style=WIDE),
-         n=FloatSlider(value=0.02, min=0.0, max=0.04, step=0.005, description="growth rate n", style=WIDE,
-                       readout_format=".3f"));
+# Fig. 3 with sliders. A `FloatSlider` chooses a number between `min` and `max` in
+# steps of `step`; `readout_format=".3f"` shows it with three decimals
+interact(
+    population_path,
+    L0=FloatSlider(value=6, min=1, max=10, step=1,
+                   description="starting population L0", style=WIDE),
+    n=FloatSlider(value=0.02, min=0.0, max=0.04, step=0.005,
+                  description="growth rate n", style=WIDE, readout_format=".3f"),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 3 with a precomputed slider for the growth rate
-# Growth rates above 2.5% would leave the start figure's vertical axis (0 to 100), which the website keeps fixed
-slider_figure(population_path, "n", [0.0, 0.005, 0.01, 0.015, 0.02, 0.025], start=0.02, label="growth rate n")
+# one picture of Fig. 3 per value of n. Growth rates above 2.5% would leave the
+# start figure's vertical axis (0 to 100), which the website keeps fixed
+slider_figure(
+    population_path,
+    "n",
+    [0.0, 0.005, 0.01, 0.015, 0.02, 0.025],     # the values of n
+    start=0.02,
+    label="growth rate n",
+)
 ```
 
 **Source.** Adapted from Fig. 3.3 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -1175,41 +1454,131 @@ At 2 percent a year, the population doubles about every 35 years (Rule of 70: $7
 the one before. Equal distances then mean equal *percentage* changes, so a constant growth rate draws a
 straight line.
 
-> **Python note.** `make_subplots(rows=1, cols=2, ...)` makes a figure with two panels side by side, and
-> `row=1, col=2` sends a trace to the second one. `np.arange(0, 106, T)` gives 0, T, 2T, … up to 105. On a
-> ratio-scale axis, the `range` is given in powers of ten: `np.log10(150)`.
+The function below draws the same path on both scales, with a dot at every doubling time. It only
+needs `constant_growth` and `doubling_time`, so all of its code is drawing code.
 
 ```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 4, the paths and the dots in both panels
+def add_two_scale_paths(fig, t, L, dots, L_dots):
+    """The curves of Fig. 4: the path in each panel, and the dots at each doubling.
+
+    Arguments
+        fig       : the two-panel figure
+        t, L      : the years and the population in each of them
+        dots      : the years of each doubling
+        L_dots    : the population in those years
+    """
+    # the path: blue in panel (a), green in panel (b)
+    fig.add_trace(
+        go.Scatter(x=t, y=L, name="Standard scale", line=dict(color=BLUE, width=4)),
+        row=1,
+        col=1,
+    )
+    fig.add_trace(
+        go.Scatter(x=t, y=L, name="Ratio scale", line=dict(color=GREEN, width=4)),
+        row=1,
+        col=2,
+    )
+    # the black dots in both panels, with one entry in the legend
+    for col in [1, 2]:
+        fig.add_trace(
+            go.Scatter(
+                x=dots,
+                y=L_dots,
+                name="Each doubling",
+                mode="markers",
+                showlegend=(col == 1),
+                marker=dict(color="black", size=10),
+            ),
+            row=1,
+            col=col,
+        )
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 4, population on a standard and a ratio scale
 def population_two_scales(n=0.02):
-    """Fig. 3.4: the same population path on (a) a standard scale and (b) a ratio scale."""
+    """The same population path on (a) a standard scale and (b) a ratio scale.
+
+    Draws Fig. 4 (adapted from Fig. 3.4 in Jones): 6 billion people growing at rate n,
+    equation (2), with a dot at every doubling time, equation (4).
+
+    Arguments
+        n : the constant growth rate, n-bar
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the path, and its value at every doubling time T.
+    # `np.linspace(0, 105, 200)` gives 200 evenly spaced years from 0 to 105, and
+    # `np.arange(0, 106, T)` gives 0, T, 2T, ... up to 105
     T = doubling_time(n)
     t = np.linspace(0, 105, 200)
-    dots = np.arange(0, 106, T)                                   # every doubling time
+    dots = np.arange(0, 106, T)
     L, L_dots = constant_growth(6, n, t), constant_growth(6, n, dots)
-    fig = make_subplots(rows=1, cols=2, subplot_titles=("(a) Standard scale: the curve bends upward", "(b) Ratio scale: a straight line"))
-    fig.add_trace(go.Scatter(x=t, y=L, name="Standard scale", line=dict(color=BLUE, width=4)), row=1, col=1)
-    fig.add_trace(go.Scatter(x=t, y=L, name="Ratio scale", line=dict(color=GREEN, width=4)), row=1, col=2)
-    for col in [1, 2]:
-        fig.add_trace(go.Scatter(x=dots, y=L_dots, name="Each doubling", mode="markers", showlegend=(col == 1),
-                                 marker=dict(color="black", size=10)), row=1, col=col)
-    fig.update_xaxes(title_text="Year", range=[-3, 108], tickvals=[25, 50, 75, 100])   # no label in the bottom-left corner
-    fig.update_yaxes(title_text="Population L (billions)", range=[0, 85], row=1, col=1)      # fixed: room for n = 2.5%
-    fig.update_yaxes(type="log", range=[np.log10(4.5), np.log10(150)], tickvals=[6, 12, 24, 48, 96], row=1, col=2)
-    fig.update_layout(title=f"n = {100 * n:.1f}%: doubles every {T:.1f} years (Rule of 70: {70 / (100 * n):.1f})")
+
+    # Step 2: `make_subplots(rows=1, cols=2, ...)` makes two panels side by side,
+    # and `row=1, col=2` sends a trace to the second one (add_two_scale_paths)
+    fig = make_subplots(
+        rows=1,
+        cols=2,
+        subplot_titles=(
+            "(a) Standard scale: the curve bends upward",
+            "(b) Ratio scale: a straight line",
+        ),
+    )
+    add_two_scale_paths(fig, t, L, dots, L_dots)
+
+    # Step 3: the axes. No label in the bottom-left corner
+    fig.update_xaxes(title_text="Year", range=[-3, 108], tickvals=[25, 50, 75, 100])
+    # panel (a): fixed, with room for n = 2.5%
+    fig.update_yaxes(
+        title_text="Population L (billions)",
+        range=[0, 85],
+        row=1,
+        col=1,
+    )
+    # panel (b): a ratio scale. On a log axis the range is given in powers of ten,
+    # with `np.log10`
+    fig.update_yaxes(
+        type="log",
+        range=[np.log10(4.5), np.log10(150)],
+        tickvals=[6, 12, 24, 48, 96],
+        row=1,
+        col=2,
+    )
+    # Step 4: the title reports the doubling time and the Rule of 70
+    fig.update_layout(
+        title=(
+            f"n = {100 * n:.1f}%: doubles every {T:.1f} years "
+            f"(Rule of 70: {70 / (100 * n):.1f})"
+        )
+    )
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(population_two_scales,
-         n=FloatSlider(value=0.02, min=0.01, max=0.025, step=0.005, description="growth rate n", style=WIDE,
-                       readout_format=".3f"));
+# Fig. 4 with a slider for the growth rate
+interact(
+    population_two_scales,
+    n=FloatSlider(value=0.02, min=0.01, max=0.025, step=0.005,
+                  description="growth rate n", style=WIDE, readout_format=".3f"),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 4 with a precomputed slider for the growth rate
-slider_figure(population_two_scales, "n", [0.01, 0.015, 0.02, 0.025], start=0.02, label="growth rate n")
+# one picture of Fig. 4 per value of n
+slider_figure(
+    population_two_scales,
+    "n",
+    [0.01, 0.015, 0.02, 0.025],     # the values of n
+    start=0.02,
+    label="growth rate n",
+)
 ```
 
 **Source.** Adapted from Fig. 3.4 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -1246,77 +1615,175 @@ Here are the data of Fig. 2 again, now on a ratio scale, with a dashed line that
 The line's level is chosen to fit the data as closely as possible (by least squares, in logarithms). You can
 also choose another country; its data then come from the Maddison Project, and the vertical axis adapts.
 
-> **Python note.** `np.log(gdp)` takes the logarithm of every value at once, and `.mean()` averages
-> them. On a ratio scale, a constant growth line is a straight line in logarithms, which is why we fit it there.
-
-> **Python note.** For a country other than the U.S., the vertical range runs from a little below the lowest
-> value to a little above the highest one, in powers of ten (`np.log10`), because the axis is a ratio scale.
-> `DOUBLINGS` lists tick values that double each time.
+`fitted_line` picks the data and computes the dashed line: the starting level that fits the data best,
+then growth at the rate $g$ from there.
 
 ```{python}
+def fitted_line(g, country):
+    """The data of Fig. 5, and the constant-growth line that fits them best.
+
+    The line y_t = y_0 (1 + g)^t of equation (2), with the starting level y_0 chosen
+    by least squares in logs: ln y_0 is the average of ln y_t - t ln(1 + g)
+
+    Arguments
+        g       : the growth rate of the line, g-bar
+        country : the country (the U.S. uses the official series)
+    Returns
+        data : the country's rows, with GDP per person `gdppc` by year
+        line : the value of the line in each year of the data
+    """
+    # Step 1: the official U.S. series, or the country's Maddison data
+    data = us if country == "United States" else world[world.country == country]
+    years = data.year - data.year.iloc[0]          # years since the first one
+    # Step 2: the best-fitting starting level. `np.log(data.gdppc)` takes the log
+    # of every value at once, and `.mean()` averages them. On a ratio scale a
+    # constant growth line is a straight line in logs, which is why we fit it there
+    level = (np.log(data.gdppc) - years * np.log(1 + g)).mean()
+    # Step 3: the line, equation (2) from that level
+    line = np.exp(level) * (1 + g) ** years
+    return data, line
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 5, per capita GDP on a ratio scale
+# tick values that double each time, for the ratio scales of Figs. 5 and 6
 DOUBLINGS = [250, 500, 1000, 2000, 4000, 8000, 16000, 32000, 64000, 128000, 256000]
 
 
 def ratio_scale_chart(g=0.02, country="United States"):
-    """Fig. 3.5: GDP per person on a ratio scale, with a constant-growth line at rate g."""
-    data = us if country == "United States" else world[world.country == country]
-    years = data.year - data.year.iloc[0]
-    level = (np.log(data.gdppc) - years * np.log(1 + g)).mean()   # best-fitting starting level
-    line = np.exp(level) * (1 + g) ** years
+    """GDP per person on a ratio scale, with a constant-growth line at rate g.
+
+    Draws Fig. 5 (inspired by Fig. 3.5 in Jones).
+
+    Arguments
+        g       : the growth rate of the dashed line, g-bar
+        country : the country
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the data and the line (fitted_line)
+    data, line = fitted_line(g, country)
     label = "U.S." if country == "United States" else short(country)
-    fig = px.line(data, x="year", y="gdppc", log_y=True,
-                  labels={"year": "Year", "gdppc": "GDP per person (2022 dollars, ratio scale)"})
-    fig.update_traces(line=dict(color=BLUE, width=3), name=f"{label} data", showlegend=True)
-    fig.add_trace(go.Scatter(x=data.year, y=line, name=f"Constant growth at {100 * g:.2f}%",
-                             line=dict(color=GREEN, width=3, dash="dash")))
-    low, high = 2500, 140000                                      # the textbook's U.S. range
+
+    # Step 2: the data in blue, on a ratio scale (`log_y=True`)
+    fig = px.line(
+        data,
+        x="year",
+        y="gdppc",
+        log_y=True,
+        labels={"year": "Year", "gdppc": "GDP per person (2022 dollars, ratio scale)"},
+    )
+    fig.update_traces(
+        line=dict(color=BLUE, width=3),
+        name=f"{label} data",
+        showlegend=True,
+    )
+    # Step 3: the dashed green line
+    fig.add_trace(
+        go.Scatter(
+            x=data.year,
+            y=line,
+            name=f"Constant growth at {100 * g:.2f}%",
+            line=dict(color=GREEN, width=3, dash="dash"),
+        )
+    )
+
+    # Step 4: the vertical range: the textbook's for the U.S.; for another country,
+    # from a little below the lowest value to a little above the highest one, in
+    # powers of ten (`np.log10`), because the axis is a ratio scale
+    low, high = 2500, 140000
     if country != "United States":
-        low, high = min(data.gdppc.min(), line.min()) / 1.3, max(data.gdppc.max(), line.max()) * 1.3
+        low = min(data.gdppc.min(), line.min()) / 1.3
+        high = max(data.gdppc.max(), line.max()) * 1.3
     fig.update_yaxes(tickvals=DOUBLINGS, range=[np.log10(low), np.log10(high)])
-    fig.update_layout(title=f"{label}: dashed line at {100 * g:.2f}% a year, doubling every "
-                            f"{doubling_time(g):.0f} years")
+
+    # Step 5: the title reports the growth rate of the line and its doubling time
+    fig.update_layout(
+        title=(
+            f"{label}: dashed line at {100 * g:.2f}% a year, doubling every "
+            f"{doubling_time(g):.0f} years"
+        )
+    )
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(ratio_scale_chart,
-         g=FloatSlider(value=0.02, min=0.01, max=0.025, step=0.0025, description="growth rate of the line g",
-                       style=WIDE, readout_format=".4f"),
-         country=Dropdown(options=sorted(world.country.unique()), value="United States", description="country",
-                          style=WIDE));
+# Fig. 5 with a slider for the growth rate of the line and a menu of countries
+interact(
+    ratio_scale_chart,
+    g=FloatSlider(value=0.02, min=0.01, max=0.025, step=0.0025,
+                  description="growth rate of the line g",
+                  style=WIDE, readout_format=".4f"),
+    country=Dropdown(options=sorted(world.country.unique()), value="United States",
+                     description="country", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: Fig. 5 with a precomputed slider for the growth rate of the dashed line
-slider_figure(ratio_scale_chart, "g", [0.01, 0.015, 0.0175, 0.02, 0.0225, 0.025], start=0.02,
-              label="growth rate of the line g")
+# @title Website version: Fig. 5 with a precomputed slider for the line's growth rate
+# one picture of Fig. 5 per value of g
+slider_figure(
+    ratio_scale_chart,
+    "g",
+    [0.01, 0.015, 0.0175, 0.02, 0.0225, 0.025],     # the values of g
+    start=0.02,
+    label="growth rate of the line g",
+)
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: Fig. 5 for other countries, each with a dashed line at its own average growth rate
-FIG5 = ["United States", "United Kingdom", "Japan", "Republic of Korea", "China", "India", "Brazil",
-        "Argentina", "Botswana", "Ghana", "D.R. of the Congo", "Venezuela (Bolivarian Republic of)"]
+# @title Website version: Fig. 5 for other countries, each at its own growth rate
+# Step 1: one picture of Fig. 5 per country, with the dashed line at the country's
+# average growth rate from its first to its last year, equation (6)
+FIG5 = ["United States", "United Kingdom", "Japan", "Republic of Korea", "China",
+        "India", "Brazil", "Argentina", "Botswana", "Ghana", "D.R. of the Congo",
+        "Venezuela (Bolivarian Republic of)"]
 figures = []
 for name in FIG5:
     data = us if name == "United States" else world[world.country == name]
-    g = growth_rate(data.gdppc.iloc[0], data.gdppc.iloc[-1], data.year.iloc[-1] - data.year.iloc[0])
+    g = growth_rate(
+        data.gdppc.iloc[0],
+        data.gdppc.iloc[-1],
+        data.year.iloc[-1] - data.year.iloc[0],
+    )
     figures.append(ratio_scale_chart(round(g, 4), name))
+# Step 2: copy every trace into one figure; only the first country's are visible
 fig = go.Figure(layout=figures[0].layout)
 for i, f in enumerate(figures):
     for trace in f.data:
         trace.visible = (i == 0)
         fig.add_trace(trace)
+# Step 3: one menu entry per country: its two traces, its title and its axis
 buttons = []
 for i, f in enumerate(figures):
-    visible = [j // 2 == i for j in range(2 * len(figures))]      # two traces per country
-    buttons.append(dict(label=short(FIG5[i]), method="update",
-                        args=[{"visible": visible}, {"title": f.layout.title.to_plotly_json(),
-                                                     "yaxis": f.layout.yaxis.to_plotly_json()}]))
-fig.update_layout(updatemenus=[dict(type="dropdown", buttons=buttons, x=1, y=1.02, xanchor="right",
-                                    yanchor="bottom")], margin=dict(t=110))         # above the plot
+    visible = [j // 2 == i for j in range(2 * len(figures))]    # two traces per country
+    buttons.append(
+        dict(
+            label=short(FIG5[i]),
+            method="update",
+            args=[{"visible": visible},
+                  {"title": f.layout.title.to_plotly_json(),
+                   "yaxis": f.layout.yaxis.to_plotly_json()}],
+        )
+    )
+# Step 4: the menu, above the plot
+fig.update_layout(
+    updatemenus=[
+        dict(
+            type="dropdown",
+            buttons=buttons,
+            x=1,
+            y=1.02,
+            xanchor="right",
+            yanchor="bottom",
+        )
+    ],
+    margin=dict(t=110),
+)
 fig
 ```
 
@@ -1349,6 +1816,7 @@ The textbook applies the rule for computing growth rates, equation (6), to \$4,2
 data, and for two shorter periods.
 
 ```{python}
+# Equation (6) with the textbook's numbers, and with our data for three periods
 print(f"Textbook numbers, 1870-2022: {growth_rate(4200, 76000, 152):.2%}")
 print(f"Our data, 1870-2025:         {growth_rate(gdp[1870], gdp[2025], 155):.2%}")
 print(f"Our data, 1870-1929:         {growth_rate(gdp[1870], gdp[1929], 59):.2%}")
@@ -1388,60 +1856,131 @@ the textbook discusses but does not draw, and you can add any other country of t
 (the `world` table of Fig. 2).
 
 ```{python}
-decades = pd.read_csv(DATA_URL + "fig3-6.csv").melt(id_vars="year", var_name="series", value_name="gdppc")
-decades["country"] = decades.series.map({"gdppc_usa": "United States", "gdppc_gbr": "United Kingdom",
-                                         "gdppc_jpn": "Japan", "gdppc_arg": "Argentina", "gdppc_zaf": "South Africa",
-                                         "gdppc_chn": "China", "gdppc_ind": "India"})
+# Load the data of Fig. 6.
+# Step 1: the textbook's values, one per decade, from a wide table to a long one
+# (as in Fig. 1)
+decades = pd.read_csv(DATA_URL + "fig3-6.csv").melt(
+    id_vars="year",
+    var_name="series",
+    value_name="gdppc",
+)
+decades["country"] = decades.series.map(
+    {
+        "gdppc_usa": "United States",
+        "gdppc_gbr": "United Kingdom",
+        "gdppc_jpn": "Japan",
+        "gdppc_arg": "Argentina",
+        "gdppc_zaf": "South Africa",
+        "gdppc_chn": "China",
+        "gdppc_ind": "India",
+    }
+)
+# Step 2: every available year, from a wider file
 annual = pd.read_csv(DATA_URL + "maddison_panel.csv")
+# Step 3: `.pivot(...)` turns the long table into a wide one, with one row per year
+# and one column per country; then Japan relative to the U.S., by year
 levels = decades.pivot(index="year", columns="country", values="gdppc")
-japan = levels["Japan"] / levels["United States"]          # Japan relative to the U.S., by year
+japan = levels["Japan"] / levels["United States"]
 annual.tail()
 ```
 
 The title compares one country with the United States: Japan when it is chosen, otherwise the first
 country in your list. The helper `versus_us` finds the first and the last year in which both have data.
 
-> **Python note.** `category_orders` fixes the order of the countries in the legend. `.pivot(...)` turns the
-> long table into a wide one, with one row per year and one column per country. `.dropna()` then keeps the
-> years in which both countries have data. `list(countries)` makes a list we can change, and `.remove(...)`
-> deletes one entry from it. The vertical axis widens (once, to a fixed wider range) when a chosen country
-> lies outside the textbook's range.
-
 ```{python}
 def versus_us(name):
-    """First and last year in which `name` and the U.S. both have data, and name's GDP per person relative to the U.S."""
-    pair = world[world.country.isin([name, "United States"])].pivot(index="year", columns="country", values="gdppc")
+    """The first and the last year in which a country and the U.S. both have data.
+
+    In each, the country's GDP per person relative to the U.S.: y / y_US
+
+    Arguments
+        name : the country
+    Returns
+        first, share_first : the first such year, and the country's GDP per person
+                             relative to the U.S. in it
+        last, share_last   : the same for the last such year
+    """
+    # Step 1: the two countries side by side, one column each (`.pivot`)
+    pair = world[world.country.isin([name, "United States"])].pivot(
+        index="year",
+        columns="country",
+        values="gdppc",
+    )
+    # Step 2: the ratio; `.dropna()` keeps the years in which both have data
     ratio = (pair[name] / pair["United States"]).dropna()
     return ratio.index[0], ratio.iloc[0], ratio.index[-1], ratio.iloc[-1]
 
 
+# Japan: its first and its last year, each with its GDP per person relative to the U.S.
 versus_us("Japan")
 ```
 
+The function below draws the chart. Its only economics is the comparison in the title, from
+`versus_us`, so all of its code is drawing code.
+
 ```{python}
-SEVEN = ["United States", "United Kingdom", "Japan", "Argentina", "South Africa", "China", "India"]
-BENCHMARKS = sorted(decades.year.unique())                     # the textbook's years: 1870, 1890, ..., 2022
+#| kind: drawing
+# @title Drawing code: Fig. 6, per capita GDP since 1870
+# the textbook's seven countries, and its years: 1870, 1890, ..., 2022
+SEVEN = ["United States", "United Kingdom", "Japan", "Argentina", "South Africa",
+         "China", "India"]
+BENCHMARKS = sorted(decades.year.unique())
 
 
 def countries_since_1870(frequency="every decade", countries=tuple(SEVEN)):
-    """Fig. 3.6: GDP per person on a ratio scale (2022 dollars), by decade or every year."""
+    """GDP per person on a ratio scale (2022 dollars), by decade or every year.
+
+    Draws Fig. 6 (inspired by Fig. 3.6 in Jones). The title compares one country with
+    the U.S. (versus_us).
+
+    Arguments
+        frequency : "every decade" (the textbook's years) or "every year"
+        countries : the countries to draw
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the rows of the chosen countries; by decade, the textbook's years only
     chosen = world[world.country.isin(countries)]
     if frequency == "every decade":
         chosen = chosen[chosen.year.isin(BENCHMARKS)]
-    fig = px.line(chosen, x="year", y="gdppc", color="country", log_y=True, color_discrete_map=COLORS,
-                  category_orders={"country": list(countries)},
-                  labels={"year": "Year", "gdppc": "GDP per person (2022 dollars, ratio scale)", "country": "Country"})
+
+    # Step 2: one line per country, on a ratio scale
+    fig = px.line(
+        chosen,
+        x="year",
+        y="gdppc",
+        color="country",
+        log_y=True,
+        color_discrete_map=COLORS,
+        # `category_orders` fixes the order of the countries in the legend
+        category_orders={"country": list(countries)},
+        labels={
+            "year": "Year",
+            "gdppc": "GDP per person (2022 dollars, ratio scale)",
+            "country": "Country",
+        },
+    )
+
+    # Step 3: the title compares one country with the U.S.: Japan when it is chosen.
+    # `list(countries)` makes a list we can change, and `.remove(...)` deletes one
+    # entry from it
     others = list(countries)
     if "United States" in others:
-        others.remove("United States")                            # compare the others with the U.S.
+        others.remove("United States")
     title = "Choose a country to compare with the United States"
     if others:
         name = "Japan" if "Japan" in others else others[0]
         first, share_first, last, share_last = versus_us(name)
-        title = f"{short(name)} went from {share_first:.0%} of U.S. GDP per person in {first} to {share_last:.0%} in {last}"
-    low, high = 700, 90000                                        # the textbook's range ...
+        title = (
+            f"{short(name)} went from {share_first:.0%} of U.S. GDP per person in "
+            f"{first} to {share_last:.0%} in {last}"
+        )
+
+    # Step 4: the textbook's vertical range, or one fixed wider range when a chosen
+    # country lies outside it
+    low, high = 700, 90000
     if not chosen.empty and (chosen.gdppc.min() < low or chosen.gdppc.max() > high):
-        low, high = 250, 300000                                   # ... or one fixed wider range
+        low, high = 250, 300000
     fig.update_yaxes(tickvals=DOUBLINGS, range=[np.log10(low), np.log10(high)])
     fig.update_layout(title=title)
     return fig
@@ -1449,18 +1988,28 @@ def countries_since_1870(frequency="every decade", countries=tuple(SEVEN)):
 
 ```{python}
 #| kind: widget
-interact(countries_since_1870,
-         frequency=ToggleButtons(options=["every decade", "every year"], description="data"),
-         countries=SelectMultiple(options=sorted(world.country.unique()), value=tuple(SEVEN), rows=8,
-                                  description="countries", style=WIDE));
+# Fig. 6 with buttons for the data and a list of countries
+interact(
+    countries_since_1870,
+    frequency=ToggleButtons(options=["every decade", "every year"],
+                            description="data"),
+    countries=SelectMultiple(options=sorted(world.country.unique()),
+                             value=tuple(SEVEN), rows=8,
+                             description="countries", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 6 with every country by decade (region menu and legend)
-fig = countries_since_1870(countries=tuple(SEVEN) + tuple(sorted(set(world.country) - set(SEVEN))))
-fig.update_layout(title=countries_since_1870().layout.title.text)  # the title of the textbook view
+# Step 1: every country, the textbook's seven first
+fig = countries_since_1870(
+    countries=tuple(SEVEN) + tuple(sorted(set(world.country) - set(SEVEN)))
+)
+# Step 2: the title of the textbook view, and the wider vertical range
+fig.update_layout(title=countries_since_1870().layout.title.text)
 fig.update_yaxes(range=[np.log10(250), np.log10(300000)])
+# Step 3: the region menu; the textbook's seven are drawn
 country_menu(fig, SEVEN, world.groupby("country").region.first())
 ```
 
@@ -1489,14 +2038,25 @@ The annual data are in the Colab version.*
 
 #### Key numbers: growth spurts and relative incomes
 
-> **Python note.** `.pivot(index="year", columns="country", values="gdppc")` turns the long table back into
-> a wide one, with one column per country, so that `wide.loc[1990, "Japan"]` picks a single number.
-
 ```{python}
+# Growth spurts and relative incomes. `.pivot(index="year", columns="country",
+# values="gdppc")` turns the long table back into a wide one, with one column per
+# country, so that `wide.loc[1990, "Japan"]` picks a single number
 wide = annual.pivot(index="year", columns="country", values="gdppc")
-print(f"Japan, 1950-1990: {growth_rate(wide.loc[1950, 'Japan'], wide.loc[1990, 'Japan'], 40):.1%} a year")
-print(f"China, 1978-2022: {growth_rate(wide.loc[1978, 'China'], wide.loc[2022, 'China'], 44):.1%} a year")
-print(f"India, 1990-2019: {growth_rate(wide.loc[1990, 'India'], wide.loc[2019, 'India'], 29):.1%} a year")
+# Step 1: average annual growth rates, equation (6)
+print(
+    "Japan, 1950-1990: "
+    f"{growth_rate(wide.loc[1950, 'Japan'], wide.loc[1990, 'Japan'], 40):.1%} a year"
+)
+print(
+    "China, 1978-2022: "
+    f"{growth_rate(wide.loc[1978, 'China'], wide.loc[2022, 'China'], 44):.1%} a year"
+)
+print(
+    "India, 1990-2019: "
+    f"{growth_rate(wide.loc[1990, 'India'], wide.loc[2019, 'India'], 29):.1%} a year"
+)
+# Step 2: GDP per person relative to the United States
 print("Relative to the United States in 2019:")
 print((wide.loc[2019] / wide.loc[2019, "United States"]).round(2))
 ```
@@ -1529,8 +2089,12 @@ We load a wider Penn World Table file with GDP per person and population for eve
 keep the 111 countries with data since 1960, the textbook's sample.
 
 ```{python}
+# Load the data of Fig. 7, from the Penn World Table; `in_sample` marks the 111
+# countries with data since 1960
 pwt = pd.read_csv(DATA_URL + "pwt_income.csv")
 sample = pwt[pwt.in_sample]
+# the poorest countries of 2023: `.sort_values("gdp_pc")` sorts from poorest to
+# richest
 sample[sample.year == 2023].sort_values("gdp_pc").head()
 ```
 
@@ -1539,54 +2103,107 @@ which is impossible. During Venezuela's hyperinflation the price data behind thi
 at your data before using it.** We drop Venezuela and continue with 110 countries.
 
 ```{python}
+# Drop Venezuela, whose 2023 value is not plausible
 sample = sample[sample.country != "Venezuela (Bolivarian Republic of)"]
+```
+
+A few countries get their name printed on the chart. The drawing code below lists them, and puts some
+labels beside their dot so that labels do not overlap.
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 7, the country names printed on the chart
+# the short names printed beside a few dots
+SHORT = {
+    "United States": "United States",
+    "China": "China",
+    "India": "India",
+    "Republic of Korea": "South Korea",
+    "Botswana": "Botswana",
+    "Singapore": "Singapore",
+    "Japan": "Japan",
+    "Brazil": "Brazil",
+    "D.R. of the Congo": "DR Congo",
+    "Burundi": "Burundi",
+    "Ethiopia": "Ethiopia",
+}
+# where some labels go, so that labels do not overlap (the others: above the dot)
+POSITION = {
+    "United States": "bottom right",
+    "India": "top left",
+    "Botswana": "bottom right",
+    "Singapore": "middle left",
+    "Japan": "bottom left",
+    "D.R. of the Congo": "bottom center",
+}
 ```
 
 Now we compute, for each country, its average annual growth rate from a starting year to 2023, and its
 GDP per person in 2023 relative to the United States.
 
-> **Python note.** `merge` joins two tables on a common column, like matching rows by ID in a
-> spreadsheet. Each pass of the loop adds one table to the list `tables`, and `pd.concat(tables)` stacks
-> them into one long table. `.map(SHORT)` looks each country up in the dictionary `SHORT`; countries that
-> are not in it get `NaN`, which `.fillna("")` replaces with an empty text. That way only a few names are
-> printed on the chart, and `POSITION` puts some of them beside their dot so that labels do not overlap.
-
 ```{python}
-SHORT = {"United States": "United States", "China": "China", "India": "India", "Republic of Korea": "South Korea",
-         "Botswana": "Botswana", "Singapore": "Singapore", "Japan": "Japan", "Brazil": "Brazil",
-         "D.R. of the Congo": "DR Congo", "Burundi": "Burundi", "Ethiopia": "Ethiopia"}
-POSITION = {"United States": "bottom right", "India": "top left", "Botswana": "bottom right",
-            "Singapore": "middle left", "Japan": "bottom left", "D.R. of the Congo": "bottom center"}
+# Step 1: GDP per person in 2023, and relative to the United States
 end = sample[sample.year == 2023][["iso3", "country", "gdp_pc"]]
 end["level_2023"] = end.gdp_pc / end[end.country == "United States"].gdp_pc.iloc[0]
+# Step 2: one table per starting year. `merge` joins two tables on a common
+# column, like matching rows by ID in a spreadsheet; the suffixes name the two
+# GDP columns
 tables = []
 for start in [1960, 1970, 1980, 1990, 2000, 2010]:
     first = sample[sample.year == start][["iso3", "gdp_pc"]]
     table = end.merge(first, on="iso3", suffixes=("_2023", "_start"))
-    table["growth"] = 100 * growth_rate(table.gdp_pc_start, table.gdp_pc_2023, 2023 - start)
+    # average annual growth to 2023, equation (6), in percent
+    table["growth"] = 100 * growth_rate(
+        table.gdp_pc_start, table.gdp_pc_2023, 2023 - start
+    )
     table["start_year"] = start
     tables.append(table)
+# Step 3: `pd.concat(tables)` stacks the tables of the list into one long table
 growth = pd.concat(tables)
+# Step 4: the labels on the chart. `.map(SHORT)` looks each country up in SHORT;
+# the others get `NaN`, which `.fillna("")` replaces with an empty text
 growth["label"] = growth.country.map(SHORT).fillna("")
 growth["position"] = growth.country.map(POSITION).fillna("top center")
 growth.head()
 ```
 
-> **Python note.** `animation_frame="start_year"` adds a play button and a slider that step through the
-> starting years. `log_x=True` puts the horizontal axis on a ratio scale, and `ticktext` writes the tick
-> values as fractions. Each country gets its own label position, taken from the first frame (1960).
-
 ```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 7, levels and growth rates of per capita GDP
+# tick values of the ratio scale, written as fractions (also in Fig. 8)
 FRACTIONS = [1 / 128, 1 / 64, 1 / 32, 1 / 16, 1 / 8, 1 / 4, 1 / 2, 1, 2]
 FRACTION_NAMES = ["1/128", "1/64", "1/32", "1/16", "1/8", "1/4", "1/2", "1", "2"]
-fig = px.scatter(growth, x="level_2023", y="growth", text="label", hover_name="country",
-                 animation_frame="start_year", log_x=True, range_x=[1 / 100, 2.2], range_y=[-4, 9],
-                 color_discrete_sequence=[GREEN],                # the color must be set here to last in every frame
-                 labels={"level_2023": "Per capita GDP in 2023 (ratio scale, U.S. = 1)",
-                         "growth": "Average annual growth to 2023 (percent)", "start_year": "Starting year"},
-                 title=f"Average growth to 2023 ranges from {growth.growth.min():.0f} to "
-                       f"{growth.growth.max():+.0f} percent a year across countries")
-fig.update_traces(marker=dict(size=9), textfont_size=10, textposition=growth[growth.start_year == 1960].position)
+# Step 1: one dot per country, one picture per starting year
+fig = px.scatter(
+    growth,
+    x="level_2023",
+    y="growth",
+    text="label",                       # the short name, for a few countries
+    hover_name="country",
+    # `animation_frame` adds a play button and a slider for the starting year
+    animation_frame="start_year",
+    log_x=True,                         # `log_x=True`: a ratio scale for the x-axis
+    range_x=[1 / 100, 2.2],
+    range_y=[-4, 9],
+    color_discrete_sequence=[GREEN],    # set here to last in every frame
+    labels={
+        "level_2023": "Per capita GDP in 2023 (ratio scale, U.S. = 1)",
+        "growth": "Average annual growth to 2023 (percent)",
+        "start_year": "Starting year",
+    },
+    title=(
+        f"Average growth to 2023 ranges from {growth.growth.min():.0f} to "
+        f"{growth.growth.max():+.0f} percent a year across countries"
+    ),
+)
+# Step 2: the dots and their labels; each country gets its own label position,
+# taken from the first frame (1960)
+fig.update_traces(
+    marker=dict(size=9),
+    textfont_size=10,
+    textposition=growth[growth.start_year == 1960].position,
+)
+# Step 3: `ticktext` writes the tick values as fractions
 fig.update_xaxes(tickvals=FRACTIONS, ticktext=FRACTION_NAMES)
 fig.show()
 ```
@@ -1612,11 +2229,19 @@ Chart: inspired by Fig. 3.7 in Jones (2024), [*Macroeconomics*, 6th ed.](https:/
 #### Key numbers: the power of compounding
 
 ```{python}
+# Compounding: Singapore's growth since 1960, and two countries that got poorer
 from_1960 = growth[growth.start_year == 1960].set_index("country")
 g_sgp = from_1960.growth["Singapore"] / 100
-print(f"Singapore grew {g_sgp:.1%} a year: it doubles every {doubling_time(g_sgp):.0f} years")
+print(
+    f"Singapore grew {g_sgp:.1%} a year: "
+    f"it doubles every {doubling_time(g_sgp):.0f} years"
+)
+# equation (2): 63 years of growth multiply income by (1 + g)^63
 print(f"Over 63 years its income rose by a factor of {(1 + g_sgp) ** 63:.0f}")
-print(f"Madagascar: {from_1960.growth['Madagascar']:.1f}% a year; Nicaragua: {from_1960.growth['Nicaragua']:.1f}% a year")
+print(
+    f"Madagascar: {from_1960.growth['Madagascar']:.1f}% a year; "
+    f"Nicaragua: {from_1960.growth['Nicaragua']:.1f}% a year"
+)
 ```
 
 **Your turn.** Find the countries whose GDP per person *fell* between 1960 and 2023. How many are there?
@@ -1647,44 +2272,117 @@ we sort countries from poorest to richest and add up their populations. The char
 the world's population that lives in countries with GDP per person at or below each level. Income is
 measured relative to the U.S. level **in 2019** for every year, so that the curves can be compared.
 
-> **Python note.** `.cumsum()` gives running totals: the first value, then the sum of the first two, and so
-> on. Dividing by the total and multiplying by 100 turns them into cumulative percentages. `.copy()` makes a
-> separate table, so that adding a column does not touch `sample`. `line_shape="hv"` draws the line as steps,
-> one for each country, and `add_vline` draws the dashed vertical line.
+`cumulative_shares` sorts the countries of one year and adds up their populations. `share_below` gives
+the share of the world's people below the dashed line of the chart, 5 percent of the 2019 U.S. level.
 
 ```{python}
 def cumulative_shares(year):
-    """Countries sorted from poorest to richest in `year`, with the cumulative share of world population."""
+    """The countries sorted from poorest to richest, with cumulative population shares.
+
+    share = 100 (population of this country and all poorer ones) / world population
+
+    Arguments
+        year : the year
+    Returns
+        the rows of `sample` for that year, from poorest to richest, with a new
+        column `share` (percent of world population)
+    """
+    # Step 1: sort from poorest to richest. `.copy()` makes a separate table, so that
+    # adding a column does not touch `sample`
     table = sample[sample.year == year].sort_values("y_rel_us_2019").copy()
+    # Step 2: `.cumsum()` gives running totals: the first value, then the sum of the
+    # first two, and so on. Dividing by the total turns them into percentages
     table["share"] = 100 * table.pop_millions.cumsum() / table.pop_millions.sum()
     return table
 
 
-def population_distribution(year=2019):
-    """Fig. 3.8: cumulative share of world population by GDP per person (U.S. 2019 = 1), year vs 1960."""
-    both = pd.concat([cumulative_shares(1960), cumulative_shares(year)])
+def share_below(year):
+    """The share of world population below the dashed line of Fig. 8.
+
+    share = population of the countries below 5% of the 2019 U.S. level / world
+    population
+
+    Arguments
+        year : the year
+    Returns
+        the share (0.69 for 69 percent)
+    """
     below = cumulative_shares(year)
-    poor = below[below.y_rel_us_2019 < 0.05].pop_millions.sum() / below.pop_millions.sum()
-    fig = px.line(both, x="y_rel_us_2019", y="share", color="year", line_shape="hv", hover_name="country",
-                  log_x=True, range_x=[1 / 200, 2], range_y=[0, 102], color_discrete_sequence=[GREEN, BLUE],
-                  labels={"y_rel_us_2019": "Per capita GDP (U.S. = 1 in 2019, ratio scale)",
-                          "share": "Share of world population (percent)", "year": "Year"})
+    # the population of the countries below 5% of the 2019 U.S. level
+    poor = below[below.y_rel_us_2019 < 0.05].pop_millions.sum()
+    return poor / below.pop_millions.sum()
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 8, the world's population by per capita GDP
+def population_distribution(year=2019):
+    """The cumulative share of world population by GDP per person, `year` and 1960.
+
+    Draws Fig. 8 (inspired by Fig. 3.8 in Jones): GDP per person relative to the
+    U.S. level in 2019, with a dashed line at 5 percent of it.
+
+    Arguments
+        year : the year drawn next to 1960
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the two years in one long table, and the share below the dashed line
+    # (cumulative_shares, share_below)
+    both = pd.concat([cumulative_shares(1960), cumulative_shares(year)])
+    poor = share_below(year)
+
+    # Step 2: one line per year; `line_shape="hv"` draws it as steps, one per country
+    fig = px.line(
+        both,
+        x="y_rel_us_2019",
+        y="share",
+        color="year",
+        line_shape="hv",
+        hover_name="country",
+        log_x=True,
+        range_x=[1 / 200, 2],
+        range_y=[0, 102],
+        color_discrete_sequence=[GREEN, BLUE],
+        labels={
+            "y_rel_us_2019": "Per capita GDP (U.S. = 1 in 2019, ratio scale)",
+            "share": "Share of world population (percent)",
+            "year": "Year",
+        },
+    )
+    # Step 3: `add_vline` draws the dashed vertical line at 5% of the U.S. level
     fig.add_vline(x=0.05, line_dash="dash", line_color=GRAY)
     fig.update_xaxes(tickvals=FRACTIONS, ticktext=FRACTION_NAMES)
-    fig.update_layout(title=f"{year}: {poor:.0%} of people live below 5% of the 2019 U.S. level (dashed line)")
+    fig.update_layout(
+        title=(
+            f"{year}: {poor:.0%} of people live below 5% of the 2019 U.S. level "
+            "(dashed line)"
+        )
+    )
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(population_distribution,
-         year=Dropdown(options=[1970, 1980, 1990, 2000, 2010, 2019, 2023], value=2019, description="year", style=WIDE));
+# Fig. 8 with a menu of years
+interact(
+    population_distribution,
+    year=Dropdown(options=[1970, 1980, 1990, 2000, 2010, 2019, 2023], value=2019,
+                  description="year", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 8 with a precomputed slider for the year
-slider_figure(population_distribution, "year", [1970, 1980, 1990, 2000, 2010, 2019, 2023], start=2019, label="year")
+# one picture of Fig. 8 per year
+slider_figure(
+    population_distribution,
+    "year",
+    [1970, 1980, 1990, 2000, 2010, 2019, 2023],     # the years
+    start=2019,
+    label="year",
+)
 ```
 
 **Sources.** Data: [Penn World Table 11.0, real GDP at chained PPPs (`rgdpe`) and population (`pop`), Groningen Growth and Development Centre](https://www.rug.nl/ggdc/productivity/pwt/)
@@ -1705,13 +2403,22 @@ Chart: inspired by Fig. 3.8 in Jones (2024), [*Macroeconomics*, 6th ed.](https:/
 #### Key numbers: fewer people in poverty
 
 ```{python}
+# Fewer people in poverty: the share and the number of people below the dashed
+# line, in 1960 and in 2019
 shares_1960, shares_2019 = cumulative_shares(1960), cumulative_shares(2019)
-poor_1960 = shares_1960[shares_1960.y_rel_us_2019 < 0.05].pop_millions.sum() / shares_1960.pop_millions.sum()
+poor_1960 = (
+    shares_1960[shares_1960.y_rel_us_2019 < 0.05].pop_millions.sum()
+    / shares_1960.pop_millions.sum()
+)
 poor_2019 = shares_2019[shares_2019.y_rel_us_2019 < 0.05].pop_millions.sum()
 total_2019 = shares_2019.pop_millions.sum()
 print(f"Share below the line: 1960 {poor_1960:.1%}, 2019 {poor_2019 / total_2019:.1%}")
 print(f"People below the line in 2019:              {poor_2019 / 1000:.2f} billion")
-print(f"... if the 1960 distribution had not changed: {poor_1960 * total_2019 / 1000:.2f} billion")
+# what if the 1960 share still held, with the 2019 population
+print(
+    "... if the 1960 distribution had not changed: "
+    f"{poor_1960 * total_2019 / 1000:.2f} billion"
+)
 ```
 
 The textbook reports "2 out of 3" in 1960 and "less than 1 out of 12" in 2019. Our 110 countries give
@@ -1753,21 +2460,34 @@ see this, the chart divides each series by its value in the first year, so all t
 For the United States we use the official series of the textbook figure. For any other country we
 compute total GDP from the Maddison Project's GDP per person and population.
 
-> **Python note.** `start, end = period` unpacks a pair of years into two variables. Dividing the table
-> `table.loc[start:end]` by its first row divides every column by its own first value. An `IntRangeSlider`
-> has two handles, so it chooses a whole period at once. `country_table` builds, for any country, a table
-> with the same columns as `usa`. `.astype(float)` turns whole numbers with gaps into ordinary numbers.
-
 ```{python}
+# Load the data of Fig. 9: the official U.S. series, with the years as row labels
 usa = pd.read_csv(DATA_URL + "fig3-9.csv").set_index("year")
 
 
 def country_table(country):
-    """Population (thousands), GDP per person and total GDP (billions of 2022 dollars) by year, as in `usa`."""
+    """Population, GDP per person and total GDP by year, as in `usa`.
+
+    Total GDP is GDP per person times population: Y = y L
+
+    Arguments
+        country : the country (the U.S. uses the official series)
+    Returns
+        a table by year: population (thousands), GDP per person and total GDP
+        (billions of 2022 dollars)
+    """
     if country == "United States":
-        return usa                                                # the official series of the textbook
+        return usa                              # the official series of the textbook
+    # Step 1: the country's Maddison data. `.astype(float)` turns whole numbers with
+    # gaps into ordinary numbers
     one = world[world.country == country].set_index("year")
-    table = pd.DataFrame({"population_thousands": one.pop_thousands.astype(float), "gdppc": one.gdppc})
+    table = pd.DataFrame(
+        {
+            "population_thousands": one.pop_thousands.astype(float),
+            "gdppc": one.gdppc,
+        }
+    )
+    # Step 2: total GDP in billions: y times L (in thousands), divided by a million
     table["gdp_billions"] = table.gdppc * table.population_thousands / 1e6
     return table.dropna()
 ```
@@ -1776,62 +2496,160 @@ If the period starts before a country's data do, the chart starts in the country
 title says which years it uses.
 
 ```{python}
-def growth_rules_chart(period=(1870, 2025), country="United States"):
-    """Fig. 3.9: total GDP, GDP per person and population, each relative to its first-year value."""
+def growth_rules(period, country):
+    """The three series of Fig. 9 relative to the first year, and their growth rates.
+
+    Equation (6) for each series. Rule (7): g_Y = g_y + g_L, approximately
+
+    Arguments
+        period  : (first year, last year)
+        country : the country
+    Returns
+        start, end : the first and the last year with data
+        chosen     : the three series, each divided by its first-year value
+                     (None when the period has no data)
+        rates      : the average annual growth rate of each series, in percent
+    """
     table = country_table(country)
+    # Step 1: `start, end = period` unpacks the pair of years into two variables
     start, end = period
-    if end == start:                                              # both handles on one year: use one year
+    if end == start:                    # both handles on one year: use one year
         end = min(start + 1, 2025)
         start = end - 1
     chosen = table.loc[start:end]
-    if len(chosen) < 2:                                           # no data in the period
-        return go.Figure().update_layout(title=f"No data for {short(country)} in {start}–{end}")
+    if len(chosen) < 2:
+        return start, end, None, None   # no data in the period
+    # Step 2: the first and the last year with data
     start, end = chosen.index[0], chosen.index[-1]
-    rates = (100 * growth_rate(chosen.iloc[0], chosen.iloc[-1], end - start)).round(2) + 0.0   # + 0.0: no "-0.00"
-    chosen = (chosen / chosen.iloc[0]).reset_index().rename(columns={
-        "gdp_billions": "Total GDP", "gdppc": "Per capita GDP", "population_thousands": "Population"})
-    fig = px.line(chosen, x="year", y=["Total GDP", "Per capita GDP", "Population"], log_y=True,
-                  color_discrete_sequence=["#e0a33b", GREEN, BLUE],
-                  labels={"year": "Year", "value": "Relative to the first year (ratio scale)", "variable": "Series"})
+    # Step 3: the growth rates, equation (6), in percent; + 0.0 avoids "-0.00"
+    rates = (
+        100 * growth_rate(chosen.iloc[0], chosen.iloc[-1], end - start)
+    ).round(2) + 0.0
+    # Step 4: dividing the table by its first row divides every column by its own
+    # first value, so all three series start at 1
+    chosen = (chosen / chosen.iloc[0]).reset_index().rename(
+        columns={
+            "gdp_billions": "Total GDP",
+            "gdppc": "Per capita GDP",
+            "population_thousands": "Population",
+        }
+    )
+    return start, end, chosen, rates
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 9, population, GDP and per capita GDP
+def growth_rules_chart(period=(1870, 2025), country="United States"):
+    """Total GDP, GDP per person and population, each relative to its first year.
+
+    Draws Fig. 9 (inspired by Fig. 3.9 in Jones), on a ratio scale.
+
+    Arguments
+        period  : (first year, last year)
+        country : the country
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the series and their growth rates (growth_rules)
+    start, end, chosen, rates = growth_rules(period, country)
+    if chosen is None:                          # no data in the period
+        return go.Figure().update_layout(
+            title=f"No data for {short(country)} in {start}–{end}"
+        )
+
+    # Step 2: one line per series, on a ratio scale
+    fig = px.line(
+        chosen,
+        x="year",
+        y=["Total GDP", "Per capita GDP", "Population"],
+        log_y=True,
+        color_discrete_sequence=["#e0a33b", GREEN, BLUE],
+        labels={
+            "year": "Year",
+            "value": "Relative to the first year (ratio scale)",
+            "variable": "Series",
+        },
+    )
     fig.update_yaxes(tickvals=[0.2, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000])
-    fig.update_xaxes(range=[start - (end - start) / 20, end])   # a little room: no label in the bottom-left corner
+    # a little room on the left: no label in the bottom-left corner
+    fig.update_xaxes(range=[start - (end - start) / 20, end])
+
+    # Step 3: the title: GDP growth is about per capita growth plus population growth
     label = "" if country == "United States" else f"{short(country)}, "
     sign = "+" if rates.population_thousands >= 0 else "−"
-    fig.update_layout(title=f"{label}{start}–{end}: GDP {rates.gdp_billions:.2f}% ≈ per capita {rates.gdppc:.2f}%"
-                            f" {sign} population {abs(rates.population_thousands):.2f}% a year")
+    fig.update_layout(
+        title=(
+            f"{label}{start}–{end}: GDP {rates.gdp_billions:.2f}% ≈ per capita "
+            f"{rates.gdppc:.2f}% {sign} population "
+            f"{abs(rates.population_thousands):.2f}% a year"
+        )
+    )
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(growth_rules_chart,
-         period=IntRangeSlider(value=(1870, 2025), min=1870, max=2025, step=1, description="period", style=WIDE),
-         country=Dropdown(options=sorted(world.country.unique()), value="United States", description="country",
-                          style=WIDE));
+# Fig. 9 with a slider for the period and a menu of countries. An
+# `IntRangeSlider` has two handles, so it chooses a whole period at once
+interact(
+    growth_rules_chart,
+    period=IntRangeSlider(value=(1870, 2025), min=1870, max=2025, step=1,
+                          description="period", style=WIDE),
+    country=Dropdown(options=sorted(world.country.unique()), value="United States",
+                     description="country", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 9 with a precomputed slider for the starting year
-PERIODS = [(1870, 2025), (1900, 2025), (1929, 2025), (1950, 2025), (1980, 2025), (2000, 2025)]
-fig = slider_figure(growth_rules_chart, "period", PERIODS, start=(1870, 2025), label="period")
-for step, (start, end) in zip(fig.layout.sliders[0].steps, PERIODS):      # each period keeps its own x range
-    step.args = [step.args[0], {**step.args[1], "xaxis.range": [start - (end - start) / 20, end]}]
+# Step 1: one picture of Fig. 9 per period
+PERIODS = [(1870, 2025), (1900, 2025), (1929, 2025), (1950, 2025), (1980, 2025),
+           (2000, 2025)]
+fig = slider_figure(
+    growth_rules_chart,
+    "period",
+    PERIODS,
+    start=(1870, 2025),
+    label="period",
+)
+# Step 2: each period keeps its own horizontal range
+for step, (start, end) in zip(fig.layout.sliders[0].steps, PERIODS):
+    step.args = [
+        step.args[0],
+        {**step.args[1], "xaxis.range": [start - (end - start) / 20, end]},
+    ]
 fig
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: Fig. 9 for other countries since 1950, with a precomputed slider for the country
+# @title Website version: Fig. 9 for other countries since 1950
 def since_1950(country):
-    """Fig. 3.9 for one country, 1950-2022 (Maddison Project; official data for the U.S.)."""
+    """Fig. 9 for one country, 1950-2022.
+
+    The Maddison Project's data; the official data for the U.S.
+
+    Arguments
+        country : the country
+    Returns
+        a Plotly figure
+    """
     return growth_rules_chart((1950, 2022), country)
 
 
-fig = slider_figure(since_1950, "country", ["United States", "United Kingdom", "Japan", "China", "India",
-                                            "Brazil", "Niger", "Republic of Korea"], start="United States",
-                    label="country")
-fig.update_yaxes(range=[np.log10(0.5), np.log10(150)])             # room for every country of the slider
+# one picture per country, with a slider that shows one at a time
+fig = slider_figure(
+    since_1950,
+    "country",
+    ["United States", "United Kingdom", "Japan", "China", "India",
+     "Brazil", "Niger", "Republic of Korea"],
+    start="United States",
+    label="country",
+)
+# room for every country of the slider
+fig.update_yaxes(range=[np.log10(0.5), np.log10(150)])
 fig
 ```
 
@@ -1864,9 +2682,12 @@ Suppose $x$ grows at 10 percent and $y$ at 3 percent a year. The rules give the 
 combination. The last column checks the rule by computing the actual one-year growth of $z$ with numbers.
 
 ```{python}
+# Table 3.1: each rule against the exact one-year growth of z
 gx, gy = 0.10, 0.03
 x0, y0 = 1.0, 1.0
-x1, y1 = x0 * (1 + gx), y0 * (1 + gy)                          # the values one year later
+# the values one year later
+x1, y1 = x0 * (1 + gx), y0 * (1 + gy)
+# one row per case: the case, the rule (equations 7 to 9), the exact growth
 rows = [
     ["z = x × y", gx + gy, (x1 * y1) / (x0 * y0) - 1],
     ["z = x / y", gx - gy, (x1 / y1) / (x0 / y0) - 1],

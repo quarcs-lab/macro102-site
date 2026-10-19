@@ -1450,52 +1450,170 @@ current (sticky) inflation rate $\pi$, and the demand shock $\bar{a}$. The circl
 model computes: the real interest rate, short-run output and the change in inflation. The baseline is normal
 times: inflation of 2 percent and a nominal rate of 7 percent, so that $R = 5\% = \bar{r}$ and output is at potential.
 
-> **Python note.** `fig.add_shape(type="circle", ...)` draws a circle inside the box from (`x0`, `y0`) to (`x1`, `y1`),
-> and `add_annotation(..., showarrow=False)` writes text at a point. `for k in range(4):` repeats the indented lines
-> for k = 0, 1, 2, 3, so `names[k]` picks one name at a time. `scaleanchor="x"` gives both axes the same scale,
-> so the circles stay round, and `visible=False` hides the axes.
+First the economics: `model_chain` runs the three steps of the chain and returns the three outcomes that the
+circles show.
 
 ```{python}
-def short_run_model(i=7.0, pi=2.0, a=0.0):
-    """Fig. 12.1: the nominal rate sets R (MP), R sets Y~ (IS), and Y~ sets the change in inflation (PC)."""
+def model_chain(i, pi, a):
+    """The three steps of the short-run model, from i to the change in inflation.
+
+    Equations (1), (2) and (5):  R = i - pi,  Y~ = a - b (R - r_bar),
+    change in inflation = nu Y~ (the circles of Fig. 1)
+
+    Arguments
+        i  : the nominal interest rate set by the central bank, in percent
+        pi : current (sticky) inflation, in percent
+        a  : the demand shock, a-bar
+    Returns
+        R   : the real interest rate, in percent (the MP curve)
+        Y   : short-run output Y~, in percent (the IS curve)
+        dpi : the change in inflation, in percentage points (the Phillips curve)
+    """
+    # MP curve: with sticky inflation, the nominal rate sets the real rate
     R = real_rate(i, pi)
+    # IS curve: the real rate sets short-run output
     Y = is_curve(R, a)
+    # Phillips curve: output sets the change in inflation
     dpi = phillips(Y)
-    names = ["Nominal<br>interest rate, i", "Real interest<br>rate, R", "Short-run<br>output, Ỹ", "Change in<br>inflation, Δπ"]
-    values = [f"{i:.1f}%", f"{R:.1f}%", f"{Y:+.1f}%", f"{dpi:+.2f}"]
-    links = ["MP<br>curve", "IS<br>curve", "Phillips<br>curve"]
-    fig = go.Figure()
+    return R, Y, dpi
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 1, the circles and the arrows of the chain
+def add_chain(fig, names, values, links):
+    """Four circles with a name and a value each, linked by three labeled arrows.
+
+    Draws the chain of Fig. 1 (adapted from Fig. 12.1 in Jones).
+
+    Arguments
+        fig    : the figure to draw on
+        names  : the names of the four circles
+        values : the values written in bold inside them
+        links  : the names of the three curves that link them
+    """
+    # Step 1: the four circles, 3.4 units apart. `for k in range(4):` repeats the
+    # indented lines for k = 0, 1, 2, 3, so `names[k]` picks one name at a time.
+    # `fig.add_shape(type="circle", ...)` draws a circle inside the box from
+    # (x0, y0) to (x1, y1)
     for k in range(4):
-        fig.add_shape(type="circle", x0=3.4 * k - 1.15, x1=3.4 * k + 1.15, y0=-1.15, y1=1.15,
-                      line=dict(color=TEAL, width=3), fillcolor="#e6f5f1")
-        fig.add_annotation(x=3.4 * k, y=0.35, text=names[k], showarrow=False, font=dict(size=12))
-        fig.add_annotation(x=3.4 * k, y=-0.45, text=f"<b>{values[k]}</b>", showarrow=False, font=dict(size=20, color=BLUE))
+        fig.add_shape(
+            type="circle",
+            x0=3.4 * k - 1.15,
+            x1=3.4 * k + 1.15,
+            y0=-1.15,
+            y1=1.15,
+            line=dict(color=TEAL, width=3),
+            fillcolor="#e6f5f1",
+        )
+        # `add_annotation(..., showarrow=False)` writes text at a point: the name of
+        # the circle, and its value in bold below it
+        fig.add_annotation(
+            x=3.4 * k,
+            y=0.35,
+            text=names[k],
+            showarrow=False,
+            font=dict(size=12),
+        )
+        fig.add_annotation(
+            x=3.4 * k,
+            y=-0.45,
+            text=f"<b>{values[k]}</b>",
+            showarrow=False,
+            font=dict(size=20, color=BLUE),
+        )
+    # Step 2: an arrow between two circles, with the name of the curve above it
     for k in range(3):
         add_arrow(fig, 3.4 * k + 1.2, 0.0, 3.4 * k + 2.2, 0.0)
-        fig.add_annotation(x=3.4 * k + 1.7, y=0.5, text=links[k], showarrow=False, font=dict(size=12))
-    fig.add_annotation(x=5.1, y=-1.7, showarrow=False, font=dict(size=14),
-                       text=f"Inflation next year: {pi:.2f}% + ({dpi:+.2f}) = {pi + dpi:.2f}%")
+        fig.add_annotation(
+            x=3.4 * k + 1.7,
+            y=0.5,
+            text=links[k],
+            showarrow=False,
+            font=dict(size=12),
+        )
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 1, the structure of the short-run model
+def short_run_model(i=7.0, pi=2.0, a=0.0):
+    """The short-run model as a chain: i -> R -> Y~ -> change in inflation.
+
+    Draws Fig. 1 (adapted from Fig. 12.1 in Jones): the nominal rate sets R (MP), R
+    sets Y~ (IS), and Y~ sets the change in inflation (Phillips curve).
+
+    Arguments
+        i  : the nominal interest rate, in percent
+        pi : current (sticky) inflation, in percent
+        a  : the demand shock, a-bar
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the numbers in the circles (model_chain)
+    R, Y, dpi = model_chain(i, pi, a)
+
+    # Step 2: the text of the circles; "<br>" starts a new line in a Plotly text
+    names = [
+        "Nominal<br>interest rate, i",
+        "Real interest<br>rate, R",
+        "Short-run<br>output, Ỹ",
+        "Change in<br>inflation, Δπ",
+    ]
+    values = [f"{i:.1f}%", f"{R:.1f}%", f"{Y:+.1f}%", f"{dpi:+.2f}"]
+    links = ["MP<br>curve", "IS<br>curve", "Phillips<br>curve"]
+
+    # Step 3: the chain (add_chain), and next year's inflation below it
+    fig = go.Figure()
+    add_chain(fig, names, values, links)
+    fig.add_annotation(
+        x=5.1,
+        y=-1.7,
+        showarrow=False,
+        font=dict(size=14),
+        text=f"Inflation next year: {pi:.2f}% + ({dpi:+.2f}) = {pi + dpi:.2f}%",
+    )
+
+    # Step 4: no axes. `scaleanchor="x"` gives both axes the same scale, so the
+    # circles stay round, and `visible=False` hides the axes
     fig.update_xaxes(visible=False, range=[-1.5, 11.7])
     fig.update_yaxes(visible=False, range=[-2.2, 1.8], scaleanchor="x")
-    fig.update_layout(title=f"i = {i:.1f}%, π = {pi:.1f}%  →  R = {R:.1f}%  →  Ỹ = {Y:+.1f}%  →  Δπ = {dpi:+.2f}")
+    fig.update_layout(
+        title=(
+            f"i = {i:.1f}%, π = {pi:.1f}%  →  R = {R:.1f}%  →  "
+            f"Ỹ = {Y:+.1f}%  →  Δπ = {dpi:+.2f}"
+        )
+    )
     return fig
 ```
 
-> **Python note.** `interact` turns each argument of a function into a slider and calls the function again
-> every time you move one. The `;` at the end only hides an extra line of text.
-
 ```{python}
 #| kind: widget
-interact(short_run_model,
-         i=FloatSlider(value=7.0, min=2.0, max=12.0, step=0.5, description="nominal interest rate i (%)", style=WIDE),
-         pi=FloatSlider(value=2.0, min=0.0, max=8.0, step=0.5, description="sticky inflation π (%)", style=WIDE),
-         a=FloatSlider(value=0.0, min=-4.0, max=4.0, step=0.5, description="demand shock ā", style=WIDE));
+# Fig. 1 with sliders. `interact` turns each argument of short_run_model into a
+# slider, and draws the figure again every time you move one. The `;` at the end
+# only hides an extra line of text.
+interact(
+    short_run_model,
+    i=FloatSlider(value=7.0, min=2.0, max=12.0, step=0.5,
+                  description="nominal interest rate i (%)", style=WIDE),
+    pi=FloatSlider(value=2.0, min=0.0, max=8.0, step=0.5,
+                   description="sticky inflation π (%)", style=WIDE),
+    a=FloatSlider(value=0.0, min=-4.0, max=4.0, step=0.5,
+                  description="demand shock ā", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 1 with a precomputed slider for the nominal interest rate
-slider_figure(short_run_model, "i", [5.0, 6.0, 7.0, 8.0, 9.0], start=7.0, label="nominal interest rate i (%)")
+# one picture of Fig. 1 per value of i; the slider shows one at a time
+slider_figure(
+    short_run_model,
+    "i",
+    [5.0, 6.0, 7.0, 8.0, 9.0],     # the values of i
+    start=7.0,
+    label="nominal interest rate i (%)",
+)
 ```
 
 **Source.** Adapted from Fig. 12.1 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -1539,6 +1657,7 @@ bank lends for less than the Fed pays, or others would borrow cheaply and lend b
 *arbitrage* opportunity).
 
 ```{python}
+# Load the data of Fig. 2: the effective federal funds rate of every month
 fedfunds = pd.read_csv(DATA_URL + "fig12-2.csv", parse_dates=["date"])
 fedfunds.tail()
 ```
@@ -1546,15 +1665,20 @@ fedfunds.tail()
 Each row is a month. `fedfunds` is the effective federal funds rate in percent, the average of the daily rates of
 that month. Let us find the highest and the lowest values.
 
-> **Python note.** `.idxmax()` gives the row label of the largest value, and `.loc[row]` picks that row.
-> `fedfunds.date.dt.year` is the year of each date, and `.between(2009, 2015)` is true for the years from 2009 to 2015.
-
 ```{python}
+# Step 1: the highest rate and the latest month. `.idxmax()` gives the row label
+# of the largest value, and `.loc[row]` picks that row
 peak = fedfunds.loc[fedfunds.fedfunds.idxmax()]
 latest = fedfunds.iloc[-1]                                  # the last row
+# Step 2: the near-zero years. `fedfunds.date.dt.year` is the year of each date,
+# and `.between(2009, 2015)` is true for the years from 2009 to 2015
 zero_years = fedfunds[fedfunds.date.dt.year.between(2009, 2015)]
+# Step 3: show the three findings
 print(f"Highest: {peak.fedfunds:.2f}% in {peak.date:%B %Y}")
-print(f"2009-2015: between {zero_years.fedfunds.min():.2f}% and {zero_years.fedfunds.max():.2f}%")
+print(
+    f"2009-2015: between {zero_years.fedfunds.min():.2f}% "
+    f"and {zero_years.fedfunds.max():.2f}%"
+)
 print(f"Latest: {latest.fedfunds:.2f}% in {latest.date:%B %Y}")
 ```
 
@@ -1564,14 +1688,15 @@ Every central bank has a policy rate. The Bank for International Settlements (BI
 and the file `policy_rates_monthly.csv` has one row per country and month. For the United States it repeats the monthly
 fed funds rate above; for the other countries it is the rate on the last day of each month.
 
-> **Python note.** `groupby("country")` makes one group of rows per country, and `.date.agg(["min", "max"])` gives the
-> first and the last date of each group. Comparing the column `"max"` with a date keeps the series that stop early.
-
 ```{python}
+# Step 1: the policy rates of 49 central banks, one row per country and month
 rates = pd.read_csv(DATA_URL + "policy_rates_monthly.csv", parse_dates=["date"])
-POLICY_COLORS = menu_colors(sorted(rates.country.unique()))
+# Step 2: the first and the last month of each series. `groupby("country")` makes
+# one group of rows per country, and `.date.agg(["min", "max"])` gives the first
+# and the last date of each group
 coverage = rates.groupby("country").date.agg(["min", "max"])
-coverage[coverage["max"] < "2026-01-01"]                  # series that stop early
+# Step 3: comparing the column "max" with a date keeps the series that stop early
+coverage[coverage["max"] < "2026-01-01"]
 ```
 
 **Look at your data.** Eleven series stop early. Germany, France, Italy, Spain and four other countries handed their
@@ -1583,21 +1708,35 @@ The chart says so in its title when a line leaves the chart.
 
 The chart can zoom in on three episodes of this chapter: choose one from the menu. You can also add other countries.
 
-> **Python note.** `rates.country.isin(countries)` is true for the rows of the chosen countries, and `.between(a, b)`
-> keeps the dates of the period. `color="country"` draws one line per country, and
-> `color_discrete_map=POLICY_COLORS` (made by `menu_colors` when we read the file) gives each its fixed color. The loop `for step in [20, 40, 80]` raises the top of the axis in steps, only when a chosen
-> country needs it. `", ".join(names)` glues a list of names into one text. A `SelectMultiple` is a list in which you
-> can pick several entries (hold Ctrl, or Cmd on a Mac, and click); the function receives the chosen names as a tuple.
-
 ```{python}
-PERIODS = {"1960–2026, all the data": (["1959-06-01", "2027-01-01"], [-1.5, 20]),   # 0 clear of the corner
-           "The Volcker years, 1977–1987": (["1977-01-01", "1987-12-31"], [-0.8, 20]),
-           "Near-zero rates after 2008, 2006–2016": (["2006-01-01", "2016-12-31"], [-0.8, 8]),
-           "Covid-19 and after, 2019–2026": (["2019-01-01", "2026-12-31"], [-0.8, 8])}
+#| kind: drawing
+# @title Drawing code: Fig. 2, the periods, the colors and two helpers
+# Step 1: the four periods of the menu: the range of the date axis and of the rate
+# axis (the rate axis starts below 0, so that 0 is clear of the corner)
+PERIODS = {
+    "1960–2026, all the data": (["1959-06-01", "2027-01-01"], [-1.5, 20]),
+    "The Volcker years, 1977–1987": (["1977-01-01", "1987-12-31"], [-0.8, 20]),
+    "Near-zero rates after 2008, 2006–2016": (["2006-01-01", "2016-12-31"], [-0.8, 8]),
+    "Covid-19 and after, 2019–2026": (["2019-01-01", "2026-12-31"], [-0.8, 8]),
+}
+# Step 2: `menu_colors` gives each central bank a fixed color
+POLICY_COLORS = menu_colors(sorted(rates.country.unique()))
 
 
 def missing_or_off(part, column, countries, low, high):
-    """Title text naming the chosen countries with no data in `part`, and those whose values leave [low, high]."""
+    """Title text naming the chosen countries with no data, and those off the chart.
+
+    Used in the titles of the multi-country charts (Figs. 2, 6, 14 and 16).
+
+    Arguments
+        part      : the rows of the chosen countries
+        column    : the column that the chart plots
+        countries : the chosen countries
+        low, high : the bottom and the top of the vertical axis
+    Returns
+        "" when every country is on the chart, else a note such as "; no data: Japan"
+    """
+    # Step 1: the countries with no rows, and those whose values leave [low, high]
     missing, off = [], []
     for name in countries:
         values = part[column][part.country == name]
@@ -1605,35 +1744,102 @@ def missing_or_off(part, column, countries, low, high):
             missing.append(name)
         elif values.min() < low or values.max() > high:
             off.append(name)
+    # Step 2: the note. `", ".join(names)` glues a list of names into one text
     note = ""
     if missing:
         note += "; no data: " + ", ".join(missing)
     if off:
         note += "; off the chart: " + ", ".join(off)
     return note
+
+
+def add_fed_labels(fig):
+    """Arrows to the 1981 peak of the fed funds rate and to its latest month (Fig. 2).
+
+    Arguments
+        fig : the figure to draw on
+    """
+    # the peak, with its label to the right
+    fig.add_annotation(
+        x=peak.date,
+        y=peak.fedfunds,
+        text=f"{peak.date:%B %Y}: {peak.fedfunds:.1f}%",
+        ax=90,
+        ay=0,
+        arrowhead=2,
+    )
+    # the latest month, with its label above, to the left
+    fig.add_annotation(
+        x=latest.date,
+        y=latest.fedfunds,
+        text=f"{latest.date:%b %Y}: {latest.fedfunds:.2f}%",
+        ax=-40,
+        ay=-50,
+        arrowhead=2,
+    )
 ```
 
 ```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 2, the policy rates over one period
 def fed_chart(period="1960–2026, all the data", countries=("United States",)):
-    """Fig. 12.2: the policy rates of the chosen central banks over one period, U.S. recessions shaded."""
+    """The policy rates of the chosen central banks over one period.
+
+    Draws Fig. 2 (inspired by Fig. 12.2 in Jones), with the U.S. recessions shaded.
+
+    Arguments
+        period    : a period of PERIODS, e.g. "The Volcker years, 1977–1987"
+        countries : the chosen countries (a tuple of names)
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the rows of the chosen countries in the period.
+    # `rates.country.isin(countries)` is true for the rows of the chosen countries,
+    # and `.between(a, b)` keeps the dates of the period
     x_range, y_range = PERIODS[period]
-    part = rates[rates.country.isin(countries) & rates.date.between(x_range[0], x_range[1])]
+    part = rates[
+        rates.country.isin(countries) & rates.date.between(x_range[0], x_range[1])
+    ]
+    # Step 2: the loop raises the top of the axis in steps, only when a chosen
+    # country needs it
     top = y_range[1]
-    for step in [20, 40, 80]:                    # a wider axis only when a chosen country needs it
+    for step in [20, 40, 80]:
         if part.policy_rate.max() > top:
             top = step
-    title = f"The fed funds rate: {peak.fedfunds:.1f}% at its 1981 peak, near zero in 2009–15 and 2020–21"
+    # Step 3: the title; with other countries, it says who is missing or off
+    title = (
+        f"The fed funds rate: {peak.fedfunds:.1f}% at its 1981 peak, "
+        "near zero in 2009–15 and 2020–21"
+    )
     if list(countries) != ["United States"]:
-        title = "Central bank policy rates" + missing_or_off(part, "policy_rate", countries, y_range[0], top)
-    fig = px.line(part, x="date", y="policy_rate", color="country", color_discrete_map=POLICY_COLORS, title=title,
-                  labels={"date": "Year", "policy_rate": "Policy rate (percent)", "country": "Central bank of"})
+        title = "Central bank policy rates" + missing_or_off(
+            part, "policy_rate", countries, y_range[0], top
+        )
+    # Step 4: `color="country"` draws one line per country, and
+    # `color_discrete_map=POLICY_COLORS` gives each its fixed color
+    fig = px.line(
+        part,
+        x="date",
+        y="policy_rate",
+        color="country",
+        color_discrete_map=POLICY_COLORS,
+        title=title,
+        labels={
+            "date": "Year",
+            "policy_rate": "Policy rate (percent)",
+            "country": "Central bank of",
+        },
+    )
+    # Step 5: the recessions shaded, and the arrows to the peak and the latest month
     shade_recessions(fig, "1960-01-01")
     if "United States" in countries:
-        fig.add_annotation(x=peak.date, y=peak.fedfunds, text=f"{peak.date:%B %Y}: {peak.fedfunds:.1f}%",
-                           ax=90, ay=0, arrowhead=2)
-        fig.add_annotation(x=latest.date, y=latest.fedfunds, text=f"{latest.date:%b %Y}: {latest.fedfunds:.2f}%",
-                           ax=-40, ay=-50, arrowhead=2)
-    fig.update_layout(xaxis_range=x_range, yaxis_range=[y_range[0], top], showlegend=len(countries) > 1)
+        add_fed_labels(fig)
+    # Step 6: the axes of the period; a legend only for several countries
+    fig.update_layout(
+        xaxis_range=x_range,
+        yaxis_range=[y_range[0], top],
+        showlegend=len(countries) > 1,
+    )
     return fig
 ```
 
@@ -1643,23 +1849,46 @@ the U.S. recessions.
 
 ```{python}
 #| kind: widget
-interact(fed_chart,
-         period=Dropdown(options=list(PERIODS), value="1960–2026, all the data", description="period", style=WIDE),
-         countries=SelectMultiple(options=sorted(rates.country.unique()), value=["United States"], rows=8,
-                                  description="countries", style=WIDE));
+# Fig. 2 with a menu and a list. A `Dropdown` is a menu. A `SelectMultiple` is a
+# list in which you can pick several entries (hold Ctrl, or Cmd on a Mac, and
+# click); the function receives the chosen names as a tuple.
+interact(
+    fed_chart,
+    period=Dropdown(options=list(PERIODS), value="1960–2026, all the data",
+                    description="period", style=WIDE),
+    countries=SelectMultiple(options=sorted(rates.country.unique()),
+                             value=["United States"], rows=8,
+                             description="countries", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: Fig. 2 with a menu for the period and buttons for groups of countries
-fig = fed_chart()                                          # the textbook view: the United States
+# @title Website version: Fig. 2 with a menu for the period and buttons for groups
+# Step 1: the textbook view, the United States, plus a line for every other bank
+fig = fed_chart()
 for trace in fed_chart(countries=sorted(rates.country.unique())).data:
     if trace.name != "United States":
         fig.add_trace(trace)
-buttons = [dict(label=name, method="relayout", args=[{"xaxis.range": x, "yaxis.range": y}])
-           for name, (x, y) in PERIODS.items()]
-fig.update_layout(showlegend=True, updatemenus=[dict(type="dropdown", buttons=buttons, x=0.99, y=0.98,
-                                                     xanchor="right", yanchor="top")])
+# Step 2: one menu entry per period; each sets the ranges of the two axes
+buttons = [
+    dict(label=name, method="relayout", args=[{"xaxis.range": x, "yaxis.range": y}])
+    for name, (x, y) in PERIODS.items()
+]
+# Step 3: the menu at the top right, then the buttons for groups of countries
+fig.update_layout(
+    showlegend=True,
+    updatemenus=[
+        dict(
+            type="dropdown",
+            buttons=buttons,
+            x=0.99,
+            y=0.98,
+            xanchor="right",
+            yanchor="top",
+        )
+    ],
+)
 group_menu(fig, ["United States"])
 ```
 
@@ -1714,31 +1943,57 @@ three. Its arguments are the new values: the real interest rate `R_new` that the
 shock `a_new` and the slope `b`. With the defaults nothing changes. When a curve moves, the old one stays behind as
 a dashed gray line.
 
-> **Python note.** `if ... else` runs one block of lines or the other. `(a_new, b) != (A_BAR, B_BAR)` is true as soon
-> as one of the two numbers differs from the baseline.
+The function needs only `is_curve` and the drawing tools, so all of its code is drawing code: open it to see
+how the curves, the points and the arrows are placed.
 
 ```{python}
+#| kind: drawing
+# @title Drawing code: Figs. 3, 4 and 10, the IS/MP diagram
 def ismp_experiment(R_new=R_BAR, a_new=A_BAR, b=B_BAR):
-    """Figs. 12.3, 12.4, 12.10: the economy moves from A (R = r_bar, Y~ = 0) to B, where IS' meets MP'."""
+    """The IS/MP diagram: the economy moves from A to B, where IS' meets MP'.
+
+    Draws Figs. 3, 4 and 10 (adapted from Figs. 12.3, 12.4 and 12.10 in Jones). A is
+    the baseline, R = r-bar and Y~ = 0; a curve that moves leaves a dashed gray copy.
+
+    Arguments
+        R_new : the real interest rate that the central bank sets, R'
+        a_new : the demand shock, a-bar'
+        b     : the slope of the IS curve, b-bar
+    Returns
+        a Plotly figure
+    """
+    # Step 1: output at B, on the IS curve at the new rate, equation (2)
     Y_B = is_curve(R_new, a_new, b)
+    # Step 2: the IS curve. `(a_new, b) != (A_BAR, B_BAR)` is true as soon as one of
+    # the two numbers differs from the baseline; `if ... else` runs one block of
+    # lines or the other
     fig = go.Figure()
     if (a_new, b) != (A_BAR, B_BAR):
         add_is(fig, "IS", GRAY, dash="dash")
         add_is(fig, "IS′", TEAL, a_new, b)
     else:
         add_is(fig, "IS", TEAL)
+    # Step 3: the MP line; when R changes, the old one stays behind, dashed
     if R_new != R_BAR:
         add_line(fig, MP_X, [R_BAR, R_BAR], "MP", GRAY, "dash")
         add_line(fig, MP_X, [R_new, R_new], "MP′", BLUE)
-        add_arrow(fig, -7.3, R_BAR, -7.3, R_new)                 # the central bank moves R
+        add_arrow(fig, -7.3, R_BAR, -7.3, R_new)        # the central bank moves R
     else:
         add_line(fig, MP_X, [R_BAR, R_BAR], "MP", BLUE)
+    # Step 4: the points A and B (`add_point` draws a dot with dashed guides to the
+    # axes), and an arrow for the change in output
     add_point(fig, 0.0, R_BAR, "A", -8, 0)
     if (Y_B, R_new) != (0.0, R_BAR):
         add_point(fig, Y_B, R_new, "B", -8, 0)
-        add_arrow(fig, 0.0, 0.6, Y_B, 0.6)                       # the change in output
+        add_arrow(fig, 0.0, 0.6, Y_B, 0.6)              # the change in output
+    # Step 5: the fixed axes X_OUTPUT and Y_RATE, and the title
     set_axes(fig, X_OUTPUT, Y_RATE)
-    fig.update_layout(title=f"MP: R = {R_new:.2f}%;  IS: ā = {a_new:.1f}, b̄ = {b:.2f}  →  Ỹ = {Y_B:+.1f}%")
+    fig.update_layout(
+        title=(
+            f"MP: R = {R_new:.2f}%;  IS: ā = {a_new:.1f}, b̄ = {b:.2f}  →  "
+            f"Ỹ = {Y_B:+.1f}%"
+        )
+    )
     return fig
 ```
 
@@ -1746,16 +2001,29 @@ Start with the textbook's Fig. 12.3: the central bank sets $R = \bar{r} = 5$ per
 
 ```{python}
 #| kind: widget
-interact(ismp_experiment,
-         R_new=FloatSlider(value=5.0, min=3.5, max=7.0, step=0.25, description="real interest rate R (%)", style=WIDE),
-         a_new=FloatSlider(value=0.0, min=-2.0, max=2.0, step=0.5, description="demand shock ā", style=WIDE),
-         b=FloatSlider(value=2.0, min=1.0, max=2.5, step=0.25, description="sensitivity of investment b̄", style=WIDE));
+# Fig. 3 with sliders for the real interest rate, the demand shock and the slope
+interact(
+    ismp_experiment,
+    R_new=FloatSlider(value=5.0, min=3.5, max=7.0, step=0.25,
+                      description="real interest rate R (%)", style=WIDE),
+    a_new=FloatSlider(value=0.0, min=-2.0, max=2.0, step=0.5,
+                      description="demand shock ā", style=WIDE),
+    b=FloatSlider(value=2.0, min=1.0, max=2.5, step=0.25,
+                  description="sensitivity of investment b̄", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 3 with a precomputed slider for the demand shock
-slider_figure(ismp_experiment, "a_new", [-2.0, -1.0, 0.0, 1.0, 2.0], start=0.0, label="demand shock ā")
+# one picture of Fig. 3 per value of the demand shock
+slider_figure(
+    ismp_experiment,
+    "a_new",
+    [-2.0, -1.0, 0.0, 1.0, 2.0],     # the values of a-bar
+    start=0.0,
+    label="demand shock ā",
+)
 ```
 
 **Source.** Adapted from Fig. 12.3 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -1792,16 +2060,29 @@ our baseline, $R' = 6$ percent gives the "$-2$ percent" of its later examples. I
 
 ```{python}
 #| kind: widget
-interact(ismp_experiment,
-         R_new=FloatSlider(value=6.0, min=3.5, max=7.0, step=0.25, description="new real interest rate R′ (%)", style=WIDE),
-         a_new=FloatSlider(value=0.0, min=-2.0, max=2.0, step=0.5, description="demand shock ā′", style=WIDE),
-         b=FloatSlider(value=2.0, min=1.0, max=2.5, step=0.25, description="sensitivity of investment b̄", style=WIDE));
+# Fig. 4 with sliders: the same function as Fig. 3, starting at R' = 6 percent
+interact(
+    ismp_experiment,
+    R_new=FloatSlider(value=6.0, min=3.5, max=7.0, step=0.25,
+                      description="new real interest rate R′ (%)", style=WIDE),
+    a_new=FloatSlider(value=0.0, min=-2.0, max=2.0, step=0.5,
+                      description="demand shock ā′", style=WIDE),
+    b=FloatSlider(value=2.0, min=1.0, max=2.5, step=0.25,
+                  description="sensitivity of investment b̄", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: Fig. 4 with a precomputed slider for the new real interest rate
-slider_figure(ismp_experiment, "R_new", [5.0, 6.0, 6.5, 7.0], start=6.0, label="new real interest rate R′ (%)")
+# @title Website version: Fig. 4 with a precomputed slider for the new real rate
+# one picture of Fig. 4 per value of R'
+slider_figure(
+    ismp_experiment,
+    "R_new",
+    [5.0, 6.0, 6.5, 7.0],     # the values of R'
+    start=6.0,
+    label="new real interest rate R′ (%)",
+)
 ```
 
 **Source.** Adapted from Fig. 12.4 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -1842,45 +2123,90 @@ $$R' = \bar{r} + \frac{\bar{a}'}{\bar{b}},$$
 the rate at which the new IS curve gives $\tilde{Y} = 0$ (our `rate_for_output`). Cheaper borrowing raises investment
 and makes up for the fall in $\bar{a}$: the economy moves to $C$, back at potential (panel b).
 
-> **Python note.** `make_subplots(rows=1, cols=2, subplot_titles=(...))` makes a figure with two panels side by side.
-> Our drawing functions take `row` and `col`, so `add_point(..., 1, 2)` draws in the panel of row 1, column 2.
-> `for col in [1, 2]:` draws the parts that both panels share.
+`housing_bubble` draws both panels. It needs only `is_curve` and `rate_for_output`, equation (3), so all of its
+code is drawing code.
 
 ```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 5, a housing bust and the Fed's answer
 def housing_bubble(a_new=-2.0, b=B_BAR):
-    """Fig. 12.5: (a) a fall in demand moves the economy from A to B; (b) the Fed lowers R to R' and reaches C."""
+    """A housing bust in two IS/MP diagrams: from A to B, then the Fed's cut to C.
+
+    Draws Fig. 5 (adapted from Fig. 12.5 in Jones). Panel (a): the fall in demand moves
+    the economy from A to B. Panel (b): the Fed lowers R to R' and reaches C.
+
+    Arguments
+        a_new : the demand shock after the bust, a-bar'
+        b     : the slope of the IS curve, b-bar
+    Returns
+        a Plotly figure
+    """
+    # Step 1: B, on the new IS curve at the old rate, and the rate of equation (3)
+    # at which the new IS curve gives Y~ = 0
     Y_B = is_curve(R_BAR, a_new, b)
-    R_new = rate_for_output(0.0, a_new, b)          # the rate at which IS' gives Y~ = 0
-    fig = make_subplots(rows=1, cols=2, horizontal_spacing=0.12,
-                        subplot_titles=("(a) The bubble bursts: A → B", "(b) The Fed lowers R: B → C"))
+    R_new = rate_for_output(0.0, a_new, b)
+    # Step 2: `make_subplots(rows=1, cols=2, subplot_titles=(...))` makes a figure
+    # with two panels side by side
+    fig = make_subplots(
+        rows=1,
+        cols=2,
+        horizontal_spacing=0.12,
+        subplot_titles=(
+            "(a) The bubble bursts: A → B",
+            "(b) The Fed lowers R: B → C",
+        ),
+    )
+    # Step 3: what both panels share. Our drawing tools take `row` and `col`, so
+    # `add_point(..., 1, col)` draws in the panel of row 1, column col
     for col in [1, 2]:
         add_is(fig, "IS", GRAY, A_BAR, b, "dash", 1, col)
         add_is(fig, "IS′", TEAL, a_new, b, "solid", 1, col)
         add_point(fig, 0.0, R_BAR, "A", -8, 0, 1, col)
         add_point(fig, Y_B, R_BAR, "B", -8, 0, 1, col)
         set_axes(fig, X_OUTPUT, Y_RATE, 1, col)
+    # Step 4: panel (a): MP stays, and output falls from A to B
     add_line(fig, MP_X, [R_BAR, R_BAR], "MP", BLUE, "solid", 1, 1)
     add_arrow(fig, 0.0, 0.6, Y_B, 0.6, 1, 1)
+    # Step 5: panel (b): the Fed lowers MP to R', and output returns from B to C
     add_line(fig, MP_X, [R_BAR, R_BAR], "MP", GRAY, "dash", 1, 2)
     add_line(fig, MP_X, [R_new, R_new], "MP′", BLUE, "solid", 1, 2)
     add_arrow(fig, -7.3, R_BAR, -7.3, R_new, 1, 2)
-    add_point(fig, 0.0, R_new, "C", -8, 0, 1, 2, where="bottom left")    # below left, clear of A
+    # C below left, clear of A
+    add_point(fig, 0.0, R_new, "C", -8, 0, 1, 2, where="bottom left")
     add_arrow(fig, Y_B, 0.6, 0.0, 0.6, 1, 2)
-    fig.update_layout(title=f"ā′ = {a_new:.1f}: B at Ỹ = {Y_B:+.1f}%;  R′ = {R_new:.2f}% brings C back to Ỹ = 0.0%")
+    # Step 6: the title reports B and the cut
+    fig.update_layout(
+        title=(
+            f"ā′ = {a_new:.1f}: B at Ỹ = {Y_B:+.1f}%;  "
+            f"R′ = {R_new:.2f}% brings C back to Ỹ = 0.0%"
+        )
+    )
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(housing_bubble,
-         a_new=FloatSlider(value=-2.0, min=-3.0, max=-0.5, step=0.25, description="demand shock after the bust ā′", style=WIDE),
-         b=FloatSlider(value=2.0, min=1.75, max=2.5, step=0.25, description="sensitivity of investment b̄", style=WIDE));
+# Fig. 5 with sliders for the demand shock after the bust and the slope
+interact(
+    housing_bubble,
+    a_new=FloatSlider(value=-2.0, min=-3.0, max=-0.5, step=0.25,
+                      description="demand shock after the bust ā′", style=WIDE),
+    b=FloatSlider(value=2.0, min=1.75, max=2.5, step=0.25,
+                  description="sensitivity of investment b̄", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 5 with a precomputed slider for the demand shock
-slider_figure(housing_bubble, "a_new", [-3.0, -2.5, -2.0, -1.5, -1.0], start=-2.0, label="demand shock after the bust ā′")
+# one picture of Fig. 5 per value of a-bar'
+slider_figure(
+    housing_bubble,
+    "a_new",
+    [-3.0, -2.5, -2.0, -1.5, -1.0],     # the values of a-bar'
+    start=-2.0,
+    label="demand shock after the bust ā′",
+)
 ```
 
 **Source.** Adapted from Fig. 12.5 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -1919,6 +2245,7 @@ pay different returns, and everyone would switch to the better one. The **yield 
 (the yield) of government bonds against their maturity.
 
 ```{python}
+# Load the data of Fig. 6: the Treasury yield curve on three days
 curves = pd.read_csv(DATA_URL + "fig12-6.csv")
 curves
 ```
@@ -1928,16 +2255,31 @@ the column name gives: `yield_1m` is the 1-month bill and `yield_360m` the 30-ye
 textbook's curves; the third is the latest day in the data. To draw one line per day we need a **long** table, with
 one row per day and maturity.
 
-> **Python note.** `melt` turns columns into rows: each `yield_...` column becomes a value in the new column
-> `column`, next to its yield. `.map(MATURITY)` replaces each column name by a readable label from the dictionary.
-
 ```{python}
-MATURITY = {"yield_1m": "1 mo", "yield_3m": "3 mo", "yield_6m": "6 mo", "yield_12m": "1 yr", "yield_24m": "2 yr",
-            "yield_36m": "3 yr", "yield_60m": "5 yr", "yield_84m": "7 yr", "yield_120m": "10 yr",
-            "yield_240m": "20 yr", "yield_360m": "30 yr"}
-DAYS = {"2022-01-03": "January 3, 2022 (textbook)", "2023-04-03": "April 3, 2023 (textbook)",
-        "2026-10-15": "October 15, 2026 (latest)"}
+# Step 1: readable labels for the maturities and for the three days
+MATURITY = {
+    "yield_1m": "1 mo",
+    "yield_3m": "3 mo",
+    "yield_6m": "6 mo",
+    "yield_12m": "1 yr",
+    "yield_24m": "2 yr",
+    "yield_36m": "3 yr",
+    "yield_60m": "5 yr",
+    "yield_84m": "7 yr",
+    "yield_120m": "10 yr",
+    "yield_240m": "20 yr",
+    "yield_360m": "30 yr",
+}
+DAYS = {
+    "2022-01-03": "January 3, 2022 (textbook)",
+    "2023-04-03": "April 3, 2023 (textbook)",
+    "2026-10-15": "October 15, 2026 (latest)",
+}
+# Step 2: a long table. `melt` turns columns into rows: each `yield_...` column
+# becomes a value in the new column `column`, next to its yield
 long = curves.melt(id_vars="date", var_name="column", value_name="yield")
+# Step 3: `.map(MATURITY)` replaces each column name by a readable label from the
+# dictionary, and `.map(DAYS)` each date by the name of its day
 long["maturity"] = long.column.map(MATURITY)
 long["day"] = long.date.map(DAYS)
 long.head()
@@ -1946,12 +2288,34 @@ long.head()
 As in the textbook, the maturities are equally spaced on the horizontal axis, not drawn to scale.
 
 ```{python}
-fig = px.line(long, x="maturity", y="yield", color="day", markers=True, hover_name="day",
-              color_discrete_map={DAYS["2022-01-03"]: BLUE, DAYS["2023-04-03"]: TEAL, DAYS["2026-10-15"]: GREEN},
-              labels={"maturity": "Maturity", "yield": "Yield (percent)", "day": "Yield curve on"},
-              title="The yield curve sloped up in January 2022 and was inverted in April 2023")
+#| kind: drawing
+# @title Drawing code: Fig. 6, the yield curve on three days
+# Step 1: one line per day (`color="day"`), with a dot at each maturity
+fig = px.line(
+    long,
+    x="maturity",
+    y="yield",
+    color="day",
+    markers=True,
+    hover_name="day",
+    color_discrete_map={
+        DAYS["2022-01-03"]: BLUE,
+        DAYS["2023-04-03"]: TEAL,
+        DAYS["2026-10-15"]: GREEN,
+    },
+    labels={
+        "maturity": "Maturity",
+        "yield": "Yield (percent)",
+        "day": "Yield curve on",
+    },
+    title="The yield curve sloped up in January 2022 and was inverted in April 2023",
+)
+# Step 2: thicker lines and larger dots; the legend inside the chart, at the left
 fig.update_traces(line_width=3, marker_size=9)
-fig.update_layout(yaxis_range=[0, 6], legend=dict(x=0.01, y=0.62, xanchor="left", yanchor="top"))
+fig.update_layout(
+    yaxis_range=[0, 6],
+    legend=dict(x=0.01, y=0.62, xanchor="left", yanchor="top"),
+)
 fig.show()
 ```
 
@@ -1963,15 +2327,28 @@ Chart: inspired by Fig. 12.6 in Jones (2024), [*Macroeconomics*, 6th ed.](https:
 How did the curve get from the first shape to the second? The file `yield_curves_monthly.csv` holds the curve on
 the first trading day of every month of 2022, 2023 and 2026. Press play.
 
-> **Python note.** `animation_frame="date"` makes one frame per date, with a play button and a slider below the
-> chart; it also works on the website. `category_orders` keeps the maturities in their natural order.
+```{python}
+# The curve on the first trading day of every month of 2022, 2023 and 2026
+monthly = pd.read_csv(DATA_URL + "yield_curves_monthly.csv")
+```
 
 ```{python}
-monthly = pd.read_csv(DATA_URL + "yield_curves_monthly.csv")
-fig = px.line(monthly, x="maturity", y="yield", animation_frame="date", markers=True,
-              category_orders={"maturity": list(MATURITY.values())},
-              labels={"maturity": "Maturity", "yield": "Yield (percent)", "date": "Date"},
-              title="Press play: short rates overtake long rates as the Fed raises rates in 2022")
+#| kind: drawing
+# @title Drawing code: Fig. 6, the yield curve month by month
+# Step 1: `animation_frame="date"` makes one frame per date, with a play button and
+# a slider below the chart; it also works on the website. `category_orders` keeps
+# the maturities in their natural order
+fig = px.line(
+    monthly,
+    x="maturity",
+    y="yield",
+    animation_frame="date",
+    markers=True,
+    category_orders={"maturity": list(MATURITY.values())},
+    labels={"maturity": "Maturity", "yield": "Yield (percent)", "date": "Date"},
+    title="Press play: short rates overtake long rates as the Fed raises rates in 2022",
+)
+# Step 2: thicker lines and larger dots, and a fixed vertical axis
 fig.update_traces(line_width=3, marker_size=9)
 fig.update_layout(yaxis_range=[0, 6])
 fig.show()
@@ -1999,16 +2376,26 @@ The file has no curves for 2024 and 2025, so the animation jumps from December 2
 
 A common measure of the slope is the 10-year yield minus the 3-month yield. We compute it for every month.
 
-> **Python note.** `pivot` does the opposite of `melt`: it makes one row per date and one column per maturity
-> (here the maturity in months), so `wide[120] - wide[3]` subtracts two columns.
-
 ```{python}
+# Step 1: `pivot` does the opposite of `melt`: it makes one row per date and one
+# column per maturity (here the maturity in months), so `wide[120] - wide[3]`
+# subtracts two columns
 wide = monthly.pivot(index="date", columns="months", values="yield")
 spread = wide[120] - wide[3]                         # 10-year minus 3-month yield
-print(f"First inverted month: {spread[spread < 0].index[0]};  most inverted: {spread.idxmin()} ({spread.min():.2f} points)")
+# Step 2: the first month with a negative spread, and the most negative one
+print(
+    f"First inverted month: {spread[spread < 0].index[0]};  "
+    f"most inverted: {spread.idxmin()} ({spread.min():.2f} points)"
+)
+# Step 3: the textbook's day, from the table of Fig. 6 labelled by date
 book = curves.set_index("date")
-print("April 3, 2023: 5-year minus 1-month", round(book.yield_60m["2023-04-03"] - book.yield_1m["2023-04-03"], 2),
-      "; 10-year minus 1-month", round(book.yield_120m["2023-04-03"] - book.yield_1m["2023-04-03"], 2))
+print(
+    "April 3, 2023: 5-year minus 1-month",
+    round(book.yield_60m["2023-04-03"] - book.yield_1m["2023-04-03"], 2),
+    "; 10-year minus 1-month",
+    round(book.yield_120m["2023-04-03"] - book.yield_1m["2023-04-03"], 2),
+)
+# Step 4: the spread in the last four months
 spread.round(2).tail(4)
 ```
 
@@ -2026,28 +2413,66 @@ For the United States it follows the Treasury curves above closely (the two 3-mo
 average), and it also shows earlier inversions, in 2000, 2006–2007 and 2019, each followed by a recession.
 
 ```{python}
+# The OECD's two interest rates of 47 economies, one row per country and month
 yields = pd.read_csv(DATA_URL + "interest_rates_monthly.csv", parse_dates=["date"])
 yields["spread"] = yields.rate_10y - yields.rate_3m        # 10-year minus 3-month rate
-SPREAD_COLORS = menu_colors(sorted(yields.country.unique()))
 yields[yields.country == "United States"].tail(3)
 ```
 
-> **Python note.** `.dropna(subset=["spread"])` drops the months in which one of the two rates is missing. The loop
-> over `[(-10, 15), (-20, 35)]` widens both ends of the axis in two steps, only when a chosen country needs it.
+`spread_chart` draws the term spread of the chosen countries, with a line at zero: below it, the yield curve is
+inverted.
 
 ```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 6, extended: the term spread of the chosen countries
+# a fixed color for each country (`menu_colors`)
+SPREAD_COLORS = menu_colors(sorted(yields.country.unique()))
+
+
 def spread_chart(countries=("United States",)):
-    """Fig. 12.6, extended: the term spread (10-year minus 3-month rate) of the chosen countries."""
+    """The term spread (10-year minus 3-month rate) of the chosen countries.
+
+    Draws Fig. 6, extended (inspired by Fig. 12.6 in Jones): one line per country and a
+    line at zero; below zero, the yield curve is inverted.
+
+    Arguments
+        countries : the chosen countries (a tuple of names)
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the chosen countries. `.dropna(subset=["spread"])` drops the months in
+    # which one of the two rates is missing
     part = yields[yields.country.isin(countries)].dropna(subset=["spread"])
+    # Step 2: the loop widens both ends of the axis in two steps, only when a chosen
+    # country needs it
     low, high = -3, 5
     for wider_low, wider_high in [(-10, 15), (-20, 35)]:
         if part.spread.min() < low or part.spread.max() > high:
             low, high = wider_low, wider_high
-    fig = px.line(part, x="date", y="spread", color="country", color_discrete_map=SPREAD_COLORS,
-                  labels={"date": "Year", "spread": "10-year minus 3-month rate (points)", "country": "Country"},
-                  title="Below zero, the yield curve is inverted" + missing_or_off(part, "spread", countries, low, high))
+    # Step 3: one line per country, in its fixed color
+    fig = px.line(
+        part,
+        x="date",
+        y="spread",
+        color="country",
+        color_discrete_map=SPREAD_COLORS,
+        labels={
+            "date": "Year",
+            "spread": "10-year minus 3-month rate (points)",
+            "country": "Country",
+        },
+        title=(
+            "Below zero, the yield curve is inverted"
+            + missing_or_off(part, "spread", countries, low, high)
+        ),
+    )
+    # Step 4: the line at zero, and fixed axes
     fig.add_hline(y=0, line_color="black", line_width=1)
-    fig.update_layout(xaxis_range=["2000-01-01", "2026-12-31"], yaxis_range=[low, high], legend_title_text="")
+    fig.update_layout(
+        xaxis_range=["2000-01-01", "2026-12-31"],
+        yaxis_range=[low, high],
+        legend_title_text="",
+    )
     return fig
 ```
 
@@ -2055,16 +2480,27 @@ On the website, the buttons above the chart list a group of countries in the leg
 
 ```{python}
 #| kind: widget
-interact(spread_chart, countries=SelectMultiple(options=sorted(yields.country.unique()), value=["United States"],
-                                                rows=8, description="countries", style=WIDE));
+# The term spread with a list of countries: hold Ctrl (Cmd on a Mac) to pick several
+interact(
+    spread_chart,
+    countries=SelectMultiple(options=sorted(yields.country.unique()),
+                             value=["United States"], rows=8,
+                             description="countries", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: the term spread of 47 economies, with buttons for groups of countries
+# @title Website version: the term spread of 47 economies, with group buttons
+# Step 1: every country in one figure; the y-axis adapts to the countries shown
 fig = spread_chart(countries=sorted(yields.country.unique()))
-fig.update_layout(title="Below zero, the yield curve is inverted", yaxis_range=None, yaxis_autorange=True)
-group_menu(fig, ["United States"])                          # the y-axis adapts to the countries shown
+fig.update_layout(
+    title="Below zero, the yield curve is inverted",
+    yaxis_range=None,
+    yaxis_autorange=True,
+)
+# Step 2: the buttons for groups of countries (the United States always drawn)
+group_menu(fig, ["United States"])
 ```
 
 **Sources.** Data: OECD, Financial market statistics (`DSD_STES@DF_FINMARK`): 3-month interbank rate (`IR3TIB`) and long-term
@@ -2118,54 +2554,115 @@ strongly prices react to demand. As with the IS diagram, one function draws thre
 curve itself (Fig. 7), an oil shock (Fig. 8) and a recession (Fig. 11). Its arguments are short-run output `Y_new`, the
 price shock `o_new` and the slope `nu`.
 
-> **Python note.** `for x, y, anchor, text in REGIONS:` takes the list of (x, y, anchor, text) groups one at a time and
-> unpacks each into four names. `dict(X_OUTPUT, title=...)` copies the settings of `X_OUTPUT` and replaces the title.
-> `Y_DPI if fits else Y_DPI_WIDE` is a one-line `if`: it gives the first axis when `fits` is true (both conditions
-> joined by `and` hold) and the wider one otherwise. `yaxis["range"][1]` looks up the axis range and takes its second
-> number, the top of the axis.
+`pc_experiment` needs only `phillips`, equation (5), so all of its code is drawing code: open it to see how the
+curves, the points and the labels are placed.
 
 ```{python}
-REGIONS = [(-7.6, 3.4, "left", "Δπ > 0:<br>inflation rises"), (7.6, -3.4, "right", "Δπ < 0:<br>inflation falls")]
-X_SLUMP_BOOM = dict(X_OUTPUT, title="←  Below potential (slump)          Short-run output, Ỹ (%)          Above potential (boom)  →")
+#| kind: drawing
+# @title Drawing code: Figs. 7, 8 and 11, the region labels and the output axis
+# Step 1: the gray labels of the two regions: (x, y, anchor, text) for each
+REGIONS = [
+    (-7.6, 3.4, "left", "Δπ > 0:<br>inflation rises"),
+    (7.6, -3.4, "right", "Δπ < 0:<br>inflation falls"),
+]
+# Step 2: the output axis with a longer title. `dict(X_OUTPUT, title=...)` copies
+# the settings of X_OUTPUT and replaces the title
+X_SLUMP_BOOM = dict(
+    X_OUTPUT,
+    title=(
+        "←  Below potential (slump)          Short-run output, Ỹ (%)"
+        "          Above potential (boom)  →"
+    ),
+)
+```
 
-
+```{python}
+#| kind: drawing
+# @title Drawing code: Figs. 7, 8 and 11, the Phillips curve diagram
 def pc_experiment(Y_new=0.0, o_new=O_BAR, nu=NU):
-    """Figs. 12.7, 12.8, 12.11: the Phillips curve, a price shock o' that shifts it, and the economy at Y~."""
+    """The Phillips curve diagram: the economy at A, at potential, and at B.
+
+    Draws Figs. 7, 8 and 11 (adapted from Figs. 12.7, 12.8 and 12.11 in Jones). A price
+    shock o' shifts the curve to PC', and B is the economy at Y~ = Y_new.
+
+    Arguments
+        Y_new : short-run output, Y~, in percent
+        o_new : the price shock, o-bar'
+        nu    : the slope of the Phillips curve, nu-bar
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the change in inflation at B, equation (5)
     dpi = phillips(Y_new, nu, o_new)
+    # Step 2: a wider axis only when B or the shift would not fit.
+    # `Y_DPI if fits else Y_DPI_WIDE` is a one-line `if`: it gives the first axis
+    # when `fits` is true (both conditions joined by `and` hold), the wider one
+    # otherwise. `yaxis["range"][1]` takes the second number of the axis range: its top
     fits = abs(dpi) <= 3.4 and abs(phillips(2.0, nu, o_new)) <= 3.4
-    yaxis = Y_DPI if fits else Y_DPI_WIDE                  # a wider axis only when B or the shift would not fit
+    yaxis = Y_DPI if fits else Y_DPI_WIDE
     top = yaxis["range"][1]
+    # Step 3: the curve; after a price shock, the old one stays behind, dashed
     fig = go.Figure()
     if o_new != O_BAR:
         add_pc(fig, "PC", GRAY, nu, O_BAR, "dash", top=top)
         add_pc(fig, "PC′", GREEN, nu, o_new, top=top)
-        add_arrow(fig, 2.0, phillips(2.0, nu), 2.0, phillips(2.0, nu, o_new))      # the shift of the curve
+        # the shift of the curve, at Y~ = 2
+        add_arrow(fig, 2.0, phillips(2.0, nu), 2.0, phillips(2.0, nu, o_new))
     else:
         add_pc(fig, "Phillips curve", GREEN, nu, top=top)
-    add_point(fig, 0.0, phillips(0.0, nu, o_new), "A", -8, -top, where="top left")  # top left: off the rising curve
+    # Step 4: A at potential (labeled top left: off the rising curve), then B
+    add_point(fig, 0.0, phillips(0.0, nu, o_new), "A", -8, -top, where="top left")
     if Y_new != 0.0:
         add_point(fig, Y_new, dpi, "B", -8, -top, where="top left")
-        add_arrow(fig, 0.0, 0.3 - top, Y_new, 0.3 - top)                            # the change in output
+        # the change in output, along the bottom of the chart
+        add_arrow(fig, 0.0, 0.3 - top, Y_new, 0.3 - top)
+    # Step 5: the region labels. `for x, y, anchor, text in REGIONS:` takes the
+    # groups one at a time and unpacks each into four names
     for x, y, anchor, text in REGIONS:
-        fig.add_annotation(x=x, y=y, text=text, showarrow=False, xanchor=anchor, font=dict(size=13, color=GRAY))
+        fig.add_annotation(
+            x=x,
+            y=y,
+            text=text,
+            showarrow=False,
+            xanchor=anchor,
+            font=dict(size=13, color=GRAY),
+        )
+    # Step 6: fixed axes, and a title that spells out equation (5)
     set_axes(fig, X_SLUMP_BOOM, yaxis)
-    fig.update_layout(title=f"Ỹ = {Y_new:+.1f}%, ō = {o_new:+.1f}  →  Δπ = {nu:.2f} × ({Y_new:+.1f}) + ({o_new:+.1f}) = {dpi:+.2f}")
+    fig.update_layout(
+        title=(
+            f"Ỹ = {Y_new:+.1f}%, ō = {o_new:+.1f}  →  "
+            f"Δπ = {nu:.2f} × ({Y_new:+.1f}) + ({o_new:+.1f}) = {dpi:+.2f}"
+        )
+    )
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(pc_experiment,
-         Y_new=FloatSlider(value=2.0, min=-4.0, max=4.0, step=0.5, description="short-run output Ỹ (%)", style=WIDE),
-         o_new=FloatSlider(value=0.0, min=-2.0, max=2.0, step=0.5, description="price shock ō", style=WIDE),
-         nu=FloatSlider(value=0.5, min=0.25, max=1.0, step=0.05, description="slope ν̄", style=WIDE));
+# Fig. 7 with sliders for output, the price shock and the slope
+interact(
+    pc_experiment,
+    Y_new=FloatSlider(value=2.0, min=-4.0, max=4.0, step=0.5,
+                      description="short-run output Ỹ (%)", style=WIDE),
+    o_new=FloatSlider(value=0.0, min=-2.0, max=2.0, step=0.5,
+                      description="price shock ō", style=WIDE),
+    nu=FloatSlider(value=0.5, min=0.25, max=1.0, step=0.05,
+                   description="slope ν̄", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 7 with a precomputed slider for short-run output
-slider_figure(pc_experiment, "Y_new", [-4.0, -3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0, 4.0], start=2.0,
-              label="short-run output Ỹ (%)")
+# one picture of Fig. 7 per value of Y~
+slider_figure(
+    pc_experiment,
+    "Y_new",
+    [-4.0, -3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0, 4.0],     # the values of Y~
+    start=2.0,
+    label="short-run output Ỹ (%)",
+)
 ```
 
 **Source.** Adapted from Fig. 12.7 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -2211,16 +2708,29 @@ wages down ($\bar{o} < 0$). The textbook's figure has no number; we use $\bar{o}
 
 ```{python}
 #| kind: widget
-interact(pc_experiment,
-         Y_new=FloatSlider(value=0.0, min=-4.0, max=4.0, step=0.5, description="short-run output Ỹ (%)", style=WIDE),
-         o_new=FloatSlider(value=1.0, min=-2.0, max=2.0, step=0.5, description="price shock ō", style=WIDE),
-         nu=FloatSlider(value=0.5, min=0.25, max=1.0, step=0.05, description="slope ν̄", style=WIDE));
+# Fig. 8 with sliders: the same function as Fig. 7, with a price shock of 1 point
+interact(
+    pc_experiment,
+    Y_new=FloatSlider(value=0.0, min=-4.0, max=4.0, step=0.5,
+                      description="short-run output Ỹ (%)", style=WIDE),
+    o_new=FloatSlider(value=1.0, min=-2.0, max=2.0, step=0.5,
+                      description="price shock ō", style=WIDE),
+    nu=FloatSlider(value=0.5, min=0.25, max=1.0, step=0.05,
+                   description="slope ν̄", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 8 with a precomputed slider for the price shock
-slider_figure(pc_experiment, "o_new", [-2.0, -1.0, 0.0, 1.0, 2.0], start=1.0, label="price shock ō")
+# one picture of Fig. 8 per value of o-bar
+slider_figure(
+    pc_experiment,
+    "o_new",
+    [-2.0, -1.0, 0.0, 1.0, 2.0],     # the values of o-bar
+    start=1.0,
+    label="price shock ō",
+)
 ```
 
 **Source.** Adapted from Fig. 12.8 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -2241,9 +2751,13 @@ slider_figure(pc_experiment, "o_new", [-2.0, -1.0, 0.0, 1.0, 2.0], start=1.0, la
 The change in inflation has two parts, $\bar{\nu}\tilde{Y}$ and $\bar{o}$. A loop computes them for a few cases.
 
 ```{python}
+# Demand-pull (nu Y~) and cost-push (o) for four cases. `for Y, o in [...]:` takes
+# one (Y~, o) pair at a time
 for Y, o in [(0.0, 1.0), (2.0, 0.0), (2.0, 1.0), (-2.0, 1.0)]:
-    print(f"Y~ = {Y:+.1f}%, o = {o:+.1f}:  demand-pull {phillips(Y, o=0.0):+.2f} + cost-push {o:+.2f}"
-          f" = {phillips(Y, o=o):+.2f} points")
+    print(
+        f"Y~ = {Y:+.1f}%, o = {o:+.1f}:  demand-pull {phillips(Y, o=0.0):+.2f} "
+        f"+ cost-push {o:+.2f} = {phillips(Y, o=o):+.2f} points"
+    )
 ```
 
 The last line is the hard case: a recession of 2 percent exactly offsets an oil shock of 1 point.
@@ -2268,6 +2782,7 @@ First `phillips(0.0, o=-0.5)`. For steady inflation solve $0 = 0.5\,\tilde{Y} - 
 **Goal.** Look at U.S. inflation since 1960 and at the role of monetary policy in it.
 
 ```{python}
+# Load the data of Fig. 9: U.S. CPI inflation, one row per year
 inflation = pd.read_csv(DATA_URL + "fig12-9.csv")
 inflation.tail()
 ```
@@ -2279,16 +2794,18 @@ We add the fed funds rate of Fig. 2, averaged over each year, and the **real int
 $R = i - \pi$. This is the *ex post* real rate, computed with the inflation that actually happened. Investors decide with
 the inflation they *expect* (the *ex ante* rate), but in this chapter we ignore the difference.
 
-> **Python note.** `groupby(...)` puts the months of each year in one group, and `.mean()` averages each group.
-> `.map(annual_ff)` then looks up the average for each year of the inflation table. `pd.to_datetime` turns the year
-> into a date (1 January), so the chart can shade the recessions.
-
 ```{python}
+# Step 1: the fed funds rate averaged over each year. `groupby(...)` puts the
+# months of each year in one group, and `.mean()` averages each group
 annual_ff = fedfunds.groupby(fedfunds.date.dt.year).fedfunds.mean()
+# Step 2: `.map(annual_ff)` looks up the average for each year of the inflation table
 inflation["fed_funds"] = inflation.year.map(annual_ff)
+# Step 3: the ex post real interest rate, R = i - pi, equation (1)
 inflation["real_rate"] = real_rate(inflation.fed_funds, inflation.inflation_cpi)
+# Step 4: `pd.to_datetime` turns the year into a date (1 January), so the chart can
+# shade the recessions
 inflation["date"] = pd.to_datetime(inflation.year.astype(str))
-top = inflation.loc[inflation.inflation_cpi.idxmax()]
+top = inflation.loc[inflation.inflation_cpi.idxmax()]       # the year of peak inflation
 inflation[inflation.year.between(1978, 1984)].round(2)
 ```
 
@@ -2296,14 +2813,21 @@ The same series exist for almost every country. The file `inflation_annual.csv` 
 economies from the World Bank (for the United States, the numbers above), and the policy rates of Fig. 2 give the
 interest rate for 49 of them. We average the monthly policy rates over each year and join the two tables.
 
-> **Python note.** `rates.assign(year=...)` returns a copy of `rates` with a new column `year`. `merge` joins two
-> tables on the columns they share, here `country` and `year`; `how="left"` keeps every row of the left table, `prices`,
-> and leaves the policy rate empty (`NaN`) where a country has none.
-
 ```{python}
+# Step 1: the CPI inflation of 194 economies
 prices = pd.read_csv(DATA_URL + "inflation_annual.csv")
-annual_rates = rates.assign(year=rates.date.dt.year).groupby(["country", "year"], as_index=False).policy_rate.mean()
+# Step 2: the policy rates of Fig. 2, averaged over each country and year.
+# `rates.assign(year=...)` returns a copy of `rates` with a new column `year`
+annual_rates = (
+    rates.assign(year=rates.date.dt.year)
+    .groupby(["country", "year"], as_index=False)
+    .policy_rate.mean()
+)
+# Step 3: `merge` joins two tables on the columns they share, here `country` and
+# `year`; `how="left"` keeps every row of the left table, `prices`, and leaves the
+# policy rate empty (`NaN`) where a country has none
 world = prices.merge(annual_rates, on=["country", "year"], how="left")
+# Step 4: the real interest rate, equation (1), and a date for the chart
 world["real_rate"] = real_rate(world.policy_rate, world.inflation)
 world["date"] = pd.to_datetime(world.year.astype(str))
 world[(world.country == "United States") & world.year.between(1980, 1982)].round(2)
@@ -2313,30 +2837,112 @@ The U.S. rows repeat the table above. The chart shows inflation as a filled area
 rate and the real interest rate, and choose another country from the menu.
 
 ```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 9, the axis and the two interest rates
+def inflation_axis(part):
+    """The range of the vertical axis of Fig. 9: wider only when the country needs it.
+
+    Arguments
+        part : the rows of one country
+    Returns
+        low, high : the bottom and the top of the axis
+    """
+    # the usual range, then two wider ones
+    low, high = -8, 18
+    for wider_low, wider_high in [(-20, 40), (-50, 100)]:
+        if (
+            part.inflation.max() > high
+            or part.policy_rate.max() > high
+            or part.real_rate.min() < low
+        ):
+            low, high = wider_low, wider_high
+    return low, high
+
+
+def add_interest_rates(fig, part, country):
+    """The policy rate i and the real rate R = i - pi of one country (Fig. 9).
+
+    Both are hidden until you click them in the legend ("legendonly").
+
+    Arguments
+        fig     : the figure to draw on
+        part    : the rows of the country
+        country : its name (the U.S. policy rate is the fed funds rate)
+    """
+    # the policy rate: a blue line
+    fig.add_trace(
+        go.Scatter(
+            x=part.date,
+            y=part.policy_rate,
+            visible="legendonly",
+            line=dict(color=BLUE, width=2),
+            name=(
+                "Fed funds rate, i" if country == "United States" else "Policy rate, i"
+            ),
+        )
+    )
+    # the real interest rate: a dotted green line
+    fig.add_trace(
+        go.Scatter(
+            x=part.date,
+            y=part.real_rate,
+            name="Real interest rate, R = i − π",
+            visible="legendonly",
+            line=dict(color=GREEN, width=2, dash="dot"),
+        )
+    )
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 9, inflation and interest rates of one country
 def inflation_chart(country="United States"):
-    """Fig. 12.9: inflation, the policy rate i and the real interest rate R = i − π of one country."""
+    """Inflation, the policy rate i and the real rate R = i - pi of one country.
+
+    Draws Fig. 9 (inspired by Fig. 12.9 in Jones): inflation as a filled area, the two
+    interest rates in the legend, and for the United States the recessions shaded.
+
+    Arguments
+        country : the country to draw
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the country's rows, its year of highest inflation, and the axis
     part = world[world.country == country]
     worst = part.loc[part.inflation.idxmax()]
-    low, high = -8, 18
-    for wider_low, wider_high in [(-20, 40), (-50, 100)]:   # a wider axis only when the country needs it
-        if part.inflation.max() > high or part.policy_rate.max() > high or part.real_rate.min() < low:
-            low, high = wider_low, wider_high
+    low, high = inflation_axis(part)
+    # Step 2: the title, with a note when a line still leaves the chart
     title = f"{country}: inflation peaked at {worst.inflation:.1f}% in {worst.year}"
     if country == "United States":
-        title = f"Inflation peaked at {worst.inflation:.1f}% in {worst.year} and tends to fall after shaded recessions"
-    if part.inflation.max() > high or part.policy_rate.max() > high or part.real_rate.min() < low:
+        title = (
+            f"Inflation peaked at {worst.inflation:.1f}% in {worst.year} "
+            "and tends to fall after shaded recessions"
+        )
+    if (
+        part.inflation.max() > high
+        or part.policy_rate.max() > high
+        or part.real_rate.min() < low
+    ):
         title += " (off the chart)"
-    fig = px.area(part, x="date", y="inflation", labels={"date": "Year", "inflation": "Percent"}, title=title)
+    # Step 3: inflation as a filled area (`px.area`), then the two interest rates
+    fig = px.area(
+        part,
+        x="date",
+        y="inflation",
+        labels={"date": "Year", "inflation": "Percent"},
+        title=title,
+    )
     fig.update_traces(name="Inflation (CPI)", showlegend=True, line_color=TEAL)
-    fig.add_trace(go.Scatter(x=part.date, y=part.policy_rate, visible="legendonly", line=dict(color=BLUE, width=2),
-                             name="Fed funds rate, i" if country == "United States" else "Policy rate, i"))
-    fig.add_trace(go.Scatter(x=part.date, y=part.real_rate, name="Real interest rate, R = i − π",
-                             visible="legendonly", line=dict(color=GREEN, width=2, dash="dot")))
+    add_interest_rates(fig, part, country)
+    # Step 4: a line at zero, the U.S. recessions, and fixed axes
     fig.add_hline(y=0, line_dash="dash", line_color="black", line_width=1)
     if country == "United States":
         shade_recessions(fig, "1960-01-01")
-    fig.update_layout(xaxis_range=["1959-01-01", "2026-12-31"], yaxis_range=[low, high],
-                      legend=dict(x=0.99, y=0.98, xanchor="right", yanchor="top"))
+    fig.update_layout(
+        xaxis_range=["1959-01-01", "2026-12-31"],
+        yaxis_range=[low, high],
+        legend=dict(x=0.99, y=0.98, xanchor="right", yanchor="top"),
+    )
     return fig
 ```
 
@@ -2344,14 +2950,24 @@ On the website, the menu offers the 49 countries with a policy rate.
 
 ```{python}
 #| kind: widget
-interact(inflation_chart, country=Dropdown(options=sorted(world.country.unique()), value="United States",
-                                           description="country", style=WIDE));
+# Fig. 9 with a menu (`Dropdown`) for the country
+interact(
+    inflation_chart,
+    country=Dropdown(options=sorted(world.country.unique()),
+                     value="United States", description="country", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 9 with a menu for the country
-menu_figure(inflation_chart, "country", sorted(annual_rates.country.unique()), "United States")
+# one picture of Fig. 9 per country with a policy rate; the menu shows one at a time
+menu_figure(
+    inflation_chart,
+    "country",
+    sorted(annual_rates.country.unique()),
+    "United States",
+)
 ```
 
 **Sources.** Data: [U.S. Bureau of Labor Statistics, Consumer Price Index for All Urban Consumers: All Items (`CPIAUCSL`), via FRED](https://fred.stlouisfed.org/series/CPIAUCSL);
@@ -2405,26 +3021,60 @@ interest rate. Because inflation is sticky, the real rate rises too: $R' = i' - 
 nominal rate of 15 percent keeps $R = 5\% = \bar{r}$; raising it to 16 percent lifts the real rate to 6 percent, and output
 falls to the textbook's $-2$ percent. The function reuses `ismp_experiment` and only adds the Fisher step.
 
+`tightening` adds only the Fisher step, `real_rate`, to the diagram of Fig. 3, so all of its code is drawing
+code.
+
 ```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 10, tightening monetary policy
 def tightening(i_new=16.0, pi=10.0):
-    """Fig. 12.10: with sticky inflation pi, a higher nominal rate i' raises R' = i' - pi and lowers output."""
+    """The IS/MP diagram after a rise in the nominal rate, with sticky inflation.
+
+    Draws Fig. 10 (adapted from Fig. 12.10 in Jones): a higher nominal rate i' raises
+    the real rate R' = i' - pi, and output falls along the IS curve.
+
+    Arguments
+        i_new : the new nominal interest rate, i', in percent
+        pi    : sticky inflation, in percent
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the Fisher equation (1) turns i' into the real rate R'
     R_new = real_rate(i_new, pi)
+    # Step 2: the diagram of Fig. 3 at R', with a title that adds the Fisher step
     fig = ismp_experiment(R_new=R_new)
-    fig.update_layout(title=f"i′ = {i_new:.1f}% and sticky π = {pi:.1f}%  →  R′ = {R_new:.1f}%  →  Ỹ = {is_curve(R_new):+.1f}%")
+    fig.update_layout(
+        title=(
+            f"i′ = {i_new:.1f}% and sticky π = {pi:.1f}%  →  "
+            f"R′ = {R_new:.1f}%  →  Ỹ = {is_curve(R_new):+.1f}%"
+        )
+    )
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(tightening,
-         i_new=FloatSlider(value=16.0, min=13.0, max=17.5, step=0.5, description="new nominal interest rate i′ (%)", style=WIDE),
-         pi=FloatSlider(value=10.0, min=9.0, max=11.0, step=0.5, description="sticky inflation π (%)", style=WIDE));
+# Fig. 10 with sliders for the new nominal rate and sticky inflation
+interact(
+    tightening,
+    i_new=FloatSlider(value=16.0, min=13.0, max=17.5, step=0.5,
+                      description="new nominal interest rate i′ (%)", style=WIDE),
+    pi=FloatSlider(value=10.0, min=9.0, max=11.0, step=0.5,
+                   description="sticky inflation π (%)", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: Fig. 10 with a precomputed slider for the nominal interest rate
-slider_figure(tightening, "i_new", [15.0, 15.5, 16.0, 16.5, 17.0, 17.5], start=16.0, label="new nominal interest rate i′ (%)")
+# @title Website version: Fig. 10 with a precomputed slider for the nominal rate
+# one picture of Fig. 10 per value of i'
+slider_figure(
+    tightening,
+    "i_new",
+    [15.0, 15.5, 16.0, 16.5, 17.0, 17.5],     # the values of i'
+    start=16.0,
+    label="new nominal interest rate i′ (%)",
+)
 ```
 
 **Source.** Adapted from Fig. 12.10 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -2461,16 +3111,29 @@ aggressively, and the economy jumps from $A$ to $B$ on the Phillips curve, where
 
 ```{python}
 #| kind: widget
-interact(pc_experiment,
-         Y_new=FloatSlider(value=-2.0, min=-4.0, max=4.0, step=0.5, description="output in the recession Ỹ′ (%)", style=WIDE),
-         o_new=FloatSlider(value=0.0, min=-2.0, max=2.0, step=0.5, description="price shock ō", style=WIDE),
-         nu=FloatSlider(value=0.5, min=0.25, max=1.0, step=0.05, description="slope ν̄", style=WIDE));
+# Fig. 11 with sliders: the function of Fig. 7, with output 2 percent below potential
+interact(
+    pc_experiment,
+    Y_new=FloatSlider(value=-2.0, min=-4.0, max=4.0, step=0.5,
+                      description="output in the recession Ỹ′ (%)", style=WIDE),
+    o_new=FloatSlider(value=0.0, min=-2.0, max=2.0, step=0.5,
+                      description="price shock ō", style=WIDE),
+    nu=FloatSlider(value=0.5, min=0.25, max=1.0, step=0.05,
+                   description="slope ν̄", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 11 with a precomputed slider for output in the recession
-slider_figure(pc_experiment, "Y_new", [-4.0, -3.0, -2.0, -1.0, 0.0], start=-2.0, label="output in the recession Ỹ′ (%)")
+# one picture of Fig. 11 per value of Y~'
+slider_figure(
+    pc_experiment,
+    "Y_new",
+    [-4.0, -3.0, -2.0, -1.0, 0.0],     # the values of Y~'
+    start=-2.0,
+    label="output in the recession Ỹ′ (%)",
+)
 ```
 
 **Source.** Adapted from Fig. 12.11 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -2506,30 +3169,125 @@ $\tilde{Y}_t$, and the Phillips curve gives $\pi_t = \pi_{t-1} + \bar{\nu}\tilde
 function. Inflation starts at the textbook's 10 percent. Inflation in year 0 already falls, because
 $\pi_0 = (P_1 - P_0)/P_0$: firms set next year's prices when they see this year's recession.
 
-> **Python note.** `np.arange(-2, 10)` is the years $-2, -1, \ldots, 9$. `np.where(condition, a, b)` gives `a` where the
-> condition is true and `b` elsewhere: here a high rate from year 0 to $t^* - 1$ and $\bar{r}$ otherwise. `&` means "and".
-> `line_shape="hv"` draws steps: a flat line, then a jump. `IntSlider` is a slider for whole numbers. `pi_path.min()`
-> is the smallest number in the array: if a long, deep recession pushes inflation below zero (deflation), the inflation
-> axis extends below zero to show it.
+First the economics: `volcker_paths` builds the path of the real interest rate that the Fed sets and runs
+`simulate` on it.
 
 ```{python}
-def disinflation(Y_rec=-2.0, t_star=5, nu=NU):
-    """Fig. 12.12: the Fed holds R high from year 0 to t*; output is Y_rec and inflation falls from 10%."""
+def volcker_paths(Y_rec, t_star, nu):
+    """The Volcker policy year by year: the paths of R, Y~ and inflation (Fig. 12).
+
+    The MP curve sets R_t: the rate of equation (3) that gives Y~ = Y_rec from year 0
+    to t* - 1, and r-bar otherwise. Then simulate applies the IS curve and the
+    Phillips curve, equation (4) with o-bar = 0, one year at a time.
+
+    Arguments
+        Y_rec  : output in the recession, Y~, in percent
+        t_star : the year in which the Fed returns R to r-bar, t*
+        nu     : the slope of the Phillips curve, nu-bar
+    Returns
+        years   : the years -2 to 9
+        R_path  : the real interest rate of each year, in percent
+        Y_path  : short-run output of each year, in percent
+        pi_path : inflation of each year, in percent (10 percent before year 0)
+    """
+    # Step 1: `np.arange(-2, 10)` is the years -2, -1, ..., 9
     years = np.arange(-2, 10)
+    # Step 2: `np.where(condition, a, b)` gives a where the condition is true and b
+    # elsewhere: here a high rate from year 0 to t* - 1, and r-bar otherwise.
+    # `&` means "and"
     R_path = np.where((years >= 0) & (years < t_star), rate_for_output(Y_rec), R_BAR)
+    # Step 3: the IS curve and the Phillips curve, year by year, from 10 percent
     Y_path, pi_path = simulate(R_path, pi_start=10.0, nu=nu)
-    fig = make_subplots(rows=1, cols=3, horizontal_spacing=0.09,
-                        subplot_titles=("(a) R held high until t*", "(b) Output below potential", "(c) Inflation steps down"))
+    return years, R_path, Y_path, pi_path
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 12, the axes of the three panels
+def volcker_axes(t_star, pi_min):
+    """The axes of the three panels of Fig. 12.
+
+    Arguments
+        t_star : the year in which the Fed returns R to r-bar, t* (marked on the axis)
+        pi_min : the lowest inflation rate of the path, in percent
+    Returns
+        time_axis : the settings of the time axis, with years 0 and t* marked
+        axes      : the settings of the three vertical axes, panels (a) to (c)
+    """
+    # the time axis marks year 0 and year t*
+    time_axis = dict(
+        title="Year",
+        tickvals=[0, t_star],
+        ticktext=["0", "t*"],
+        range=[-2.5, 9.5],
+    )
+    # `pi_path.min()` is the smallest number in the array: if a long, deep recession
+    # pushes inflation below zero (deflation), the inflation axis extends below zero
+    axes = [
+        dict(title="Real interest rate, R (%)", range=[2.5, 7.5]),
+        dict(title="Short-run output, Ỹ (%)", range=[-4.5, 1.5]),
+        dict(title="Inflation, π (%)", range=[min(0.0, pi_min - 1.0), 11.5]),
+    ]
+    return time_axis, axes
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 12, the disinflation over time
+def disinflation(Y_rec=-2.0, t_star=5, nu=NU):
+    """Three panels over time: the real interest rate, output and inflation.
+
+    Draws Fig. 12 (adapted from Fig. 12.12 in Jones): the Fed holds R high from year 0
+    to t*, output is Y_rec, and inflation falls from 10 percent.
+
+    Arguments
+        Y_rec  : output in the recession, Y~, in percent
+        t_star : the year in which the Fed returns R to r-bar, t*
+        nu     : the slope of the Phillips curve, nu-bar
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the paths (volcker_paths)
+    years, R_path, Y_path, pi_path = volcker_paths(Y_rec, t_star, nu)
+    # Step 2: three panels side by side
+    fig = make_subplots(
+        rows=1,
+        cols=3,
+        horizontal_spacing=0.09,
+        subplot_titles=(
+            "(a) R held high until t*",
+            "(b) Output below potential",
+            "(c) Inflation steps down",
+        ),
+    )
+    # Step 3: what each panel draws. `line_shape="hv"` draws steps: a flat line,
+    # then a jump
     paths = [R_path, Y_path, pi_path]
     colors, shapes = [BLUE, TEAL, GREEN], ["hv", "hv", "linear"]
-    axes = [dict(title="Real interest rate, R (%)", range=[2.5, 7.5]), dict(title="Short-run output, Ỹ (%)", range=[-4.5, 1.5]),
-            dict(title="Inflation, π (%)", range=[min(0.0, pi_path.min() - 1.0), 11.5])]   # widens only below zero
+    time_axis, axes = volcker_axes(t_star, pi_path.min())
+    # Step 4: one path per panel, with years 0 and t* marked on the time axis
     for k in range(3):
-        fig.add_trace(go.Scatter(x=years, y=paths[k], mode="lines+markers", showlegend=False, line_shape=shapes[k],
-                                 line=dict(color=colors[k], width=4), marker=dict(color="black", size=9)), row=1, col=k + 1)
-        set_axes(fig, dict(title="Year", tickvals=[0, t_star], ticktext=["0", "t*"], range=[-2.5, 9.5]), axes[k], 1, k + 1)
-    fig.update_layout(title=f"π: 10.0% → {pi_path[-1]:.1f}% with Ỹ = {Y_rec:+.1f}% until t* = {t_star};"
-                            f"  output lost: {-Y_path.sum():.1f} %-years")
+        fig.add_trace(
+            go.Scatter(
+                x=years,
+                y=paths[k],
+                mode="lines+markers",
+                showlegend=False,
+                line_shape=shapes[k],
+                line=dict(color=colors[k], width=4),
+                marker=dict(color="black", size=9),
+            ),
+            row=1,
+            col=k + 1,
+        )
+        set_axes(fig, time_axis, axes[k], 1, k + 1)
+    # Step 5: the title reports the fall in inflation and the output lost
+    fig.update_layout(
+        title=(
+            f"π: 10.0% → {pi_path[-1]:.1f}% with Ỹ = {Y_rec:+.1f}% "
+            f"until t* = {t_star};  output lost: {-Y_path.sum():.1f} %-years"
+        )
+    )
     return fig
 ```
 
@@ -2538,17 +3296,31 @@ recession, the years of tight policy and the slope, then press **Run the Volcker
 
 ```{python}
 #| kind: widget
+# Fig. 12 with a button. `interact_manual` adds a button, so nothing happens until
+# you press it; `IntSlider` is a slider for whole numbers
 run_volcker = interact_manual.options(manual_name="Run the Volcker policy")
-run_volcker(disinflation,
-            Y_rec=FloatSlider(value=-2.0, min=-4.0, max=-0.5, step=0.5, description="output in the recession (%)", style=WIDE),
-            t_star=IntSlider(value=5, min=1, max=9, step=1, description="years of tight policy t*", style=WIDE),
-            nu=FloatSlider(value=0.5, min=0.25, max=1.0, step=0.05, description="slope ν̄", style=WIDE));
+run_volcker(
+    disinflation,
+    Y_rec=FloatSlider(value=-2.0, min=-4.0, max=-0.5, step=0.5,
+                      description="output in the recession (%)", style=WIDE),
+    t_star=IntSlider(value=5, min=1, max=9, step=1,
+                     description="years of tight policy t*", style=WIDE),
+    nu=FloatSlider(value=0.5, min=0.25, max=1.0, step=0.05,
+                   description="slope ν̄", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: Fig. 12 with a precomputed slider for the years of tight policy
-slider_figure(disinflation, "t_star", [1, 2, 3, 4, 5, 6, 7, 8], start=5, label="years of tight policy t*")
+# @title Website version: Fig. 12 with a precomputed slider for years of tight policy
+# one picture of Fig. 12 per value of t*
+slider_figure(
+    disinflation,
+    "t_star",
+    [1, 2, 3, 4, 5, 6, 7, 8],     # the values of t*
+    start=5,
+    label="years of tight policy t*",
+)
 ```
 
 **Source.** Adapted from Fig. 12.12 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -2592,60 +3364,216 @@ The textbook's figure is stylized, so we describe it with three numbers: potenti
 1973 (`g_new`), and how far the stimulus eventually pushes output above true potential (`gap_max`, reached gradually).
 Output is an index with 1973 = 100. This small model is used only here, so we define it in this section.
 
-> **Python note.** `np.exp` is the exponential function: an index growing at g percent a year is
-> $100\,e^{g\,(t - 1973)/100}$. `np.minimum(x, 0)` keeps the negative values of `x` and sets the others to 0, and
-> `np.maximum(x, 0)` does the opposite. `continue` skips the rest of the loop for the current item.
-
 ```{python}
 def output_paths(g_old=3.5, g_new=2.5, gap_max=4.0):
-    """Fig. 12.13: believed potential, true potential and actual output (1973 = 100)."""
+    """Believed potential, true potential and actual output, 1965-1985 (Fig. 13).
+
+    An index with 1973 = 100. Potential grows at g_old percent a year, and after 1973 at
+    g_new; policymakers still believe in g_old. The stimulus pushes actual output,
+    gradually, gap_max percent above true potential.
+
+    Arguments
+        g_old   : potential growth before 1973, in percent a year
+        g_new   : true potential growth after 1973, in percent a year
+        gap_max : how far the stimulus finally pushes output above true potential
+    Returns
+        years    : the years 1965 to 1985
+        believed : potential output as policymakers believe it
+        true     : true potential output
+        actual   : actual output
+    """
+    # Step 1: the years, and the years before and after 1973. `np.minimum(x, 0)`
+    # keeps the negative values of x and sets the others to 0, and
+    # `np.maximum(x, 0)` does the opposite
     years = np.arange(1965, 1986)
     before, after = np.minimum(years - 1973, 0), np.maximum(years - 1973, 0)
+    # Step 2: `np.exp` is the exponential function: an index growing at g percent a
+    # year is 100 exp(g (t - 1973) / 100)
     believed = 100 * np.exp(g_old * (years - 1973) / 100)
     true = 100 * np.exp((g_old * before + g_new * after) / 100)
-    gap_true = gap_max * (1 - np.exp(-after / 4))      # the stimulus pushes output above true potential
+    # Step 3: the stimulus pushes output above true potential, more each year
+    gap_true = gap_max * (1 - np.exp(-after / 4))
     actual = true * (1 + gap_true / 100)
     return years, believed, true, actual
 ```
 
+`slowdown_gaps` computes the two output gaps, as policymakers saw it and as it really was, and the rise in
+inflation that the Phillips curve gives from 1974 to 1980.
+
 ```{python}
-def slowdown(g_old=3.5, g_new=2.5, gap_max=4.0):
-    """Fig. 12.13 with readouts: the perceived and the true output gap, and the rise in inflation."""
+def slowdown_gaps(g_old, g_new, gap_max):
+    """The perceived and the true output gap, and the rise in inflation (Fig. 13).
+
+    Perceived Y~ = 100 (actual / believed potential - 1), true Y~ = 100 (actual / true
+    potential - 1); the Phillips curve, equation (5), adds nu Y~ to inflation each year.
+
+    Arguments
+        g_old, g_new, gap_max : as in output_paths
+    Returns
+        years, believed, true, actual : the paths of output_paths
+        perceived_gap, true_gap       : the two output gaps of each year, in percent
+        dpi : the rise in inflation from 1974 to 1980, in percentage points
+    """
+    # Step 1: the three paths of output
     years, believed, true, actual = output_paths(g_old, g_new, gap_max)
+    # Step 2: the output gap that policymakers saw, and the true one
     perceived_gap, true_gap = 100 * (actual / believed - 1), 100 * (actual / true - 1)
-    dpi = phillips(true_gap[(years > 1973) & (years <= 1980)]).sum()   # Phillips curve, 1974-1980
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=years, y=believed, name=f"Believed potential ({g_old:g}% a year)", line=dict(color=GREEN, width=4, dash="dash")))
-    fig.add_trace(go.Scatter(x=years, y=actual, name="Actual output (with the stimulus)", line=dict(color=TEAL, width=4)))
-    fig.add_trace(go.Scatter(x=years, y=true, name=f"True potential ({g_new:g}% a year after 1973)", line=dict(color=BLUE, width=4, dash="dash")))
-    gaps = [(actual[-1], believed[-1], "seen as Ỹ < 0"), (true[-1], actual[-1], "true Ỹ > 0")]
+    # Step 3: the Phillips curve in each year from 1974 to 1980, added up
+    dpi = phillips(true_gap[(years > 1973) & (years <= 1980)]).sum()
+    return years, believed, true, actual, perceived_gap, true_gap, dpi
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 13, the three paths of output
+def add_slowdown_paths(fig, years, believed, true, actual, g_old, g_new):
+    """The three paths of Fig. 13: believed potential, actual output, true potential.
+
+    Arguments
+        fig                    : the figure to draw on
+        years                  : the years 1965 to 1985
+        believed, true, actual : the three paths of output_paths
+        g_old, g_new           : potential growth before and after 1973, for the legend
+    """
+    # believed potential: dashed green, at the old growth rate
+    fig.add_trace(
+        go.Scatter(
+            x=years,
+            y=believed,
+            name=f"Believed potential ({g_old:g}% a year)",
+            line=dict(color=GREEN, width=4, dash="dash"),
+        )
+    )
+    # actual output: solid teal
+    fig.add_trace(
+        go.Scatter(
+            x=years,
+            y=actual,
+            name="Actual output (with the stimulus)",
+            line=dict(color=TEAL, width=4),
+        )
+    )
+    # true potential: dashed blue, slower after 1973
+    fig.add_trace(
+        go.Scatter(
+            x=years,
+            y=true,
+            name=f"True potential ({g_new:g}% a year after 1973)",
+            line=dict(color=BLUE, width=4, dash="dash"),
+        )
+    )
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 13, the brackets of the two gaps
+def add_gap_brackets(fig, believed, true, actual):
+    """A bracket and a label at the right end for each of the two gaps (Fig. 13).
+
+    Arguments
+        fig                    : the figure to draw on
+        believed, true, actual : the three paths of output_paths
+    """
+    # the gap seen by policymakers, and the true one, in 1985
+    gaps = [
+        (actual[-1], believed[-1], "seen as Ỹ < 0"),
+        (true[-1], actual[-1], "true Ỹ > 0"),
+    ]
     for low, high, text in gaps:
-        if high - low < 4:                             # no bracket (and no false label) for a gap that is not there
+        # `continue` skips the rest of the loop for a gap that is not there: no
+        # bracket, and no false label
+        if high - low < 4:
             continue
-        fig.add_trace(go.Scatter(x=[1985.4, 1985.4], y=[low, high], mode="lines", showlegend=False, line=dict(color="black", width=2)))
-        fig.add_annotation(x=1985.6, y=(low + high) / 2, text=text, showarrow=False, xanchor="left", font=dict(size=13))
-    k = 1980 - 1965                                    # the position of 1980 in the arrays
+        # the bracket: a black line from low to high, just right of 1985
+        fig.add_trace(
+            go.Scatter(
+                x=[1985.4, 1985.4],
+                y=[low, high],
+                mode="lines",
+                showlegend=False,
+                line=dict(color="black", width=2),
+            )
+        )
+        # its label, halfway up
+        fig.add_annotation(
+            x=1985.6,
+            y=(low + high) / 2,
+            text=text,
+            showarrow=False,
+            xanchor="left",
+            font=dict(size=13),
+        )
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 13, mistaking a slowdown in potential for a recession
+def slowdown(g_old=3.5, g_new=2.5, gap_max=4.0):
+    """Believed potential, true potential and actual output, with the two gaps.
+
+    Draws Fig. 13 (adapted from Fig. 12.13 in Jones), with readouts of the perceived
+    and the true output gap in 1980 and of the rise in inflation since 1973.
+
+    Arguments
+        g_old   : potential growth before 1973, in percent a year
+        g_new   : true potential growth after 1973, in percent a year
+        gap_max : how far the stimulus finally pushes output above true potential
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the numbers (slowdown_gaps)
+    years, believed, true, actual, perceived_gap, true_gap, dpi = slowdown_gaps(
+        g_old, g_new, gap_max
+    )
+    # Step 2: the three paths, and the brackets of the gaps
+    fig = go.Figure()
+    add_slowdown_paths(fig, years, believed, true, actual, g_old, g_new)
+    add_gap_brackets(fig, believed, true, actual)
+    # Step 3: a dotted line at 1973, and the title reports 1980
+    # the position of 1980 in the arrays
+    k = 1980 - 1965
     fig.add_vline(x=1973, line_dash="dot", line_color=GRAY)
-    fig.update_layout(title=f"1980: perceived Ỹ = {perceived_gap[k]:+.1f}%, true Ỹ = {true_gap[k]:+.1f}%;"
-                            f" inflation +{dpi:.1f} points since 1973",
-                      xaxis=dict(title="Year", range=[1964, 1990], tickvals=[1965, 1970, 1973, 1980, 1985]),
-                      yaxis=dict(title="Output (index, 1973 = 100)", range=[60, 190]),
-                      legend=dict(x=0.01, y=0.99, xanchor="left", yanchor="top"))
+    fig.update_layout(
+        title=(
+            f"1980: perceived Ỹ = {perceived_gap[k]:+.1f}%, "
+            f"true Ỹ = {true_gap[k]:+.1f}%; inflation +{dpi:.1f} points since 1973"
+        ),
+        xaxis=dict(
+            title="Year",
+            range=[1964, 1990],
+            tickvals=[1965, 1970, 1973, 1980, 1985],
+        ),
+        yaxis=dict(title="Output (index, 1973 = 100)", range=[60, 190]),
+        legend=dict(x=0.01, y=0.99, xanchor="left", yanchor="top"),
+    )
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(slowdown,
-         g_old=FloatSlider(value=3.5, min=2.0, max=5.0, step=0.25, description="potential growth before 1973 (%)", style=WIDE),
-         g_new=FloatSlider(value=2.5, min=1.0, max=4.0, step=0.25, description="true potential growth after 1973 (%)", style=WIDE),
-         gap_max=FloatSlider(value=4.0, min=0.0, max=6.0, step=0.5, description="stimulus: long-run true gap (%)", style=WIDE));
+# Fig. 13 with sliders for potential growth before and after 1973 and the stimulus
+interact(
+    slowdown,
+    g_old=FloatSlider(value=3.5, min=2.0, max=5.0, step=0.25,
+                      description="potential growth before 1973 (%)", style=WIDE),
+    g_new=FloatSlider(value=2.5, min=1.0, max=4.0, step=0.25,
+                      description="true potential growth after 1973 (%)", style=WIDE),
+    gap_max=FloatSlider(value=4.0, min=0.0, max=6.0, step=0.5,
+                        description="stimulus: long-run true gap (%)", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 13 with a precomputed slider for true potential growth
-slider_figure(slowdown, "g_new", [1.5, 2.0, 2.5, 3.0, 3.5], start=2.5, label="true potential growth after 1973 (%)")
+# one picture of Fig. 13 per growth rate of true potential after 1973
+slider_figure(
+    slowdown,
+    "g_new",
+    [1.5, 2.0, 2.5, 3.0, 3.5],     # the growth rates, in percent
+    start=2.5,
+    label="true potential growth after 1973 (%)",
+)
 ```
 
 **Source.** Adapted from Fig. 12.13 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -2677,12 +3605,23 @@ The textbook sums up how monetary policy works through the three building blocks
 Here is the chain in numbers, with inflation stuck at 10 percent, for three nominal interest rates.
 
 ```{python}
+# The chain in numbers for three nominal rates, with inflation stuck at 10 percent.
+# `rows.append([...])` adds one row of four numbers to the list `rows`
 rows = []
 for i in [15.0, 16.0, 17.0]:
-    R = real_rate(i, 10.0)
-    Y = is_curve(R)
-    rows.append([i, R, Y, phillips(Y)])
-pd.DataFrame(rows, columns=["nominal rate i (%)", "real rate R (%)", "output Y~ (%)", "change in inflation (points)"])
+    R = real_rate(i, 10.0)                  # MP curve, equation (1)
+    Y = is_curve(R)                         # IS curve, equation (2)
+    rows.append([i, R, Y, phillips(Y)])     # Phillips curve, equation (5)
+# a table with one row per nominal rate
+pd.DataFrame(
+    rows,
+    columns=[
+        "nominal rate i (%)",
+        "real rate R (%)",
+        "output Y~ (%)",
+        "change in inflation (points)",
+    ],
+)
 ```
 
 **Your turn.** In the slowdown model, how large must the stimulus (`gap_max`) be for inflation to rise by only 2 points
@@ -2711,6 +3650,7 @@ The pandemic tested the model: a deep but brief fall in GDP, a large fiscal resp
 **Goal.** Measure how deep the Covid-19 recession was and how fast GDP came back.
 
 ```{python}
+# Load the data of Fig. 14: U.S. real GDP, one row per quarter
 gdp = pd.read_csv(DATA_URL + "fig12-14.csv", parse_dates=["date"])
 gdp.head()
 ```
@@ -2719,32 +3659,67 @@ Each row is a quarter. `real_gdp` is real GDP in trillions of chained 2017 dolla
 2012 dollars, so its numbers are 8–10 percent lower; the shape is the same. To judge whether GDP was "back on trend", we
 fit a straight line to the logarithm of GDP before Covid (2015Q1–2019Q4), which means a constant growth rate, and extend it.
 
-> **Python note.** `np.polyfit(x, y, 1)` fits a straight line $y = \text{slope}\cdot x + \text{intercept}$ by least squares.
-> `np.log` and `np.exp` move between levels and logs; `np.exp(4 * slope)` turns quarterly log growth into annual growth.
-
 ```{python}
-pre = gdp[gdp.date <= "2019-10-01"]                     # 2015Q1 to 2019Q4
+# Step 1: the quarters before Covid, 2015Q1 to 2019Q4
+pre = gdp[gdp.date <= "2019-10-01"]
 t = np.arange(len(gdp))                                 # quarters since 2015Q1
+# Step 2: `np.polyfit(x, y, 1)` fits a straight line y = slope x + intercept by
+# least squares, here to `np.log` of GDP before Covid: a constant growth rate
 slope, intercept = np.polyfit(t[:len(pre)], np.log(pre.real_gdp), 1)
+# Step 3: `np.exp` turns the line back into levels: the trend in every quarter,
+# and the gap, in percent above (+) or below (-) the trend
 gdp["trend"] = np.exp(intercept + slope * t)
-gdp["gap"] = 100 * (gdp.real_gdp / gdp.trend - 1)       # percent above (+) or below (-) the trend
-fall = 100 * (gdp.real_gdp[gdp.date == "2020-04-01"].iloc[0] / gdp.real_gdp[gdp.date == "2019-10-01"].iloc[0] - 1)
-print(f"Pre-Covid trend growth: {100 * (np.exp(4 * slope) - 1):.2f}% a year;  2019Q4 to 2020Q2: {fall:.2f}%")
+gdp["gap"] = 100 * (gdp.real_gdp / gdp.trend - 1)
+# Step 4: the fall in GDP from 2019Q4 to 2020Q2, in percent
+fall = 100 * (
+    gdp.real_gdp[gdp.date == "2020-04-01"].iloc[0]
+    / gdp.real_gdp[gdp.date == "2019-10-01"].iloc[0]
+    - 1
+)
+# Step 5: `np.exp(4 * slope)` turns quarterly log growth into annual growth
+print(
+    f"Pre-Covid trend growth: {100 * (np.exp(4 * slope) - 1):.2f}% a year;  "
+    f"2019Q4 to 2020Q2: {fall:.2f}%"
+)
 gdp[gdp.date.dt.year.between(2020, 2022)].round(2)
 ```
 
-> **Python note.** `rename(columns={...})` gives columns new names; we use the readable names that the legend should
-> show. Passing a list of columns as `y=[...]` makes `px.line` draw one line per column.
-
 ```{python}
-chart = gdp.rename(columns={"real_gdp": "Real GDP", "trend": "Pre-Covid trend (2015–2019)"})
-fig = px.line(chart, x="date", y=["Real GDP", "Pre-Covid trend (2015–2019)"], markers=True,
-              color_discrete_sequence=[BLUE, GRAY],
-              labels={"date": "Year", "value": "Trillions of chained 2017 dollars", "variable": "Series"},
-              title=f"Real GDP fell {-fall:.1f}% in the Covid-19 recession and was back on trend by late 2021")
-fig.update_traces(line_dash="dash", marker_size=4, selector=dict(name="Pre-Covid trend (2015–2019)"))
+#| kind: drawing
+# @title Drawing code: Fig. 14, real GDP and its pre-Covid trend
+# Step 1: `rename(columns={...})` gives the columns the readable names that the
+# legend should show; a list of columns as `y=[...]` makes `px.line` draw one line
+# per column
+chart = gdp.rename(
+    columns={"real_gdp": "Real GDP", "trend": "Pre-Covid trend (2015–2019)"}
+)
+fig = px.line(
+    chart,
+    x="date",
+    y=["Real GDP", "Pre-Covid trend (2015–2019)"],
+    markers=True,
+    color_discrete_sequence=[BLUE, GRAY],
+    labels={
+        "date": "Year",
+        "value": "Trillions of chained 2017 dollars",
+        "variable": "Series",
+    },
+    title=(
+        f"Real GDP fell {-fall:.1f}% in the Covid-19 recession "
+        "and was back on trend by late 2021"
+    ),
+)
+# Step 2: the trend dashed, with small dots; the recession shaded
+fig.update_traces(
+    line_dash="dash",
+    marker_size=4,
+    selector=dict(name="Pre-Covid trend (2015–2019)"),
+)
 shade_recessions(fig, "2015-01-01")
-fig.update_layout(yaxis_range=[18, 25.5], legend=dict(x=0.01, y=0.99, xanchor="left", yanchor="top", title=None))
+fig.update_layout(
+    yaxis_range=[18, 25.5],
+    legend=dict(x=0.01, y=0.99, xanchor="left", yanchor="top", title=None),
+)
 fig.show()
 ```
 
@@ -2770,37 +3745,78 @@ GDP levels in different currencies cannot be compared directly, but their change
 volume index of real GDP for 49 economies (China is missing: it does not publish seasonally adjusted levels). We set
 every country's index to 100 in 2019Q4, just before the pandemic, so each line shows the percent change since then.
 
-> **Python note.** `base` is a Series with one value per country, the index in 2019Q4. `gdp_world.country.map(base)`
-> looks up that value for every row, so dividing by it *rebases* each country's index to 100 in 2019Q4.
-
 ```{python}
+# Step 1: the OECD's quarterly volume index of real GDP for 49 economies
 gdp_world = pd.read_csv(DATA_URL + "gdp_quarterly.csv", parse_dates=["date"])
+# Step 2: rebase to 2019Q4 = 100. `base` is a Series with one value per country,
+# the index in 2019Q4 (`.set_index("country")` labels the rows by country), and
+# `gdp_world.country.map(base)` looks up that value for every row
 base = gdp_world[gdp_world.date == "2019-10-01"].set_index("country").gdp_index
 gdp_world["index_2019q4"] = 100 * gdp_world.gdp_index / gdp_world.country.map(base)
-GDP_COLORS = menu_colors(sorted(gdp_world.country.unique()))
-gdp_world[(gdp_world.country == "United States") & (gdp_world.date.dt.year == 2020)].round(2)
+# Step 3: the U.S. rows of 2020
+gdp_world[
+    (gdp_world.country == "United States") & (gdp_world.date.dt.year == 2020)
+].round(2)
 ```
 
 The U.S. index falls by the same 9.1 percent as the textbook series from 2019Q4 to 2020Q2: it is the same GDP data.
 
+`gdp_index_chart` draws the rebased index of the chosen countries, with a dotted line at 100, the level before
+the pandemic.
+
 ```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 14, extended: real GDP of the chosen countries
+# a fixed color for each country (`menu_colors`)
+GDP_COLORS = menu_colors(sorted(gdp_world.country.unique()))
+
+
 def gdp_index_chart(countries=("United States",)):
-    """Fig. 12.14, extended: real GDP of the chosen countries, 2019Q4 = 100."""
+    """Real GDP of the chosen countries, 2019Q4 = 100.
+
+    Draws Fig. 14, extended (inspired by Fig. 12.14 in Jones): one line per country and
+    a dotted line at 100.
+
+    Arguments
+        countries : the chosen countries (a tuple of names)
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the chosen countries, and a wider axis only when one of them needs it
     part = gdp_world[gdp_world.country.isin(countries)]
     low, high = 80, 120
-    for wider_low, wider_high in [(70, 130), (60, 160)]:   # a wider axis only when a chosen country needs it
+    for wider_low, wider_high in [(70, 130), (60, 160)]:
         if part.index_2019q4.min() < low or part.index_2019q4.max() > high:
             low, high = wider_low, wider_high
+    # Step 2: the title; for one country, it reports the fall in 2020
     title = "Real GDP since the end of 2019 (2019Q4 = 100)"
     if len(countries) == 1 and len(part) > 0:
         fall = 100 - part.index_2019q4[part.date.dt.year == 2020].min()
         title = f"{countries[0]}: real GDP fell {fall:.1f}% in 2020 (2019Q4 = 100)"
     title += missing_or_off(part, "index_2019q4", countries, low, high)
-    fig = px.line(part, x="date", y="index_2019q4", color="country", color_discrete_map=GDP_COLORS, markers=True,
-                  labels={"date": "Year", "index_2019q4": "Real GDP, 2019Q4 = 100", "country": "Country"}, title=title)
+    # Step 3: one line per country, in its fixed color
+    fig = px.line(
+        part,
+        x="date",
+        y="index_2019q4",
+        color="country",
+        color_discrete_map=GDP_COLORS,
+        markers=True,
+        labels={
+            "date": "Year",
+            "index_2019q4": "Real GDP, 2019Q4 = 100",
+            "country": "Country",
+        },
+        title=title,
+    )
+    # Step 4: small dots, a dotted line at 100, and fixed axes
     fig.update_traces(marker_size=4)
     fig.add_hline(y=100, line_dash="dot", line_color=GRAY)
-    fig.update_layout(xaxis_range=["2014-10-01", "2026-10-01"], yaxis_range=[low, high], legend_title_text="")
+    fig.update_layout(
+        xaxis_range=["2014-10-01", "2026-10-01"],
+        yaxis_range=[low, high],
+        legend_title_text="",
+    )
     return fig
 ```
 
@@ -2808,16 +3824,28 @@ On the website, the buttons above the chart list a group of countries in the leg
 
 ```{python}
 #| kind: widget
-interact(gdp_index_chart, countries=SelectMultiple(options=sorted(gdp_world.country.unique()), value=["United States"],
-                                                   rows=8, description="countries", style=WIDE));
+# Fig. 14, extended, with a list of countries: hold Ctrl (Cmd on a Mac) to pick several
+interact(
+    gdp_index_chart,
+    countries=SelectMultiple(options=sorted(gdp_world.country.unique()),
+                             value=["United States"], rows=8,
+                             description="countries", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: real GDP of 49 economies, with buttons for groups of countries
+# Step 1: every country in one figure, with the U.S. title; the y-axis adapts to the
+# countries shown
 fig = gdp_index_chart(countries=sorted(gdp_world.country.unique()))
-fig.update_layout(title=gdp_index_chart().layout.title.text, yaxis_range=None, yaxis_autorange=True)
-group_menu(fig, ["United States"])                         # the y-axis adapts to the countries shown
+fig.update_layout(
+    title=gdp_index_chart().layout.title.text,
+    yaxis_range=None,
+    yaxis_autorange=True,
+)
+# Step 2: the buttons for groups of countries (the United States always drawn)
+group_menu(fig, ["United States"])
 ```
 
 **Sources.** Data: OECD, Quarterly National Accounts (`DSD_NAMAIN1@DF_QNA`), real GDP, chain-linked volume index, on the [OECD Data Explorer](https://data-explorer.oecd.org/).
@@ -2847,6 +3875,7 @@ Chart: inspired by Fig. 12.14 in Jones (2024), [*Macroeconomics*, 6th ed.](https
 **Goal.** See the surprising path of inflation during and after the pandemic.
 
 ```{python}
+# Load the data of Fig. 15: U.S. CPI inflation, one row per month
 cpi = pd.read_csv(DATA_URL + "fig12-15.csv", parse_dates=["date"])
 cpi.head()
 ```
@@ -2855,10 +3884,9 @@ Each row is a month. `inflation_all` is the percent change of the consumer price
 `inflation_core` the same for **core** prices, which leave out food and energy, the most volatile prices. Are any values
 missing?
 
-> **Python note.** `.isna()` is true where a value is missing, and `.any(axis=1)` is true for rows with at least one
-> missing value.
-
 ```{python}
+# The rows with a missing value: `.isna()` is true where a value is missing, and
+# `.any(axis=1)` is true for rows with at least one missing value
 cpi[cpi.isna().any(axis=1)]
 ```
 
@@ -2872,52 +3900,123 @@ missing for some countries and stop early for others: in 2026 the OECD has not y
 European countries, and its core index for Japan stops in June 2021. The U.S. rows are the table above.
 
 ```{python}
+# Step 1: all-items and core inflation of 64 economies
 cpi_world = pd.read_csv(DATA_URL + "cpi_monthly.csv", parse_dates=["date"])
-cpi_world.groupby("country").inflation_core.count().sort_values().head(8)     # months with core data
+# Step 2: the months with core data in each country (`.count()` skips missing
+# values), the eight countries with the fewest first
+cpi_world.groupby("country").inflation_core.count().sort_values().head(8)
 ```
 
-> **Python note.** `.set_index("date")["All items"]` makes a Series labelled by date, so `.idxmin()` and `.idxmax()`
-> return dates. `f"{day:%B %Y}"` writes a date as month and year. The loop over the list of ranges keeps the first one
-> that holds every value of the chosen country.
+`cpi_chart` draws the two inflation rates of one country since 2020, with a dotted line at 2 percent; its title
+reports the dip of 2020 and the peak after it.
 
 ```{python}
-def cpi_chart(country="United States"):
-    """Fig. 12.15: 12-month CPI inflation, all items and core, of one country since January 2020."""
-    part = cpi_world[cpi_world.country == country].rename(
-        columns={"inflation_all": "All items", "inflation_core": "Core (less food and energy)"})
-    values = part[["All items", "Core (less food and energy)"]]
-    for low, high in [(0, 10), (-4, 12), (-5, 30), (-10, 100), (-20, 300)]:
-        if values.min().min() >= low and values.max().max() <= high:
-            break                                       # the first range that holds every value
+#| kind: drawing
+# @title Drawing code: Fig. 15, the title: the dip of 2020 and the peak after it
+def cpi_title(part):
+    """The title of Fig. 15: the low point of inflation in 2020, and the peak after it.
+
+    Arguments
+        part : the rows of one country, with the column "All items"
+    Returns
+        the title text
+    """
+    # Step 1: `.set_index("date")["All items"]` makes a Series labelled by date, so
+    # `.idxmin()` and `.idxmax()` return dates
     title = "No all-items CPI data for this country"
     every = part.set_index("date")["All items"].dropna()
     if not every.empty:
+        # Step 2: the dip of 2020, and the highest value after it.
+        # `f"{day:%B %Y}"` writes a date as month and year, and
+        # `round(x, 1) + 0.0` turns a rounded -0.0 into 0.0
         dip = every[every.index.year == 2020]
         later = every[every.index > dip.idxmin()]
-        title = f"CPI inflation fell to {round(dip.min(), 1) + 0.0:.1f}% in {dip.idxmin():%B %Y}"
+        title = (
+            f"CPI inflation fell to {round(dip.min(), 1) + 0.0:.1f}% "
+            f"in {dip.idxmin():%B %Y}"
+        )
         if not later.empty:
             title += f", then rose to {later.max():.1f}% in {later.idxmax():%B %Y}"
-    fig = px.line(part, x="date", y=["All items", "Core (less food and energy)"], title=title,
-                  labels={"date": "Year", "value": "Percent change over 12 months", "variable": "CPI"})
+    return title
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 15, CPI inflation of one country
+def cpi_chart(country="United States"):
+    """12-month CPI inflation, all items and core, of one country since January 2020.
+
+    Draws Fig. 15 (inspired by Fig. 12.15 in Jones).
+
+    Arguments
+        country : the country to draw
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the country's rows, with readable column names for the legend
+    part = cpi_world[cpi_world.country == country].rename(
+        columns={
+            "inflation_all": "All items",
+            "inflation_core": "Core (less food and energy)",
+        }
+    )
+    values = part[["All items", "Core (less food and energy)"]]
+    # Step 2: the loop keeps the first range that holds every value of the country
+    for low, high in [(0, 10), (-4, 12), (-5, 30), (-10, 100), (-20, 300)]:
+        if values.min().min() >= low and values.max().max() <= high:
+            break
+    # Step 3: the two lines, and a dotted line at 2 percent
+    fig = px.line(
+        part,
+        x="date",
+        y=["All items", "Core (less food and energy)"],
+        title=cpi_title(part),
+        labels={
+            "date": "Year",
+            "value": "Percent change over 12 months",
+            "variable": "CPI",
+        },
+    )
     fig.update_traces(line_width=3)
-    fig.add_hline(y=2, line_dash="dot", line_color=GRAY, annotation_text="2 percent", annotation_position="bottom right")
+    fig.add_hline(
+        y=2,
+        line_dash="dot",
+        line_color=GRAY,
+        annotation_text="2 percent",
+        annotation_position="bottom right",
+    )
+    # Step 4: the U.S. recession shaded, and fixed axes
     if country == "United States":
         shade_recessions(fig, "2020-01-01")
-    fig.update_layout(xaxis_range=["2019-12-01", "2026-10-31"], yaxis_range=[low, high], legend_title_text=country,
-                      legend=dict(x=0.99, y=0.98, xanchor="right", yanchor="top"))
+    fig.update_layout(
+        xaxis_range=["2019-12-01", "2026-10-31"],
+        yaxis_range=[low, high],
+        legend_title_text=country,
+        legend=dict(x=0.99, y=0.98, xanchor="right", yanchor="top"),
+    )
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(cpi_chart, country=Dropdown(options=sorted(cpi_world.country.unique()), value="United States",
-                                     description="country", style=WIDE));
+# Fig. 15 with a menu (`Dropdown`) for the country
+interact(
+    cpi_chart,
+    country=Dropdown(options=sorted(cpi_world.country.unique()),
+                     value="United States", description="country", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 15 with a menu for the country
-menu_figure(cpi_chart, "country", sorted(cpi_world.country.unique()), "United States")
+# one picture of Fig. 15 per country; the menu shows one at a time
+menu_figure(
+    cpi_chart,
+    "country",
+    sorted(cpi_world.country.unique()),
+    "United States",
+)
 ```
 
 **Sources.** Data: [U.S. Bureau of Labor Statistics, Consumer Price Index for All Urban Consumers: All Items (`CPIAUCSL`), via FRED](https://fred.stlouisfed.org/series/CPIAUCSL);
@@ -2961,6 +4060,7 @@ Keep the rows after the peak with `cpi.date > "2022-06-01"` and `cpi.inflation_a
 **Goal.** See how strongly government spending reacted to the pandemic.
 
 ```{python}
+# Load the data of Fig. 16: federal outlays in percent of GDP, one row per fiscal year
 outlays = pd.read_csv(DATA_URL + "fig12-16.csv", parse_dates=["date"])
 outlays.tail(8)
 ```
@@ -2969,9 +4069,18 @@ outlays.tail(8)
 fiscal year is dated January 1, so FY2020 appears as `2020-01-01`.
 
 ```{python}
-fig = px.line(outlays, x="date", y="outlays_gdp_pct", markers=True,
-              labels={"date": "Fiscal year", "outlays_gdp_pct": "Percent of GDP"},
-              title="Federal spending jumped from 20.7% of GDP in FY2019 to 30.5% in FY2020")
+#| kind: drawing
+# @title Drawing code: Fig. 16, federal spending as a share of GDP
+# Step 1: one line, with a dot for each fiscal year
+fig = px.line(
+    outlays,
+    x="date",
+    y="outlays_gdp_pct",
+    markers=True,
+    labels={"date": "Fiscal year", "outlays_gdp_pct": "Percent of GDP"},
+    title="Federal spending jumped from 20.7% of GDP in FY2019 to 30.5% in FY2020",
+)
+# Step 2: a thick blue line, the recessions shaded, and a fixed vertical axis
 fig.update_traces(line_color=BLUE, line_width=3, marker_size=9)
 shade_recessions(fig, "2007-01-01")
 fig.update_layout(yaxis_range=[16, 32])
@@ -3004,30 +4113,74 @@ publishes it for 194 economies. For the United States it is 13 to 17 points of G
 it moved the same way: up 8.9 points from 2019 to 2020, against 9.8 points for federal outlays.
 
 ```{python}
+# General government spending of 194 economies, in percent of GDP, one row per year
 spending = pd.read_csv(DATA_URL + "government_spending.csv")
-SPENDING_COLORS = menu_colors(sorted(spending.country.unique()))
-spending[spending.country.isin(["United States", "France", "China"]) & (spending.year == 2020)]
+# three countries in 2020
+spending[
+    spending.country.isin(["United States", "France", "China"])
+    & (spending.year == 2020)
+]
 ```
 
-> **Python note.** `part.set_index("year").spending_gdp` labels the values by year, so `.get(2019)` picks the value of
-> 2019, or gives `None` when the year is missing.
+`spending_chart` draws the spending of the chosen countries from 2007.
 
 ```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 16, extended: government spending of the chosen countries
+# a fixed color for each country (`menu_colors`)
+SPENDING_COLORS = menu_colors(sorted(spending.country.unique()))
+
+
 def spending_chart(countries=("United States",)):
-    """Fig. 12.16, extended: general government spending, percent of GDP, in the chosen countries."""
+    """General government spending, percent of GDP, in the chosen countries.
+
+    Draws Fig. 16, extended (inspired by Fig. 12.16 in Jones): one line per country,
+    since 2007.
+
+    Arguments
+        countries : the chosen countries (a tuple of names)
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the chosen countries from 2007; a few small islands spend more than
+    # their GDP, so the axis is twice as high only when one of them is chosen
     part = spending[spending.country.isin(countries) & (spending.year >= 2007)]
     high = 70
-    if part.spending_gdp.max() > high:              # a few small islands spend more than their GDP
+    if part.spending_gdp.max() > high:
         high = 140
+    # Step 2: the title; for one country, spending in 2019 and in 2020.
+    # `part.set_index("year").spending_gdp` labels the values by year, so
+    # `.get(2019)` picks the value of 2019, or gives `None` when the year is missing
     title = "General government spending, percent of GDP"
     by_year = part.set_index("year").spending_gdp
-    if len(countries) == 1 and by_year.get(2019) is not None and by_year.get(2020) is not None:
-        title = f"{countries[0]}: spending went from {by_year[2019]:.1f}% of GDP in 2019 to {by_year[2020]:.1f}% in 2020"
+    if (
+        len(countries) == 1
+        and by_year.get(2019) is not None
+        and by_year.get(2020) is not None
+    ):
+        title = (
+            f"{countries[0]}: spending went from {by_year[2019]:.1f}% of GDP "
+            f"in 2019 to {by_year[2020]:.1f}% in 2020"
+        )
     title += missing_or_off(part, "spending_gdp", countries, 0, high)
-    fig = px.line(part, x="year", y="spending_gdp", color="country", color_discrete_map=SPENDING_COLORS, markers=True,
-                  labels={"year": "Year", "spending_gdp": "Percent of GDP", "country": "Country"}, title=title)
+    # Step 3: one line per country, in its fixed color
+    fig = px.line(
+        part,
+        x="year",
+        y="spending_gdp",
+        color="country",
+        color_discrete_map=SPENDING_COLORS,
+        markers=True,
+        labels={"year": "Year", "spending_gdp": "Percent of GDP", "country": "Country"},
+        title=title,
+    )
+    # Step 4: thick lines, and fixed axes
     fig.update_traces(line_width=3, marker_size=7)
-    fig.update_layout(xaxis_range=[2006.5, 2025.5], yaxis_range=[0, high], legend_title_text="")
+    fig.update_layout(
+        xaxis_range=[2006.5, 2025.5],
+        yaxis_range=[0, high],
+        legend_title_text="",
+    )
     return fig
 ```
 
@@ -3035,16 +4188,28 @@ On the website, the buttons above the chart list a group of countries in the leg
 
 ```{python}
 #| kind: widget
-interact(spending_chart, countries=SelectMultiple(options=sorted(spending.country.unique()), value=["United States"],
-                                                  rows=8, description="countries", style=WIDE));
+# Fig. 16, extended, with a list of countries: hold Ctrl (Cmd on a Mac) to pick several
+interact(
+    spending_chart,
+    countries=SelectMultiple(options=sorted(spending.country.unique()),
+                             value=["United States"], rows=8,
+                             description="countries", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: government spending in 194 economies, with buttons for groups of countries
+# @title Website version: government spending in 194 economies, with group buttons
+# Step 1: every country in one figure, with the U.S. title; the y-axis adapts to the
+# countries shown
 fig = spending_chart(countries=sorted(spending.country.unique()))
-fig.update_layout(title=spending_chart().layout.title.text, yaxis_range=None, yaxis_autorange=True)
-group_menu(fig, ["United States"])                         # the y-axis adapts to the countries shown
+fig.update_layout(
+    title=spending_chart().layout.title.text,
+    yaxis_range=None,
+    yaxis_autorange=True,
+)
+# Step 2: the buttons for groups of countries (the United States always drawn)
+group_menu(fig, ["United States"])
 ```
 
 **Sources.** Data: [International Monetary Fund, *Fiscal Monitor*, General government total expenditure, percent of GDP (`G_X_G01_GDP_PT`)](https://www.imf.org/external/datamapper/G_X_G01_GDP_PT).
@@ -3078,6 +4243,7 @@ Which shock raised spending more?
 **Goal.** See how government payments kept household income up during the pandemic.
 
 ```{python}
+# Load the data of Fig. 17: U.S. real disposable income and consumption, by month
 income = pd.read_csv(DATA_URL + "fig12-17.csv", parse_dates=["date"])
 income.head()
 ```
@@ -3087,9 +4253,9 @@ transfers, and `real_consumption` real personal consumption, both in trillions o
 The U.S. government sent three payments to each person: 1,200 dollars in April 2020, 600 dollars in January 2021 and
 1,400 dollars in March 2021. Let us find the three largest monthly jumps in income.
 
-> **Python note.** `.diff()` gives the change from the previous row, and `.nlargest(3)` keeps the three largest values.
-
 ```{python}
+# The three largest monthly jumps in income: `.diff()` gives the change from the
+# previous row, and `.nlargest(3)` keeps the three largest values
 jumps = income.set_index("date").real_disp_income.diff().nlargest(3)
 jumps.round(2)
 ```
@@ -3097,17 +4263,53 @@ jumps.round(2)
 The three largest jumps are exactly the three payment months. We mark them on the chart.
 
 ```{python}
-chart = income.rename(columns={"real_disp_income": "Disposable income", "real_consumption": "Consumption"})
-fig = px.line(chart, x="date", y=["Disposable income", "Consumption"], color_discrete_sequence=[BLUE, TEAL],
-              labels={"date": "Year", "value": "Trillions of chained 2017 dollars", "variable": "Series"},
-              title="Income spiked with each government payment; consumption fell 17% in April 2020")
+# Income in the three payment months: the points that we mark on the chart
+paid = income.set_index("date").loc[
+    pd.to_datetime(["2020-04-01", "2021-01-01", "2021-03-01"])
+]
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 17, income, consumption and the three payments
+# Step 1: readable column names for the legend, then one line per series
+chart = income.rename(
+    columns={"real_disp_income": "Disposable income", "real_consumption": "Consumption"}
+)
+fig = px.line(
+    chart,
+    x="date",
+    y=["Disposable income", "Consumption"],
+    color_discrete_sequence=[BLUE, TEAL],
+    labels={
+        "date": "Year",
+        "value": "Trillions of chained 2017 dollars",
+        "variable": "Series",
+    },
+    title=(
+        "Income spiked with each government payment; "
+        "consumption fell 17% in April 2020"
+    ),
+)
 fig.update_traces(line_width=3)
-paid = income.set_index("date").loc[pd.to_datetime(["2020-04-01", "2021-01-01", "2021-03-01"])]
-fig.add_trace(go.Scatter(x=paid.index, y=paid.real_disp_income, name="Payments (dollars per person)",
-                         mode="markers+text", text=["1,200", "600", "1,400"], textposition=["top center", "top left", "top center"],
-                         marker=dict(color="black", size=10)))
+# Step 2: a black dot on income in each payment month, with the amount paid
+fig.add_trace(
+    go.Scatter(
+        x=paid.index,
+        y=paid.real_disp_income,
+        name="Payments (dollars per person)",
+        mode="markers+text",
+        text=["1,200", "600", "1,400"],
+        textposition=["top center", "top left", "top center"],
+        marker=dict(color="black", size=10),
+    )
+)
+# Step 3: the recession shaded, a fixed vertical axis, the legend at the top left
 shade_recessions(fig, "2017-01-01")
-fig.update_layout(yaxis_range=[11, 22], legend=dict(x=0.01, y=0.99, xanchor="left", yanchor="top", title=None))
+fig.update_layout(
+    yaxis_range=[11, 22],
+    legend=dict(x=0.01, y=0.99, xanchor="left", yanchor="top", title=None),
+)
 fig.show()
 ```
 
@@ -3139,49 +4341,118 @@ disposable income and consumption per person** for about 40 countries (income fo
 2021Q1 income rose 17.6 percent per person (17.5 percent in total).
 
 ```{python}
+# Step 1: real household income and consumption per person, about 40 countries
 households = pd.read_csv(DATA_URL + "household_quarterly.csv", parse_dates=["date"])
+# Step 2: rebase both series to 2019Q4 = 100, one column at a time
 for column in ["income_pc", "consumption_pc"]:
     base = households[households.date == "2019-10-01"].set_index("country")[column]
-    households[column] = 100 * households[column] / households.country.map(base)    # 2019Q4 = 100
+    households[column] = 100 * households[column] / households.country.map(base)
 households[households.country == "United States"].tail(3).round(1)
 ```
 
-> **Python note.** `values.get(day, np.nan)` picks the value of one date, or `np.nan` (a missing number) when the
-> country has no data for it. `round(x, 1) + 0.0` turns a rounded −0.0 into 0.0.
+`household_chart` draws the two indexes of one country, with a dotted line at 100; its title reports the change
+from 2019Q4 to 2021Q1.
 
 ```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 17, extended: the title, 2021Q1 against 2019Q4
+def household_title(part, country):
+    """The title of the household chart: the change from 2019Q4 to 2021Q1.
+
+    Arguments
+        part    : the rows of one country, with the readable column names
+        country : the country's name
+    Returns
+        the title text
+    """
+    # Step 1: each index in 2021Q1 minus 100: the percent change since 2019Q4.
+    # `.get(day, np.nan)` picks the value of one date, or `np.nan` (a missing
+    # number) when the country has no data for it
+    by_date = part.set_index("date")
+    day = pd.Timestamp("2021-01-01")
+    income = round(by_date["Disposable income per person"].get(day, np.nan) - 100, 1)
+    spent = round(by_date["Consumption per person"].get(day, np.nan) - 100, 1)
+    # Step 2: the title; `round(x, 1) + 0.0` turns a rounded -0.0 into 0.0, and
+    # `np.isnan` is true when there are no income data
+    title = (
+        f"{country}, 2021Q1 vs 2019Q4: real income per person {income + 0.0:+.1f}%, "
+        f"consumption {spent + 0.0:+.1f}%"
+    )
+    if np.isnan(income):
+        title = (
+            f"{country}, 2021Q1 vs 2019Q4: consumption per person "
+            f"{spent + 0.0:+.1f}% (no income data)"
+        )
+    return title
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 17, extended: household income and consumption per person
 def household_chart(country="United States"):
-    """Fig. 12.17, extended: real household income and consumption per person, 2019Q4 = 100."""
+    """Real household income and consumption per person of one country, 2019Q4 = 100.
+
+    Draws Fig. 17, extended (inspired by Fig. 12.17 in Jones), with a dotted line at
+    100, the level before the pandemic.
+
+    Arguments
+        country : the country to draw
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the country's rows, with readable column names for the legend
     part = households[households.country == country].rename(
-        columns={"income_pc": "Disposable income per person", "consumption_pc": "Consumption per person"})
+        columns={
+            "income_pc": "Disposable income per person",
+            "consumption_pc": "Consumption per person",
+        }
+    )
     values = part[["Disposable income per person", "Consumption per person"]]
+    # Step 2: the loop keeps the first range that holds every value of the country
     for low, high in [(80, 120), (70, 130), (60, 170)]:
         if values.min().min() >= low and values.max().max() <= high:
-            break                                       # the first range that holds every value
-    by_date = part.set_index("date")
-    income = round(by_date["Disposable income per person"].get(pd.Timestamp("2021-01-01"), np.nan) - 100, 1)
-    spent = round(by_date["Consumption per person"].get(pd.Timestamp("2021-01-01"), np.nan) - 100, 1)
-    title = f"{country}, 2021Q1 vs 2019Q4: real income per person {income + 0.0:+.1f}%, consumption {spent + 0.0:+.1f}%"
-    if np.isnan(income):
-        title = f"{country}, 2021Q1 vs 2019Q4: consumption per person {spent + 0.0:+.1f}% (no income data)"
-    fig = px.line(part, x="date", y=list(values.columns), markers=True, color_discrete_sequence=[BLUE, TEAL], title=title,
-                  labels={"date": "Year", "value": "Index, 2019Q4 = 100", "variable": "Series"})
+            break
+    # Step 3: the two lines, with the title of household_title, and a line at 100
+    fig = px.line(
+        part,
+        x="date",
+        y=list(values.columns),
+        markers=True,
+        color_discrete_sequence=[BLUE, TEAL],
+        title=household_title(part, country),
+        labels={"date": "Year", "value": "Index, 2019Q4 = 100", "variable": "Series"},
+    )
     fig.add_hline(y=100, line_dash="dot", line_color=GRAY)
-    fig.update_layout(xaxis_range=["2016-10-01", "2026-04-01"], yaxis_range=[low, high], legend_title_text=country,
-                      legend=dict(x=0.01, y=0.99, xanchor="left", yanchor="top"))
+    # Step 4: fixed axes; the legend at the top left, titled with the country
+    fig.update_layout(
+        xaxis_range=["2016-10-01", "2026-04-01"],
+        yaxis_range=[low, high],
+        legend_title_text=country,
+        legend=dict(x=0.01, y=0.99, xanchor="left", yanchor="top"),
+    )
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(household_chart, country=Dropdown(options=sorted(households.country.unique()), value="United States",
-                                           description="country", style=WIDE));
+# Fig. 17, extended, with a menu (`Dropdown`) for the country
+interact(
+    household_chart,
+    country=Dropdown(options=sorted(households.country.unique()),
+                     value="United States", description="country", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: household income and consumption per person, with a menu for the country
-menu_figure(household_chart, "country", sorted(households.country.unique()), "United States")
+# @title Website version: household income and consumption, with a country menu
+# one picture per country; the menu shows one at a time
+menu_figure(
+    household_chart,
+    "country",
+    sorted(households.country.unique()),
+    "United States",
+)
 ```
 
 **Sources.** Data: OECD, Household dashboard (`DSD_HHDASH@DF_HHDASH_INDIC`): real household gross disposable income per person
@@ -3229,44 +4500,80 @@ would want less money than there is, and the rate would fall; if lower, the oppo
 As before, one function draws two textbook figures: this one (Fig. 18) and a change in the money supply (Fig. 19). Its arguments
 are the new money supply `M_new` and the new level of money demand `m0_new` (demand is $M^d = m_0 - i$).
 
-> **Python note.** `"Mᵈ′" if m0_new != M0 else "Mᵈ"` is a one-line `if`: it gives the first text when the condition is true
-> and the second otherwise.
+`money_experiment` needs only `market_rate`, equation (12), so all of its code is drawing code: open it to see
+how the curves and the points are placed.
 
 ```{python}
+#| kind: drawing
+# @title Drawing code: Figs. 18 and 19, the money market
 def money_experiment(M_new=M_BAR, m0_new=M0):
-    """Figs. 12.18 and 12.19: money supply and demand set the nominal rate; a change moves i* to i**."""
+    """The money market: supply and demand set i; a change moves i* to i**.
+
+    Draws Figs. 18 and 19 (adapted from Figs. 12.18 and 12.19 in Jones). Money demand
+    is M = m0 - i; a curve that moves leaves a dashed gray copy.
+
+    Arguments
+        M_new  : the money supply, set by the central bank
+        m0_new : money demanded at a zero interest rate, m0
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the rate before and after the change, equation (12)
     i_star, i_new = market_rate(M_BAR), market_rate(M_new, m0_new)
+    # Step 2: the demand curve. `"Mᵈ′" if m0_new != M0 else "Mᵈ"` is a one-line
+    # `if`: it gives the first text when the condition is true, the second otherwise
     fig = go.Figure()
     if m0_new != M0:
         add_demand(fig, "Mᵈ", GRAY, M0, "dash")
     add_demand(fig, "Mᵈ′" if m0_new != M0 else "Mᵈ", BLUE, m0_new)
+    # Step 3: the vertical supply line; when it moves, the old one stays, dashed
     if M_new != M_BAR:
         add_line(fig, [M_BAR, M_BAR], [0.5, 9.5], "Mˢ", GRAY, "dash")
-        add_arrow(fig, M_BAR, 1.0, M_new, 1.0)                     # the change in the money supply
+        add_arrow(fig, M_BAR, 1.0, M_new, 1.0)      # the change in the money supply
     add_line(fig, [M_new, M_new], [0.5, 9.5], "Mˢ′" if M_new != M_BAR else "Mˢ", TEAL)
-    where = "bottom left" if m0_new > M0 else "top right"      # keep i* clear of a higher demand curve
+    # Step 4: i*, labeled clear of a higher demand curve ...
+    where = "bottom left" if m0_new > M0 else "top right"
     add_point(fig, M_BAR, i_star, "i*", 0, 0, where=where)
     if i_new != i_star:
-        where = "bottom left" if m0_new < M0 else "top right"  # ... and i** clear of the old, higher one
+        # ... and i**, clear of the old, higher one
+        where = "bottom left" if m0_new < M0 else "top right"
         add_point(fig, M_new, i_new, "i**", 0, 0, where=where)
-        add_arrow(fig, 0.5, i_star, 0.5, i_new)                    # the change in the interest rate
+        add_arrow(fig, 0.5, i_star, 0.5, i_new)     # the change in the interest rate
+    # Step 5: fixed axes, and the title
     set_axes(fig, X_MONEY, Y_NOMINAL)
-    fig.update_layout(title=f"Money supply {M_new:.1f}, demand Mᵈ = {m0_new:.1f} − i  →  i = {i_star:.1f}% → {i_new:.1f}%",
-                      margin=dict(r=90))
+    fig.update_layout(
+        title=(
+            f"Money supply {M_new:.1f}, demand Mᵈ = {m0_new:.1f} − i  →  "
+            f"i = {i_star:.1f}% → {i_new:.1f}%"
+        ),
+        margin=dict(r=90),
+    )
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(money_experiment,
-         M_new=FloatSlider(value=5.0, min=3.5, max=7.0, step=0.5, description="money supply Mˢ", style=WIDE),
-         m0_new=FloatSlider(value=10.0, min=8.0, max=12.0, step=0.5, description="money demand at i = 0, m₀", style=WIDE));
+# Fig. 18 with sliders for the money supply and money demand
+interact(
+    money_experiment,
+    M_new=FloatSlider(value=5.0, min=3.5, max=7.0, step=0.5,
+                      description="money supply Mˢ", style=WIDE),
+    m0_new=FloatSlider(value=10.0, min=8.0, max=12.0, step=0.5,
+                       description="money demand at i = 0, m₀", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 18 with a precomputed slider for money demand
-slider_figure(money_experiment, "m0_new", [8.0, 9.0, 10.0, 11.0, 12.0], start=10.0, label="money demand at i = 0, m₀")
+# one picture of Fig. 18 per level of money demand
+slider_figure(
+    money_experiment,
+    "m0_new",
+    [8.0, 9.0, 10.0, 11.0, 12.0],     # the values of m0
+    start=10.0,
+    label="money demand at i = 0, m₀",
+)
 ```
 
 **Source.** Adapted from Fig. 12.18 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -3303,15 +4610,27 @@ back in line with supply. The rate rises to $i^{**}$. We use our illustrative cu
 
 ```{python}
 #| kind: widget
-interact(money_experiment,
-         M_new=FloatSlider(value=4.0, min=3.5, max=7.0, step=0.5, description="new money supply Mˢ′", style=WIDE),
-         m0_new=FloatSlider(value=10.0, min=8.0, max=12.0, step=0.5, description="money demand at i = 0, m₀", style=WIDE));
+# Fig. 19 with sliders: the function of Fig. 18, with the money supply cut to 4
+interact(
+    money_experiment,
+    M_new=FloatSlider(value=4.0, min=3.5, max=7.0, step=0.5,
+                      description="new money supply Mˢ′", style=WIDE),
+    m0_new=FloatSlider(value=10.0, min=8.0, max=12.0, step=0.5,
+                       description="money demand at i = 0, m₀", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 19 with a precomputed slider for the new money supply
-slider_figure(money_experiment, "M_new", [3.5, 4.0, 4.5, 5.0, 5.5, 6.0, 6.5, 7.0], start=4.0, label="new money supply Mˢ′")
+# one picture of Fig. 19 per value of the new money supply
+slider_figure(
+    money_experiment,
+    "M_new",
+    [3.5, 4.0, 4.5, 5.0, 5.5, 6.0, 6.5, 7.0],     # the values of the money supply
+    start=4.0,
+    label="new money supply Mˢ′",
+)
 ```
 
 **Source.** Adapted from Fig. 12.19 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -3345,42 +4664,103 @@ interest rate, and with it the real rate and output. Instead, modern central ban
 whatever money is demanded at the target rate $i^*$. The money supply curve becomes **horizontal** at $i^*$, and shifts in
 money demand change the quantity of money, not the rate. Compare the two policies with the toggle.
 
-> **Python note.** `ToggleButtons` shows one button per option, and the function receives the text of the chosen button.
+First the economics: `policy_outcome` gives the interest rate and the quantity of money under each of the two
+policies.
 
 ```{python}
+def policy_outcome(m0_new, i_target, policy):
+    """The interest rate and the quantity of money under a policy (Fig. 20).
+
+    Peg the rate: supply whatever money is demanded at the target, M = m0_new - i*.
+    Fix the money supply: keep the supply that gave the target before the shift,
+    M = m0 - i*, and let equation (12) set the rate, i = m0_new - M.
+
+    Arguments
+        m0_new   : money demanded at a zero interest rate, after the shift
+        i_target : the target rate, i*, in percent
+        policy   : "peg the interest rate" or "fix the money supply"
+    Returns
+        i_eq : the nominal interest rate, in percent
+        M_eq : the quantity of money
+    """
+    if policy == "peg the interest rate":
+        # the rate stays at its target, and the supply follows demand
+        i_eq, M_eq = i_target, money_demand(i_target, m0_new)
+    else:
+        # the supply that gave i_target before the shift; now the rate moves
+        M_eq = money_demand(i_target)
+        i_eq = market_rate(M_eq, m0_new)
+    return i_eq, M_eq
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 20, targeting the nominal interest rate
 def rate_target(m0_new=M0, i_target=5.0, policy="peg the interest rate"):
-    """Fig. 12.20: pegging i makes money supply horizontal; fixing M lets money-demand shocks move i."""
+    """The money market under a rate peg or under a fixed money supply.
+
+    Draws Fig. 20 (adapted from Fig. 12.20 in Jones): pegging i makes the money supply
+    horizontal; fixing M lets shifts in money demand move i.
+
+    Arguments
+        m0_new   : money demanded at a zero interest rate, after the shift
+        i_target : the target rate, i*, in percent
+        policy   : "peg the interest rate" or "fix the money supply"
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the outcome of the policy (policy_outcome)
+    i_eq, M_eq = policy_outcome(m0_new, i_target, policy)
+    # Step 2: the demand curve; after a shift, the old one stays behind, dashed
     fig = go.Figure()
     if m0_new != M0:
         add_demand(fig, "Mᵈ", GRAY, M0, "dash")
     add_demand(fig, "Mᵈ′" if m0_new != M0 else "Mᵈ", BLUE, m0_new)
+    # Step 3: the supply: horizontal at the target rate, or vertical at a fixed M
     if policy == "peg the interest rate":
-        i_eq, M_eq = i_target, money_demand(i_target, m0_new)
         add_line(fig, [0.5, 10.5], [i_target, i_target], "Mˢ", TEAL)
     else:
-        M_eq = money_demand(i_target)                  # the supply that gave i_target before the shock
-        i_eq = market_rate(M_eq, m0_new)
         add_line(fig, [M_eq, M_eq], [0.5, 9.5], "Mˢ", TEAL)
+    # Step 4: the equilibrium point, fixed axes and the title
     add_point(fig, M_eq, i_eq, "", 0, 0)
     set_axes(fig, X_MONEY, Y_NOMINAL)
-    fig.update_layout(title=f"Policy: {policy};  demand shift {m0_new - M0:+.1f}  →  i = {i_eq:.1f}%, M = {M_eq:.1f}",
-                      margin=dict(r=90))
+    fig.update_layout(
+        title=(
+            f"Policy: {policy};  demand shift {m0_new - M0:+.1f}  →  "
+            f"i = {i_eq:.1f}%, M = {M_eq:.1f}"
+        ),
+        margin=dict(r=90),
+    )
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(rate_target,
-         m0_new=FloatSlider(value=11.0, min=8.0, max=12.0, step=0.5, description="money demand at i = 0, m₀", style=WIDE),
-         i_target=FloatSlider(value=5.0, min=3.0, max=7.0, step=0.5, description="target rate i* (%)", style=WIDE),
-         policy=ToggleButtons(options=["peg the interest rate", "fix the money supply"], value="peg the interest rate",
-                              description="policy", style=WIDE));
+# Fig. 20 with sliders and buttons. `ToggleButtons` shows one button per option,
+# and the function receives the text of the chosen button
+interact(
+    rate_target,
+    m0_new=FloatSlider(value=11.0, min=8.0, max=12.0, step=0.5,
+                       description="money demand at i = 0, m₀", style=WIDE),
+    i_target=FloatSlider(value=5.0, min=3.0, max=7.0, step=0.5,
+                         description="target rate i* (%)", style=WIDE),
+    policy=ToggleButtons(options=["peg the interest rate", "fix the money supply"],
+                         value="peg the interest rate",
+                         description="policy", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: Fig. 20 with a precomputed slider for money demand (the rate is pegged)
-slider_figure(rate_target, "m0_new", [8.0, 9.0, 10.0, 11.0, 12.0], start=11.0, label="money demand at i = 0, m₀")
+# @title Website version: Fig. 20 with a slider for money demand (the rate is pegged)
+# one picture of Fig. 20 per level of money demand, with the rate pegged
+slider_figure(
+    rate_target,
+    "m0_new",
+    [8.0, 9.0, 10.0, 11.0, 12.0],     # the values of m0
+    start=11.0,
+    label="money demand at i = 0, m₀",
+)
 ```
 
 **Source.** Adapted from Fig. 12.20 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -3404,10 +4784,22 @@ pays 100 dollars in one year and sells for 97 dollars today yields $3/97 = 3.1$ 
 
 ```{python}
 def bond_yield(price, face=100.0):
-    """The one-year interest rate implied by a bond's price: (face - price) / price, in percent."""
+    """The one-year interest rate implied by a bond's price, in percent.
+
+    A bond that pays `face` in one year and costs `price` today yields
+    (face - price) / price.
+
+    Arguments
+        price : the bond's price today, in dollars
+        face  : what the bond pays in one year, in dollars
+    Returns
+        the interest rate, in percent
+    """
+    # what you earn, as a share of what you pay, in percent
     return 100 * (face - price) / price
 
 
+# the yields at five prices: the lower the price, the higher the yield
 for price in [95.0, 96.0, 97.0, 98.0, 99.0]:
     print(f"Price {price:.0f}  ->  yield {bond_yield(price):.2f}%")
 ```
@@ -3452,61 +4844,148 @@ The four panels tell the story of Fig. 13 with the model's diagrams:
 The figure has four panels, so we split the work: `perceived_panels` draws the two panels of what policymakers believe,
 and `great_inflation` adds the truth and the readout.
 
+First the economics: `great_inflation_numbers` computes the cut that policymakers make, true output, and the
+change in inflation that follows.
+
 ```{python}
+def great_inflation_numbers(a_perc, nu):
+    """The policy mistake in numbers: the cut, true output and inflation (Fig. 21).
+
+    Equation (3) with the believed shock gives R' = r-bar + a' / b-bar. But the true IS
+    curve, equation (2), never moved, so true output is Y~ = -b-bar (R' - r-bar), and
+    the Phillips curve, equation (5), gives the change in inflation.
+
+    Arguments
+        a_perc : the demand shock that policymakers believe in, a-bar'
+        nu     : the slope of the Phillips curve, nu-bar
+    Returns
+        R_new  : the real rate that the Fed sets, R', in percent
+        Y_true : true short-run output, Y~, in percent
+        dpi    : the change in inflation, in percentage points a year
+    """
+    # the cut that would close the perceived gap
+    R_new = rate_for_output(0.0, a_perc)
+    # but the true IS curve never moved
+    Y_true = is_curve(R_new)
+    # so output is above potential, and inflation rises
+    dpi = phillips(Y_true, nu)
+    return R_new, Y_true, dpi
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 21, panels (a) and (b), what policymakers believe
 def perceived_panels(fig, a_perc, R_new):
-    """Fig. 12.21 (a) and (b): the IS/MP diagram as policymakers see it."""
+    """Panels (a) and (b) of Fig. 21: the IS/MP diagram as policymakers see it.
+
+    Panel (a): demand falls, IS shifts to IS', and the economy moves from A to B.
+    Panel (b): the cut to R' takes it, they believe, back to potential at C.
+
+    Arguments
+        fig    : the four-panel figure; (a) and (b) are row 1, columns 1 and 2
+        a_perc : the demand shock that policymakers believe in, a-bar'
+        R_new  : the real rate that the Fed sets, R'
+    """
+    # Step 1: what both panels share: the old and the believed IS curve, A, and B
+    # at Y~ = a' on the believed curve
     for col in [1, 2]:
         add_is(fig, "IS", GRAY, dash="dash", row=1, col=col)
         add_is(fig, "IS′", TEAL, a_perc, row=1, col=col)
         add_point(fig, 0.0, R_BAR, "A", -8, 0, 1, col)
         add_point(fig, a_perc, R_BAR, "B", -8, 0, 1, col)
         set_axes(fig, X_OUTPUT, Y_RATE, 1, col)
+    # Step 2: panel (a): MP stays, and output falls from A to B
     add_line(fig, MP_X, [R_BAR, R_BAR], "MP", BLUE, row=1, col=1)
     add_arrow(fig, 0.0, 0.6, a_perc, 0.6, 1, 1)
+    # Step 3: panel (b): the cut to R', and the way back from B to C
     add_line(fig, MP_X, [R_BAR, R_BAR], "MP", GRAY, "dash", 1, 2)
     add_line(fig, MP_X, [R_new, R_new], "MP′", BLUE, row=1, col=2)
-    add_point(fig, 0.0, R_new, "C", -8, 0, 1, 2, where="bottom left")    # below left, clear of A
+    # C below left, clear of A
+    add_point(fig, 0.0, R_new, "C", -8, 0, 1, 2, where="bottom left")
     add_arrow(fig, a_perc, 0.6, 0.0, 0.6, 1, 2)
 ```
 
 ```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 21, the Great Inflation in four panels
 def great_inflation(a_perc=-2.0, nu=NU):
-    """Fig. 12.21: the Fed sees a demand shock a' that never happened, cuts R, and inflation rises."""
-    R_new = rate_for_output(0.0, a_perc)           # the cut that would close the perceived gap
-    Y_true = is_curve(R_new)                       # but the true IS curve never moved
-    dpi = phillips(Y_true, nu)
-    fig = make_subplots(rows=2, cols=2, horizontal_spacing=0.12, vertical_spacing=0.14,
-                        subplot_titles=("(a) Belief: demand fell, IS → IS′", "(b) Belief: a cut to R′ restores Ỹ = 0",
-                                        "(c) Reality: IS unchanged, Ỹ overshoots", "(d) Reality: Ỹ > 0 pushes Δπ up"))
+    """The Great Inflation in four panels: belief (a, b) and reality (c, d).
+
+    Draws Fig. 21 (adapted from Fig. 12.21 in Jones, the answer to Exercise 12): the
+    Fed sees a demand shock a' that never happened, cuts R, and inflation rises.
+
+    Arguments
+        a_perc : the demand shock that policymakers believe in, a-bar'
+        nu     : the slope of the Phillips curve, nu-bar
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the numbers (great_inflation_numbers)
+    R_new, Y_true, dpi = great_inflation_numbers(a_perc, nu)
+    # Step 2: four panels in two rows, and the two panels of the belief
+    fig = make_subplots(
+        rows=2,
+        cols=2,
+        horizontal_spacing=0.12,
+        vertical_spacing=0.14,
+        subplot_titles=(
+            "(a) Belief: demand fell, IS → IS′",
+            "(b) Belief: a cut to R′ restores Ỹ = 0",
+            "(c) Reality: IS unchanged, Ỹ overshoots",
+            "(d) Reality: Ỹ > 0 pushes Δπ up",
+        ),
+    )
     perceived_panels(fig, a_perc, R_new)
+    # Step 3: panel (c): the true IS curve did not move, so the cut takes the
+    # economy from A down the IS curve to C, above potential
     add_is(fig, "IS", TEAL, row=2, col=1)
     add_line(fig, MP_X, [R_BAR, R_BAR], "MP", GRAY, "dash", 2, 1)
     add_line(fig, MP_X, [R_new, R_new], "MP′", BLUE, row=2, col=1)
     add_point(fig, 0.0, R_BAR, "A", -8, 0, 2, 1)
-    add_point(fig, Y_true, R_new, "C", -8, 0, 2, 1, where="bottom left")  # clear of the old MP line
+    # C below left, clear of the old MP line
+    add_point(fig, Y_true, R_new, "C", -8, 0, 2, 1, where="bottom left")
     add_arrow(fig, 0.0, 0.6, Y_true, 0.6, 2, 1)
+    # Step 4: panel (d): on the Phillips curve, from A to B, where inflation rises
     add_pc(fig, "Phillips curve", GREEN, nu, row=2, col=2)
     add_point(fig, 0.0, 0.0, "A", -8, -4, 2, 2, where="top left")
     add_point(fig, Y_true, dpi, "B", -8, -4, 2, 2, where="top left")
+    # Step 5: fixed axes, a taller figure, and the title
     set_axes(fig, X_OUTPUT, Y_RATE, 2, 1)
     set_axes(fig, X_OUTPUT, Y_DPI, 2, 2)
-    fig.update_layout(height=820, title=f"Believed ā′ = {a_perc:.1f}  →  R′ = {R_new:.2f}%  →  true Ỹ = {Y_true:+.1f}%"
-                                        f"  →  Δπ = {dpi:+.2f} a year")
+    fig.update_layout(
+        height=820,
+        title=(
+            f"Believed ā′ = {a_perc:.1f}  →  R′ = {R_new:.2f}%  →  "
+            f"true Ỹ = {Y_true:+.1f}%  →  Δπ = {dpi:+.2f} a year"
+        ),
+    )
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(great_inflation,
-         a_perc=FloatSlider(value=-2.0, min=-3.0, max=-0.5, step=0.5, description="demand shock policymakers believe in ā′", style=WIDE),
-         nu=FloatSlider(value=0.5, min=0.25, max=1.0, step=0.05, description="slope ν̄", style=WIDE));
+# Fig. 21 with sliders for the believed demand shock and the slope
+interact(
+    great_inflation,
+    a_perc=FloatSlider(value=-2.0, min=-3.0, max=-0.5, step=0.5,
+                       description="demand shock policymakers believe in ā′",
+                       style=WIDE),
+    nu=FloatSlider(value=0.5, min=0.25, max=1.0, step=0.05,
+                   description="slope ν̄", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: Fig. 21 with a precomputed slider for the believed demand shock
-slider_figure(great_inflation, "a_perc", [-3.0, -2.5, -2.0, -1.5], start=-2.0,
-              label="demand shock policymakers believe in ā′")
+# @title Website version: Fig. 21 with a precomputed slider for the believed shock
+# one picture of Fig. 21 per value of the believed demand shock a-bar'
+slider_figure(
+    great_inflation,
+    "a_perc",
+    [-3.0, -2.5, -2.0, -1.5],     # the values of a-bar'
+    start=-2.0,
+    label="demand shock policymakers believe in ā′",
+)
 ```
 
 **Source.** Adapted from Fig. 12.21 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612), the worked answer to Exercise 12.

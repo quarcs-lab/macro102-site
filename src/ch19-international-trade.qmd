@@ -1405,11 +1405,12 @@ The file `us_trade.csv` holds the U.S. national accounts we need, in billions of
 imports, net exports, private investment and the **net international investment position** (Fig. 6), plus the
 same position as it was published in July 2023.
 
-> **Python note.** `set_index("year")` makes the years the row labels, so that `us.loc[2006]` is the row of 2006
-> and `us.exports` is one column, a *Series* with years as labels. `NaN` ("not a number") marks a missing value:
-> the investment position starts only in 1976.
-
 ```{python}
+# Load the U.S. data of Figs. 1, 2 and 6, in billions of current dollars.
+# `.set_index("year")` makes the years the row labels, so that `us.loc[2006]` is
+# the row of 2006 and `us.exports` is one column, a Series with years as labels.
+# `NaN` ("not a number") marks a missing value: the investment position starts
+# only in 1976.
 us = pd.read_csv(DATA_URL + "us_trade.csv").set_index("year")
 us.tail()
 ```
@@ -1418,29 +1419,64 @@ We turn exports and imports into shares of GDP with our function `share_of_gdp`,
 figure's own data file.
 
 ```{python}
-shares = pd.DataFrame({"Exports": share_of_gdp(us.exports, us.gdp),
-                       "Imports": share_of_gdp(us.imports, us.gdp)})
+# Step 1: exports and imports as percent of GDP, 100 EX / Y and 100 IM / Y
+shares = pd.DataFrame({
+    "Exports": share_of_gdp(us.exports, us.gdp),
+    "Imports": share_of_gdp(us.imports, us.gdp),
+})
+# the first and the last year of the data
+first, last = shares.index[0], shares.index[-1]
+
+# Step 2: the check against the figure's data file: the largest gap, in points
 check = pd.read_csv(DATA_URL + "fig19-1.csv").set_index("year")
-print(f"Largest difference from fig19-1.csv: {(shares.Exports - check.exports_share).abs().max():.4f} points")
+print(
+    "Largest difference from fig19-1.csv: "
+    f"{(shares.Exports - check.exports_share).abs().max():.4f} points"
+)
 shares.loc[[1950, 1957, 1976, 2006, 2022, 2025]].round(2)
 ```
 
-> **Python note.** `px.line` with a list `y=[...]` draws one line per column. Instead of a legend, the textbook
-> writes the names next to the lines: `fig.add_annotation` puts a text at a point, and `yshift` moves it up or down
-> by a number of pixels.
-
 ```{python}
-first, last = shares.index[0], shares.index[-1]
-fig = px.line(shares.reset_index(), x="year", y=["Exports", "Imports"], color_discrete_sequence=[BLUE, GREEN],
-              labels={"year": "Year", "value": "Percent of GDP", "variable": "Series"},
-              title=f"{first}–{last}: U.S. exports rose from {shares.Exports[first]:.1f}% to "
-                    f"{shares.Exports[last]:.1f}% of GDP, imports from {shares.Imports[first]:.1f}% to "
-                    f"{shares.Imports[last]:.1f}%")
+#| kind: drawing
+# @title Drawing code: Fig. 1, U.S. exports and imports as shares of GDP
+# Step 1: `px.line` with a list `y=[...]` draws one line per column
+fig = px.line(
+    shares.reset_index(),
+    x="year",
+    y=["Exports", "Imports"],
+    color_discrete_sequence=[BLUE, GREEN],
+    labels={"year": "Year", "value": "Percent of GDP", "variable": "Series"},
+    title=(
+        f"{first}–{last}: U.S. exports rose from {shares.Exports[first]:.1f}% to "
+        f"{shares.Exports[last]:.1f}% of GDP, imports from "
+        f"{shares.Imports[first]:.1f}% to {shares.Imports[last]:.1f}%"
+    ),
+)
 fig.update_traces(line_width=3)
-fig.add_annotation(x=last, y=shares.Imports[last], text="Imports", showarrow=False, xanchor="left", xshift=6,
-                   font=dict(size=15, color=GREEN))    # labels at the end of each line
-fig.add_annotation(x=last, y=shares.Exports[last], text="Exports", showarrow=False, xanchor="left", xshift=6,
-                   font=dict(size=15, color=BLUE))
+
+# Step 2: instead of a legend, the textbook writes the names next to the lines.
+# `fig.add_annotation` puts a text at a point; `xshift` (and `yshift` up or down)
+# moves it by a number of pixels, here 6 to the right of the line's end
+fig.add_annotation(
+    x=last,
+    y=shares.Imports[last],
+    text="Imports",
+    showarrow=False,
+    xanchor="left",
+    xshift=6,
+    font=dict(size=15, color=GREEN),
+)
+fig.add_annotation(
+    x=last,
+    y=shares.Exports[last],
+    text="Exports",
+    showarrow=False,
+    xanchor="left",
+    xshift=6,
+    font=dict(size=15, color=BLUE),
+)
+
+# Step 3: no legend, and the textbook's axes
 fig.update_layout(showlegend=False)
 fig.update_xaxes(range=[1948, 2033])
 fig.update_yaxes(range=[2, 18.5], tickvals=[4, 6, 8, 10, 12, 14, 16, 18])
@@ -1470,19 +1506,35 @@ Chart: inspired by Fig. 19.1 in Jones (2024), [*Macroeconomics*, 6th ed.](https:
 The textbook says that exports and imports rose "from under 5 percent of GDP in the 1950s to around 12 and 15
 percent of GDP, respectively, in recent years" (Jones 2024).
 
-> **Python note.** `~` means "not": `~above` is True in the years when imports were **not** above exports.
-> `.idxmax()` gives the label (here the year) of the largest value.
-
 ```{python}
+# Step 1: the 1950s, and 2022, the textbook's last year.
+# `.idxmax()` gives the label (here the year) of the largest value
 fifties = shares.loc[1950:1959]
-print(f"1950s: highest export share {fifties.Exports.max():.2f}% ({fifties.Exports.idxmax()}), "
-      f"highest import share {fifties.Imports.max():.2f}%")
-print(f"2022, the textbook's last year: exports {shares.Exports[2022]:.2f}%, imports {shares.Imports[2022]:.2f}%")
+print(
+    f"1950s: highest export share {fifties.Exports.max():.2f}% "
+    f"({fifties.Exports.idxmax()}), "
+    f"highest import share {fifties.Imports.max():.2f}%"
+)
+print(
+    f"2022, the textbook's last year: exports {shares.Exports[2022]:.2f}%, "
+    f"imports {shares.Imports[2022]:.2f}%"
+)
+
+# Step 2: since when have imports been above exports? `~` means "not": `~above`
+# is True in the years when imports were not above exports
 above = shares.Imports > shares.Exports
-print(f"Imports have been above exports every year since {above[~above].index.max() + 1}")
+print(
+    "Imports have been above exports every year since "
+    f"{above[~above].index.max() + 1}"
+)
+
+# Step 3: openness, exports + imports as a percent of GDP
 openness = shares.Exports + shares.Imports
-print(f"Exports + imports: {openness[1950]:.1f}% of GDP in 1950, {openness.max():.1f}% at the peak "
-      f"({openness.idxmax()}), {openness[last]:.1f}% in {last}")
+print(
+    f"Exports + imports: {openness[1950]:.1f}% of GDP in 1950, "
+    f"{openness.max():.1f}% at the peak ({openness.idxmax()}), "
+    f"{openness[last]:.1f}% in {last}"
+)
 ```
 
 The textbook's "respectively" lists the two numbers the wrong way round: exports are about 12 percent of GDP
@@ -1501,17 +1553,26 @@ two shares, exports and imports of goods and services as a percent of GDP (serie
 imports (`NE.RSB.GNFS.ZS`), which we use in Fig. 2. The small file `countries.csv` gives each economy's World Bank
 region and income group.
 
-> **Python note.** `.nunique()` counts the different values in a column. Subtracting two Series lines them up by
-> their labels (here the years), and a year that one of them lacks gives `NaN`, which `.max()` skips. For the
-> United States the WDI copy the BEA's numbers, so the two sources should agree.
-
 ```{python}
-world = pd.read_csv(DATA_URL + "wdi_trade.csv")         # World Bank WDI, percent of GDP
-regions = pd.read_csv(DATA_URL + "countries.csv")       # World Bank region and income group of each economy
+# Step 1: load the World Bank data (percent of GDP) and the groups of each economy
+world = pd.read_csv(DATA_URL + "wdi_trade.csv")
+regions = pd.read_csv(DATA_URL + "countries.csv")   # region and income group
+
+# Step 2: compare the U.S. rows with the BEA data of Fig. 1: the WDI copy the
+# BEA's numbers, so the two should agree. Subtracting two Series lines them up by
+# their labels (the years), and a year that one of them lacks gives NaN, which
+# `.max()` skips
 us_wdi = world[world.country == "U.S."].set_index("year")
-gap = max((us_wdi.exports - shares.Exports).abs().max(), (us_wdi.imports - shares.Imports).abs().max())
-print(f"{world.country.nunique()} economies, {world.year.min()}-{world.year.max()}; the U.S. rows start in "
-      f"{us_wdi.index.min()} and differ from the BEA data by at most {gap:.2f} points")
+gap = max(
+    (us_wdi.exports - shares.Exports).abs().max(),
+    (us_wdi.imports - shares.Imports).abs().max(),
+)
+# `.nunique()` counts the different values in a column
+print(
+    f"{world.country.nunique()} economies, {world.year.min()}-{world.year.max()}; "
+    f"the U.S. rows start in {us_wdi.index.min()} and differ from the BEA data "
+    f"by at most {gap:.2f} points"
+)
 world.head()
 ```
 
@@ -1520,47 +1581,74 @@ enough colors, fewer than the 214 economies, so `group_colors` hands them out su
 group (the G7, a region, ...) never share a color, as far as 44 colors allow.
 
 ```{python}
-LIGHT = ["#F7E1A0", "#E2E2E2", "#FBE426", "#16FF32", "#1CFFCE", "#2ED9FF"]     # too pale on a white background
+#| kind: drawing
+# @title Drawing code: Fig. 1, the palette of country colors
+# too pale on a white background
+LIGHT = ["#F7E1A0", "#E2E2E2", "#FBE426", "#16FF32", "#1CFFCE", "#2ED9FF"]
+# 24 + 26 colors of two Plotly palettes, 44 of them kept
 PALETTE = []
-for color in px.colors.qualitative.Dark24 + px.colors.qualitative.Alphabet:   # 24 + 26 colors, 44 of them kept
+for color in px.colors.qualitative.Dark24 + px.colors.qualitative.Alphabet:
     if color not in LIGHT and color != "#2E91E5":
         PALETTE.append(color)
-PALETTE.append("#2E91E5")                       # Dark24's medium blue goes last: it is close to the book's navy
+# Dark24's medium blue goes last: it is close to the book's navy
+PALETTE.append("#2E91E5")
 ```
 
-> **Python note.** For each country, `score` gives every color a cost: 1 for each country that already uses it, 10
-> for each one in a large group (Europe has more countries than there are colors) and 100 for each one in a group
-> small enough to avoid any clash. `a if test else b` gives `a` when the test is True. `min(PALETTE, key=score.get)`
-> picks the color with the lowest cost (the first one on ties). When no color is free, `PALETTE[::-1]` (the list in
-> reverse order) makes the search start from the end of the list, so that the leftovers take the last, rarely used
-> colors.
-
 ```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 1, a color for every economy
 def group_colors(names, groups, fixed=None):
-    """A color for each country that no other country in its groups uses, as far as the palette allows.
+    """Give each country a color that no other country in its groups uses.
 
-    groups: the lists of countries shown together (the menu views); fixed: the textbook countries' colors."""
+    As far as the palette allows: when no color is free, the country gets the least
+    used one, searched from the end of the palette.
+
+    Arguments
+        names  : the countries to color
+        groups : the lists of countries shown together (the menu views)
+        fixed  : {country: color} for the textbook countries, or None
+    Returns
+        a dictionary {country: color}
+    """
+    # start from a copy of the fixed colors (or an empty dictionary)
     colors = dict(fixed or {})
     for name in sorted(names):
         if name in colors:
-            continue
-        score = {}                                  # the cost of each color: lower is better
+            continue                    # `continue` skips to the next country
+        # Step 1: `score` gives every color a cost (lower is better): 1 for each
+        # country that already uses it anywhere
+        score = {}
         for color in PALETTE:
-            score[color] = list(colors.values()).count(color)            # 1 per country using it anywhere
+            score[color] = list(colors.values()).count(color)
+        # Step 2: 10 for each country of a large group that uses it (Europe has
+        # more countries than there are colors), and 100 for each one of a group
+        # small enough to avoid any clash. `a if test else b` gives a when the
+        # test is True and b otherwise; `colors.get(other)` is None for a country
+        # without a color yet
         for group in groups:
             if name in group:
-                weight = 100 if len(group) <= len(PALETTE) else 10      # a clash in a small group costs most
+                weight = 100 if len(group) <= len(PALETTE) else 10
                 for other in group:
                     if colors.get(other) in score:
                         score[colors[other]] += weight
-        best = min(PALETTE, key=score.get)                              # the cheapest color
-        if score[best] >= 10:                       # no free color: the least used one, searching from the end
+        # Step 3: `min(PALETTE, key=score.get)` picks the color with the lowest
+        # cost (the first one on ties)
+        best = min(PALETTE, key=score.get)
+        # no free color: the least used one, searching from the end of the list
+        # (`PALETTE[::-1]` is the list in reverse order), so that the leftovers
+        # take the last, rarely used colors
+        if score[best] >= 10:
             best = min(PALETTE[::-1], key=score.get)
         colors[name] = best
     return colors
 
 
-COLORS = group_colors(regions.country, country_groups(regions, ["U.S."]).values(), {"U.S.": BLUE})
+# The color of every economy; the U.S. keeps the book's blue
+COLORS = group_colors(
+    regions.country,
+    country_groups(regions, ["U.S."]).values(),
+    {"U.S.": BLUE},
+)
 ```
 
 The dictionary `COLORS` maps each economy to its color, and `color_discrete_map=COLORS` makes Plotly use it, in Colab
@@ -1568,64 +1656,150 @@ and on the website. `fit_range` keeps the textbook's axis range when the data fi
 which lets Plotly choose a range that shows every value.
 
 ```{python}
+#| kind: drawing
+# @title Drawing code: Figs. 1 to 6, the textbook's axis range when the data fit
 def fit_range(values, book_range):
-    """The textbook's axis range if every value fits in it, otherwise None (Plotly then chooses)."""
+    """The textbook's axis range if every value fits in it, otherwise None.
+
+    With None, Plotly chooses a range that shows every value.
+
+    Arguments
+        values     : the values drawn on the axis
+        book_range : [lowest, highest], the textbook's range
+    Returns
+        book_range, or None
+    """
+    # every value between the lowest and the highest end of the textbook's range
     if values.min() >= book_range[0] and values.max() <= book_range[1]:
         return book_range
+    # some value would fall off the chart: let Plotly choose
     return None
 ```
 
-The figure function draws Fig. 19.1 for any list of economies. The title reports exports plus imports, the
-**openness** of each economy, in its latest year.
-
-> **Python note.** `.melt(...)` stacks the export and import columns into one column `share`, with a new column
-> `flow` that says which is which; `line_dash="flow"` then draws exports solid and imports dashed.
-> `.groupby("country").last()` keeps each economy's last row. `", ".join(names)` glues a list of texts together, and
-> `a if test else b` gives `a` when the test is True and `b` otherwise: the title names two economies and counts
-> the rest.
+The figure draws Fig. 19.1 for any list of economies. First the data: `trade_shares_data` keeps the rows of the
+chosen economies and computes exports plus imports, the **openness** of each economy, in its latest year. The
+title of the figure reports it.
 
 ```{python}
-FLOWS = {"Exports and imports": ["Exports", "Imports"], "Exports": ["Exports"], "Imports": ["Imports"]}
+# The flows that the buttons of the figure can show
+FLOWS = {
+    "Exports and imports": ["Exports", "Imports"],
+    "Exports": ["Exports"],
+    "Imports": ["Imports"],
+}
 
 
+def trade_shares_data(countries, flow):
+    """The data of Fig. 1 for any economies, and the openness of each.
+
+    Openness: exports + imports, percent of GDP, in each economy's latest year.
+
+    Arguments
+        countries : the economies to show
+        flow      : a key of FLOWS, the flows to show
+    Returns
+        rows     : the chosen economies' rows of `world`
+        long     : the flows to draw, one row per economy, year and flow
+        openness : each economy's exports + imports in its latest year
+    """
+    # Step 1: `.isin(countries)` is True for the rows whose economy is in the
+    # list; `.rename(columns={...})` gives the columns readable names
+    rows = world[world.country.isin(countries)].rename(
+        columns={"exports": "Exports", "imports": "Imports"}
+    )
+    # Step 2: `.melt(...)` stacks the export and import columns into one column
+    # `share`, with a new column `flow` that says which is which
+    long = rows.melt(
+        id_vars=["country", "year"],
+        value_vars=FLOWS[flow],
+        var_name="flow",
+        value_name="share",
+    )
+    # Step 3: `.groupby("country").last()` keeps each economy's last row with
+    # both flows; openness is exports + imports in that year
+    last = rows.dropna(subset=["Exports", "Imports"]).groupby("country").last()
+    openness = last.Exports + last.Imports
+    return rows, long, openness
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 1 for any economies
 def trade_shares_world(countries=("U.S.",), flow="Exports and imports"):
-    """Fig. 19.1 for any economies: exports and imports, percent of GDP (World Bank WDI)."""
-    rows = world[world.country.isin(countries)].rename(columns={"exports": "Exports", "imports": "Imports"})
+    """Exports and imports, percent of GDP (World Bank WDI), for any economies.
+
+    Draws Fig. 1 (inspired by Fig. 19.1 in Jones) for any list of economies.
+
+    Arguments
+        countries : the economies to show
+        flow      : "Exports and imports", "Exports" or "Imports"
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the data (trade_shares_data)
+    rows, long, openness = trade_shares_data(countries, flow)
     if len(rows) == 0:
         return go.Figure(layout=dict(title="Choose at least one economy"))
-    long = rows.melt(id_vars=["country", "year"], value_vars=FLOWS[flow], var_name="flow", value_name="share")
-    last = rows.dropna(subset=["Exports", "Imports"]).groupby("country").last()
+
+    # Step 2: the title names two economies and counts the rest.
+    # `", ".join(names)` glues a list of texts together
     names = []
-    for name in last.index[:2]:
-        names.append(f"{name} {last.Exports[name] + last.Imports[name]:.0f}%")
-    more = f" + {len(last) - 2} more" if len(last) > 2 else ""
-    fig = px.line(long, x="year", y="share", color="country", line_dash="flow", hover_name="country",
-                  color_discrete_map=COLORS, labels={"year": "Year", "share": "Percent of GDP", "flow": "Flow"},
-                  title="Latest exports + imports, % of GDP: " + ", ".join(names) + more)
+    for name in openness.index[:2]:
+        names.append(f"{name} {openness[name]:.0f}%")
+    more = f" + {len(openness) - 2} more" if len(openness) > 2 else ""
+
+    # Step 3: one line per economy and flow: `line_dash="flow"` draws exports
+    # solid and imports dashed, and `color_discrete_map=COLORS` gives each
+    # economy its own color, in Colab and on the website
+    fig = px.line(
+        long,
+        x="year",
+        y="share",
+        color="country",
+        line_dash="flow",
+        hover_name="country",
+        color_discrete_map=COLORS,
+        labels={"year": "Year", "share": "Percent of GDP", "flow": "Flow"},
+        title="Latest exports + imports, % of GDP: " + ", ".join(names) + more,
+    )
     fig.update_traces(line_width=3)
+
+    # Step 4: the axes: the textbook's range when the data fit in it
     fig.update_xaxes(range=[1955, 2027])         # 1960 sits away from the corner
     fig.update_yaxes(range=fit_range(long.share.dropna(), [2, 18.5]))
     fig.update_layout(legend_title_text="")
     return fig
 ```
 
-> **Python note.** `SelectMultiple` is a list from which you can choose several items: hold Ctrl (Cmd on a Mac)
-> and click. Its `value` is the list chosen at the start, here only the United States, as in the textbook.
-
 ```{python}
 #| kind: widget
-interact(trade_shares_world,
-         countries=SelectMultiple(options=sorted(world.country.unique()), value=["U.S."], rows=8,
-                                  description="economies", style=WIDE),
-         flow=ToggleButtons(options=list(FLOWS), value="Exports and imports", description="flows"));
+# Fig. 1 for any economies. `interact` turns each argument of trade_shares_world
+# into a widget, and draws the figure again every time you change one; the `;` at
+# the end only hides an extra line of text. `SelectMultiple` is a list from which
+# you can choose several items: hold Ctrl (Cmd on a Mac) and click. Its `value` is
+# the list chosen at the start, here only the United States, as in the textbook.
+# `ToggleButtons` shows a row of buttons, one per choice
+interact(
+    trade_shares_world,
+    countries=SelectMultiple(options=sorted(world.country.unique()), value=["U.S."],
+                             rows=8, description="economies", style=WIDE),
+    flow=ToggleButtons(options=list(FLOWS), value="Exports and imports",
+                       description="flows"),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: exports and imports of every economy, one group at a time
+# Step 1: Fig. 1 with every economy
 fig = trade_shares_world(tuple(world.country.unique()), "Exports and imports")
-group_menu(fig, country_groups(regions, ["U.S."]), "Textbook",
-           "Exports (solid) and imports (dashed), percent of GDP: choose a group in the menu")
+# Step 2: a menu above the chart shows one group of economies at a time
+group_menu(
+    fig,
+    country_groups(regions, ["U.S."]),
+    "Textbook",
+    "Exports (solid) and imports (dashed), percent of GDP: choose a group in the menu",
+)
 ```
 
 **Sources.** Data: World Bank, World Development Indicators: [Exports of goods and services, % of GDP (`NE.EXP.GNFS.ZS`)](https://data.worldbank.org/indicator/NE.EXP.GNFS.ZS) and
@@ -1641,11 +1815,18 @@ it, and double-click the chart to show extreme values that the chosen range leav
 How open is the United States compared with other economies?
 
 ```{python}
+# Openness in 2024: exports + imports, percent of GDP, from least to most open
 in_2024 = world[world.year == 2024].set_index("country")
 openness_2024 = (in_2024.exports + in_2024.imports).sort_values()
+# the U.S. rank: `.index("U.S.")` finds its place in the list, counting from 0
 rank = list(openness_2024.index).index("U.S.") + 1
-print(f"In 2024 the U.S. is number {rank} of {len(openness_2024)} economies, counting from the least open")
-openness_2024.loc[["U.S.", "Brazil", "China", "Japan", "India", "Germany", "Ireland", "Singapore"]].round(1)
+print(
+    f"In 2024 the U.S. is number {rank} of {len(openness_2024)} economies, "
+    "counting from the least open"
+)
+openness_2024.loc[
+    ["U.S.", "Brazil", "China", "Japan", "India", "Germany", "Ireland", "Singapore"]
+].round(1)
 ```
 
 The United States is one of the **least open** economies in the world: in 2024 only four of 172 economies traded
@@ -1677,54 +1858,132 @@ The trade balance is exports minus imports. We compute it with `net_exports`, tu
 it against the figure's data file, which was computed from the BEA's own net-exports series.
 
 ```{python}
+# The trade balance NX = EX - IM, as a percent of GDP
 us["trade_balance"] = share_of_gdp(net_exports(us.exports, us.imports), us.gdp)
+# the check against the figure's data file: the largest gap, in points
 check = pd.read_csv(DATA_URL + "fig19-2.csv").set_index("year")
-print(f"Largest difference from fig19-2.csv: {(us.trade_balance - check.trade_balance_pct_gdp).abs().max():.4f} points")
+print(
+    "Largest difference from fig19-2.csv: "
+    f"{(us.trade_balance - check.trade_balance_pct_gdp).abs().max():.4f} points"
+)
 us.trade_balance.loc[[1950, 1975, 1976, 1987, 2006, 2025]].round(2)
 ```
 
-The Oddtopia example says that the trade balance must average zero over a long period. The figure function shades a
-window of years and reports the average trade balance in it, using our `period_average`.
-
-> **Python note.** `min(a, b)` and `max(a, b)` give the smaller and the larger of two numbers, so the window stays
-> valid even if the two sliders cross. `(series < 0).sum()` counts the years with a deficit, because each True
-> counts as 1. `add_vrect` shades a band between two x values, and `add_shape(type="line", ...)` draws a segment.
+The Oddtopia example says that the trade balance must average zero over a long period. `balance_window` computes
+the average trade balance over a window of years, using our `period_average`, and counts the deficit years in it.
+The figure shades that window and reports both numbers.
 
 ```{python}
-def trade_balance_chart(start=1976, end=2025):
-    """Fig. 19.2: the U.S. trade balance (% of GDP), with its average from start to end."""
-    start, end = min(start, end), max(start, end)         # in case the sliders cross
+def balance_window(start, end):
+    """The average U.S. trade balance over a window of years, and its deficit years.
+
+    Fig. 2:  the average of 100 NX / Y from start to end (period_average)
+
+    Arguments
+        start, end : the first and the last year of the window
+    Returns
+        start, end : the same two years, in order (start <= end)
+        avg        : the average trade balance, percent of GDP
+        deficits   : the number of years with a deficit, NX < 0
+    """
+    # `min(a, b)` and `max(a, b)` give the smaller and the larger of two numbers,
+    # so the window stays valid even if the two sliders cross
+    start, end = min(start, end), max(start, end)
     avg = period_average(us.trade_balance, start, end)
+    # `(series < 0).sum()` counts the deficit years, because each True counts as 1
     deficits = (us.trade_balance.loc[start:end] < 0).sum()
-    fig = px.line(us.reset_index(), x="year", y="trade_balance", color_discrete_sequence=[BLUE],
-                  labels={"year": "Year", "trade_balance": "Percent of GDP"},
-                  title=f"{start}–{end}: average trade balance {avg:+.2f}% of GDP, "
-                        f"deficits in {deficits} of {end - start + 1} years")
+    return start, end, avg, deficits
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 2, the U.S. trade balance
+def trade_balance_chart(start=1976, end=2025):
+    """The U.S. trade balance (percent of GDP), with its average from start to end.
+
+    Draws Fig. 2 (inspired by Fig. 19.2 in Jones).
+
+    Arguments
+        start, end : the first and the last year of the shaded window
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the numbers of the figure (balance_window)
+    start, end, avg, deficits = balance_window(start, end)
+
+    # Step 2: the trade balance, year by year; the title reports the window
+    fig = px.line(
+        us.reset_index(),
+        x="year",
+        y="trade_balance",
+        color_discrete_sequence=[BLUE],
+        labels={"year": "Year", "trade_balance": "Percent of GDP"},
+        title=(
+            f"{start}–{end}: average trade balance {avg:+.2f}% of GDP, "
+            f"deficits in {deficits} of {end - start + 1} years"
+        ),
+    )
     fig.update_traces(line_width=3)
+
+    # Step 3: the zero line; `add_vrect` shades the window between two x values,
+    # and `add_shape(type="line", ...)` draws the dotted average as one segment
     fig.add_hline(y=0, line_dash="dash", line_color="black", line_width=1)
     fig.add_vrect(x0=start, x1=end, fillcolor=GRAY, opacity=0.15, line_width=0)
-    fig.add_shape(type="line", x0=start, x1=end, y0=avg, y1=avg, line=dict(color=TEAL, width=3, dash="dot"))
-    fig.add_annotation(x=1990, y=1.6, text="Above zero: exports > imports", showarrow=False, font=dict(size=13))
-    fig.add_annotation(x=1965, y=-4.5, text="Below zero: imports > exports", showarrow=False, font=dict(size=13))
+    fig.add_shape(
+        type="line",
+        x0=start,
+        x1=end,
+        y0=avg,
+        y1=avg,
+        line=dict(color=TEAL, width=3, dash="dot"),
+    )
+
+    # Step 4: what the two sides of zero mean
+    fig.add_annotation(
+        x=1990,
+        y=1.6,
+        text="Above zero: exports > imports",
+        showarrow=False,
+        font=dict(size=13),
+    )
+    fig.add_annotation(
+        x=1965,
+        y=-4.5,
+        text="Below zero: imports > exports",
+        showarrow=False,
+        font=dict(size=13),
+    )
+
+    # Step 5: the textbook's axes, with no tick label in the corner
     fig.update_xaxes(range=[1948, 2027])
-    fig.update_yaxes(range=[-6.5, 2.5], tickvals=[-5, -4, -3, -2, -1, 0, 1, 2])   # no label in the corner
+    fig.update_yaxes(range=[-6.5, 2.5], tickvals=[-5, -4, -3, -2, -1, 0, 1, 2])
     return fig
 ```
 
-> **Python note.** `interact` turns each argument of the function into a widget and draws the figure again whenever
-> you move one. `IntSlider` is a slider for whole numbers. The `;` at the end only hides an extra line of text.
-
 ```{python}
 #| kind: widget
-interact(trade_balance_chart,
-         start=IntSlider(value=1976, min=1950, max=2025, step=1, description="first year", style=WIDE),
-         end=IntSlider(value=2025, min=1950, max=2025, step=1, description="last year", style=WIDE));
+# Fig. 2 with two sliders for the window. `IntSlider` is a slider for whole
+# numbers
+interact(
+    trade_balance_chart,
+    start=IntSlider(value=1976, min=1950, max=2025, step=1,
+                    description="first year", style=WIDE),
+    end=IntSlider(value=2025, min=1950, max=2025, step=1,
+                  description="last year", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: Fig. 2 with a precomputed slider for the first year (last year 2025)
-slider_figure(trade_balance_chart, "start", [1950, 1960, 1976, 1990, 2000, 2010], start=1976, label="first year")
+# @title Website version: Fig. 2 with a precomputed slider for the first year
+# one picture of Fig. 2 per first year; the last year stays 2025
+slider_figure(
+    trade_balance_chart,
+    "start",
+    [1950, 1960, 1976, 1990, 2000, 2010],     # the first years
+    start=1976,
+    label="first year",
+)
 ```
 
 **Sources.** Data: U.S. Bureau of Economic Analysis (BEA), National Income and Product Accounts, via FRED: [Exports of goods and services (`EXPGSA`)](https://fred.stlouisfed.org/series/EXPGSA),
@@ -1749,13 +2008,27 @@ Chart: inspired by Fig. 19.2 in Jones (2024), [*Macroeconomics*, 6th ed.](https:
 #### Key numbers: the deficit in the text
 
 ```{python}
+# Step 1: 1950 to 1975: the surplus years and the deficit years
 tb = us.trade_balance
 early = tb.loc[1950:1975]
-print(f"1950-1975: surplus in {(early > 0).sum()} of {len(early)} years; deficits in {list(early[early < 0].index)}")
+print(
+    f"1950-1975: surplus in {(early > 0).sum()} of {len(early)} years; "
+    f"deficits in {list(early[early < 0].index)}"
+)
+
+# Step 2: the surplus years since 1976 (none), and the largest deficit;
+# `.idxmin()` gives the year of the smallest value
 print(f"Surplus years after 1975: {list(tb.loc[1976:][tb.loc[1976:] > 0].index)}")
 print(f"Largest deficit: {tb.min():.2f}% of GDP in {tb.idxmin()}")
-print(f"2000-2022: from {tb.loc[2000:2022].min():.2f}% to {tb.loc[2000:2022].max():.2f}% of GDP")
+
+# Step 3: the range since 2000, and the recent average
+print(
+    f"2000-2022: from {tb.loc[2000:2022].min():.2f}% "
+    f"to {tb.loc[2000:2022].max():.2f}% of GDP"
+)
 print(f"Average 2023-2025: {period_average(tb, 2023, 2025):.2f}% of GDP")
+
+# Step 4: equation (1): C + I + G = Y - NX, here 100 - NX in percent of GDP
 print(f"2006: domestic uses C + I + G were {100 - tb[2006]:.1f}% of GDP (equation 1)")
 ```
 
@@ -1770,39 +2043,97 @@ Americans consumed, invested and bought through their governments 105.7 percent 
 Does trade balance in the long run in other countries? The same figure, for any economy, uses the WDI trade balance
 of `wdi_trade.csv`. The dotted lines are each economy's average over the chosen years.
 
-> **Python note.** `go.Scatter(x=[start, end], y=[avg, avg], mode="lines")` draws one straight segment.
-> `legendgroup=name` ties it to the economy's line, so that a click on the legend hides both, and
-> `showlegend=False` keeps it out of the legend.
+Both functions of this figure are drawing code: `add_average` draws an economy's average as a dotted segment,
+and `trade_balance_world` draws the trade balance of each chosen economy with its average. The only economics
+in them is the average itself, which comes from our `period_average`.
 
 ```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 2, the dotted average line of each economy
 def add_average(fig, series, name, start, end):
-    """Draw the average of a yearly series from start to end as a dotted segment, and return the average."""
+    """Draw the average of a yearly series from start to end as a dotted segment.
+
+    The dotted lines of Fig. 2 for any economies; period_average gives the average.
+
+    Arguments
+        fig        : the Plotly figure to draw on
+        series     : a yearly series, with the years as labels
+        name       : the economy, for its color and its legend group
+        start, end : the first and the last year of the window
+    Returns
+        the average (NaN when the window has no data)
+    """
     avg = period_average(series, start, end)
-    if avg == avg:                                         # NaN (no data in the window) is not equal to itself
-        fig.add_trace(go.Scatter(x=[start, end], y=[avg, avg], mode="lines", name=name + ", average",
-                                 legendgroup=name, showlegend=False,
-                                 line=dict(color=COLORS[name], width=3, dash="dot")))
+    # NaN (no data in the window) is not equal to itself
+    if avg == avg:
+        # `go.Scatter(..., mode="lines")` with two points draws one straight
+        # segment. `legendgroup=name` ties it to the economy's line, so that a
+        # click on the legend hides both, and `showlegend=False` keeps it out of
+        # the legend
+        fig.add_trace(
+            go.Scatter(
+                x=[start, end],
+                y=[avg, avg],
+                mode="lines",
+                name=name + ", average",
+                legendgroup=name,
+                showlegend=False,
+                line=dict(color=COLORS[name], width=3, dash="dot"),
+            )
+        )
     return avg
 ```
 
 ```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 2 for any economies
 def trade_balance_world(countries=("U.S.",), start=1976, end=2024):
-    """Fig. 19.2 for any economies: the trade balance (% of GDP, WDI) and its average from start to end."""
-    start, end = min(start, end), max(start, end)          # in case the sliders cross
+    """The trade balance (percent of GDP, WDI) and its average from start to end.
+
+    Draws Fig. 2 (inspired by Fig. 19.2 in Jones) for any economies.
+
+    Arguments
+        countries  : the economies to show
+        start, end : the first and the last year of the averages
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the window, in order even if the sliders cross, and the chosen rows
+    start, end = min(start, end), max(start, end)
     rows = world[world.country.isin(countries)]
-    fig = px.line(rows, x="year", y="trade_balance", color="country", hover_name="country",
-                  color_discrete_map=COLORS, labels={"year": "Year", "trade_balance": "Percent of GDP"})
+
+    # Step 2: one line per economy, in its own color
+    fig = px.line(
+        rows,
+        x="year",
+        y="trade_balance",
+        color="country",
+        hover_name="country",
+        color_discrete_map=COLORS,
+        labels={"year": "Year", "trade_balance": "Percent of GDP"},
+    )
     fig.update_traces(line_width=3)
+
+    # Step 3: each economy's dotted average (add_average), and its text for the
+    # title
     names = []
     for name in sorted(set(rows.country)):
-        avg = add_average(fig, rows[rows.country == name].set_index("year").trade_balance, name, start, end)
+        series = rows[rows.country == name].set_index("year").trade_balance
+        avg = add_average(fig, series, name, start, end)
         if avg == avg:
-            names.append(f"{name} {round(avg, 1) + 0.0:+.1f}%")     # + 0.0 turns -0.0 into 0.0
+            # + 0.0 turns -0.0 into 0.0
+            names.append(f"{name} {round(avg, 1) + 0.0:+.1f}%")
         else:
             names.append(f"{name}: no data")
+
+    # Step 4: the title names two economies and counts the rest
     more = f" + {len(names) - 2} more" if len(names) > 2 else ""
-    fig.update_layout(title=f"Average trade balance {start}–{end}: " + ", ".join(names[:2]) + more,
-                      legend_title_text="")
+    fig.update_layout(
+        title=f"Average trade balance {start}–{end}: " + ", ".join(names[:2]) + more,
+        legend_title_text="",
+    )
+
+    # Step 5: the zero line, the shaded window and the axes
     fig.add_hline(y=0, line_dash="dash", line_color="black", line_width=1)
     fig.add_vrect(x0=start, x1=end, fillcolor=GRAY, opacity=0.15, line_width=0)
     fig.update_xaxes(range=[1955, 2027])         # 1960 sits away from the corner
@@ -1812,19 +2143,30 @@ def trade_balance_world(countries=("U.S.",), start=1976, end=2024):
 
 ```{python}
 #| kind: widget
-interact(trade_balance_world,
-         countries=SelectMultiple(options=sorted(world.country.unique()), value=["U.S."], rows=8,
-                                  description="economies", style=WIDE),
-         start=IntSlider(value=1976, min=1960, max=2025, step=1, description="first year", style=WIDE),
-         end=IntSlider(value=2024, min=1960, max=2025, step=1, description="last year", style=WIDE));
+# Fig. 2 for any economies, with two sliders for the window of the averages
+interact(
+    trade_balance_world,
+    countries=SelectMultiple(options=sorted(world.country.unique()), value=["U.S."],
+                             rows=8, description="economies", style=WIDE),
+    start=IntSlider(value=1976, min=1960, max=2025, step=1,
+                    description="first year", style=WIDE),
+    end=IntSlider(value=2024, min=1960, max=2025, step=1,
+                  description="last year", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: the trade balance of every economy and its 1976-2024 average, one group at a time
+# @title Website version: the trade balance of every economy, 1976-2024 averages
+# Step 1: Fig. 2 with every economy, and the averages over 1976-2024
 fig = trade_balance_world(tuple(world.country.unique()), 1976, 2024)
-group_menu(fig, country_groups(regions, ["U.S."]), "Textbook",
-           "Trade balances, percent of GDP, with 1976–2024 averages (dotted): choose a group")
+# Step 2: a menu above the chart shows one group of economies at a time
+group_menu(
+    fig,
+    country_groups(regions, ["U.S."]),
+    "Textbook",
+    "Trade balances, percent of GDP, with 1976–2024 averages (dotted): choose a group",
+)
 ```
 
 **Sources.** Data: World Bank, World Development Indicators: [External balance on goods and services, % of GDP (`NE.RSB.GNFS.ZS`)](https://data.worldbank.org/indicator/NE.RSB.GNFS.ZS);
@@ -1837,7 +2179,13 @@ Chart: inspired by Fig. 19.2 in Jones (2024), [*Macroeconomics*, 6th ed.](https:
 *On the website, choose a group in the menu above the chart; click a name in the legend to hide it.*
 
 ```{python}
-g7_balance = world[world.country.isin(G7)].pivot(index="year", columns="country", values="trade_balance")
+# The average trade balance of the G7, 1976-2024. `.pivot(...)` turns the long
+# table into a wide one: years as rows, countries as columns
+g7_balance = world[world.country.isin(G7)].pivot(
+    index="year",
+    columns="country",
+    values="trade_balance",
+)
 period_average(g7_balance, 1976, 2024).sort_values().round(2)
 ```
 
@@ -1872,10 +2220,10 @@ parity, PPP). The file `pwt_trade.csv` holds, for nine countries, the GDP shares
 investment (`csh_i`) and government purchases (`csh_g`), and GDP at PPP (`cgdpo`, in millions of US dollars), in two
 versions of the table: PWT 10.01, the one the textbook used, which ends in 2019, and PWT 11.0, which runs to 2023.
 
-> **Python note.** A new column made from other columns is computed for every row at once. Here our function
-> `trade_balance_share` applies $100(1 - c - i - g)$ to all 576 rows.
-
 ```{python}
+# Load the nine textbook countries. A new column made from other columns is
+# computed for every row at once: our function `trade_balance_share` applies
+# 100 (1 - c - i - g), equation (2), to all 576 rows
 pwt = pd.read_csv(DATA_URL + "pwt_trade.csv")
 pwt["trade_balance"] = trade_balance_share(pwt.csh_c, pwt.csh_i, pwt.csh_g)
 pwt.head()
@@ -1887,93 +2235,208 @@ Its rows for the nine textbook countries are identical to those of `pwt_trade.cs
 nine countries, to check the textbook.
 
 ```{python}
+# Every economy of PWT 11.0, with the same trade balance
 pwt_world = pd.read_csv(DATA_URL + "pwt_trade_world.csv")
-pwt_world["trade_balance"] = trade_balance_share(pwt_world.csh_c, pwt_world.csh_i, pwt_world.csh_g)
-print(f"{pwt_world.country.nunique()} economies, {pwt_world.year.min()}-{pwt_world.year.max()}")
+pwt_world["trade_balance"] = trade_balance_share(
+    pwt_world.csh_c, pwt_world.csh_i, pwt_world.csh_g
+)
+print(
+    f"{pwt_world.country.nunique()} economies, "
+    f"{pwt_world.year.min()}-{pwt_world.year.max()}"
+)
 ```
 
 The second bar of the textbook's figure shows each country's trade balance as a share of **U.S.** GDP, so the bars
 of different countries can be added up and compared with the U.S. deficit: we multiply the share of own GDP by the
 country's GDP and divide by U.S. GDP.
 
-You can add any country to the figure. Two small tools keep the textbook's countries first and say which chosen
+You can add any country to the figure. `book_order` keeps the textbook's countries first and says which chosen
 countries have no data (PWT 10.01 has only the nine textbook countries).
 
-> **Python note.** `.isin(list)` is True for the rows whose value is in the list. `.melt(id_vars="country")` turns
-> the two measure columns into rows, one row per country and measure, the *long* shape that `px.bar` needs. With
-> `color="Measure"` and `barmode="group"`, the bars of the two measures stand side by side. A function can
-> `return` two results at once, `order, missing`, and the caller unpacks them into two names.
-
 ```{python}
+# The textbook's five countries of Fig. 3, in its order
 FIG3 = ["U.S.", "Japan", "China", "France", "Germany"]
 
 
 def book_order(countries, book, available):
-    """The chosen countries with data, the textbook's first and in its order, and the chosen ones without data."""
+    """The chosen countries with data, the textbook's first, and those without data.
+
+    The textbook's countries come in its order, then the others from A to Z.
+
+    Arguments
+        countries : the chosen countries
+        book      : the textbook's countries, in its order
+        available : the countries that have data
+    Returns
+        order   : the chosen countries with data
+        missing : the chosen countries without data
+    """
     order, missing = [], []
     for name in list(book) + sorted(countries):
+        # each chosen country once
         if name in countries and name not in order and name not in missing:
             if name in available:
                 order.append(name)
             else:
                 missing.append(name)
+    # a function can `return` two results at once; the caller unpacks them into
+    # two names: `order, missing = book_order(...)`
     return order, missing
+```
 
+The two bars of each country are the economics of Fig. 3: its trade balance as a share of its own GDP, and
+the same balance as a share of U.S. GDP, from `share_of_us_gdp`. `world_balance_data` computes them for one
+year and one version of the table.
 
+```{python}
+def world_balance_data(year, vintage, countries):
+    """The two bars of Fig. 3 for each chosen country, in one year.
+
+    Fig. 3:  100 NX / Y, and the same as a share of U.S. GDP, 100 NX / Y_US
+
+    Arguments
+        year      : the year
+        vintage   : "PWT 11.0" or "PWT 10.01", the version of the table
+        countries : the chosen countries
+    Returns
+        year    : the year shown (PWT 10.01 ends in 2019)
+        bars    : one row per country: the trade balance as a percent of its own
+                  GDP and as a percent of U.S. GDP
+        missing : the chosen countries without data
+    """
+    # Step 1: the table of that version, and the year (PWT 10.01 ends in 2019)
+    source = pwt_world if vintage == "PWT 11.0" else pwt
+    year = min(year, source[source.vintage == vintage].year.max())
+    rows = source[(source.year == year) & (source.vintage == vintage)]
+    rows = rows.set_index("country")
+    # Step 2: the chosen countries with data, the textbook's first
+    order, missing = book_order(countries, FIG3, rows.index)
+    one = rows.loc[order]
+    # Step 3: the two bars: a share of own GDP, and a share of U.S. GDP
+    bars = pd.DataFrame({
+        "Share of own GDP": one.trade_balance,
+        "Share of U.S. GDP": share_of_us_gdp(
+            one.trade_balance, one.cgdpo, rows.loc["U.S.", "cgdpo"]
+        ),
+    })
+    return year, bars, missing
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 3, the title
 def world_title(year, vintage, bars, missing):
-    """The title of Fig. 3: the U.S. deficit and the largest surplus in percent of U.S. GDP."""
+    """The title of Fig. 3: the U.S. deficit and the largest surplus.
+
+    The surplus in percent of U.S. GDP; a note instead when a chosen country has no
+    data.
+
+    Arguments
+        year    : the year shown
+        vintage : the version of the Penn World Table
+        bars    : the two bars of each country (world_balance_data)
+        missing : the chosen countries without data
+    Returns
+        the title, a text
+    """
+    # Step 1: a note when some chosen country has no data, or none is chosen
     if missing:
         return f"{year}: no {vintage} data for " + ", ".join(missing[:3])
     if len(bars) == 0:
         return "Choose at least one country"
+    # Step 2: the year and the U.S. deficit, in percent of U.S. GDP
     text = f"{year} ({vintage}): "
     if "U.S." in bars.index:
         text += f"U.S. deficit {-bars.loc['U.S.', 'Share of own GDP']:.1f}% of GDP; "
+    # the country with the largest balance in percent of U.S. GDP; + 0.0 turns
+    # -0.0 into 0.0
     top = bars["Share of U.S. GDP"].idxmax()
-    value = round(bars.loc[top, "Share of U.S. GDP"], 2) + 0.0     # + 0.0 turns -0.0 into 0.0
+    value = round(bars.loc[top, "Share of U.S. GDP"], 2) + 0.0
+    # Step 3: a surplus if the largest balance is positive, else a deficit
     if value > 0:
         return text + f"largest surplus {top}, {value:.2f}% of U.S. GDP"
     return text + f"smallest deficit {top}, {value:.2f}% of U.S. GDP"
 ```
 
 ```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 3, the trade balance around the world
 def world_balance_chart(year=2023, vintage="PWT 11.0", countries=FIG3):
-    """Fig. 19.3: the trade balance as a share of own GDP and of U.S. GDP, in one year."""
-    source = pwt_world if vintage == "PWT 11.0" else pwt
-    year = min(year, source[source.vintage == vintage].year.max())     # PWT 10.01 ends in 2019
-    rows = source[(source.year == year) & (source.vintage == vintage)].set_index("country")
-    order, missing = book_order(countries, FIG3, rows.index)
-    one = rows.loc[order]
-    bars = pd.DataFrame({"Share of own GDP": one.trade_balance,
-                         "Share of U.S. GDP": share_of_us_gdp(one.trade_balance, one.cgdpo, rows.loc["U.S.", "cgdpo"])})
-    long = bars.reset_index().melt(id_vars="country", var_name="Measure", value_name="Percent")
-    fig = px.bar(long, x="country", y="Percent", color="Measure", barmode="group", hover_name="country",
-                 color_discrete_map={"Share of own GDP": BLUE, "Share of U.S. GDP": GREEN},
-                 labels={"country": "", "Percent": "Percent"}, title=world_title(year, vintage, bars, missing))
+    """The trade balance as a share of own GDP and of U.S. GDP, in one year.
+
+    Draws Fig. 3 (inspired by Fig. 19.3 in Jones).
+
+    Arguments
+        year      : the year
+        vintage   : "PWT 11.0" or "PWT 10.01", the version of the table
+        countries : the countries to show
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the two bars of each country (world_balance_data)
+    year, bars, missing = world_balance_data(year, vintage, countries)
+
+    # Step 2: `.melt(id_vars="country")` turns the two measure columns into rows,
+    # one row per country and measure: the long shape that `px.bar` needs
+    long = bars.reset_index().melt(
+        id_vars="country",
+        var_name="Measure",
+        value_name="Percent",
+    )
+
+    # Step 3: with `color="Measure"` and `barmode="group"`, the two bars of each
+    # country stand side by side
+    fig = px.bar(
+        long,
+        x="country",
+        y="Percent",
+        color="Measure",
+        barmode="group",
+        hover_name="country",
+        color_discrete_map={"Share of own GDP": BLUE, "Share of U.S. GDP": GREEN},
+        labels={"country": "", "Percent": "Percent"},
+        title=world_title(year, vintage, bars, missing),
+    )
     fig.add_hline(y=0, line_color="black", line_width=1)
-    book = fit_range(long.Percent, [-9, 12.5])           # the textbook's range, unless a bar does not fit
+
+    # Step 4: the textbook's range, unless a bar does not fit
+    book = fit_range(long.Percent, [-9, 12.5])
     if book:
-        fig.update_yaxes(range=book, tickvals=[-8, -6, -4, -2, 0, 2, 4, 6, 8, 10, 12])
-    fig.update_layout(legend=dict(x=0.01, y=0.99, xanchor="left", yanchor="top", title=""))
+        fig.update_yaxes(
+            range=book,
+            tickvals=[-8, -6, -4, -2, 0, 2, 4, 6, 8, 10, 12],
+        )
+    fig.update_layout(
+        legend=dict(x=0.01, y=0.99, xanchor="left", yanchor="top", title="")
+    )
     return fig
 ```
 
-> **Python note.** `ToggleButtons` shows a row of buttons, one per choice. In the country list, hold Ctrl (Cmd on a
-> Mac) and click to choose several countries.
-
 ```{python}
 #| kind: widget
-interact(world_balance_chart,
-         year=IntSlider(value=2023, min=1990, max=2023, step=1, description="year", style=WIDE),
-         vintage=ToggleButtons(options=["PWT 11.0", "PWT 10.01"], value="PWT 11.0", description="data"),
-         countries=SelectMultiple(options=sorted(pwt_world.country.unique()), value=FIG3, rows=8,
-                                  description="countries", style=WIDE));
+# Fig. 3 with a slider for the year, buttons for the version of the table and a
+# list of countries (hold Ctrl, or Cmd on a Mac, and click to choose several)
+interact(
+    world_balance_chart,
+    year=IntSlider(value=2023, min=1990, max=2023, step=1,
+                   description="year", style=WIDE),
+    vintage=ToggleButtons(options=["PWT 11.0", "PWT 10.01"], value="PWT 11.0",
+                          description="data"),
+    countries=SelectMultiple(options=sorted(pwt_world.country.unique()), value=FIG3,
+                             rows=8, description="countries", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 3 with a precomputed slider for the year (PWT 11.0)
-slider_figure(world_balance_chart, "year", [2000, 2005, 2007, 2010, 2015, 2017, 2019, 2023], start=2023)
+# one picture of Fig. 3 per year
+slider_figure(
+    world_balance_chart,
+    "year",
+    [2000, 2005, 2007, 2010, 2015, 2017, 2019, 2023],     # the years
+    start=2023,
+)
 ```
 
 **Sources.** Data: Groningen Growth and Development Centre, [Penn World Table 11.0](https://www.rug.nl/ggdc/productivity/pwt/) ([doi:10.34894/FABVLR](https://doi.org/10.34894/FABVLR)) and [Penn World Table 10.01](https://doi.org/10.34894/QT5BCC), the textbook's version (Feenstra, Inklaar and Timmer 2015, *American Economic Review*); variables `csh_c`, `csh_i`, `csh_g` (shares of GDP) and `cgdpo`
@@ -2000,13 +2463,26 @@ The textbook's figure is titled 2019, and the text says that "the U.S. trade def
 GDP". The values below are read off the textbook's bars.
 
 ```{python}
-book = pd.DataFrame({"Share of own GDP": [-4.0, 1.8, 3.0, -2.9, 7.0],
-                     "Share of U.S. GDP": [-4.0, 0.45, 3.05, -0.45, 1.5]}, index=FIG3)
+# Step 1: the textbook's bars, read off its figure
+book = pd.DataFrame(
+    {
+        "Share of own GDP": [-4.0, 1.8, 3.0, -2.9, 7.0],
+        "Share of U.S. GDP": [-4.0, 0.45, 3.05, -0.45, 1.5],
+    },
+    index=FIG3,
+)
+
+# Step 2: next to them, the trade balance in PWT 10.01 (2017 and 2019) and in
+# PWT 11.0 (2019)
 compare = pd.DataFrame({"Textbook": book["Share of own GDP"]})
 for year in [2017, 2019]:
     one = pwt[(pwt.year == year) & (pwt.vintage == "PWT 10.01")].set_index("country")
     compare[f"PWT 10.01, {year}"] = one.trade_balance
-compare["PWT 11.0, 2019"] = pwt[(pwt.year == 2019) & (pwt.vintage == "PWT 11.0")].set_index("country").trade_balance
+compare["PWT 11.0, 2019"] = (
+    pwt[(pwt.year == 2019) & (pwt.vintage == "PWT 11.0")]
+    .set_index("country")
+    .trade_balance
+)
 compare.round(2)
 ```
 
@@ -2016,11 +2492,15 @@ an earlier edition. And a newer version of the same table changes the numbers ag
 surplus is almost zero. **Always check which year, and which version of a dataset, a figure really shows.**
 
 ```{python}
+# The U.S. deficit and the other four balances, in percent of U.S. GDP
 for vintage, year in [("PWT 10.01", 2017), ("PWT 11.0", 2023)]:
-    one = pwt[(pwt.year == year) & (pwt.vintage == vintage)].set_index("country").loc[FIG3]
+    one = pwt[(pwt.year == year) & (pwt.vintage == vintage)].set_index("country")
+    one = one.loc[FIG3]
     in_us_gdp = share_of_us_gdp(one.trade_balance, one.cgdpo, one.loc["U.S.", "cgdpo"])
-    print(f"{year} ({vintage}): U.S. deficit {-in_us_gdp['U.S.']:.2f}% of U.S. GDP; surpluses of the other four "
-          f"together {in_us_gdp.drop('U.S.').sum():.2f}%")
+    print(
+        f"{year} ({vintage}): U.S. deficit {-in_us_gdp['U.S.']:.2f}% of U.S. GDP; "
+        f"surpluses of the other four together {in_us_gdp.drop('U.S.').sum():.2f}%"
+    )
 ```
 
 The four other countries' balances together are about as large as the whole U.S. deficit. China alone covers most
@@ -2033,21 +2513,40 @@ of it.
 The bars show a few countries. A map shows all 185 economies of PWT 11.0 at once, colored by their trade balance:
 blue for surpluses, red for deficits. Press the play button, or drag the year slider below the map.
 
-> **Python note.** `px.choropleth` colors countries on a map. `locations="iso3"` tells it where each row belongs,
-> using three-letter country codes, `animation_frame="year"` makes one frame per year, and `range_color` fixes the
-> color scale, so that the colors mean the same in every year. Balances beyond ±20 percent get the darkest color.
-
 ```{python}
+# The number of economies with a trade deficit, in 1990 and in 2023
 deficit_count = {}
 for year in [1990, 2023]:
     one_year = pwt_world[pwt_world.year == year]
     deficit_count[year] = f"{(one_year.trade_balance < 0).sum()} of {len(one_year)}"
-fig = px.choropleth(pwt_world, locations="iso3", color="trade_balance", hover_name="country",
-                    animation_frame="year", range_color=[-20, 20], color_continuous_scale="RdBu",
-                    labels={"trade_balance": "Trade balance (% of GDP)", "year": "Year"},
-                    title=f"Most economies run trade deficits: {deficit_count[1990]} in 1990, "
-                          f"{deficit_count[2023]} in 2023")
-fig.update_layout(coloraxis_colorbar=dict(title="% of GDP"), margin=dict(l=0, r=0, t=60, b=0))
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 3, the trade balance of every economy on a map
+# `px.choropleth` colors countries on a map. `locations="iso3"` tells it where
+# each row belongs, using three-letter country codes; `animation_frame="year"`
+# makes one frame per year; and `range_color` fixes the color scale, so that the
+# colors mean the same in every year (balances beyond 20 percent of GDP, up or
+# down, get the darkest color)
+fig = px.choropleth(
+    pwt_world,
+    locations="iso3",
+    color="trade_balance",
+    hover_name="country",
+    animation_frame="year",
+    range_color=[-20, 20],
+    color_continuous_scale="RdBu",          # red for deficits, blue for surpluses
+    labels={"trade_balance": "Trade balance (% of GDP)", "year": "Year"},
+    title=(
+        f"Most economies run trade deficits: {deficit_count[1990]} in 1990, "
+        f"{deficit_count[2023]} in 2023"
+    ),
+)
+fig.update_layout(
+    coloraxis_colorbar=dict(title="% of GDP"),
+    margin=dict(l=0, r=0, t=60, b=0),
+)
 fig.show()
 ```
 
@@ -2098,31 +2597,83 @@ later: it should run trade **deficits**. The textbook checks this for five fast-
 simple average of the yearly trade balance over a window of years. We first make a table with one row per year and
 one column per country, so that `period_average` gives one average per country.
 
-> **Python note.** `.pivot(index="year", columns="country", values="trade_balance")` turns a long table into a
-> wide one: years as rows, countries as columns. `[FIG4]` then keeps the columns in the textbook's order. With
-> `text_auto=".1f"`, `px.bar` writes each bar's value, with one decimal, on the bar.
-
 ```{python}
+# The textbook's five fast-growing economies, and their rows of both PWT versions
 FIG4 = ["China", "India", "Singapore", "Ireland", "S. Korea"]
 fast = pwt[pwt.country.isin(FIG4)]
 
 
-def fast_growers_chart(start=2000, end=2023, vintage="PWT 11.0", countries=FIG4):
-    """Fig. 19.4: the average trade balance (% of own GDP) of fast-growing (or any chosen) economies."""
+def fast_growers_data(start, end, vintage, countries):
+    """The bars of Fig. 4: each economy's average trade balance over a window.
+
+    Fig. 4:  the average of 100 NX / Y from start to end (period_average)
+
+    Arguments
+        start, end : the first and the last year of the window
+        vintage    : "PWT 11.0" or "PWT 10.01", the version of the table
+        countries  : the chosen economies
+    Returns
+        end     : the last year used (PWT 10.01 ends in 2019)
+        avg     : each economy's average trade balance, percent of own GDP
+        missing : the chosen economies without data
+    """
+    # Step 1: one row per year and one column per country, with `.pivot(...)`
     source = pwt_world if vintage == "PWT 11.0" else pwt
-    wide = source[source.vintage == vintage].pivot(index="year", columns="country", values="trade_balance")
-    end = min(end, wide.index.max())                         # PWT 10.01 ends in 2019
+    wide = source[source.vintage == vintage].pivot(
+        index="year",
+        columns="country",
+        values="trade_balance",
+    )
+    end = min(end, wide.index.max())                 # PWT 10.01 ends in 2019
+    # Step 2: the chosen economies, the textbook's first: `wide[order]` keeps
+    # their columns in that order, and period_average gives one average each
     order, missing = book_order(countries, FIG4, wide.columns)
     avg = period_average(wide[order], start, end)
+    return end, avg, missing
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 4, the trade balance in rapidly growing countries
+def fast_growers_chart(start=2000, end=2023, vintage="PWT 11.0", countries=FIG4):
+    """The average trade balance (percent of own GDP) of fast-growing economies.
+
+    Draws Fig. 4 (inspired by Fig. 19.4 in Jones), for the textbook's five or any
+    chosen economies.
+
+    Arguments
+        start, end : the first and the last year of the averages
+        vintage    : "PWT 11.0" or "PWT 10.01", the version of the table
+        countries  : the economies to show
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the averages (fast_growers_data), and the title
+    end, avg, missing = fast_growers_data(start, end, vintage, countries)
     bars = avg.rename("average").reset_index()
-    title = f"{start}–{end} ({vintage}): {(avg > 0).sum()} of {len(avg)} economies ran trade surpluses on average"
+    title = (
+        f"{start}–{end} ({vintage}): {(avg > 0).sum()} of {len(avg)} economies "
+        "ran trade surpluses on average"
+    )
     if missing:
         title = f"{start}–{end}: no {vintage} data for " + ", ".join(missing[:3])
-    fig = px.bar(bars, x="country", y="average", text_auto=".1f", hover_name="country",
-                 color_discrete_sequence=[GREEN], labels={"country": "", "average": "Percent of own GDP"},
-                 title=title)
+
+    # Step 2: one bar per economy; `text_auto=".1f"` writes each bar's value, with
+    # one decimal, on the bar
+    fig = px.bar(
+        bars,
+        x="country",
+        y="average",
+        text_auto=".1f",
+        hover_name="country",
+        color_discrete_sequence=[GREEN],
+        labels={"country": "", "average": "Percent of own GDP"},
+        title=title,
+    )
     fig.add_hline(y=0, line_color="black", line_width=1)
-    book = fit_range(avg.dropna(), [-5, 30])                 # the textbook's range, unless a bar does not fit
+
+    # Step 3: the textbook's range, unless a bar does not fit
+    book = fit_range(avg.dropna(), [-5, 30])
     if book:
         fig.update_yaxes(range=book, tickvals=[0, 5, 10, 15, 20, 25, 30])
     return fig
@@ -2130,18 +2681,32 @@ def fast_growers_chart(start=2000, end=2023, vintage="PWT 11.0", countries=FIG4)
 
 ```{python}
 #| kind: widget
-interact(fast_growers_chart,
-         start=IntSlider(value=2000, min=1990, max=2005, step=1, description="first year", style=WIDE),
-         end=IntSlider(value=2023, min=2010, max=2023, step=1, description="last year", style=WIDE),
-         vintage=ToggleButtons(options=["PWT 11.0", "PWT 10.01"], value="PWT 11.0", description="data"),
-         countries=SelectMultiple(options=sorted(pwt_world.country.unique()), value=FIG4, rows=8,
-                                  description="countries", style=WIDE));
+# Fig. 4 with sliders for the window, buttons for the version of the table and a
+# list of countries; the first year stops at 2005 and the last starts at 2010
+interact(
+    fast_growers_chart,
+    start=IntSlider(value=2000, min=1990, max=2005, step=1,
+                    description="first year", style=WIDE),
+    end=IntSlider(value=2023, min=2010, max=2023, step=1,
+                  description="last year", style=WIDE),
+    vintage=ToggleButtons(options=["PWT 11.0", "PWT 10.01"], value="PWT 11.0",
+                          description="data"),
+    countries=SelectMultiple(options=sorted(pwt_world.country.unique()), value=FIG4,
+                             rows=8, description="countries", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: Fig. 4 with a precomputed slider for the last year (first year 2000, PWT 11.0)
-slider_figure(fast_growers_chart, "end", [2010, 2015, 2017, 2019, 2023], start=2023, label="last year")
+# @title Website version: Fig. 4 with a precomputed slider for the last year
+# one picture of Fig. 4 per last year; the first year stays 2000, with PWT 11.0
+slider_figure(
+    fast_growers_chart,
+    "end",
+    [2010, 2015, 2017, 2019, 2023],     # the last years
+    start=2023,
+    label="last year",
+)
 ```
 
 **Sources.** Data: Groningen Growth and Development Centre, [Penn World Table 11.0](https://www.rug.nl/ggdc/productivity/pwt/) ([doi:10.34894/FABVLR](https://doi.org/10.34894/FABVLR)) and [Penn World Table 10.01](https://doi.org/10.34894/QT5BCC), the textbook's version (Feenstra, Inklaar and Timmer 2015, *American Economic Review*); variables `csh_c`, `csh_i` and `csh_g`.
@@ -2163,14 +2728,37 @@ Chart: inspired by Fig. 19.4 in Jones (2024), [*Macroeconomics*, 6th ed.](https:
 
 #### Look at your data: an average can hide big swings
 
+We draw the yearly balances behind the averages, in PWT 11.0, and find the lowest and the highest of them.
+
 ```{python}
+# The yearly trade balances of the five in PWT 11.0, and the rows of the lowest
+# and the highest (`.idxmin()` and `.idxmax()` give their row labels)
 annual = fast[fast.vintage == "PWT 11.0"]
-low, high = annual.loc[annual.trade_balance.idxmin()], annual.loc[annual.trade_balance.idxmax()]
-fig = px.line(annual, x="year", y="trade_balance", color="country", hover_name="country",
-              color_discrete_sequence=[BLUE, GRAY, TEAL, GREEN, "#5aa0d8"],
-              labels={"year": "Year", "trade_balance": "Percent of own GDP", "country": "Country"},
-              title=f"Yearly trade balances swing: {low.country} {low.trade_balance:.1f}% in {low.year}, "
-                    f"{high.country} {high.trade_balance:.1f}% in {high.year}")
+low = annual.loc[annual.trade_balance.idxmin()]
+high = annual.loc[annual.trade_balance.idxmax()]
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 4, the yearly trade balances of the five
+# one line per country; the title reports the lowest and the highest balance
+fig = px.line(
+    annual,
+    x="year",
+    y="trade_balance",
+    color="country",
+    hover_name="country",
+    color_discrete_sequence=[BLUE, GRAY, TEAL, GREEN, "#5aa0d8"],
+    labels={
+        "year": "Year",
+        "trade_balance": "Percent of own GDP",
+        "country": "Country",
+    },
+    title=(
+        f"Yearly trade balances swing: {low.country} {low.trade_balance:.1f}% "
+        f"in {low.year}, {high.country} {high.trade_balance:.1f}% in {high.year}"
+    ),
+)
 fig.add_hline(y=0, line_color="black", line_width=1)
 fig.update_yaxes(range=[-40, 60], tickvals=[-20, 0, 20, 40, 60])
 fig.show()
@@ -2197,8 +2785,15 @@ it changes a lot with the choice of years. That is why the figure lets you choos
 The textbook's title says 2000–2019 and its text says "from 1990 to 2019". The values below are read off its bars.
 
 ```{python}
+# Step 1: the textbook's bars, read off its figure
 book4 = pd.Series([2.9, -0.4, 16.1, 22.8, 3.5], index=FIG4)
-wide10 = fast[fast.vintage == "PWT 10.01"].pivot(index="year", columns="country", values="trade_balance")
+# Step 2: the five in PWT 10.01: one row per year, one column per country
+wide10 = fast[fast.vintage == "PWT 10.01"].pivot(
+    index="year",
+    columns="country",
+    values="trade_balance",
+)
+# Step 3: the averages over three windows, next to the textbook's bars
 windows = pd.DataFrame({"Textbook": book4})
 for start, end in [(2000, 2017), (2000, 2019), (1990, 2019)]:
     windows[f"PWT 10.01, {start}–{end}"] = period_average(wide10, start, end)
@@ -2217,21 +2812,34 @@ The textbook picked five fast-growing economies. A fairer test uses **every** ec
 smaller trade balances (borrowing), as consumption smoothing predicts? We measure growth of real GDP per person,
 `rgdpna / pop`, from 2000 to 2023, and the average trade balance over the same years.
 
-> **Python note.** `growth_rate` applies the growth formula of Chapter 3 to every column of the wide table at once.
-> `np.log` is the natural logarithm. `pd.DataFrame({...}).dropna()` builds the table of two columns and drops the
-> economies that miss either one.
-
 ```{python}
 def growth_rate(y, start, end):
-    """Average annual growth rate in percent: 100 ln(y_end / y_start) / (end - start)."""
+    """The average annual growth rate between two years, in percent.
+
+    The growth formula of Chapter 3:  100 ln(y_end / y_start) / (end - start)
+
+    Arguments
+        y          : a table whose rows are years (here one column per economy)
+        start, end : the first and the last year
+    Returns
+        the average annual growth rate of each column, in percent
+    """
+    # `np.log` is the natural logarithm; the formula works on every column of the
+    # wide table at once
     return 100 * np.log(y.loc[end] / y.loc[start]) / (end - start)
 
 
+# Step 1: real GDP per person, then one row per year and one column per economy
 pwt_world["gdp_per_person"] = pwt_world.rgdpna / pwt_world["pop"]
 income = pwt_world.pivot(index="year", columns="country", values="gdp_per_person")
 balance = pwt_world.pivot(index="year", columns="country", values="trade_balance")
-growers = pd.DataFrame({"growth": growth_rate(income, 2000, 2023),
-                        "trade_balance": period_average(balance, 2000, 2023)}).dropna().reset_index()
+
+# Step 2: growth and the average trade balance, 2000-2023, in one table;
+# `.dropna()` drops the economies that miss either one
+growers = pd.DataFrame({
+    "growth": growth_rate(income, 2000, 2023),
+    "trade_balance": period_average(balance, 2000, 2023),
+}).dropna().reset_index()
 growers.sort_values("trade_balance").head(7).round(1)
 ```
 
@@ -2239,27 +2847,59 @@ growers.sort_values("trade_balance").head(7).round(1)
 (Bermuda). These are not real trade deficits: PWT's consumption and investment shares are badly measured for such tiny,
 finance-heavy economies. We set aside the economies beyond ±40 percent and say so.
 
-> **Python note.** `np.where(test, a, b)` takes `a` where the test is True and `b` elsewhere: here a label for the
-> textbook's five and an empty text for the others. `trendline="ols"` with `trendline_scope="overall"` fits one
-> straight line through all the points, whatever their color.
-
 ```{python}
+# Step 1: set aside the economies whose average balance is beyond 40 percent of
+# GDP, up or down, and say which
 odd = growers[growers.trade_balance.abs() > 40]
 print(f"Set aside: {', '.join(odd.country)}")
 growers = growers[growers.trade_balance.abs() <= 40].copy()
-growers["group"] = growers.country.isin(FIG4).map({True: "Textbook's five", False: "Other economies"})
+
+# Step 2: a group for the legend (`.map({...})` replaces True and False by the
+# group names), and a label for the textbook's five only:
+# `np.where(test, a, b)` takes a where the test is True and b elsewhere
+growers["group"] = growers.country.isin(FIG4).map(
+    {True: "Textbook's five", False: "Other economies"}
+)
 growers["label"] = np.where(growers.country.isin(FIG4), growers.country, "")
+
+# Step 3: the least-squares line of the trade balance against growth: its slope
+# is the change in the trade balance per point of faster growth
 slope, intercept = np.polyfit(growers.growth, growers.trade_balance, 1)
-fig = px.scatter(growers, x="growth", y="trade_balance", color="group", text="label", hover_name="country",
-                 trendline="ols", trendline_scope="overall",
-                 color_discrete_map={"Textbook's five": GREEN, "Other economies": GRAY},
-                 labels={"growth": "Growth of GDP per person, 2000–2023 (% a year)",
-                         "trade_balance": "Average trade balance (% of GDP)", "group": ""},
-                 title=f"{len(growers)} economies: 1 point faster growth, {slope:+.1f} points of trade balance")
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 4, growth and the trade balance in every economy
+# Step 1: one point per economy. `trendline="ols"` with
+# `trendline_scope="overall"` fits one straight line through all the points,
+# whatever their color
+fig = px.scatter(
+    growers,
+    x="growth",
+    y="trade_balance",
+    color="group",
+    text="label",
+    hover_name="country",
+    trendline="ols",
+    trendline_scope="overall",
+    color_discrete_map={"Textbook's five": GREEN, "Other economies": GRAY},
+    labels={
+        "growth": "Growth of GDP per person, 2000–2023 (% a year)",
+        "trade_balance": "Average trade balance (% of GDP)",
+        "group": "",
+    },
+    title=(
+        f"{len(growers)} economies: 1 point faster growth, "
+        f"{slope:+.1f} points of trade balance"
+    ),
+)
+# Step 2: the labels above the points, and the fitted line in blue
 fig.update_traces(textposition="top center", marker_size=9)
 fig.update_traces(line=dict(color=BLUE, width=3), selector=dict(mode="lines"))
 fig.add_hline(y=0, line_color="black", line_width=1)
 fig.show()
+# Step 3: below the chart, the correlation of growth and the trade balance, a
+# number between -1 and +1 (`a.corr(b)` is the correlation of two columns)
 print(f"Correlation: {growers.growth.corr(growers.trade_balance):.2f}")
 ```
 
@@ -2313,6 +2953,7 @@ investment falls too, or foreigners fill the gap and the trade deficit grows. Th
 textbook's figure, as percent of GDP.
 
 ```{python}
+# Load the three series of Fig. 5, percent of GDP
 twin = pd.read_csv(DATA_URL + "fig19-5.csv").set_index("year")
 twin.head()
 ```
@@ -2321,60 +2962,133 @@ The trade **deficit** is minus the trade balance, so $NX = -$(trade deficit). Wi
 add a fourth line, domestic saving $S = I + NX$. The gap between saving and investment is then exactly the trade
 deficit.
 
-> **Python note.** `rename(columns={...})` gives the columns readable names, which then appear in the legend.
-
 ```{python}
-named = twin.rename(columns={"investment_pct_gdp": "Investment", "budget_deficit_pct_gdp": "Budget deficit",
-                             "trade_deficit_pct_gdp": "Trade deficit"})
-named["Domestic saving, S = I + NX"] = domestic_saving(named.Investment, -named["Trade deficit"])
+# Step 1: readable column names, which then appear in the legend;
+# `.rename(columns={...})` renames the columns
+named = twin.rename(
+    columns={
+        "investment_pct_gdp": "Investment",
+        "budget_deficit_pct_gdp": "Budget deficit",
+        "trade_deficit_pct_gdp": "Trade deficit",
+    }
+)
+# Step 2: domestic saving S = I + NX, equation (4), with NX = -(trade deficit)
+named["Domestic saving, S = I + NX"] = domestic_saving(
+    named.Investment, -named["Trade deficit"]
+)
+# Step 3: check that S - I equals minus the trade deficit in every year
 gap = net_capital_outflow(named["Domestic saving, S = I + NX"], named.Investment)
-print(f"S - I equals minus the trade deficit in every year: {((gap + named['Trade deficit']).abs() < 1e-9).all()}")
+print(
+    "S - I equals minus the trade deficit in every year: "
+    f"{((gap + named['Trade deficit']).abs() < 1e-9).all()}"
+)
 named.loc[[1979, 1986, 2006, 2025]].round(2)
 ```
 
-The menu chooses an episode with a rising budget deficit. The title reports how much each line changed between the
-first and the last year of the episode.
-
-> **Python note.** `named.loc[end] - named.loc[start]` subtracts two rows, column by column. `Dropdown` is a menu,
-> and `list(EPISODES)` lists the keys of the dictionary, the names of the episodes.
+The menu chooses an episode with a rising budget deficit. `episode_change` computes how much each line changed
+between the first and the last year of the episode, and the title of the figure reports it.
 
 ```{python}
-EPISODES = {"1980s: 1979 to 1986": (1979, 1986), "2000s: 2000 to 2006": (2000, 2006),
-            "Great Recession: 2007 to 2010": (2007, 2010), "Covid-19: 2019 to 2021": (2019, 2021)}
+# The episodes of the menu, each with its first and last year
+EPISODES = {
+    "1980s: 1979 to 1986": (1979, 1986),
+    "2000s: 2000 to 2006": (2000, 2006),
+    "Great Recession: 2007 to 2010": (2007, 2010),
+    "Covid-19: 2019 to 2021": (2019, 2021),
+}
+# the four lines of the figure
 LINES = ["Investment", "Budget deficit", "Trade deficit", "Domestic saving, S = I + NX"]
 
 
-def twin_deficits_chart(episode="1980s: 1979 to 1986"):
-    """Fig. 19.5: investment, the budget deficit and the trade deficit (% of GDP), with one episode."""
+def episode_change(episode):
+    """The change of each line of Fig. 5 over one episode, in points of GDP.
+
+    Fig. 5:  the value in the last year minus the value in the first year
+
+    Arguments
+        episode : a key of EPISODES
+    Returns
+        start, end : the first and the last year of the episode
+        change     : the change of each column of `named`, in points of GDP
+    """
     start, end = EPISODES[episode]
+    # `named.loc[end] - named.loc[start]` subtracts two rows, column by column
     change = named.loc[end] - named.loc[start]
-    fig = px.line(named.reset_index(), x="year", y=LINES, color_discrete_sequence=[TEAL, BLUE, GREEN, GRAY],
-                  labels={"year": "Year", "value": "Percent of GDP"},
-                  title=f"{start}→{end}: budget deficit {change['Budget deficit']:+.1f}, trade deficit "
-                        f"{change['Trade deficit']:+.1f}, investment {change['Investment']:+.1f} points")
+    return start, end, change
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 5, U.S. investment, budget deficit and trade deficit
+def twin_deficits_chart(episode="1980s: 1979 to 1986"):
+    """Investment, the budget deficit and the trade deficit, percent of GDP.
+
+    Draws Fig. 5 (inspired by Fig. 19.5 in Jones), with one episode shaded.
+
+    Arguments
+        episode : a key of EPISODES, the episode to shade
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the changes over the episode (episode_change)
+    start, end, change = episode_change(episode)
+
+    # Step 2: the four lines; the title reports the changes
+    fig = px.line(
+        named.reset_index(),
+        x="year",
+        y=LINES,
+        color_discrete_sequence=[TEAL, BLUE, GREEN, GRAY],
+        labels={"year": "Year", "value": "Percent of GDP"},
+        title=(
+            f"{start}→{end}: budget deficit {change['Budget deficit']:+.1f}, "
+            f"trade deficit {change['Trade deficit']:+.1f}, "
+            f"investment {change['Investment']:+.1f} points"
+        ),
+    )
+    # thick lines, and domestic saving thinner and dotted
     fig.update_traces(line_width=3)
     fig.update_traces(selector=dict(name=LINES[3]), line_width=2, line_dash="dot")
+
+    # Step 3: the zero line, the shaded episode and the axes
     fig.add_hline(y=0, line_dash="dash", line_color="black", line_width=1)
     fig.add_vrect(x0=start, x1=end, fillcolor=GRAY, opacity=0.2, line_width=0)
     fig.update_xaxes(range=[1958, 2027])
-    fig.update_yaxes(range=[-5, 28], tickvals=[0, 5, 10, 15, 20, 25])        # room for the legend
-    fig.update_layout(legend=dict(orientation="h", x=0.01, y=0.99, xanchor="left", yanchor="top"),
-                      legend_title_text="")
+    # room above the lines for the legend
+    fig.update_yaxes(range=[-5, 28], tickvals=[0, 5, 10, 15, 20, 25])
+    fig.update_layout(
+        legend=dict(orientation="h", x=0.01, y=0.99, xanchor="left", yanchor="top"),
+        legend_title_text="",
+    )
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(twin_deficits_chart, episode=Dropdown(options=list(EPISODES), value="1980s: 1979 to 1986",
-                                               description="episode", style=WIDE));
+# Fig. 5 with a menu of episodes. `Dropdown` is a menu, and `list(EPISODES)` lists
+# the keys of the dictionary, the names of the episodes
+interact(
+    twin_deficits_chart,
+    episode=Dropdown(options=list(EPISODES), value="1980s: 1979 to 1986",
+                     description="episode", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 5 with a precomputed slider for the episode
-slider_figure(twin_deficits_chart, "episode", ["1980s: 1979 to 1986", "2000s: 2000 to 2006",
-                                               "Great Recession: 2007 to 2010", "Covid-19: 2019 to 2021"],
-              start="1980s: 1979 to 1986")
+# one picture of Fig. 5 per episode
+slider_figure(
+    twin_deficits_chart,
+    "episode",
+    [
+        "1980s: 1979 to 1986",
+        "2000s: 2000 to 2006",
+        "Great Recession: 2007 to 2010",
+        "Covid-19: 2019 to 2021",
+    ],
+    start="1980s: 1979 to 1986",
+)
 ```
 
 **Sources.** Data: U.S. Bureau of Economic Analysis (BEA), National Income and Product Accounts, via FRED: [Gross private domestic investment (`GPDIA`)](https://fred.stlouisfed.org/series/GPDIA),
@@ -2401,10 +3115,13 @@ Chart: inspired by Fig. 19.5 in Jones (2024), [*Macroeconomics*, 6th ed.](https:
 
 #### Key numbers: decades of twin deficits
 
-> **Python note.** `named.index // 10 * 10` turns each year into its decade (1987 → 1980): `//` divides and drops
-> the remainder. `.groupby(...)` then puts the years of each decade together, and `.mean()` averages them.
+We average each line of Fig. 5 over the years of each decade.
 
 ```{python}
+# The average of each line by decade. `named.index // 10 * 10` turns each year
+# into its decade (1987 becomes 1980): `//` divides and drops the remainder.
+# `.groupby(...)` then puts the years of each decade together, and `.mean()`
+# averages them
 decades = named.groupby(named.index // 10 * 10).mean().round(2)
 decades.index.name = "decade"
 decades
@@ -2432,58 +3149,122 @@ three lines of Fig. 19.5 for most economies, as percent of GDP, from 1980 to 202
 The same names can hide different definitions, so we first compare the U.S. rows with the BEA data of Fig. 5.
 
 ```{python}
+# Step 1: load the three lines for most economies, and keep the U.S. rows
 twin_world = pd.read_csv(DATA_URL + "twin_deficits_world.csv")
 us_world = twin_world[twin_world.country == "U.S."].set_index("year")
-pd.DataFrame({"Investment, private (BEA)": named.Investment, "Investment, all (WDI)": us_world.investment,
-              "Budget deficit, federal (BEA)": named["Budget deficit"],
-              "Budget deficit, all governments (IMF)": us_world.budget_deficit,
-              "Trade deficit (BEA)": named["Trade deficit"], "Trade deficit (WDI)": us_world.trade_deficit}
-             ).loc[[2007, 2009, 2020, 2024]].round(1)
+# Step 2: the U.S. rows next to the BEA data of Fig. 5, in four years
+pd.DataFrame({
+    "Investment, private (BEA)": named.Investment,
+    "Investment, all (WDI)": us_world.investment,
+    "Budget deficit, federal (BEA)": named["Budget deficit"],
+    "Budget deficit, all governments (IMF)": us_world.budget_deficit,
+    "Trade deficit (BEA)": named["Trade deficit"],
+    "Trade deficit (WDI)": us_world.trade_deficit,
+}).loc[[2007, 2009, 2020, 2024]].round(1)
 ```
 
 The trade deficits agree within 0.1 point, but total investment is about 4 points higher than private investment,
-and the general-government deficit is about 1 point higher than the federal one. The figure function draws the three
-lines for any economy; its title reports the **correlation** of the two deficits, a number between −1 and +1 that is
-positive when they rise and fall together.
-
-> **Python note.** `a.corr(b)` is the correlation of two columns. `.stack()` puts all the columns of a table
-> into one long column, so that `fit_range` sees every value of the three lines.
+and the general-government deficit is about 1 point higher than the federal one. `twin_deficits_data` keeps the three
+lines of one economy and computes the **correlation** of its two deficits, a number between −1 and +1 that is
+positive when they rise and fall together. The figure draws the lines, and its title reports the correlation.
 
 ```{python}
-WORLD_LINES = {"investment": "Investment", "budget_deficit": "Budget deficit", "trade_deficit": "Trade deficit"}
-counts = twin_world.dropna(subset=["budget_deficit", "trade_deficit"]).groupby("country").year.count()
-TWIN_COUNTRIES = sorted(counts[counts >= 5].index)     # economies with both deficits in at least 5 years
+# Step 1: readable names for the three lines
+WORLD_LINES = {
+    "investment": "Investment",
+    "budget_deficit": "Budget deficit",
+    "trade_deficit": "Trade deficit",
+}
+# Step 2: the economies with both deficits in at least 5 years, for the menu
+counts = twin_world.dropna(subset=["budget_deficit", "trade_deficit"])
+counts = counts.groupby("country").year.count()
+TWIN_COUNTRIES = sorted(counts[counts >= 5].index)
 
 
-def twin_deficits_world(country="U.S."):
-    """Fig. 19.5 for any economy: investment, budget deficit and trade deficit, percent of GDP."""
+def twin_deficits_data(country):
+    """The three lines of Fig. 5 for one economy, and the correlation of its deficits.
+
+    Fig. 5:  r = the correlation of the budget and the trade deficit
+
+    Arguments
+        country : the economy
+    Returns
+        one  : its rows of `twin_world`, with readable column names
+        both : the rows of the years with both deficits
+        r    : the correlation of the two deficits, rounded to two decimals
+    """
+    # Step 1: the economy's rows, and the years that have both deficits
     one = twin_world[twin_world.country == country].rename(columns=WORLD_LINES)
     both = one.dropna(subset=["Budget deficit", "Trade deficit"])
+    # Step 2: the correlation of the two columns; + 0.0 turns -0.0 into 0.0
     r = round(both["Budget deficit"].corr(both["Trade deficit"]), 2) + 0.0
-    fig = px.line(one, x="year", y=list(WORLD_LINES.values()), color_discrete_sequence=[TEAL, BLUE, GREEN],
-                  labels={"year": "Year", "value": "Percent of GDP"},
-                  title=f"{country}, {both.year.min()}–{both.year.max()}: correlation of the budget and "
-                        f"trade deficits {r:+.2f}")
+    return one, both, r
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 5 for any economy
+def twin_deficits_world(country="U.S."):
+    """Investment, the budget deficit and the trade deficit, percent of GDP.
+
+    Draws Fig. 5 (inspired by Fig. 19.5 in Jones) for any economy.
+
+    Arguments
+        country : the economy
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the data and the correlation (twin_deficits_data)
+    one, both, r = twin_deficits_data(country)
+
+    # Step 2: the three lines; the title reports the correlation
+    fig = px.line(
+        one,
+        x="year",
+        y=list(WORLD_LINES.values()),
+        color_discrete_sequence=[TEAL, BLUE, GREEN],
+        labels={"year": "Year", "value": "Percent of GDP"},
+        title=(
+            f"{country}, {both.year.min()}–{both.year.max()}: correlation of the "
+            f"budget and trade deficits {r:+.2f}"
+        ),
+    )
     fig.update_traces(line_width=3)
     fig.add_hline(y=0, line_dash="dash", line_color="black", line_width=1)
+
+    # Step 3: the axes. `.stack()` puts all the columns of a table into one long
+    # column, so that fit_range sees every value of the three lines
     fig.update_xaxes(range=[1975, 2027])         # 1980 sits away from the corner
-    fig.update_yaxes(range=fit_range(one[list(WORLD_LINES.values())].stack(), [-5, 28]))
-    fig.update_layout(legend=dict(orientation="h", x=0, y=-0.15, xanchor="left", yanchor="top"),
-                      legend_title_text="")
+    fig.update_yaxes(
+        range=fit_range(one[list(WORLD_LINES.values())].stack(), [-5, 28])
+    )
+    fig.update_layout(
+        legend=dict(orientation="h", x=0, y=-0.15, xanchor="left", yanchor="top"),
+        legend_title_text="",
+    )
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(twin_deficits_world, country=Dropdown(options=TWIN_COUNTRIES, value="U.S.", description="economy",
-                                               style=WIDE));
+# Fig. 5 for any economy, chosen from a menu
+interact(
+    twin_deficits_world,
+    country=Dropdown(options=TWIN_COUNTRIES, value="U.S.",
+                     description="economy", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: twin deficits in the G20 economies (menu)
-G20 = ["U.S.", "Argentina", "Australia", "Brazil", "Canada", "China", "France", "Germany", "India", "Indonesia",
-       "Italy", "Japan", "Mexico", "Russia", "S. Korea", "Saudi Arabia", "South Africa", "Türkiye", "United Kingdom"]
+# Step 1: the G20 economies
+G20 = [
+    "U.S.", "Argentina", "Australia", "Brazil", "Canada", "China", "France",
+    "Germany", "India", "Indonesia", "Italy", "Japan", "Mexico", "Russia",
+    "S. Korea", "Saudi Arabia", "South Africa", "Türkiye", "United Kingdom",
+]
+# Step 2: one picture of Fig. 5 per economy, chosen from a menu
 menu_figure(twin_deficits_world, "country", G20, start="U.S.")
 ```
 
@@ -2500,9 +3281,12 @@ Chart: inspired by Fig. 19.5 in Jones (2024), [*Macroeconomics*, 6th ed.](https:
 178 economies.*
 
 ```{python}
+# The correlation of the two deficits in six economies
 twin_corr = {}
 for country in ["U.S.", "Germany", "Japan", "Greece", "United Kingdom", "Australia"]:
-    both = twin_world[twin_world.country == country].dropna(subset=["budget_deficit", "trade_deficit"])
+    both = twin_world[twin_world.country == country].dropna(
+        subset=["budget_deficit", "trade_deficit"]
+    )
     twin_corr[country] = both.budget_deficit.corr(both.trade_deficit)
 pd.Series(twin_corr).round(2)
 ```
@@ -2547,34 +3331,106 @@ year, as in the Oddtopia table. We also compare the current data with the same s
 which the textbook used.
 
 ```{python}
+# Step 1: three versions of the position, percent of GDP: the current data, the
+# data of July 2023, and the 1976 position plus the sum of the later trade
+# balances (accumulate, equation (5) with r-bar = 0)
 niip = pd.DataFrame({
     "Current data": share_of_gdp(us.niip, us.gdp),
-    "As published in July 2023 (the textbook)": share_of_gdp(us.niip_2023, us.gdp_2023),
-    "1976 position + sum of later trade balances": share_of_gdp(accumulate(us.niip[1976], us.net_exports.loc[1977:]),
-                                                                us.gdp)})
+    "As published in July 2023 (the textbook)": share_of_gdp(
+        us.niip_2023, us.gdp_2023
+    ),
+    "1976 position + sum of later trade balances": share_of_gdp(
+        accumulate(us.niip[1976], us.net_exports.loc[1977:]), us.gdp
+    ),
+})
+
+# Step 2: the check against the figure's data file: the largest gap, in points
 check = pd.read_csv(DATA_URL + "fig19-6.csv").set_index("year")
-print(f"Largest difference from fig19-6.csv: {(niip['Current data'] - check.niip_pct_gdp).abs().max():.4f} points")
+print(
+    "Largest difference from fig19-6.csv: "
+    f"{(niip['Current data'] - check.niip_pct_gdp).abs().max():.4f} points"
+)
 niip.loc[[1980, 1988, 1989, 2008, 2019, 2021, 2022, 2025]].round(1)
 ```
 
+For the chart we stack the three series into one column, and we keep the current data without the
+years before 1976.
+
 ```{python}
-long = niip.reset_index().melt(id_vars="year", var_name="Series", value_name="Percent of GDP").dropna()
+# Step 1: the long shape for the chart: one row per year and series
+long = niip.reset_index().melt(
+    id_vars="year",
+    var_name="Series",
+    value_name="Percent of GDP",
+).dropna()
+# Step 2: the current data, from 1976 on
 current = niip["Current data"].dropna()
-fig = px.line(long, x="year", y="Percent of GDP", color="Series", color_discrete_sequence=[BLUE, GRAY, TEAL],
-              labels={"year": "Year"},
-              title=f"The U.S. turned net debtor in {current[current < 0].index.min()}; its net foreign debt "
-                    f"was {-current.iloc[-1]:.1f}% of GDP in {current.index[-1]}")
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 6, the three lines
+# Step 1: one line per series; the title reports the first year as a net debtor
+# and the latest net foreign debt
+fig = px.line(
+    long,
+    x="year",
+    y="Percent of GDP",
+    color="Series",
+    color_discrete_sequence=[BLUE, GRAY, TEAL],
+    labels={"year": "Year"},
+    title=(
+        f"The U.S. turned net debtor in {current[current < 0].index.min()}; "
+        f"its net foreign debt was {-current.iloc[-1]:.1f}% of GDP "
+        f"in {current.index[-1]}"
+    ),
+)
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 6, the U.S. net international investment position
+# Step 2: thick lines; the textbook's data dashed, the summed balances dotted
 fig.update_traces(line_width=3)
-fig.update_traces(selector=dict(name="As published in July 2023 (the textbook)"), line_dash="dash", line_width=2)
-fig.update_traces(selector=dict(name="1976 position + sum of later trade balances"), line_dash="dot", line_width=2)
+fig.update_traces(
+    selector=dict(name="As published in July 2023 (the textbook)"),
+    line_dash="dash",
+    line_width=2,
+)
+fig.update_traces(
+    selector=dict(name="1976 position + sum of later trade balances"),
+    line_dash="dot",
+    line_width=2,
+)
+# Step 3: the zero line, and what its two sides mean
 fig.add_hline(y=0, line_dash="dash", line_color=GRAY, line_width=1)
-fig.add_annotation(x=2005, y=12, text="Above zero: U.S. owns more abroad", showarrow=False, font=dict(size=13))
-fig.add_annotation(x=1985, y=-30, text="Below zero: foreigners own<br>more in the U.S.", showarrow=False,
-                   font=dict(size=13))
+fig.add_annotation(
+    x=2005,
+    y=12,
+    text="Above zero: U.S. owns more abroad",
+    showarrow=False,
+    font=dict(size=13),
+)
+fig.add_annotation(
+    x=1985,
+    y=-30,
+    text="Below zero: foreigners own<br>more in the U.S.",    # <br>: a new line
+    showarrow=False,
+    font=dict(size=13),
+)
+# Step 4: the axes, and the legend in the bottom left corner, on a white box
 fig.update_xaxes(range=[1970, 2030], tickvals=[1980, 1990, 2000, 2010, 2020, 2030])
 fig.update_yaxes(range=[-85, 22], tickvals=[-80, -60, -40, -20, 0, 20])
-fig.update_layout(legend=dict(x=0.01, y=0.02, xanchor="left", yanchor="bottom", title="",
-                              bgcolor="rgba(255,255,255,0.8)"))
+fig.update_layout(
+    legend=dict(
+        x=0.01,
+        y=0.02,
+        xanchor="left",
+        yanchor="bottom",
+        title="",
+        bgcolor="rgba(255,255,255,0.8)",
+    )
+)
 fig.show()
 ```
 
@@ -2608,13 +3464,29 @@ The textbook says that the United States was a net creditor "up until the late 1
 "exceeded 60 percent of GDP in 2022".
 
 ```{python}
+# Step 1: the last year as a net creditor, and 2022 in both vintages
 july_2023 = niip["As published in July 2023 (the textbook)"].dropna()
 print(f"Last year as a net creditor: {current[current > 0].index.max()}")
-print(f"2022: {current[2022]:.1f}% of GDP in current data, {july_2023[2022]:.1f}% as published in July 2023")
+print(
+    f"2022: {current[2022]:.1f}% of GDP in current data, "
+    f"{july_2023[2022]:.1f}% as published in July 2023"
+)
+
+# Step 2: the years with a debt above 60 percent of GDP, and the revision to
+# 2021, in trillions of dollars (the data are in billions)
 print(f"Years below -60% of GDP in current data: {list(current[current < -60].index)}")
-print(f"Revision to the 2021 position: {(us.niip[2021] - us.niip_2023[2021]) / 1000:+.2f} trillion dollars")
+print(
+    "Revision to the 2021 position: "
+    f"{(us.niip[2021] - us.niip_2023[2021]) / 1000:+.2f} trillion dollars"
+)
+
+# Step 3: the change in the position from 1976 to 2025, and the sum of the trade
+# balances of 1977 to 2025
 change, summed = us.niip[2025] - us.niip[1976], us.net_exports.loc[1977:2025].sum()
-print(f"1976 to 2025: position {change / 1000:+.1f} trillion dollars; sum of trade balances {summed / 1000:+.1f} trillion")
+print(
+    f"1976 to 2025: position {change / 1000:+.1f} trillion dollars; "
+    f"sum of trade balances {summed / 1000:+.1f} trillion"
+)
 ```
 
 In the textbook's vintage the net foreign debt was 63.5 percent of GDP in 2022, as the text says. In the current data
@@ -2634,10 +3506,15 @@ completes the official investment positions of about 200 economies. The file `ni
 year from 1970 to 2024. First we check its U.S. rows against the BEA data of the figure above.
 
 ```{python}
+# Step 1: load the net position of every economy, percent of GDP
 niip_world = pd.read_csv(DATA_URL + "niip_world.csv")
 ewn_us = niip_world[niip_world.country == "U.S."].set_index("year").niip
-pd.DataFrame({"BEA, current": current, "BEA, July 2023": july_2023,
-              "External Wealth of Nations": ewn_us}).loc[[2010, 2019, 2020, 2021, 2022, 2023, 2024]].round(1)
+# Step 2: the U.S. position in three sources, side by side
+pd.DataFrame({
+    "BEA, current": current,
+    "BEA, July 2023": july_2023,
+    "External Wealth of Nations": ewn_us,
+}).loc[[2010, 2019, 2020, 2021, 2022, 2023, 2024]].round(1)
 ```
 
 **Look at your data.** Up to 2019 the two sources agree to the decimal, because the database copies the BEA. From 2020
@@ -2645,22 +3522,68 @@ on it keeps BEA numbers from **before** the later revisions (its 2020–2022 val
 vintage), so its U.S. position is 7 to 15 points of GDP more negative than the current BEA data: −90.6 percent
 instead of −75.3 in 2024. When you combine sources, check that they measure the same thing at the same vintage.
 
+`niip_world_data` keeps the rows of the chosen economies and finds each one's latest position, which the
+title of the figure reports.
+
 ```{python}
-def niip_world_chart(countries=("U.S.",)):
-    """Fig. 19.6 for any economies: net international investment position, percent of GDP."""
+def niip_world_data(countries):
+    """The data of Fig. 6 for any economies, and the latest position of each.
+
+    The net international investment position: foreign assets minus foreign
+    liabilities, percent of GDP (External Wealth of Nations).
+
+    Arguments
+        countries : the economies to show
+    Returns
+        rows   : the chosen economies' rows of `niip_world`
+        latest : each economy's position in its latest year, percent of GDP
+    """
     rows = niip_world[niip_world.country.isin(countries)]
+    # each economy's last row: its latest year
+    latest = rows.groupby("country").last().niip
+    return rows, latest
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 6 for any economies
+def niip_world_chart(countries=("U.S.",)):
+    """The net international investment position, percent of GDP, of any economies.
+
+    Draws Fig. 6 (inspired by Fig. 19.6 in Jones) for any list of economies.
+
+    Arguments
+        countries : the economies to show
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the data (niip_world_data)
+    rows, latest = niip_world_data(countries)
     if len(rows) == 0:
         return go.Figure(layout=dict(title="Choose at least one economy"))
-    last = rows.groupby("country").last()                  # each economy's latest year
+
+    # Step 2: the title names two economies, in whole percent (+ 0 turns -0
+    # into 0), and counts the rest
     names = []
-    for name in last.index[:2]:
-        names.append(f"{name} {round(last.niip[name]) + 0:+d}%")
-    more = f" + {len(last) - 2} more" if len(last) > 2 else ""
-    fig = px.line(rows, x="year", y="niip", color="country", hover_name="country", color_discrete_map=COLORS,
-                  labels={"year": "Year", "niip": "Percent of GDP"},
-                  title="Latest net foreign assets, % of GDP: " + ", ".join(names) + more)
+    for name in latest.index[:2]:
+        names.append(f"{name} {round(latest[name]) + 0:+d}%")
+    more = f" + {len(latest) - 2} more" if len(latest) > 2 else ""
+
+    # Step 3: one line per economy, in its own color
+    fig = px.line(
+        rows,
+        x="year",
+        y="niip",
+        color="country",
+        hover_name="country",
+        color_discrete_map=COLORS,
+        labels={"year": "Year", "niip": "Percent of GDP"},
+        title="Latest net foreign assets, % of GDP: " + ", ".join(names) + more,
+    )
     fig.update_traces(line_width=3)
     fig.add_hline(y=0, line_dash="dash", line_color=GRAY, line_width=1)
+
+    # Step 4: the axes: the textbook's range when the data fit in it
     fig.update_xaxes(range=[1965, 2027])         # 1970 sits away from the corner
     fig.update_yaxes(range=fit_range(rows.niip, [-100, 30]))
     fig.update_layout(legend_title_text="")
@@ -2669,17 +3592,27 @@ def niip_world_chart(countries=("U.S.",)):
 
 ```{python}
 #| kind: widget
-interact(niip_world_chart,
-         countries=SelectMultiple(options=sorted(niip_world.country.unique()), value=["U.S."], rows=8,
-                                  description="economies", style=WIDE));
+# Fig. 6 for any economies, chosen from a list
+interact(
+    niip_world_chart,
+    countries=SelectMultiple(options=sorted(niip_world.country.unique()),
+                             value=["U.S."], rows=8,
+                             description="economies", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: the net investment position of every economy, one group at a time
+# @title Website version: the net investment position of every economy, by group
+# Step 1: Fig. 6 with every economy
 fig = niip_world_chart(tuple(niip_world.country.unique()))
-group_menu(fig, country_groups(regions, ["U.S."]), "Textbook",
-           "Net international investment position, percent of GDP: choose a group")
+# Step 2: a menu above the chart shows one group of economies at a time
+group_menu(
+    fig,
+    country_groups(regions, ["U.S."]),
+    "Textbook",
+    "Net international investment position, percent of GDP: choose a group",
+)
 ```
 
 **Sources.** Data: Philip R. Lane and Gian Maria Milesi-Ferretti,
@@ -2694,10 +3627,15 @@ Chart: inspired by Fig. 19.6 in Jones (2024), [*Macroeconomics*, 6th ed.](https:
 a few financial centers and oil exporters, which the chosen range leaves out.*
 
 ```{python}
+# The positions in 2024: how many economies are net debtors, and a few of them
 niip_2024 = niip_world[niip_world.year == 2024].set_index("country").niip
 print(f"Net debtors in 2024: {(niip_2024 < 0).sum()} of {len(niip_2024)} economies")
-niip_2024.loc[["Norway", "Switzerland", "Japan", "Germany", "China", "United Kingdom", "Ireland", "U.S.",
-               "Greece"]].round(1)
+niip_2024.loc[
+    [
+        "Norway", "Switzerland", "Japan", "Germany", "China",
+        "United Kingdom", "Ireland", "U.S.", "Greece",
+    ]
+].round(1)
 ```
 
 The United States has by far the largest net foreign debt in dollars (27 trillion in this database), but not as a

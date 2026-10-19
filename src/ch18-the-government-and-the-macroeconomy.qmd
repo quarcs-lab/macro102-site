@@ -1159,56 +1159,130 @@ Office of Management and Budget (OMB). They are measured in **fiscal years**: th
 for example, ran from October 2024 to September 2025.
 
 ```{python}
+# Load the data of Fig. 1: federal spending and revenue, percent of GDP.
+# `pd.read_csv` reads a data file into a table; `.tail(3)` shows its last three rows
 revenue_spending = pd.read_csv(DATA_URL + "fig18-1.csv")
 revenue_spending.tail(3)
 ```
 
 `spending_gdp_pct` and `revenue_gdp_pct` are percentages of GDP, from FY1934 to FY2025. The menu draws the
 averages over one period as dotted lines. The textbook's dashed lines at 18 and 20 percent stay on the chart.
-
-> **Python note.** `rename(columns={...})` gives the columns readable names, which then appear in the
-> legend, and `set_index("year")` makes the years the row labels, as `period_mean` needs. `PERIODS` is a
-> *dictionary*: each name (the key) gives a pair of years (the value), and `start, end = PERIODS[period]`
-> unpacks the pair. `fig.add_hline` draws a horizontal line across the chart.
+First we name the columns, and `budget_averages` computes the averages of a period. The drawing code then
+draws the chart.
 
 ```{python}
-named = revenue_spending.rename(columns={"spending_gdp_pct": "Spending", "revenue_gdp_pct": "Revenue"})
+# Step 1: readable column names, which then appear in the legend.
+# `rename(columns={...})` renames columns, and `set_index("year")` makes the years
+# the row labels, as `period_mean` needs
+named = revenue_spending.rename(
+    columns={"spending_gdp_pct": "Spending", "revenue_gdp_pct": "Revenue"}
+)
 by_year = named.set_index("year")
-PERIODS = {"FY1934–1939": (1934, 1939), "FY1950–1969": (1950, 1969), "FY1970–1997": (1970, 1997),
-           "FY1998–2001": (1998, 2001), "FY2002–2025": (2002, 2025), "FY1975–2024": (1975, 2024)}
+# Step 2: the periods of the menu. `PERIODS` is a dictionary: each name (the key)
+# gives a pair of years (the value)
+PERIODS = {
+    "FY1934–1939": (1934, 1939),
+    "FY1950–1969": (1950, 1969),
+    "FY1970–1997": (1970, 1997),
+    "FY1998–2001": (1998, 2001),
+    "FY2002–2025": (2002, 2025),
+    "FY1975–2024": (1975, 2024),
+}
 
 
-def budget_chart(period="FY1950–1969"):
-    """Fig. 18.1: federal spending and revenue (% of GDP), with their averages over one period."""
+def budget_averages(period):
+    """Average federal spending and revenue over one period of the menu (Fig. 1).
+
+    The averages, in percent of GDP, that the dotted lines and the title of Fig. 1
+    report. Their gap is the average deficit of the period.
+
+    Arguments
+        period : the name of a period in PERIODS, such as "FY1950–1969"
+    Returns
+        start, end        : the first and the last fiscal year of the period
+        spending, revenue : average spending and revenue over those years (% of GDP)
+    """
+    # `start, end = PERIODS[period]` unpacks the pair of years
     start, end = PERIODS[period]
-    spending, revenue = period_mean(by_year.Spending, start, end), period_mean(by_year.Revenue, start, end)
-    fig = px.line(named, x="year", y=["Spending", "Revenue"], color_discrete_sequence=[BLUE, GREEN],
-                  labels={"year": "Fiscal year", "value": "Percentage of GDP", "variable": "Series"},
-                  title=f"{period}: spending averaged {spending:.1f}% and revenue {revenue:.1f}% of GDP")
+    # `period_mean` averages a series from start to end
+    spending = period_mean(by_year.Spending, start, end)
+    revenue = period_mean(by_year.Revenue, start, end)
+    return start, end, spending, revenue
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 1, federal spending and revenue
+def budget_chart(period="FY1950–1969"):
+    """Federal spending and revenue (% of GDP), with their averages over one period.
+
+    Draws Fig. 1 (inspired by Fig. 18.1 in Jones): the two lines, the textbook's
+    dashed lines at 18 and 20 percent, and the averages of the period as dotted lines.
+
+    Arguments
+        period : the name of a period in PERIODS, such as "FY1950–1969"
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the averages of the period (budget_averages)
+    start, end, spending, revenue = budget_averages(period)
+    # Step 2: one line per column, spending in blue and revenue in green
+    fig = px.line(
+        named,
+        x="year",
+        y=["Spending", "Revenue"],
+        color_discrete_sequence=[BLUE, GREEN],
+        labels={
+            "year": "Fiscal year",
+            "value": "Percentage of GDP",
+            "variable": "Series",
+        },
+        title=(
+            f"{period}: spending averaged {spending:.1f}% and revenue "
+            f"{revenue:.1f}% of GDP"
+        ),
+    )
     fig.update_traces(line_width=3)
-    for level in [18, 20]:                       # the textbook's dashed reference lines
+    # Step 3: the textbook's dashed reference lines; `fig.add_hline` draws a
+    # horizontal line across the chart
+    for level in [18, 20]:
         fig.add_hline(y=level, line=dict(color="black", width=1, dash="dash"))
+    # Step 4: the shaded period and its dotted averages
     add_period_means(fig, by_year, ["Spending", "Revenue"], [BLUE, GREEN], start, end)
+    # Step 5: fixed axes, and the legend in the top right corner
     fig.update_xaxes(range=[1930, 2028])
     fig.update_yaxes(range=[0, 46], tickvals=[5, 10, 15, 20, 25, 30, 35, 40, 45])
-    fig.update_layout(legend=dict(x=0.99, y=0.99, xanchor="right", yanchor="top"), legend_title_text="")
+    fig.update_layout(
+        legend=dict(x=0.99, y=0.99, xanchor="right", yanchor="top"),
+        legend_title_text="",
+    )
     return fig
 ```
 
-> **Python note.** `interact` calls `budget_chart` again whenever you choose another period in the
-> `Dropdown` menu, and shows the figure it returns. The `;` at the end only hides an extra line of text.
-
 ```{python}
 #| kind: widget
-interact(budget_chart, period=Dropdown(options=list(PERIODS), value="FY1950–1969", description="period",
-                                       style=WIDE));
+# Fig. 1 with a menu. `interact` calls budget_chart again whenever you choose
+# another period in the `Dropdown` menu, and shows the figure it returns. The `;`
+# at the end only hides an extra line of text.
+interact(
+    budget_chart,
+    period=Dropdown(options=list(PERIODS), value="FY1950–1969",
+                    description="period", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 1 with a precomputed slider for the period
-slider_figure(budget_chart, "period", ["FY1934–1939", "FY1950–1969", "FY1970–1997", "FY1998–2001",
-                                       "FY2002–2025", "FY1975–2024"], start="FY1950–1969", label="period")
+# one picture of Fig. 1 per period; the slider shows one at a time
+slider_figure(
+    budget_chart,
+    "period",
+    ["FY1934–1939", "FY1950–1969", "FY1970–1997", "FY1998–2001",
+     "FY2002–2025", "FY1975–2024"],     # the periods of the menu
+    start="FY1950–1969",
+    label="period",
+)
 ```
 
 **Source.** Data: [Office of Management and Budget, Historical Tables](https://www.whitehouse.gov/omb/budget/historical-tables/) of the FY2027 Budget, Table 1.2, total receipts and total outlays as percentages of GDP.
@@ -1235,11 +1309,28 @@ Chart: inspired by Fig. 18.1 in Jones (2024), [*Macroeconomics*, 6th ed.](https:
 #### Key numbers: the war, the 1930s and the 20 percent ceiling
 
 ```{python}
-print(f"Highest spending: {by_year.Spending.max():.1f}% of GDP in FY{by_year.Spending.idxmax()}")
+# The key numbers of Fig. 1, in percent of GDP.
+# Step 1: the peak of spending; `.max()` is the largest value and `.idxmax()` its
+# row label, the fiscal year
+print(
+    f"Highest spending: {by_year.Spending.max():.1f}% of GDP "
+    f"in FY{by_year.Spending.idxmax()}"
+)
 print(f"Revenue in FY1944: {by_year.Revenue[1944]:.1f}% of GDP")
-print(f"Average revenue, FY1934-1939: {period_mean(by_year.Revenue, 1934, 1939):.1f}% of GDP")
-print("Fiscal years with revenue of 20% of GDP or more:", by_year.index[by_year.Revenue >= 20].tolist())
-print(f"FY2025: spending {by_year.Spending[2025]:.1f}%, revenue {by_year.Revenue[2025]:.1f}% of GDP")
+print(
+    f"Average revenue, FY1934-1939: "
+    f"{period_mean(by_year.Revenue, 1934, 1939):.1f}% of GDP"
+)
+# Step 2: the fiscal years in which revenue reached 20 percent of GDP;
+# `.tolist()` turns them into a plain Python list
+print(
+    "Fiscal years with revenue of 20% of GDP or more:",
+    by_year.index[by_year.Revenue >= 20].tolist(),
+)
+print(
+    f"FY2025: spending {by_year.Spending[2025]:.1f}%, "
+    f"revenue {by_year.Revenue[2025]:.1f}% of GDP"
+)
 ```
 
 The textbook says spending peaked "at just under 44 percent" and revenue reached "nearly 21 percent" in 1944.
@@ -1257,37 +1348,82 @@ need **general government**, all levels together, which the OECD measures in the
 `balance` (revenue minus spending), and the `private_investment` that we use in Fig. 5, all in percent of GDP.
 
 ```{python}
+# Load the OECD data: the general government budgets of 42 countries
 finance = pd.read_csv(DATA_URL + "gov_finance.csv")
+# the last three years of the United States
 finance[finance.country == "United States"].tail(3)
 ```
 
 The series start in 1970 for the United States, Korea and Sweden, but only in 1995 for most European countries. Brazil
 and Costa Rica have investment data only: their OECD government accounts are about 24 points of GDP above the IMF's
 numbers for the same concept, so we leave them out. China and South Africa report only the balance. That leaves 38
-countries with revenue and spending. The chart function draws one country at a time.
-
-> **Python note.** `.dropna(subset=["revenue", "spending"])` drops the rows in which one of these two columns is
-> missing, and `sorted(... .unique())` lists every remaining country once, in alphabetical order.
+countries with revenue and spending. `country_budget` keeps the data of one country, and the drawing code draws
+them.
 
 ```{python}
+# The countries of the menu. `.dropna(subset=["revenue"])` drops the rows in
+# which revenue is missing, and `sorted(... .unique())` lists every remaining
+# country once, in alphabetical order
 FINANCE_COUNTRIES = sorted(finance.dropna(subset=["revenue"]).country.unique())
 
 
-def budget_by_country(country="United States"):
-    """Fig. 18.1 for any country: general government spending and revenue (% of GDP, OECD)."""
+def country_budget(country):
+    """The general government spending and revenue of one country (Fig. 1).
+
+    The OECD data of one country, in percent of GDP, for the years with both values.
+
+    Arguments
+        country : the country's name, as in FINANCE_COUNTRIES
+    Returns
+        the country's rows, with the columns renamed Spending and Revenue
+    """
+    # Step 1: the country's rows; `.dropna(subset=["revenue", "spending"])` drops the
+    # years in which one of the two is missing
     rows = finance[finance.country == country].dropna(subset=["revenue", "spending"])
-    rows = rows.rename(columns={"spending": "Spending", "revenue": "Revenue"})
+    # Step 2: readable names, which then appear in the legend
+    return rows.rename(columns={"spending": "Spending", "revenue": "Revenue"})
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 1 for any country, general government budgets
+def budget_by_country(country="United States"):
+    """General government spending and revenue (% of GDP, OECD) of one country.
+
+    Draws Fig. 1 for any country (inspired by Fig. 18.1 in Jones), with the
+    averages over all its years in the title.
+
+    Arguments
+        country : the country's name, as in FINANCE_COUNTRIES
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the country's data (country_budget)
+    rows = country_budget(country)
+    # Step 2: the title reports the averages over all years with data
     title = f"{country}: no OECD data on government revenue and spending"
     if len(rows) > 0:
-        title = (f"{country}, {rows.year.min()}–{rows.year.max()}: spending averaged {rows.Spending.mean():.1f}%, "
-                 f"revenue {rows.Revenue.mean():.1f}% of GDP")
-    fig = px.line(rows, x="year", y=["Spending", "Revenue"], color_discrete_sequence=[BLUE, GREEN],
-                  labels={"year": "Year", "value": "Percentage of GDP", "variable": "Series"}, title=title)
+        title = (
+            f"{country}, {rows.year.min()}–{rows.year.max()}: spending averaged "
+            f"{rows.Spending.mean():.1f}%, revenue {rows.Revenue.mean():.1f}% of GDP"
+        )
+    # Step 3: the two lines
+    fig = px.line(
+        rows,
+        x="year",
+        y=["Spending", "Revenue"],
+        color_discrete_sequence=[BLUE, GREEN],
+        labels={"year": "Year", "value": "Percentage of GDP", "variable": "Series"},
+        title=title,
+    )
     fig.update_traces(line_width=3)
+    # Step 4: the same fixed axes for every country, and the legend above the chart
     fig.update_xaxes(range=[1958, 2027])
     fig.update_yaxes(range=[0, 70], tickvals=[10, 20, 30, 40, 50, 60, 70])
-    fig.update_layout(legend=dict(orientation="h", x=0.99, y=1.02, xanchor="right", yanchor="bottom"),
-                      legend_title_text="")
+    fig.update_layout(
+        legend=dict(orientation="h", x=0.99, y=1.02, xanchor="right", yanchor="bottom"),
+        legend_title_text="",
+    )
     return fig
 ```
 
@@ -1296,42 +1432,79 @@ menu; the helper cell right after the widget builds it.
 
 ```{python}
 #| kind: widget
-interact(budget_by_country, country=Dropdown(options=FINANCE_COUNTRIES, value="United States", description="country",
-                                             style=WIDE));
+# Fig. 1 for any country, with a menu of the 38 countries
+interact(
+    budget_by_country,
+    country=Dropdown(options=FINANCE_COUNTRIES, value="United States",
+                     description="country", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: helper
-# @title Helper for the website versions with a country menu (run this cell; you do not need to read it)
+# @title Helper for the website versions with a country menu (no need to read it)
 def dropdown_figure(make_figure, options, start):
-    """Precompute make_figure(option) for every option and join the results with a dropdown menu.
+    """Precompute make_figure(option) for every option and join them with a menu.
 
-    The website cannot run Python, so a figure with a country menu gets this precomputed version."""
+    The website cannot run Python, so a figure with a country menu gets this
+    precomputed version (Figs. 1 and 5 for any country).
+
+    Arguments
+        make_figure : the function that draws the figure for one option
+        options     : the options of the menu, such as the country names
+        start       : the option shown first
+    Returns
+        one Plotly figure with all versions, and a menu that shows one at a time
+    """
+    # Step 1: draw the figure once for every option
     figures = [make_figure(o) for o in options]
     first = options.index(start)
+    # Step 2: copy every trace into one figure; only the start option's are visible
     fig = go.Figure(layout=figures[first].layout)
-    owner = []                                  # which precomputed figure each trace comes from
+    owner = []                      # which precomputed figure each trace comes from
     for i, f in enumerate(figures):
         for trace in f.data:
             trace.visible = (i == first)
             fig.add_trace(trace)
             owner.append(i)
+    # Step 3: one menu entry per option: its traces, title, axis, labels and shapes
     buttons = []
     for i, f in enumerate(figures):
-        layout = {"title": f.layout.title.to_plotly_json(), "yaxis.range": f.layout.yaxis.range,
-                  "annotations": [a.to_plotly_json() for a in f.layout.annotations],
-                  "shapes": [s.to_plotly_json() for s in f.layout.shapes]}
-        buttons.append(dict(label=str(options[i]), method="update",
-                            args=[{"visible": [o == i for o in owner]}, layout]))
-    fig.update_layout(updatemenus=[dict(type="dropdown", active=first, buttons=buttons, x=0, y=1.02,
-                                        xanchor="left", yanchor="bottom")],
-                      margin=dict(t=110))
+        layout = {
+            "title": f.layout.title.to_plotly_json(),
+            "yaxis.range": f.layout.yaxis.range,
+            "annotations": [a.to_plotly_json() for a in f.layout.annotations],
+            "shapes": [s.to_plotly_json() for s in f.layout.shapes],
+        }
+        buttons.append(
+            dict(
+                label=str(options[i]),
+                method="update",
+                args=[{"visible": [o == i for o in owner]}, layout],
+            )
+        )
+    # Step 4: the menu sits above the top left corner of the chart
+    fig.update_layout(
+        updatemenus=[
+            dict(
+                type="dropdown",
+                active=first,
+                buttons=buttons,
+                x=0,
+                y=1.02,
+                xanchor="left",
+                yanchor="bottom",
+            )
+        ],
+        margin=dict(t=110),
+    )
     return fig
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: general government budgets in 38 countries, with a country menu
+# @title Website version: general government budgets in 38 countries, country menu
+# one precomputed chart per country, joined by a menu
 dropdown_figure(budget_by_country, FINANCE_COUNTRIES, start="United States")
 ```
 
@@ -1363,49 +1536,90 @@ every fiscal year since 1940, in percent of GDP, together with GDP (billions of 
 (millions, from 1960).
 
 ```{python}
+# Load the federal budget lines of every fiscal year since 1940
 budget = pd.read_csv(DATA_URL + "federal_budget.csv")
-budget[budget.year >= 2023][["year", "release", "gdp_billions", "population_millions", "total_spending",
-                             "total_revenue", "balance"]]
+# the rows from 2023 on, and the columns of Table 18.1's totals
+budget[budget.year >= 2023][
+    ["year", "release", "gdp_billions", "population_millions", "total_spending",
+     "total_revenue", "balance"]
+]
 ```
 
 There are two rows for 2023. The textbook was written in early 2023, before fiscal year 2023 was over, so its
 table shows OMB's **estimate** from March 2023 (the row "estimate (FY2024 Budget)"). The **actual** numbers came
 in lower: spending 22.4 instead of 24.2 percent of GDP, revenue 16.2 instead of 18.2 percent.
 
-> **Python note.** `budget[(budget.year == year) & (budget.release == release)]` keeps the rows where both
-> conditions are true, and `.iloc[0]` takes the first of them. `round(-2)` rounds to the nearest 100.
-
 ```{python}
-LINES = {"total_spending": "Total expenditures", "health": "Health (including Medicare)",
-         "social_security": "Social Security", "defense": "National defense", "income_security": "Income security",
-         "net_interest": "Net interest", "other_spending": "Other spending", "total_revenue": "Total revenues",
-         "individual_income_tax": "Individual income taxes",
-         "social_insurance_tax": "Social insurance and retirement receipts",
-         "corporate_income_tax": "Corporate income taxes", "other_revenue": "Other revenues",
-         "balance": "Budget balance (deficit < 0)"}
+# The lines of Table 18.1: each column of the file (the key) and its name (the value)
+LINES = {
+    "total_spending": "Total expenditures",
+    "health": "Health (including Medicare)",
+    "social_security": "Social Security",
+    "defense": "National defense",
+    "income_security": "Income security",
+    "net_interest": "Net interest",
+    "other_spending": "Other spending",
+    "total_revenue": "Total revenues",
+    "individual_income_tax": "Individual income taxes",
+    "social_insurance_tax": "Social insurance and retirement receipts",
+    "corporate_income_tax": "Corporate income taxes",
+    "other_revenue": "Other revenues",
+    "balance": "Budget balance (deficit < 0)",
+}
 
 
 def budget_table(year, release="actual (FY2027 Budget)"):
-    """Table 18.1 for one fiscal year: each line in percent of GDP and in dollars per person."""
+    """Table 18.1 for one fiscal year: each line in percent of GDP and per person.
+
+    Arguments
+        year    : the fiscal year
+        release : the OMB release, "actual (FY2027 Budget)" or
+                  "estimate (FY2024 Budget)"
+    Returns
+        a table with one row per line of LINES, in percent of GDP and in dollars
+        per person
+    """
+    # Step 1: the row of that year and release. `&` keeps the rows where both
+    # conditions are true, and `.iloc[0]` takes the first of them
     row = budget[(budget.year == year) & (budget.release == release)].iloc[0]
     table = pd.DataFrame({"Percent of GDP": row[list(LINES)].astype(float)})
-    table["Dollars per person"] = per_person(table["Percent of GDP"], row.gdp_billions,
-                                             row.population_millions).round(-2)
+    # Step 2: dollars per person (per_person); `round(-2)` rounds to the nearest 100
+    table["Dollars per person"] = per_person(
+        table["Percent of GDP"], row.gdp_billions, row.population_millions
+    ).round(-2)
+    # Step 3: the readable names as row labels
     return table.rename(index=LINES)
 ```
 
 We put the textbook's numbers next to the estimate it used, the actual 2023 numbers and the latest year, 2025.
 
 ```{python}
-book = pd.DataFrame({"Textbook 2023, %": [23.9, 6.4, 5.1, 3.1, 3.0, 2.5, 3.9, 18.0, 8.7, 6.3, 2.0, 0.9, -5.9],
-                     "Textbook 2023, dollars": [19100, 5100, 4000, 2400, 2400, 2000, 3100, 14400, 7000, 5000,
-                                                1600, 800, -4700]},
-                    index=list(LINES.values()))
-estimate, actual, latest = budget_table(2023, "estimate (FY2024 Budget)"), budget_table(2023), budget_table(2025)
-table = pd.concat([book, estimate["Percent of GDP"].rename("2023 estimate, %"),
-                   actual["Percent of GDP"].rename("2023 actual, %"),
-                   latest["Percent of GDP"].rename("2025, %"), latest["Dollars per person"].rename("2025, dollars")],
-                  axis=1)
+# Step 1: the textbook's Table 18.1, in percent of GDP and in dollars per person
+book = pd.DataFrame(
+    {
+        "Textbook 2023, %": [23.9, 6.4, 5.1, 3.1, 3.0, 2.5, 3.9, 18.0, 8.7, 6.3, 2.0,
+                             0.9, -5.9],
+        "Textbook 2023, dollars": [19100, 5100, 4000, 2400, 2400, 2000, 3100, 14400,
+                                   7000, 5000, 1600, 800, -4700],
+    },
+    index=list(LINES.values()),
+)
+# Step 2: the OMB estimate the textbook used, the actual 2023 numbers, and 2025
+estimate = budget_table(2023, "estimate (FY2024 Budget)")
+actual = budget_table(2023)
+latest = budget_table(2025)
+# Step 3: `pd.concat([...], axis=1)` puts the columns side by side; `.rename(...)`
+# gives each column its own name
+table = pd.concat(
+    [
+        book,
+        estimate["Percent of GDP"].rename("2023 estimate, %"),
+        actual["Percent of GDP"].rename("2023 actual, %"),
+        latest["Percent of GDP"].rename("2025, %"),
+        latest["Dollars per person"].rename("2025, dollars"),
+    ],
+    axis=1,
+)
 table.round(1)
 ```
 
@@ -1439,6 +1653,7 @@ year's deficit adds to it. The data are the federal debt **held by the public** 
 the end of each fiscal year, and the total surplus (+) or deficit (−), both in percent of GDP.
 
 ```{python}
+# Load the data of Fig. 2: the debt and the budget balance, percent of GDP
 debt_deficit = pd.read_csv(DATA_URL + "fig18-2.csv")
 debt_deficit[debt_deficit.year.between(1937, 1942)]
 ```
@@ -1450,27 +1665,82 @@ more debt point, for 1939, from an older edition of the table. Plotly simply sta
 The two series differ a lot in size, so each gets its own vertical axis: the budget balance on the left and the
 debt on the right. We line up the zeros of the two axes, so that the dashed line marks zero on both.
 
-> **Python note.** `fig.add_trace(go.Scatter(..., yaxis="y2"))` adds a line that uses a second vertical axis.
-> In `update_layout`, `yaxis2=dict(overlaying="y", side="right", ...)` puts that axis on the right, over the
-> same plot. `fig.add_annotation` writes a label at a point of the chart; `<br>` starts a new line.
+```{python}
+# The debt ratio with the fiscal years as row labels: the title of Fig. 2 and the
+# debt projection of Fig. 6 read their values from it
+debt_by_year = debt_deficit.set_index("year").debt_public_gdp_pct
+```
 
 ```{python}
-debt_by_year = debt_deficit.set_index("year").debt_public_gdp_pct
-fig = px.line(debt_deficit, x="year", y="surplus_gdp_pct",
-              labels={"year": "Fiscal year", "surplus_gdp_pct": "Surplus or deficit (% of GDP)"},
-              title=f"Federal debt: {debt_by_year[1946]:.1f}% of GDP in FY1946, {debt_by_year[2025]:.1f}% in FY2025")
+#| kind: drawing
+# @title Drawing code: Fig. 2, the two lines and their labels
+# Step 1: the budget balance, a green line on the left axis
+fig = px.line(
+    debt_deficit,
+    x="year",
+    y="surplus_gdp_pct",
+    labels={"year": "Fiscal year", "surplus_gdp_pct": "Surplus or deficit (% of GDP)"},
+    title=(
+        f"Federal debt: {debt_by_year[1946]:.1f}% of GDP in FY1946, "
+        f"{debt_by_year[2025]:.1f}% in FY2025"
+    ),
+)
 fig.update_traces(line=dict(color=GREEN, width=3), name="Surplus or deficit")
-fig.add_trace(go.Scatter(x=debt_deficit.year, y=debt_deficit.debt_public_gdp_pct, yaxis="y2", name="Debt-GDP ratio",
-                         line=dict(color=BLUE, width=3)))
+# Step 2: the debt ratio, a blue line. `fig.add_trace(go.Scatter(..., yaxis="y2"))`
+# adds a line that uses a second vertical axis
+fig.add_trace(
+    go.Scatter(
+        x=debt_deficit.year,
+        y=debt_deficit.debt_public_gdp_pct,
+        yaxis="y2",
+        name="Debt-GDP ratio",
+        line=dict(color=BLUE, width=3),
+    )
+)
+# the dashed line at zero
 fig.add_hline(y=0, line=dict(color="black", width=1, dash="dash"))
-fig.add_annotation(x=1985, y=29, text="Debt held by the public, % of GDP (right axis)", showarrow=False,
-                   font=dict(color=BLUE, size=14))
-fig.add_annotation(x=1966, y=-12, text="Budget balance, % of GDP<br>(left axis)", showarrow=False,
-                   font=dict(color=GREEN, size=14))
-fig.update_layout(showlegend=False, hovermode="x unified",
-                  yaxis=dict(title="Surplus or deficit (% of GDP)", range=[-32, 48], tickvals=[-30, -20, -10, 0, 10]),
-                  yaxis2=dict(title="Debt-GDP ratio (%)", overlaying="y", side="right", range=[-80, 120],
-                              tickvals=[0, 20, 40, 60, 80, 100, 120], showgrid=False))    # zeros of both axes level
+# Step 3: the names of the two lines. `fig.add_annotation` writes a label at a
+# point of the chart; `<br>` starts a new line
+fig.add_annotation(
+    x=1985,
+    y=29,
+    text="Debt held by the public, % of GDP (right axis)",
+    showarrow=False,
+    font=dict(color=BLUE, size=14),
+)
+# the `;` at the end hides the chart here: the next cell shows it, with its axes
+fig.add_annotation(
+    x=1966,
+    y=-12,
+    text="Budget balance, % of GDP<br>(left axis)",
+    showarrow=False,
+    font=dict(color=GREEN, size=14),
+);
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 2, the two vertical axes
+# In `update_layout`, `yaxis2=dict(overlaying="y", side="right", ...)` puts the
+# second axis on the right, over the same plot. The ranges put the zeros of both
+# axes at the same height, so the dashed line marks zero on both.
+fig.update_layout(
+    showlegend=False,
+    hovermode="x unified",
+    yaxis=dict(
+        title="Surplus or deficit (% of GDP)",
+        range=[-32, 48],
+        tickvals=[-30, -20, -10, 0, 10],
+    ),
+    yaxis2=dict(
+        title="Debt-GDP ratio (%)",
+        overlaying="y",
+        side="right",
+        range=[-80, 120],
+        tickvals=[0, 20, 40, 60, 80, 100, 120],
+        showgrid=False,
+    ),
+)
 fig.update_xaxes(range=[1930, 2028])
 fig.show()
 ```
@@ -1500,16 +1770,22 @@ How did the United States pay off its war debt? Fig. 6's file has federal revenu
 interest from FY1950, so their difference is the **primary balance**. The total balance of Fig. 2 minus the
 primary balance is the interest paid. We first combine the two files.
 
-> **Python note.** `merge(..., on="year")` joins two tables row by row, matching the years. Rows whose year
-> is missing in one of the tables are dropped, so the result starts in FY1950.
-
 ```{python}
+# Step 1: load Fig. 6's file and join it to Fig. 2's.
+# `merge(..., on="year")` joins two tables row by row, matching the years; rows
+# whose year is missing in one of them are dropped, so the result starts in FY1950
 projections = pd.read_csv(DATA_URL + "fig18-6.csv")
 history = debt_deficit.merge(projections[projections.projection == 0], on="year")
+# Step 2: the primary deficit (spending excluding interest minus revenue), and the
+# interest paid (the total deficit minus the primary deficit)
 history["primary_deficit"] = history.spending_ex_interest - history.revenue
 history["net_interest"] = -history.surplus_gdp_pct - history.primary_deficit
+# Step 3: the years of the textbook's Exercise 3
 years = history.set_index("year")
-years.loc[[1985, 1999, 2006, 2010, 2025], ["surplus_gdp_pct", "primary_deficit", "net_interest"]].round(2)
+years.loc[
+    [1985, 1999, 2006, 2010, 2025],
+    ["surplus_gdp_pct", "primary_deficit", "net_interest"],
+].round(2)
 ```
 
 These are the years of the textbook's Exercise 3. In FY1999 the total surplus was 1.3 percent of GDP, but the
@@ -1520,11 +1796,17 @@ shows 3.2 percent of interest: Fig. 2's file rounds the deficit to one decimal, 
 Now `debt_change_parts` splits the change in the debt ratio over four episodes.
 
 ```{python}
+# The change in the debt ratio over four episodes, split as in equation (6)
 EPISODES = [(1950, 1974), (1981, 1993), (2001, 2008), (2007, 2025)]
 for start, end in EPISODES:
-    change, from_deficits, rest = debt_change_parts(years.debt_public_gdp_pct, years.primary_deficit, start, end)
-    print(f"FY{start}-{end}: debt ratio {change:+6.1f} points = primary deficits {from_deficits:+6.1f} "
-          f"+ interest minus growth {rest:+6.1f}")
+    change, from_deficits, rest = debt_change_parts(
+        years.debt_public_gdp_pct, years.primary_deficit, start, end
+    )
+    # `:+6.1f`: a sign and one decimal, six characters wide, so the columns line up
+    print(
+        f"FY{start}-{end}: debt ratio {change:+6.1f} points = primary deficits "
+        f"{from_deficits:+6.1f} + interest minus growth {rest:+6.1f}"
+    )
 ```
 
 From FY1950 to FY1974 the debt ratio fell by 55.4 points. Primary surpluses paid for only 14.1 points of that.
@@ -1543,6 +1825,7 @@ those held by other parts of the government, and it covers all levels of governm
 line here lies above the federal debt held by the public of Fig. 2: by 15.1 points in 1946 and 24.9 points in 2024.
 
 ```{python}
+# Load the IMF's gross debt: one row per country and year
 gross = pd.read_csv(DATA_URL + "gross_debt.csv")
 gross.head(3)
 ```
@@ -1550,61 +1833,119 @@ gross.head(3)
 With many countries on one chart, each country needs its own color, and it should keep that color when we add or
 remove other countries. Two small tools do this for the multi-country charts of this notebook (Figs. 2, 4 and 8).
 
-> **Python note.** `px.colors.qualitative.Dark24` is a list of 24 colors, and `+` joins two lists. `enumerate`
-> numbers the items of a list as the loop runs (0, 1, 2, ...), and `i % len(PALETTE)` is the remainder of the
-> division, which starts again at 0 when the colors run out. `colors.update(fixed)` overwrites some entries of the
-> dictionary. In `latest_text`, `.groupby("country").tail(1)` keeps the last row of each country,
-> `.iloc[[0, -1]]` keeps the first and the last row of a table, and `for i, (_, row) in enumerate(...)` numbers
-> the rows that `.iterrows()` hands over one at a time.
-
 ```{python}
-PALETTE = px.colors.qualitative.Dark24 + px.colors.qualitative.Light24     # 48 distinct colors
+#| kind: drawing
+# @title Drawing code: Figs. 2, 4 and 8, country colors and the title text
+# 48 distinct colors: `px.colors.qualitative.Dark24` is a list of 24 colors, and
+# `+` joins two lists
+PALETTE = px.colors.qualitative.Dark24 + px.colors.qualitative.Light24
 
 
 def country_colors(names, fixed):
-    """One fixed color per country, so that a country keeps its color when the selection changes."""
+    """One fixed color per country, so that a country keeps its color.
+
+    A country keeps its color when we add or remove other countries (Figs. 2, 4
+    and 8 for any countries).
+
+    Arguments
+        names : the names of all countries of a chart
+        fixed : the countries whose colors are given, such as the textbook's
+    Returns
+        a dictionary with one color per country
+    """
     colors = {}
+    # `enumerate` numbers the countries as the loop runs (0, 1, 2, ...), and
+    # `i % len(PALETTE)` is the remainder of the division, which starts again at 0
+    # when the colors run out
     for i, name in enumerate(sorted(names)):
         colors[name] = PALETTE[i % len(PALETTE)]
-    colors.update(fixed)                        # the textbook's countries keep the colors of the book
+    # `colors.update(fixed)` overwrites some entries of the dictionary: the
+    # textbook's countries keep the colors of the book
+    colors.update(fixed)
     return colors
 
 
 def latest_text(data, column, time):
-    """The latest value of each chosen country, highest first; only the maximum and minimum for 3 or more."""
+    """The latest value of each chosen country, for the title of a chart.
+
+    Highest first; with 3 or more countries, only the maximum and the minimum.
+
+    Arguments
+        data   : the rows of the chosen countries
+        column : the column to report, such as "gross_debt"
+        time   : the time column, "year"
+    Returns
+        the text for the title, such as "latest: max ..., min ..."
+    """
+    # Step 1: nothing to report without countries
     if len(data) == 0:
         return "choose at least one country"
-    last = data.sort_values(time).groupby("country").tail(1).sort_values(column, ascending=False)
+    # Step 2: `.groupby("country").tail(1)` keeps the last row of each country;
+    # then we sort them, the highest value first
+    last = data.sort_values(time).groupby("country").tail(1)
+    last = last.sort_values(column, ascending=False)
+    # Step 3: `.iloc[[0, -1]]` keeps the first and the last row: the max and the min
     words = ["", ""]
     if len(last) > 2:
         last, words = last.iloc[[0, -1]], ["max ", "min "]
+    # Step 4: one piece of text per country; `for i, (_, row) in enumerate(...)`
+    # numbers the rows that `.iterrows()` hands over one at a time
     parts = []
     for i, (_, row) in enumerate(last.iterrows()):
         parts.append(f"{words[i]}{row.country} {row[column]:.1f}")
     return "latest: " + ", ".join(parts)
 ```
 
-The axes have two fixed sizes each: up to 150 percent of GDP, or up to 300 percent when a country above 150 percent
-is chosen; from 1900, or from 1800 when a chosen country's data start earlier. `list(range(50, top + 1, 50))` is the
-list of tick values 50, 100, ... up to `top`.
+The drawing code below plots the gross debt of the chosen countries, one line each. The axes have two fixed sizes
+each: up to 150 percent of GDP, or up to 300 percent when a country above 150 percent is chosen; from 1900, or from
+1800 when a chosen country's data start earlier.
 
 ```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 2 for any countries, gross government debt
+# one fixed color per country; the United States keeps the textbook's blue
 GROSS_COLORS = country_colors(gross.country.unique(), {"United States": BLUE})
 
 
 def gross_debt_chart(countries=("United States",)):
-    """Fig. 18.2 for any countries: general government gross debt, percent of GDP (IMF)."""
+    """General government gross debt (percent of GDP, IMF) of the chosen countries.
+
+    Draws Fig. 2 for any countries (inspired by Fig. 18.2 in Jones).
+
+    Arguments
+        countries : a tuple of country names, such as ("United States", "Japan")
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the rows of the chosen countries; `.isin(countries)` is true for the
+    # rows whose country is in the tuple
     chosen = gross[gross.country.isin(countries)]
+    # Step 2: two fixed sizes for each axis
     top, start = 150, 1900
     if chosen.gross_debt.max() > 150:
-        top = 300                               # a second, fixed scale for the most indebted countries
+        top = 300                   # a second, fixed scale for the most indebted
     if chosen.year.min() < 1900:
-        start = 1800                            # some series start in the 19th century
-    fig = px.line(chosen, x="year", y="gross_debt", color="country", hover_name="country",
-                  color_discrete_map=GROSS_COLORS, range_x=[start, 2027], range_y=[0, top],
-                  labels={"year": "Year", "gross_debt": "Percentage of GDP", "country": "Country"},
-                  title="Gross debt, % of GDP, " + latest_text(chosen, "gross_debt", "year"))
-    fig.update_yaxes(tickvals=list(range(50, top + 1, 50)))      # no 0 next to the first year
+        start = 1800                # some series start in the 19th century
+    # Step 3: one line per country, in its own color
+    fig = px.line(
+        chosen,
+        x="year",
+        y="gross_debt",
+        color="country",
+        hover_name="country",
+        color_discrete_map=GROSS_COLORS,
+        range_x=[start, 2027],
+        range_y=[0, top],
+        labels={
+            "year": "Year",
+            "gross_debt": "Percentage of GDP",
+            "country": "Country",
+        },
+        title="Gross debt, % of GDP, " + latest_text(chosen, "gross_debt", "year"),
+    )
+    # Step 4: `list(range(50, top + 1, 50))` is the list of ticks 50, 100, ... up to
+    # top: no 0 next to the first year
+    fig.update_yaxes(tickvals=list(range(50, top + 1, 50)))
     fig.update_layout(legend_title_text="")
     return fig
 ```
@@ -1612,51 +1953,95 @@ def gross_debt_chart(countries=("United States",)):
 The widget below is the Colab version. The website version draws all 48 countries at once, shows the United States,
 and keeps the others one click away; the helper cell right after the widget does this for every multi-country chart.
 
-> **Python note.** `SelectMultiple` is a list in which you can pick several entries: hold Ctrl (Cmd on a Mac) and
-> click. The function then receives a *tuple* of names, such as `("United States", "Japan")`.
-
 ```{python}
 #| kind: widget
-interact(gross_debt_chart,
-         countries=SelectMultiple(options=sorted(gross.country.unique()), value=("United States",), rows=8,
-                                  description="countries", style=WIDE));
+# Fig. 2 for any countries. `SelectMultiple` is a list in which you can pick
+# several entries: hold Ctrl (Cmd on a Mac) and click. The function then receives
+# a tuple of names, such as ("United States", "Japan").
+interact(
+    gross_debt_chart,
+    countries=SelectMultiple(options=sorted(gross.country.unique()),
+                             value=("United States",), rows=8,
+                             description="countries", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: helper
-# @title Helper for the multi-country website figures (run this cell; you do not need to read it)
-G7 = ["Canada", "France", "Germany", "Italy", "Japan", "United Kingdom", "United States"]
+# @title Helper for the multi-country website figures (no need to read it)
+G7 = ["Canada", "France", "Germany", "Italy", "Japan", "United Kingdom",
+      "United States"]
 
 
 def legend_menu(fig, data, shown):
-    """Website version of a multi-country chart: the countries in `shown` are drawn, every other country is
-    one click away in the legend, and buttons show a group (the textbook's countries, the G7, a region, all).
-    Traces that are not countries, such as averages, always stay visible."""
+    """Website version of a multi-country chart: a legend and group buttons.
+
+    The countries in `shown` are drawn, every other country is one click away in the
+    legend, and buttons show a group (the textbook's countries, the G7, a region,
+    all). Traces that are not countries, such as averages, always stay visible.
+    Used for Figs. 2, 4 and 8 for any countries.
+
+    Arguments
+        fig   : the chart with every country
+        data  : the data table, with the columns country and region
+        shown : the countries drawn at first
+    Returns
+        the same figure, with the buttons
+    """
+    # Step 1: the groups of the buttons: the textbook's countries, the G7, each
+    # region and all countries
     countries = set(data.country)
     groups = {"Textbook": list(shown), "G7": G7}
     for region in sorted(data.region.unique()):
         groups[region] = list(data[data.region == region].country.unique())
     groups["All"] = list(countries)
+    # Step 2: only the countries in `shown` are drawn; "legendonly" keeps the
+    # others in the legend, one click away
     for trace in fig.data:
         if trace.name in countries and trace.name not in shown:
             trace.visible = "legendonly"
+    # Step 3: one button per group: it draws the group's countries and every trace
+    # that is not a country
     buttons = []
     for label, members in groups.items():
         visible = []
         for trace in fig.data:
-            visible.append(True if trace.name not in countries or trace.name in members else "legendonly")
-        buttons.append(dict(label=label, method="restyle", args=[{"visible": visible}]))
-    fig.update_layout(updatemenus=[dict(type="buttons", direction="right", buttons=buttons, x=0, y=1.02,
-                                        xanchor="left", yanchor="bottom", pad=dict(r=4, t=0))],
-                      margin=dict(t=120))
+            visible.append(
+                True if trace.name not in countries or trace.name in members
+                else "legendonly"
+            )
+        buttons.append(
+            dict(label=label, method="restyle", args=[{"visible": visible}])
+        )
+    # Step 4: the buttons in one row above the top left corner of the chart
+    fig.update_layout(
+        updatemenus=[
+            dict(
+                type="buttons",
+                direction="right",
+                buttons=buttons,
+                x=0,
+                y=1.02,
+                xanchor="left",
+                yanchor="bottom",
+                pad=dict(r=4, t=0),
+            )
+        ],
+        margin=dict(t=120),
+    )
     return fig
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: gross government debt in 48 countries (buttons and legend)
+# Step 1: every country in one chart, on a taller canvas for the long legend
 fig = gross_debt_chart(tuple(gross.country.unique()))
-fig.update_layout(title="Gross government debt in 48 countries, percent of GDP (IMF)", height=560)
+fig.update_layout(
+    title="Gross government debt in 48 countries, percent of GDP (IMF)",
+    height=560,
+)
+# Step 2: draw the United States; the buttons and the legend add the others
 legend_menu(fig, gross, ["United States"])
 ```
 
@@ -1709,24 +2094,54 @@ governments. The textbook uses 2019, the last year before the pandemic. The data
 available for all six countries, 2024.
 
 ```{python}
+# Load the data of Fig. 3: general government spending in 2019 and 2024
 spending = pd.read_csv(DATA_URL + "fig18-3.csv")
 spending
 ```
 
-> **Python note.** `melt` stacks the two year columns into one column of values, with a new column that says
-> which year each value belongs to. `barmode="group"` puts the bars of the two years side by side, and
-> `texttemplate="%{y:.1f}"` writes each bar's value above it.
+For the chart we need one long table, with one row per country and year.
 
 ```{python}
-bars = spending.melt(id_vars=["iso3", "country"], value_vars=["gov_spending_2019", "gov_spending_2024"],
-                     var_name="year", value_name="gov_spending")
-bars["year"] = bars.year.map({"gov_spending_2019": "2019 (textbook year)", "gov_spending_2024": "2024 (latest)"})
-fig = px.bar(bars, x="country", y="gov_spending", color="year", barmode="group", hover_name="country",
-             color_discrete_sequence=[GREEN, LIGHT_BLUE], range_y=[0, 62],
-             labels={"country": "Country", "gov_spending": "Percentage of GDP", "year": "Year"},
-             title="General government spending: from 32% of GDP in Korea to 55% in France (2019)")
+# Step 1: `melt` stacks the two year columns into one column of values, with a
+# new column, year, that says which year each value belongs to
+bars = spending.melt(
+    id_vars=["iso3", "country"],
+    value_vars=["gov_spending_2019", "gov_spending_2024"],
+    var_name="year",
+    value_name="gov_spending",
+)
+# Step 2: readable names for the two years
+bars["year"] = bars.year.map(
+    {"gov_spending_2019": "2019 (textbook year)", "gov_spending_2024": "2024 (latest)"}
+)
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 3, government spending in six countries
+# Step 1: one bar per country and year. `barmode="group"` puts the bars of the two
+# years side by side
+fig = px.bar(
+    bars,
+    x="country",
+    y="gov_spending",
+    color="year",
+    barmode="group",
+    hover_name="country",
+    color_discrete_sequence=[GREEN, LIGHT_BLUE],
+    range_y=[0, 62],
+    labels={"country": "Country", "gov_spending": "Percentage of GDP", "year": "Year"},
+    title=(
+        "General government spending: from 32% of GDP in Korea to 55% in France "
+        "(2019)"
+    ),
+)
+# Step 2: `texttemplate="%{y:.1f}"` writes each bar's value above it
 fig.update_traces(texttemplate="%{y:.1f}", textposition="outside")
-fig.update_layout(legend=dict(x=0.01, y=0.99, xanchor="left", yanchor="top"), legend_title_text="")
+fig.update_layout(
+    legend=dict(x=0.01, y=0.99, xanchor="left", yanchor="top"),
+    legend_title_text="",
+)
 fig.show()
 ```
 
@@ -1752,7 +2167,12 @@ The textbook's bars for 2019 are not the same as ours. Statistical offices revis
 example when they measure GDP better. We compare the textbook's values with today's.
 
 ```{python}
-textbook = pd.Series({"S. Korea": 33.9, "Japan": 38.9, "U.S.": 38.4, "U.K.": 40.8, "Sweden": 49.1, "France": 55.3})
+# Step 1: the textbook's bars for 2019, percent of GDP
+textbook = pd.Series(
+    {"S. Korea": 33.9, "Japan": 38.9, "U.S.": 38.4, "U.K.": 40.8, "Sweden": 49.1,
+     "France": 55.3}
+)
+# Step 2: today's values for 2019 next to them, and the revision
 compare = spending.set_index("country")[["gov_spending_2019"]]
 compare["textbook"] = textbook
 compare["revision"] = compare.gov_spending_2019 - compare.textbook
@@ -1770,28 +2190,60 @@ which the textbook used, reproduces all six printed bars within 0.1 point.
 The wider file `gov_spending.csv` has the same measure for all 38 OECD countries from 2007. The animation shows
 one year at a time. The countries stay in their 2019 order, so you can watch a bar grow or shrink.
 
-> **Python note.** `oecd.iso3.isin(EURO_FOUR)` is true for the rows whose code is in the list, and
-> `oecd.loc[rows, "group"] = ...` changes the column `group` in those rows only. `animation_frame="year"` draws
-> one chart per year and adds a play button and a slider. `category_orders` fixes the order of the countries on
-> the x-axis. `.sort_values(...)` sorts a table, and
-> `.tolist()` turns a column into a plain Python list.
-
 ```{python}
+# Step 1: load the 38 OECD countries; 2025 has data for only 26 countries so far
 oecd = pd.read_csv(DATA_URL + "gov_spending.csv")
-oecd = oecd[oecd.year <= 2024]                  # 2025 has data for only 26 countries so far
+oecd = oecd[oecd.year <= 2024]
 EURO_FOUR = ["FRA", "DEU", "ITA", "ESP"]        # the textbook's euro-area examples
+# Step 2: three groups of countries, one color each. `oecd.iso3.isin(EURO_FOUR)`
+# is true for the rows whose code is in the list, and `oecd.loc[rows, "group"] = ...`
+# changes the column group in those rows only
 oecd["group"] = "Other OECD"
 oecd.loc[oecd.iso3.isin(EURO_FOUR), "group"] = "France, Germany, Italy, Spain"
 oecd.loc[oecd.iso3 == "USA", "group"] = "United States"
+# Step 3: the countries in their 2019 order, from the smallest government.
+# `.sort_values(...)` sorts a table, and `.tolist()` turns a column into a list
 order = oecd[oecd.year == 2019].sort_values("gov_spending").country.tolist()
-fig = px.bar(oecd, x="country", y="gov_spending", color="group", animation_frame="year", hover_name="country",
-             category_orders={"country": order}, range_y=[0, 65],
-             color_discrete_map={"United States": BLUE, "France, Germany, Italy, Spain": TEAL, "Other OECD": GRAY},
-             labels={"country": "Country", "gov_spending": "Percentage of GDP", "group": "Group", "year": "Year"},
-             title="General government spending in the 38 OECD countries (in the 2019 order)")
-fig.update_layout(legend=dict(x=0.01, y=0.99, xanchor="left", yanchor="top"), legend_title_text="",
-                  xaxis_title=None, xaxis_tickangle=-60, height=600)
-fig.layout.sliders[0].pad.t = 100               # room for the slanted country names above the slider
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 3, all OECD countries, 2007 to 2024
+# Step 1: one bar per country. `animation_frame="year"` draws one chart per year
+# and adds a play button and a slider; `category_orders` fixes the order of the
+# countries on the x-axis
+fig = px.bar(
+    oecd,
+    x="country",
+    y="gov_spending",
+    color="group",
+    animation_frame="year",
+    hover_name="country",
+    category_orders={"country": order},
+    range_y=[0, 65],
+    color_discrete_map={
+        "United States": BLUE,
+        "France, Germany, Italy, Spain": TEAL,
+        "Other OECD": GRAY,
+    },
+    labels={
+        "country": "Country",
+        "gov_spending": "Percentage of GDP",
+        "group": "Group",
+        "year": "Year",
+    },
+    title="General government spending in the 38 OECD countries (in the 2019 order)",
+)
+# Step 2: the legend in the top left corner, and slanted country names
+fig.update_layout(
+    legend=dict(x=0.01, y=0.99, xanchor="left", yanchor="top"),
+    legend_title_text="",
+    xaxis_title=None,
+    xaxis_tickangle=-60,
+    height=600,
+)
+# Step 3: room for the slanted country names above the slider and the play button
+fig.layout.sliders[0].pad.t = 100
 fig.layout.updatemenus[0].pad.t = 110
 fig.show()
 ```
@@ -1807,13 +2259,27 @@ Press play: 2009 and 2020 are the years of the two recessions, when spending jum
 fell). Turkey's bar is missing in 2007–08 and after 2020, because it reports no data for those years.
 
 ```{python}
+# Step 1: the U.S. in 2019, and its rank; `.rank()` numbers the values from the
+# smallest (1) up
 in_2019 = oecd[oecd.year == 2019]
-print(f"U.S. 2019: {in_2019[in_2019.iso3 == 'USA'].gov_spending.iloc[0]:.1f}%, the "
-      f"{int(in_2019.gov_spending.rank()[in_2019.iso3 == 'USA'].iloc[0])}th lowest of {len(in_2019)} countries")
+print(
+    f"U.S. 2019: {in_2019[in_2019.iso3 == 'USA'].gov_spending.iloc[0]:.1f}%, the "
+    f"{int(in_2019.gov_spending.rank()[in_2019.iso3 == 'USA'].iloc[0])}th lowest of "
+    f"{len(in_2019)} countries"
+)
+# Step 2: the average of the four euro-area countries in 2019 and in 2024
 for year in [2019, 2024]:
     four = oecd[(oecd.year == year) & oecd.iso3.isin(EURO_FOUR)]
-    print(f"{year}: average of France, Germany, Italy and Spain {four.gov_spending.mean():.1f}%")
-print(in_2019[in_2019.iso3.isin(["DNK", "FRA", "SWE"])][["country", "gov_spending"]].to_string(index=False))
+    print(
+        f"{year}: average of France, Germany, Italy and Spain "
+        f"{four.gov_spending.mean():.1f}%"
+    )
+# Step 3: Denmark, France and Sweden in 2019; `.to_string(index=False)` prints
+# the table without its row labels
+print(
+    in_2019[in_2019.iso3.isin(["DNK", "FRA", "SWE"])][["country", "gov_spending"]]
+    .to_string(index=False)
+)
 ```
 
 The textbook's statements hold: the U.S. is among the lowest spenders (11th lowest of 38), and Denmark, France
@@ -1843,6 +2309,7 @@ This figure uses **net** debt: the debt of all levels of government minus the fi
 percent of GDP. For some countries, such as Norway with its large oil fund, net debt is negative.
 
 ```{python}
+# Load the data of Fig. 4: the net government debt of five countries, % of GDP
 net_debt = pd.read_csv(DATA_URL + "fig18-4.csv")
 net_debt.head(3)
 ```
@@ -1852,20 +2319,58 @@ column `japan_eo` fills 1995–2005 with a similar OECD series, from its *Econom
 line, and do not glue the two series into one: in 2005 they differ by 3.4 points (66.2 against 62.8).
 
 ```{python}
-COUNTRIES = {"italy": "Italy", "japan": "Japan", "usa": "U.S.", "uk": "U.K.", "germany": "Germany",
-             "japan_eo": "Japan, 1995–2005 (Economic Outlook)"}
-long = net_debt.rename(columns=COUNTRIES).melt(id_vars="year", var_name="country", value_name="net_debt").dropna()
-fig = px.line(long, x="year", y="net_debt", color="country", hover_name="country", range_y=[0, 175],
-              color_discrete_map={"Italy": GREEN, "Japan": ORANGE, "U.S.": BLUE, "U.K.": LIGHT_BLUE,
-                                  "Germany": DARK_TEAL, "Japan, 1995–2005 (Economic Outlook)": ORANGE},
-              labels={"year": "Year", "net_debt": "Percentage of GDP", "country": "Country"},
-              title="Net government debt rose in four of the five countries after 2007")
+# Step 1: the names of the legend, for each column of the file
+COUNTRIES = {
+    "italy": "Italy",
+    "japan": "Japan",
+    "usa": "U.S.",
+    "uk": "U.K.",
+    "germany": "Germany",
+    "japan_eo": "Japan, 1995–2005 (Economic Outlook)",
+}
+# Step 2: one long table, one row per country and year; `.dropna()` drops the
+# missing years, such as those before a series starts
+long = net_debt.rename(columns=COUNTRIES).melt(
+    id_vars="year", var_name="country", value_name="net_debt"
+).dropna()
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 4, net government debt in five countries
+# Step 1: one line per country, in the textbook's colors
+fig = px.line(
+    long,
+    x="year",
+    y="net_debt",
+    color="country",
+    hover_name="country",
+    range_y=[0, 175],
+    color_discrete_map={
+        "Italy": GREEN,
+        "Japan": ORANGE,
+        "U.S.": BLUE,
+        "U.K.": LIGHT_BLUE,
+        "Germany": DARK_TEAL,
+        "Japan, 1995–2005 (Economic Outlook)": ORANGE,
+    },
+    labels={"year": "Year", "net_debt": "Percentage of GDP", "country": "Country"},
+    title="Net government debt rose in four of the five countries after 2007",
+)
 fig.update_traces(line_width=3)
-fig.update_traces(selector=dict(name="Japan, 1995–2005 (Economic Outlook)"), line_dash="dot")
+# Step 2: Japan's Economic Outlook series as a dotted line; `selector` picks the
+# trace with that name
+fig.update_traces(
+    selector=dict(name="Japan, 1995–2005 (Economic Outlook)"),
+    line_dash="dot",
+)
+# Step 3: fixed axes, and the legend in one row above the lines
 fig.update_xaxes(range=[1994, 2026.5])
 fig.update_yaxes(tickvals=[20, 40, 60, 80, 100, 120, 140, 160])
-fig.update_layout(legend=dict(orientation="h", x=0.01, y=0.99, xanchor="left", yanchor="top"),   # one row above the lines
-                  legend_title_text="")
+fig.update_layout(
+    legend=dict(orientation="h", x=0.01, y=0.99, xanchor="left", yanchor="top"),
+    legend_title_text="",
+)
 fig.show()
 ```
 
@@ -1892,11 +2397,22 @@ Chart: inspired by Fig. 18.4 in Jones (2024), [*Macroeconomics*, 6th ed.](https:
 #### Data check: a number in the textbook that the data do not support
 
 ```{python}
+# Japan's two series, and Italy and Germany in 2021, in percent of GDP
 debt_table = net_debt.set_index("year")
-print(f"Japan, Economic Outlook series: 1995 {debt_table.japan_eo[1995]:.1f}%, 2005 {debt_table.japan_eo[2005]:.1f}%")
-print(f"Japan, balance sheets: 2021 {debt_table.japan[2021]:.1f}%, peak {debt_table.japan.max():.1f}% "
-      f"in {debt_table.japan.idxmax()}, 2023 {debt_table.japan[2023]:.1f}%")
-print(f"Italy 2021: {debt_table.italy[2021]:.1f}%   Germany 2021: {debt_table.germany[2021]:.1f}%")
+print(
+    f"Japan, Economic Outlook series: 1995 {debt_table.japan_eo[1995]:.1f}%, "
+    f"2005 {debt_table.japan_eo[2005]:.1f}%"
+)
+# the peak of the balance-sheet series and its year (`.idxmax()`)
+print(
+    f"Japan, balance sheets: 2021 {debt_table.japan[2021]:.1f}%, peak "
+    f"{debt_table.japan.max():.1f}% in {debt_table.japan.idxmax()}, "
+    f"2023 {debt_table.japan[2023]:.1f}%"
+)
+print(
+    f"Italy 2021: {debt_table.italy[2021]:.1f}%   "
+    f"Germany 2021: {debt_table.germany[2021]:.1f}%"
+)
 ```
 
 The textbook says in one place that Japan's ratio rose to "more than 126 percent in 2021" and, in another, to
@@ -1914,24 +2430,62 @@ starts with the textbook's five countries in the textbook's colors. The vertical
 unless a chosen country leaves it; then it switches to a wider fixed scale, and to a much wider one for Norway.
 
 ```{python}
+# Load the OECD net debt of 39 countries: one row per country and year
 world_debt = pd.read_csv(DATA_URL + "net_debt.csv")
+# the textbook's five countries, drawn first
 BOOK_FIVE = ("Germany", "Italy", "Japan", "United Kingdom", "United States")
-NET_COLORS = country_colors(world_debt.country.unique(), {"Italy": GREEN, "Japan": ORANGE, "United States": BLUE,
-                                                         "United Kingdom": LIGHT_BLUE, "Germany": DARK_TEAL})
+```
+
+The drawing code below plots the net debt of the chosen countries, one line each, on
+the scales described above.
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 4 for any countries, net government debt
+# one fixed color per country; the textbook's five keep the textbook's colors
+NET_COLORS = country_colors(
+    world_debt.country.unique(),
+    {
+        "Italy": GREEN,
+        "Japan": ORANGE,
+        "United States": BLUE,
+        "United Kingdom": LIGHT_BLUE,
+        "Germany": DARK_TEAL,
+    },
+)
 
 
 def net_debt_chart(countries=BOOK_FIVE):
-    """Fig. 18.4 for any countries: net government debt, percent of GDP (OECD)."""
+    """Net government debt (percent of GDP, OECD) of the chosen countries.
+
+    Draws Fig. 4 for any countries (inspired by Fig. 18.4 in Jones).
+
+    Arguments
+        countries : a tuple of country names, such as BOOK_FIVE
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the rows of the chosen countries
     chosen = world_debt[world_debt.country.isin(countries)]
+    # Step 2: the textbook's scale, or a wider fixed one when a country leaves it
     low, high = 0, 175
     if chosen.net_debt.min() < 0 or chosen.net_debt.max() > 175:
-        low, high = -100, 200                   # a wider fixed scale for countries with negative net debt
+        low, high = -100, 200       # a wider fixed scale, also for negative net debt
     if chosen.net_debt.min() < -100:
-        low = -450                              # Norway owns more than four years of GDP
-    fig = px.line(chosen, x="year", y="net_debt", color="country", hover_name="country",
-                  color_discrete_map=NET_COLORS, range_x=[1994, 2026.5], range_y=[low, high],
-                  labels={"year": "Year", "net_debt": "Percentage of GDP", "country": "Country"},
-                  title="Net debt, % of GDP, " + latest_text(chosen, "net_debt", "year"))
+        low = -450                  # Norway owns more than four years of GDP
+    # Step 3: one line per country, and a black line at zero
+    fig = px.line(
+        chosen,
+        x="year",
+        y="net_debt",
+        color="country",
+        hover_name="country",
+        color_discrete_map=NET_COLORS,
+        range_x=[1994, 2026.5],
+        range_y=[low, high],
+        labels={"year": "Year", "net_debt": "Percentage of GDP", "country": "Country"},
+        title="Net debt, % of GDP, " + latest_text(chosen, "net_debt", "year"),
+    )
     fig.update_traces(line_width=3)
     fig.add_hline(y=0, line=dict(color="black", width=1))
     fig.update_layout(legend_title_text="")
@@ -1940,16 +2494,25 @@ def net_debt_chart(countries=BOOK_FIVE):
 
 ```{python}
 #| kind: widget
-interact(net_debt_chart,
-         countries=SelectMultiple(options=sorted(world_debt.country.unique()), value=BOOK_FIVE, rows=8,
-                                  description="countries", style=WIDE));
+# Fig. 4 for any countries: hold Ctrl (Cmd on a Mac) and click to pick several
+interact(
+    net_debt_chart,
+    countries=SelectMultiple(options=sorted(world_debt.country.unique()),
+                             value=BOOK_FIVE, rows=8,
+                             description="countries", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: net government debt in 39 countries (buttons and legend)
+# Step 1: every country in one chart, on a taller canvas for the long legend
 fig = net_debt_chart(tuple(world_debt.country.unique()))
-fig.update_layout(title="Net government debt in 39 countries, percent of GDP (OECD)", height=560)
+fig.update_layout(
+    title="Net government debt in 39 countries, percent of GDP (OECD)",
+    height=560,
+)
+# Step 2: draw the textbook's five; the buttons and the legend add the others
 legend_menu(fig, world_debt, list(BOOK_FIVE))
 ```
 
@@ -2003,49 +2566,125 @@ The data are gross private domestic investment and government saving (the federa
 national accounts), both in percent of GDP, for calendar years.
 
 ```{python}
+# Load the data of Fig. 5: investment and government saving, percent of GDP
 saving = pd.read_csv(DATA_URL + "fig18-5.csv")
 saving.head(3)
 ```
 
 Equation (9) says that investment minus government saving is the saving of households, firms and
 foreigners. Our function `private_and_foreign_saving` computes it, and the chart hides it until you click its
-name in the legend. The buttons compare the averages before and after 1980.
+name in the legend. The buttons compare the averages before and after 1980, which `saving_averages` computes.
 
 ```{python}
-named_saving = saving.rename(columns={"investment_share": "Investment", "gov_saving_share": "Government saving"})
-named_saving["Private + foreign saving"] = private_and_foreign_saving(named_saving.Investment,
-                                                                      named_saving["Government saving"])
+# Step 1: readable names, which then appear in the legend
+named_saving = saving.rename(
+    columns={"investment_share": "Investment", "gov_saving_share": "Government saving"}
+)
+# Step 2: private plus foreign saving, equation (9): investment minus government
+# saving
+named_saving["Private + foreign saving"] = private_and_foreign_saving(
+    named_saving.Investment, named_saving["Government saving"]
+)
 saving_by_year = named_saving.set_index("year")
+# Step 3: the two periods of the buttons
 SPLITS = {"1960–1979": (1960, 1979), "1980–2025": (1980, 2025)}
 
 
-def saving_chart(period="1980–2025"):
-    """Fig. 18.5: investment and government saving (% of GDP), with their averages over one period."""
+def saving_averages(period):
+    """Average investment and government saving over one period (Fig. 5).
+
+    The averages, in percent of GDP, that the dotted lines and the title of Fig. 5
+    report.
+
+    Arguments
+        period : "1960–1979" or "1980–2025", a key of SPLITS
+    Returns
+        start, end : the first and the last year of the period
+        I, S       : average investment and government saving (% of GDP)
+    """
     start, end = SPLITS[period]
-    I, S = period_mean(saving_by_year.Investment, start, end), period_mean(saving_by_year["Government saving"], start, end)
-    fig = px.line(named_saving, x="year", y=["Investment", "Government saving", "Private + foreign saving"],
-                  color_discrete_sequence=[BLUE, GREEN, GRAY], range_y=[-15, 35],
-                  labels={"year": "Year", "value": "Percentage of GDP", "variable": "Series"},
-                  title=f"{period}: investment averaged {I:.1f}%, government saving {S:.1f}% of GDP")
+    # the averages of the two series over those years (period_mean)
+    I = period_mean(saving_by_year.Investment, start, end)
+    S = period_mean(saving_by_year["Government saving"], start, end)
+    return start, end, I, S
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 5, investment and government saving
+def saving_chart(period="1980–2025"):
+    """Investment and government saving (% of GDP), with their period averages.
+
+    Draws Fig. 5 (inspired by Fig. 18.5 in Jones). Private plus foreign saving is a
+    third, dashed line, hidden until you click its name in the legend.
+
+    Arguments
+        period : "1960–1979" or "1980–2025", a key of SPLITS
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the averages of the period (saving_averages)
+    start, end, I, S = saving_averages(period)
+    # Step 2: the three lines
+    fig = px.line(
+        named_saving,
+        x="year",
+        y=["Investment", "Government saving", "Private + foreign saving"],
+        color_discrete_sequence=[BLUE, GREEN, GRAY],
+        range_y=[-15, 35],
+        labels={"year": "Year", "value": "Percentage of GDP", "variable": "Series"},
+        title=(
+            f"{period}: investment averaged {I:.1f}%, government saving "
+            f"{S:.1f}% of GDP"
+        ),
+    )
     fig.update_traces(line_width=3)
-    fig.update_traces(selector=dict(name="Private + foreign saving"), visible="legendonly", line_dash="dash")
+    # Step 3: private + foreign saving is dashed, and hidden at first ("legendonly")
+    fig.update_traces(
+        selector=dict(name="Private + foreign saving"),
+        visible="legendonly",
+        line_dash="dash",
+    )
+    # Step 4: the dashed zero line, and the shaded period with its dotted averages
     fig.add_hline(y=0, line=dict(color="black", width=1, dash="dash"))
-    add_period_means(fig, saving_by_year, ["Investment", "Government saving"], [BLUE, GREEN], start, end)
+    add_period_means(fig, saving_by_year, ["Investment", "Government saving"],
+                     [BLUE, GREEN], start, end)
+    # Step 5: a fixed axis, and the legend in a box on the left
     fig.update_xaxes(range=[1959, 2026.5])
-    fig.update_layout(legend=dict(x=0.01, y=0.57, xanchor="left", yanchor="top", bgcolor="rgba(255,255,255,0.8)"),
-                      legend_title_text="")
+    fig.update_layout(
+        legend=dict(
+            x=0.01,
+            y=0.57,
+            xanchor="left",
+            yanchor="top",
+            bgcolor="rgba(255,255,255,0.8)",
+        ),
+        legend_title_text="",
+    )
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(saving_chart, period=ToggleButtons(options=list(SPLITS), value="1980–2025", description="averages over"));
+# Fig. 5 with buttons: `ToggleButtons` shows each option as a button
+interact(
+    saving_chart,
+    period=ToggleButtons(options=list(SPLITS), value="1980–2025",
+                         description="averages over"),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 5 with a precomputed slider for the period
-slider_figure(saving_chart, "period", ["1960–1979", "1980–2025"], start="1980–2025", label="averages over")
+# one picture of Fig. 5 per period
+slider_figure(
+    saving_chart,
+    "period",
+    ["1960–1979", "1980–2025"],
+    start="1980–2025",
+    label="averages over",
+)
 ```
 
 **Sources.** Data: U.S. Bureau of Economic Analysis, national accounts, via FRED: [gross private domestic investment (`GPDI`)](https://fred.stlouisfed.org/series/GPDI), [net federal government saving (`FGDEF`)](https://fred.stlouisfed.org/series/FGDEF) and [GDP (`GDP`)](https://fred.stlouisfed.org/series/GDP).
@@ -2072,17 +2711,20 @@ Chart: inspired by Fig. 18.5 in Jones (2024), [*Macroeconomics*, 6th ed.](https:
 The textbook speaks of "some correlation in the year-to-year movements". A **correlation** of 1 means two
 series move exactly together, 0 means no relation.
 
-> **Python note.** `.diff()` takes the change from the previous year, and `a.corr(b)` is the correlation of two
-> Series.
-
 ```{python}
+# Step 1: the correlations. `.diff()` takes the change from the previous year, and
+# `a.corr(b)` is the correlation of two Series
 I, S = saving_by_year.Investment, saving_by_year["Government saving"]
 print(f"Correlation of the levels:            {I.corr(S):.2f}")
 print(f"Correlation of the changes each year: {I.diff().corr(S.diff()):.2f}")
+# Step 2: the averages before and after 1980
 for start, end in SPLITS.values():
-    print(f"{start}-{end}: investment {period_mean(I, start, end):.2f}%, government saving "
-          f"{period_mean(S, start, end):.2f}%, private + foreign saving "
-          f"{period_mean(saving_by_year['Private + foreign saving'], start, end):.2f}%")
+    print(
+        f"{start}-{end}: investment {period_mean(I, start, end):.2f}%, "
+        f"government saving {period_mean(S, start, end):.2f}%, "
+        f"private + foreign saving "
+        f"{period_mean(saving_by_year['Private + foreign saving'], start, end):.2f}%"
+    )
 ```
 
 The changes are clearly correlated (0.55), the levels much less (0.29). In the short run, a larger deficit comes
@@ -2102,37 +2744,98 @@ government saving: it also subtracts the government's own investment. The title 
 changes, as in the key numbers above.
 
 ```{python}
-BALANCE_COUNTRIES = sorted(finance.dropna(subset=["balance", "private_investment"]).country.unique())
+# The countries of the menu: those with a budget balance and private investment
+BALANCE_COUNTRIES = sorted(
+    finance.dropna(subset=["balance", "private_investment"]).country.unique()
+)
 
 
-def crowding_out_chart(country="United States"):
-    """Fig. 18.5 for any country: private investment and the general government budget balance (% of GDP)."""
-    rows = finance[finance.country == country].dropna(subset=["balance", "private_investment"])
-    rows = rows.rename(columns={"private_investment": "Private investment", "balance": "Budget balance"})
+def investment_and_balance(country):
+    """Private investment and the budget balance of one country, and their correlation.
+
+    The OECD data of one country, in percent of GDP, and the correlation of the
+    yearly changes, as in the key numbers of Fig. 5.
+
+    Arguments
+        country : the country's name, as in BALANCE_COUNTRIES
+    Returns
+        rows : the country's years with both values, with the columns renamed
+               "Private investment" and "Budget balance"
+        corr : the correlation of the yearly changes of the two series
+    """
+    # Step 1: the country's years with both values, with readable names
+    rows = finance[finance.country == country].dropna(
+        subset=["balance", "private_investment"]
+    )
+    rows = rows.rename(
+        columns={
+            "private_investment": "Private investment",
+            "balance": "Budget balance",
+        }
+    )
+    # Step 2: the correlation of the yearly changes
     corr = rows["Private investment"].diff().corr(rows["Budget balance"].diff())
+    return rows, corr
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 5 for any country, investment and the budget balance
+def crowding_out_chart(country="United States"):
+    """Private investment and the general government budget balance (% of GDP).
+
+    Draws Fig. 5 for any country (inspired by Fig. 18.5 in Jones), with the
+    correlation of the yearly changes in the title.
+
+    Arguments
+        country : the country's name, as in BALANCE_COUNTRIES
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the country's data and the correlation (investment_and_balance)
+    rows, corr = investment_and_balance(country)
+    # Step 2: a fixed scale, and a second, wider fixed one for the extreme years
     low, high = -20, 35
     if rows["Budget balance"].min() < -18 or rows["Private investment"].max() > 33:
-        low, high = -35, 55                     # a second, fixed scale for the extreme years
-    fig = px.line(rows, x="year", y=["Private investment", "Budget balance"], color_discrete_sequence=[BLUE, GREEN],
-                  range_x=[1968, 2027], range_y=[low, high],
-                  labels={"year": "Year", "value": "Percentage of GDP", "variable": "Series"},
-                  title=f"{country}, {rows.year.min()}–{rows.year.max()}: correlation of the yearly changes {corr:.2f}")
+        low, high = -35, 55
+    # Step 3: the two lines
+    fig = px.line(
+        rows,
+        x="year",
+        y=["Private investment", "Budget balance"],
+        color_discrete_sequence=[BLUE, GREEN],
+        range_x=[1968, 2027],
+        range_y=[low, high],
+        labels={"year": "Year", "value": "Percentage of GDP", "variable": "Series"},
+        title=(
+            f"{country}, {rows.year.min()}–{rows.year.max()}: correlation of the "
+            f"yearly changes {corr:.2f}"
+        ),
+    )
     fig.update_traces(line_width=3)
+    # Step 4: the dashed zero line, and the legend above the chart
     fig.add_hline(y=0, line=dict(color="black", width=1, dash="dash"))
-    fig.update_layout(legend=dict(orientation="h", x=0.99, y=1.02, xanchor="right", yanchor="bottom"),
-                      legend_title_text="")
+    fig.update_layout(
+        legend=dict(orientation="h", x=0.99, y=1.02, xanchor="right", yanchor="bottom"),
+        legend_title_text="",
+    )
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(crowding_out_chart, country=Dropdown(options=BALANCE_COUNTRIES, value="United States", description="country",
-                                              style=WIDE));
+# Fig. 5 for any country, with a menu of the 36 countries
+interact(
+    crowding_out_chart,
+    country=Dropdown(options=BALANCE_COUNTRIES, value="United States",
+                     description="country", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: investment and the budget balance in 36 countries, with a country menu
+# @title Website version: investment and the budget balance in 36 countries (menu)
+# one precomputed chart per country, joined by a menu
 dropdown_figure(crowding_out_chart, BALANCE_COUNTRIES, start="United States")
 ```
 
@@ -2188,6 +2891,7 @@ from February 2026, which end in 2056. The column `projection` is 1 for the proj
 U.S.-only: they show the CBO's projections, which cover only the U.S. federal budget.
 
 ```{python}
+# The last three years of Fig. 6's file (loaded for the key numbers of Fig. 2)
 projections.tail(3)
 ```
 
@@ -2197,34 +2901,91 @@ spending excluding interest. We add the textbook's CBO 2002 projections, read fr
 as markers.
 
 ```{python}
-SERIES = {"revenue": "Revenues", "spending_ex_interest": "Spending excluding interest",
-          "ss_medicare_medicaid": "Social Security, Medicare, Medicaid"}
-cbo_2002 = pd.DataFrame({"year": [2010, 2020, 2030, 2040, 2050, 2060, 2070, 2075],
-                         "Revenues": [19.2, 19.0, 19.0, 19.0, 19.0, 19.0, 19.0, 19.0],
-                         "Spending excluding interest": [16.5, 18.5, 21.0, 22.7, 23.7, 25.2, 27.2, 28.2],
-                         "Social Security, Medicare, Medicaid": [8.8, 11.3, 13.9, 15.5, 16.5, 18.0, 20.0, 21.1]})
+# Step 1: the three series of Fig. 6, and their names in the chart
+SERIES = {
+    "revenue": "Revenues",
+    "spending_ex_interest": "Spending excluding interest",
+    "ss_medicare_medicaid": "Social Security, Medicare, Medicaid",
+}
+# Step 2: the textbook's CBO 2002 projections, read from its figure every ten years
+cbo_2002 = pd.DataFrame(
+    {
+        "year": [2010, 2020, 2030, 2040, 2050, 2060, 2070, 2075],
+        "Revenues": [19.2, 19.0, 19.0, 19.0, 19.0, 19.0, 19.0, 19.0],
+        "Spending excluding interest": [16.5, 18.5, 21.0, 22.7, 23.7, 25.2, 27.2, 28.2],
+        "Social Security, Medicare, Medicaid": [8.8, 11.3, 13.9, 15.5, 16.5, 18.0,
+                                                20.0, 21.1],
+    }
+)
+# Step 3: one long table of actual data and CBO projection (actual_and_projection)
 lines = actual_and_projection(projections, SERIES)
 lines.head(3)
 ```
 
 ```{python}
-COLORS_6 = {"Revenues": GREEN, "Spending excluding interest": DARK_TEAL, "Social Security, Medicare, Medicaid": BLUE}
-fig = px.line(lines, x="year", y="percent", color="series", line_dash="segment", hover_name="series",
-              color_discrete_map=COLORS_6, line_dash_map={"actual": "solid", "CBO projection": "dash"},
-              labels={"year": "Fiscal year", "percent": "Percentage of GDP", "series": "Series", "segment": "Data"},
-              title=f"Entitlements: {projections.ss_medicare_medicaid.iloc[0]:.1f}% of GDP in 1950, "
-                    f"{lines[(lines.year == 2025) & (lines.series == SERIES['ss_medicare_medicaid'])].percent.iloc[0]:.1f}% "
-                    f"in 2025, {projections.ss_medicare_medicaid.iloc[-1]:.1f}% projected for 2056")
+#| kind: drawing
+# @title Drawing code: Fig. 6, the actual and the projected lines
+# Step 1: one color per series
+COLORS_6 = {
+    "Revenues": GREEN,
+    "Spending excluding interest": DARK_TEAL,
+    "Social Security, Medicare, Medicaid": BLUE,
+}
+# Step 2: the entitlement share of FY2025, for the title
+entitlements_2025 = lines[
+    (lines.year == 2025) & (lines.series == SERIES["ss_medicare_medicaid"])
+].percent.iloc[0]
+# Step 3: one line per series, solid for actual data and dashed for the projection
+fig = px.line(
+    lines,
+    x="year",
+    y="percent",
+    color="series",
+    line_dash="segment",
+    hover_name="series",
+    color_discrete_map=COLORS_6,
+    line_dash_map={"actual": "solid", "CBO projection": "dash"},
+    labels={
+        "year": "Fiscal year",
+        "percent": "Percentage of GDP",
+        "series": "Series",
+        "segment": "Data",
+    },
+    title=(
+        f"Entitlements: {projections.ss_medicare_medicaid.iloc[0]:.1f}% of GDP "
+        f"in 1950, {entitlements_2025:.1f}% in 2025, "
+        f"{projections.ss_medicare_medicaid.iloc[-1]:.1f}% projected for 2056"
+    ),
+)
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 6, the CBO 2002 markers and the axes
+# Step 1: one legend entry per series (one_legend_entry), and thicker lines
 one_legend_entry(fig)
 fig.update_traces(line_width=3)
+# Step 2: the textbook's CBO 2002 projections as x markers, with one legend entry
 for name, color in COLORS_6.items():
-    fig.add_trace(go.Scatter(x=cbo_2002.year, y=cbo_2002[name], mode="markers", marker=dict(color=color, size=9,
-                             symbol="x"), name="CBO 2002 (textbook)", legendgroup="2002",
-                             showlegend=(name == "Revenues")))
+    fig.add_trace(
+        go.Scatter(
+            x=cbo_2002.year,
+            y=cbo_2002[name],
+            mode="markers",
+            marker=dict(color=color, size=9, symbol="x"),
+            name="CBO 2002 (textbook)",
+            legendgroup="2002",
+            showlegend=(name == "Revenues"),
+        )
+    )
+# Step 3: the gray band marks the projected years; fixed axes
 fig.add_vrect(x0=2025, x1=2056, fillcolor=GRAY, opacity=0.12, line_width=0)
 fig.update_xaxes(range=[1945, 2080])
 fig.update_yaxes(range=[0, 31], tickvals=[5, 10, 15, 20, 25, 30])
-fig.update_layout(legend=dict(x=0.01, y=0.99, xanchor="left", yanchor="top"), legend_title_text="")
+fig.update_layout(
+    legend=dict(x=0.01, y=0.99, xanchor="left", yanchor="top"),
+    legend_title_text="",
+)
 fig.show()
 ```
 
@@ -2257,52 +3018,123 @@ the interest rate $i$ and on the growth rate of nominal GDP $g$, through `debt_r
 you cut the primary deficit in every year from FY2026, by raising taxes or cutting spending: the two
 "possible solutions" of the textbook.
 
-> **Python note.** `max(path)` and `min(path)` are the largest and smallest values of a list, and
-> `max(250, ...)` is the larger of two numbers: the vertical axis stays at 0 to 250 unless the debt ratio would
-> leave it. `[50, 100, 150, 200, 250] if top == 250 else None` is a one-line `if`: it gives the list of ticks when
-> the axis has its usual size, and `None` (let Plotly choose) when it has grown.
-
 ```{python}
+# Step 1: CBO's projected years and their primary deficits, FY2026-2056
 cbo = projections[projections.projection == 1]
-cbo_deficits = (cbo.spending_ex_interest - cbo.revenue).tolist()     # projected primary deficits, FY2026-2056
+cbo_deficits = (cbo.spending_ex_interest - cbo.revenue).tolist()
+# Step 2: the starting point, the debt ratio of FY2025, and the history to draw
 b_2025 = debt_by_year[2025]
 debt_history = debt_deficit[debt_deficit.year >= 1940]
 
 
-def debt_projection(i=4.0, g=4.0, cut=0.0):
-    """The debt ratio after FY2025 under CBO's primary deficits minus a cut (all in percent of GDP)."""
+def projected_debt(i, g, cut):
+    """The debt ratio after FY2025 under CBO's primary deficits minus a cut.
+
+    Equation (5), applied once a year from FY2026 to FY2056 (debt_ratio_path), with
+    the primary deficit of every year lowered by the same cut.
+
+    Arguments
+        i   : nominal interest rate on the debt, in percent
+        g   : growth rate of nominal GDP, in percent
+        cut : the cut in the primary deficit of every year, in percent of GDP
+    Returns
+        deficits : the primary deficit of each year after the cut (% of GDP)
+        path     : the debt ratio at the end of each year (% of GDP)
+    """
+    # Step 1: the deficits after the cut, by raising taxes or cutting spending
     deficits = []
     for d in cbo_deficits:
         deficits.append(d - cut)
+    # Step 2: equation (5) year by year; the rates in percent become decimals
     path = debt_ratio_path(b_2025, i / 100, g / 100, deficits)
-    top = max(250, 1.05 * max(path))                 # fixed axis, widened only when the debt ratio would leave it
-    bottom = min(0, 1.1 * min(path))                 # below zero, the government owns more than it owes
-    fig = px.line(debt_history, x="year", y="debt_public_gdp_pct", range_y=[bottom, top],
-                  labels={"year": "Fiscal year", "debt_public_gdp_pct": "Debt held by the public (% of GDP)"},
-                  title=f"Debt in FY2056: {path[-1]:.1f}% of GDP (FY2025: {b_2025:.1f}%), "
-                        f"average primary deficit {np.mean(deficits):.2f}%")
+    return deficits, path
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 6, the debt projection to FY2056
+def debt_projection(i=4.0, g=4.0, cut=0.0):
+    """The debt ratio up to FY2025, and its projection to FY2056.
+
+    Draws the debt projection of Fig. 6 (inspired by the discussion of Fig. 18.6 in
+    Jones): the history as a solid line, the projection as a dashed line.
+
+    Arguments
+        i   : nominal interest rate on the debt, in percent
+        g   : growth rate of nominal GDP, in percent
+        cut : the cut in the primary deficit of every year, in percent of GDP
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the projection (projected_debt)
+    deficits, path = projected_debt(i, g, cut)
+    # Step 2: a fixed vertical axis, widened only when the debt ratio would leave it.
+    # `max(path)` and `min(path)` are the largest and smallest values of the list,
+    # and `max(250, ...)` is the larger of two numbers
+    top = max(250, 1.05 * max(path))
+    # below zero, the government owns more than it owes
+    bottom = min(0, 1.1 * min(path))
+    # Step 3: the history, a solid blue line
+    fig = px.line(
+        debt_history,
+        x="year",
+        y="debt_public_gdp_pct",
+        range_y=[bottom, top],
+        labels={
+            "year": "Fiscal year",
+            "debt_public_gdp_pct": "Debt held by the public (% of GDP)",
+        },
+        title=(
+            f"Debt in FY2056: {path[-1]:.1f}% of GDP (FY2025: {b_2025:.1f}%), "
+            f"average primary deficit {np.mean(deficits):.2f}%"
+        ),
+    )
     fig.update_traces(line=dict(color=BLUE, width=3))
-    fig.add_trace(go.Scatter(x=cbo.year, y=path, name="Projection", line=dict(color=BLUE, width=3, dash="dash"),
-                             showlegend=False))
+    # Step 4: the projection, a dashed blue line, and a dotted line at the FY2025 level
+    fig.add_trace(
+        go.Scatter(
+            x=cbo.year,
+            y=path,
+            name="Projection",
+            line=dict(color=BLUE, width=3, dash="dash"),
+            showlegend=False,
+        )
+    )
     fig.add_hline(y=b_2025, line=dict(color=GRAY, width=1, dash="dot"))
+    # Step 5: the gray band marks the projected years
     fig.add_vrect(x0=2025, x1=2056, fillcolor=GRAY, opacity=0.12, line_width=0)
     fig.update_xaxes(range=[1938, 2058])
+    # `[...] if top == 250 else None` is a one-line `if`: the list of ticks when the
+    # axis has its usual size, and None (let Plotly choose) when it has grown
     fig.update_yaxes(tickvals=[50, 100, 150, 200, 250] if top == 250 else None)
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(debt_projection,
-         i=FloatSlider(value=4.0, min=0.0, max=8.0, step=0.5, description="interest rate i (%)", style=WIDE),
-         g=FloatSlider(value=4.0, min=0.0, max=8.0, step=0.5, description="nominal GDP growth g (%)", style=WIDE),
-         cut=FloatSlider(value=0.0, min=0.0, max=4.0, step=0.5, description="deficit cut (% of GDP)", style=WIDE));
+# The debt projection with sliders for the interest rate, growth and the deficit cut
+interact(
+    debt_projection,
+    i=FloatSlider(value=4.0, min=0.0, max=8.0, step=0.5,
+                  description="interest rate i (%)", style=WIDE),
+    g=FloatSlider(value=4.0, min=0.0, max=8.0, step=0.5,
+                  description="nominal GDP growth g (%)", style=WIDE),
+    cut=FloatSlider(value=0.0, min=0.0, max=4.0, step=0.5,
+                    description="deficit cut (% of GDP)", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: the debt projection with a precomputed slider for the deficit cut (i = g = 4%)
-slider_figure(debt_projection, "cut", [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0], start=0.0, label="deficit cut (% of GDP)")
+# @title Website version: the debt projection with a precomputed slider (i = g = 4%)
+# one picture per deficit cut, with the default rates i = g = 4%
+slider_figure(
+    debt_projection,
+    "cut",
+    [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0],     # the values of the cut
+    start=0.0,
+    label="deficit cut (% of GDP)",
+)
 ```
 
 **Sources.** Data: [Office of Management and Budget, Historical Tables](https://www.whitehouse.gov/omb/budget/historical-tables/), Table 7.1 (debt held by the public); [Congressional Budget Office, *The Long-Term Budget Outlook: 2026 to 2056*](https://www.cbo.gov/data/budget-economic-data) (primary deficits, revenue minus spending excluding interest).
@@ -2327,12 +3159,24 @@ Chart: inspired by the discussion of Fig. 18.6 in Jones (2024), [*Macroeconomics
 #### Key numbers: the projection in numbers
 
 ```{python}
+# Step 1: CBO's projection for FY2056, in percent of GDP
 cbo_2056 = cbo.set_index("year").loc[2056]
-print(f"FY2056 (CBO): revenue {cbo_2056.revenue:.1f}%, spending excluding interest {cbo_2056.spending_ex_interest:.1f}%, "
-      f"entitlements {cbo_2056.ss_medicare_medicaid:.1f}% of GDP")
-print(f"Average primary deficit FY2026-2056: {np.mean(cbo_deficits):.2f}% of GDP, sum {np.sum(cbo_deficits):.1f} points")
+print(
+    f"FY2056 (CBO): revenue {cbo_2056.revenue:.1f}%, spending excluding interest "
+    f"{cbo_2056.spending_ex_interest:.1f}%, "
+    f"entitlements {cbo_2056.ss_medicare_medicaid:.1f}% of GDP"
+)
+# Step 2: the projected primary deficits: their average and their sum
+print(
+    f"Average primary deficit FY2026-2056: {np.mean(cbo_deficits):.2f}% of GDP, "
+    f"sum {np.sum(cbo_deficits):.1f} points"
+)
+# Step 3: the debt ratio in FY2056 for three interest rates, with g = 4%
 for i in [3.0, 4.0, 5.0]:
-    print(f"i = {i}%, g = 4%: debt in FY2056 {debt_ratio_path(b_2025, i / 100, 0.04, cbo_deficits)[-1]:.1f}% of GDP")
+    print(
+        f"i = {i}%, g = 4%: debt in FY2056 "
+        f"{debt_ratio_path(b_2025, i / 100, 0.04, cbo_deficits)[-1]:.1f}% of GDP"
+    )
 ```
 
 The textbook's CBO 2002 projections had entitlements at 21.1 percent of GDP and total spending at nearly 40
@@ -2363,25 +3207,64 @@ Medicaid, and all other spending (defense, income security, education, roads and
 add up to the spending excluding interest of Fig. 6.
 
 ```{python}
+# Load the data of Fig. 7: the parts of federal spending, percent of GDP.
+# `.isin([...])` keeps the rows whose year is in the list
 components = pd.read_csv(DATA_URL + "fig18-7.csv")
 components[components.year.isin([1950, 2000, 2025, 2056])]
 ```
 
+As for Fig. 6, we first turn the three parts into one long table of actual data and
+CBO projection.
+
 ```{python}
-PARTS = {"other_ex_interest": "All other spending", "social_security": "Social Security",
-         "medicare_medicaid": "Medicare and Medicaid"}
-COLORS_7 = {"All other spending": DARK_TEAL, "Social Security": BLUE, "Medicare and Medicaid": ORANGE}
+# The three parts and their names in the chart, then one long table of actual
+# data and CBO projection (actual_and_projection)
+PARTS = {
+    "other_ex_interest": "All other spending",
+    "social_security": "Social Security",
+    "medicare_medicaid": "Medicare and Medicaid",
+}
 parts = actual_and_projection(components, PARTS)
-fig = px.line(parts, x="year", y="percent", color="series", line_dash="segment", hover_name="series",
-              color_discrete_map=COLORS_7, line_dash_map={"actual": "solid", "CBO projection": "dash"},
-              labels={"year": "Fiscal year", "percent": "Percentage of GDP", "series": "Series", "segment": "Data"},
-              title="Medicare and Medicaid are projected to pass all other spending in 2041")
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 7, components of federal spending
+# Step 1: one color per part
+COLORS_7 = {
+    "All other spending": DARK_TEAL,
+    "Social Security": BLUE,
+    "Medicare and Medicaid": ORANGE,
+}
+# Step 2: one line per part, solid for actual data and dashed for the projection
+fig = px.line(
+    parts,
+    x="year",
+    y="percent",
+    color="series",
+    line_dash="segment",
+    hover_name="series",
+    color_discrete_map=COLORS_7,
+    line_dash_map={"actual": "solid", "CBO projection": "dash"},
+    labels={
+        "year": "Fiscal year",
+        "percent": "Percentage of GDP",
+        "series": "Series",
+        "segment": "Data",
+    },
+    title="Medicare and Medicaid are projected to pass all other spending in 2041",
+)
+# one legend entry per part (one_legend_entry)
 one_legend_entry(fig)
 fig.update_traces(line_width=3)
+# Step 3: the gray band marks the projected years; fixed axes
 fig.add_vrect(x0=2025, x1=2056, fillcolor=GRAY, opacity=0.12, line_width=0)
 fig.update_xaxes(range=[1945, 2060])
 fig.update_yaxes(range=[0, 20.5], tickvals=[2, 4, 6, 8, 10, 12, 14, 16, 18, 20])
-fig.update_layout(legend=dict(x=0.99, y=0.99, xanchor="right", yanchor="top"), legend_title_text="")
+fig.update_layout(
+    legend=dict(x=0.99, y=0.99, xanchor="right", yanchor="top"),
+    legend_title_text="",
+)
 fig.show()
 ```
 
@@ -2411,11 +3294,21 @@ The case study in the textbook says that Social Security spending will rise "fro
 about 6 percent". Some combination of higher taxes and lower benefits must cover that gap.
 
 ```{python}
+# Step 1: Social Security and health spending in some years, percent of GDP
 by_part = components.set_index("year")
-print(f"Social Security: 2000 {by_part.social_security[2000]:.2f}%, 2025 {by_part.social_security[2025]:.2f}%, "
-      f"2030 {by_part.social_security[2030]:.2f}%, 2056 {by_part.social_security[2056]:.2f}%")
-print(f"Medicare and Medicaid: 2000 {by_part.medicare_medicaid[2000]:.2f}%, 2030 {by_part.medicare_medicaid[2030]:.2f}%, "
-      f"2056 {by_part.medicare_medicaid[2056]:.2f}%")
+print(
+    f"Social Security: 2000 {by_part.social_security[2000]:.2f}%, "
+    f"2025 {by_part.social_security[2025]:.2f}%, "
+    f"2030 {by_part.social_security[2030]:.2f}%, "
+    f"2056 {by_part.social_security[2056]:.2f}%"
+)
+print(
+    f"Medicare and Medicaid: 2000 {by_part.medicare_medicaid[2000]:.2f}%, "
+    f"2030 {by_part.medicare_medicaid[2030]:.2f}%, "
+    f"2056 {by_part.medicare_medicaid[2056]:.2f}%"
+)
+# Step 2: the years in which health is above all other spending; the first of
+# them is the crossing
 crossing = by_part.index[by_part.medicare_medicaid > by_part.other_ex_interest]
 print(f"First year in which health spending exceeds all other spending: {crossing[0]}")
 ```
@@ -2448,6 +3341,8 @@ The data are the total current health expenditure, public and private, as a perc
 Health Statistics.
 
 ```{python}
+# Load the data of Fig. 8: health spending in five countries, percent of GDP.
+# `.isna().sum()` counts the missing values of each column
 health = pd.read_csv(DATA_URL + "fig18-8.csv")
 health.isna().sum()
 ```
@@ -2459,21 +3354,59 @@ data start in 1970, so the textbook's points for 1960 and 1965 cannot be drawn, 
 provisional estimates.
 
 ```{python}
-NAMES_8 = {"usa": "U.S.", "germany": "Germany", "france": "France", "japan": "Japan", "uk": "U.K."}
-health_long = health.rename(columns=NAMES_8).melt(id_vars="year", var_name="country",
-                                                  value_name="health_share").dropna()
-other_four = health.dropna()[["germany", "france", "japan", "uk"]].mean(axis=1)   # only years with all four
-fig = px.line(health_long, x="year", y="health_share", color="country", hover_name="country", range_y=[2, 20],
-              color_discrete_map={"U.S.": BLUE, "Germany": DARK_TEAL, "France": GREEN, "Japan": ORANGE,
-                                  "U.K.": LIGHT_BLUE},
-              labels={"year": "Year", "health_share": "Percent of GDP", "country": "Country"},
-              title=f"U.S. health spending: {health.usa.iloc[0]:.1f}% of GDP in 1970, {health.usa.iloc[-1]:.1f}% in 2025")
+# Step 1: the names of the legend, and one long table without the missing
+# values, so that each line connects the years that do exist
+NAMES_8 = {"usa": "U.S.", "germany": "Germany", "france": "France", "japan": "Japan",
+           "uk": "U.K."}
+health_long = health.rename(columns=NAMES_8).melt(
+    id_vars="year", var_name="country", value_name="health_share"
+).dropna()
+# Step 2: the average of the other four, only in the years with all four;
+# `.mean(axis=1)` averages across the columns, one value per year
+other_four = health.dropna()[["germany", "france", "japan", "uk"]].mean(axis=1)
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 8, health spending in five countries
+# Step 1: one line per country, in the textbook's colors
+fig = px.line(
+    health_long,
+    x="year",
+    y="health_share",
+    color="country",
+    hover_name="country",
+    range_y=[2, 20],
+    color_discrete_map={
+        "U.S.": BLUE,
+        "Germany": DARK_TEAL,
+        "France": GREEN,
+        "Japan": ORANGE,
+        "U.K.": LIGHT_BLUE,
+    },
+    labels={"year": "Year", "health_share": "Percent of GDP", "country": "Country"},
+    title=(
+        f"U.S. health spending: {health.usa.iloc[0]:.1f}% of GDP in 1970, "
+        f"{health.usa.iloc[-1]:.1f}% in 2025"
+    ),
+)
 fig.update_traces(line_width=3)
-fig.add_trace(go.Scatter(x=health.dropna().year, y=other_four, name="Average of the other four",
-                         line=dict(color=GRAY, width=2, dash="dot")))
+# Step 2: the average of the other four, a gray dotted line
+fig.add_trace(
+    go.Scatter(
+        x=health.dropna().year,
+        y=other_four,
+        name="Average of the other four",
+        line=dict(color=GRAY, width=2, dash="dot"),
+    )
+)
+# Step 3: fixed axes, and the legend in the top left corner
 fig.update_xaxes(range=[1968, 2027])
 fig.update_yaxes(tickvals=[4, 6, 8, 10, 12, 14, 16, 18, 20])
-fig.update_layout(legend=dict(x=0.01, y=0.99, xanchor="left", yanchor="top"), legend_title_text="")
+fig.update_layout(
+    legend=dict(x=0.01, y=0.99, xanchor="left", yanchor="top"),
+    legend_title_text="",
+)
 fig.show()
 ```
 
@@ -2498,10 +3431,20 @@ Chart: inspired by Fig. 18.8 in Jones (2024), [*Macroeconomics*, 6th ed.](https:
 #### Key numbers: why health spending rises
 
 ```{python}
-first_year, last_year = health.set_index("year").loc[1970], health.set_index("year").loc[2025]
-growth = 100 * ((last_year / first_year) ** (1 / 55) - 1)        # average growth of the share, percent a year
-pd.DataFrame({"1970": first_year, "2021": health.set_index("year").loc[2021], "2025": last_year,
-              "Share growth, % a year": growth}).round(2)
+# Step 1: the health shares of 1970 and 2025, one value per country
+first_year = health.set_index("year").loc[1970]
+last_year = health.set_index("year").loc[2025]
+# Step 2: the average growth of the share over the 55 years, percent a year
+growth = 100 * ((last_year / first_year) ** (1 / 55) - 1)
+# Step 3: the table, with 2021 too
+pd.DataFrame(
+    {
+        "1970": first_year,
+        "2021": health.set_index("year").loc[2021],
+        "2025": last_year,
+        "Share growth, % a year": growth,
+    }
+).round(2)
 ```
 
 The share of GDP spent on health grew by between 1.4 and 1.9 percent a year in every country: health spending
@@ -2519,38 +3462,87 @@ and Brazil. The file `health_spending.csv` has one row per country and year. The
 countries in the textbook's colors, and all countries fit on the textbook's scale.
 
 ```{python}
+# Load the OECD health spending of 45 countries: one row per country and year
 health_world = pd.read_csv(DATA_URL + "health_spending.csv")
+# the textbook's five countries, drawn first
 FIVE = ("France", "Germany", "Japan", "United Kingdom", "United States")
-HEALTH_COLORS = country_colors(health_world.country.unique(), {"United States": BLUE, "Germany": DARK_TEAL,
-                                                               "France": GREEN, "Japan": ORANGE,
-                                                               "United Kingdom": LIGHT_BLUE})
+```
+
+The drawing code below plots the health spending of the chosen countries, one line
+each, on the textbook's scale.
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 8 for any countries, health spending
+# one fixed color per country; the textbook's five keep the textbook's colors
+HEALTH_COLORS = country_colors(
+    health_world.country.unique(),
+    {
+        "United States": BLUE,
+        "Germany": DARK_TEAL,
+        "France": GREEN,
+        "Japan": ORANGE,
+        "United Kingdom": LIGHT_BLUE,
+    },
+)
 
 
 def health_by_country(countries=FIVE):
-    """Fig. 18.8 for any countries: current health expenditure, percent of GDP (OECD)."""
+    """Current health expenditure (percent of GDP, OECD) of the chosen countries.
+
+    Draws Fig. 8 for any countries (inspired by Fig. 18.8 in Jones).
+
+    Arguments
+        countries : a tuple of country names, such as FIVE
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the rows of the chosen countries
     chosen = health_world[health_world.country.isin(countries)]
-    fig = px.line(chosen, x="year", y="health_share", color="country", hover_name="country",
-                  color_discrete_map=HEALTH_COLORS, range_x=[1968, 2027], range_y=[0, 20],
-                  labels={"year": "Year", "health_share": "Percent of GDP", "country": "Country"},
-                  title="Health spending, % of GDP, " + latest_text(chosen, "health_share", "year"))
+    # Step 2: one line per country, on the textbook's scale
+    fig = px.line(
+        chosen,
+        x="year",
+        y="health_share",
+        color="country",
+        hover_name="country",
+        color_discrete_map=HEALTH_COLORS,
+        range_x=[1968, 2027],
+        range_y=[0, 20],
+        labels={"year": "Year", "health_share": "Percent of GDP", "country": "Country"},
+        title=(
+            "Health spending, % of GDP, "
+            + latest_text(chosen, "health_share", "year")
+        ),
+    )
     fig.update_traces(line_width=3)
-    fig.update_yaxes(tickvals=[4, 8, 12, 16, 20])           # no 0 next to the first year
+    # Step 3: the ticks, with no 0 next to the first year
+    fig.update_yaxes(tickvals=[4, 8, 12, 16, 20])
     fig.update_layout(legend_title_text="")
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(health_by_country,
-         countries=SelectMultiple(options=sorted(health_world.country.unique()), value=FIVE, rows=8,
-                                  description="countries", style=WIDE));
+# Fig. 8 for any countries: hold Ctrl (Cmd on a Mac) and click to pick several
+interact(
+    health_by_country,
+    countries=SelectMultiple(options=sorted(health_world.country.unique()),
+                             value=FIVE, rows=8,
+                             description="countries", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: health spending in 45 countries (buttons and legend)
+# Step 1: every country in one chart, on a taller canvas for the long legend
 fig = health_by_country(tuple(health_world.country.unique()))
-fig.update_layout(title="Health spending in 45 countries, percent of GDP (OECD)", height=560)
+fig.update_layout(
+    title="Health spending in 45 countries, percent of GDP (OECD)",
+    height=560,
+)
+# Step 2: draw the textbook's five; the buttons and the legend add the others
 legend_menu(fig, health_world, list(FIVE))
 ```
 

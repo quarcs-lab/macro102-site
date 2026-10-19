@@ -924,52 +924,159 @@ The curve is the textbook's $u(c)=\log c$. Its slope at any point is the margina
 marks one consumption level and draws the tangent line there, whose slope *is* $u'(c)$. As $c$ grows, the curve,
 and the tangent with it, becomes flatter and flatter.
 
-> **Python note.** `go.Figure()` starts an empty chart, and each `add_trace` adds one curve or set of points.
-> `fig.add_annotation` writes a text label at a point; we use it to name the curve at its right end, as the
-> textbook does. We fix the axis ranges so that you can *see* what changes when you move a slider.
+First we compute the three numbers the figure reports. `utility_at` gives the utility $u(c)$, the marginal
+utility $u'(c)$, the slope of the tangent, and the utility that one more unit of consumption adds.
 
 ```{python}
-def flow_utility(c=2.0, form="log"):
-    """Fig. 16.1: flow utility u(c), with the tangent at c, whose slope is the marginal utility."""
-    grid = np.linspace(0.01, 10, 1000)
+def utility_at(c, form="log"):
+    """Utility, marginal utility and the gain from one more unit at c (Fig. 1).
+
+    u(c), its slope u'(c) (1/c with log utility, as in equation 3), and u(c + 1) - u(c)
+
+    Arguments
+        c    : consumption, c
+        form : "log" (the default) or "square root"
+    Returns
+        u    : flow utility, u(c)
+        mu   : marginal utility, u'(c): the slope of the tangent at c
+        gain : the utility added by one more unit, u(c + 1) - u(c)
+    """
+    # utility and its slope at c (functions of Model in code)
     u, mu = utility(c, form), marginal_utility(c, form)
-    gain = utility(c + 1, form) - u                         # utility added by one more unit
-    near = np.linspace(max(c - 2, 0.01), min(c + 2, 10.5), 50)   # a short stretch around c, inside the chart
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=grid, y=utility(grid, form), name="u(c)", line=dict(color=BLUE, width=4)))
-    fig.add_trace(go.Scatter(x=near, y=u + mu * (near - c), name="tangent", mode="lines",
-                             line=dict(color=GREEN, width=2, dash="dash")))
-    fig.add_trace(go.Scatter(x=[c], y=[u], name="chosen c", mode="markers", marker=dict(color="black", size=11)))
+    # utility added by one more unit: a little less than mu, since the curve flattens
+    gain = utility(c + 1, form) - u
+    return u, mu, gain
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 1, the names of the curve and of the slope
+def label_utility(fig, form, mu):
+    """The two labels of Fig. 1: the name of the curve and the slope of the tangent.
+
+    Arguments
+        fig  : the figure to write on
+        form : "log" or "square root", the utility function
+        mu   : marginal utility at the chosen c, u'(c)
+    """
+    # `add_annotation` writes a text label at a point: the curve's name at its
+    # right end, as the textbook does
     name = {"log": "u(c) = log c", "square root": "u(c) = √c"}[form]
-    fig.add_annotation(x=10, y=utility(10, form), text=name, showarrow=False, xanchor="right", yshift=16)
-    fig.add_annotation(x=10, y=-2, text=f"slope of the tangent: u′(c) = {mu:.2f}", showarrow=False,
-                       xanchor="right", font=dict(size=13, color=GREEN))   # an empty corner, for every c
-    fig.update_layout(title=f"c = {c:.1f}:  u(c) = {u:.2f},  marginal utility u′(c) = {mu:.2f},  "
-                            f"one more unit adds {gain:.2f}",
-                      showlegend=False,
-                      xaxis=dict(title="Consumption, c", range=[0, 10.5]),
-                      yaxis=dict(title="Utility", range=[-2.5, 3.5]))
+    fig.add_annotation(
+        x=10,
+        y=utility(10, form),
+        text=name,
+        showarrow=False,
+        xanchor="right",
+        yshift=16,
+    )
+    # the slope of the tangent, in a corner that stays empty for every c
+    fig.add_annotation(
+        x=10,
+        y=-2,
+        text=f"slope of the tangent: u′(c) = {mu:.2f}",
+        showarrow=False,
+        xanchor="right",
+        font=dict(size=13, color=GREEN),
+    )
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 1, flow utility and the tangent at c
+def flow_utility(c=2.0, form="log"):
+    """Flow utility u(c), with the tangent at c, whose slope is the marginal utility.
+
+    Draws Fig. 1 (adapted from Fig. 16.1 in Jones).
+
+    Arguments
+        c    : consumption, c, where the tangent touches the curve
+        form : "log" (the default) or "square root"
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the numbers of the figure (utility_at)
+    u, mu, gain = utility_at(c, form)
+    # the curve from 0.01 to 10 (log c has no value at 0)
+    grid = np.linspace(0.01, 10, 1000)
+    # a short stretch around c for the tangent, inside the chart
+    near = np.linspace(max(c - 2, 0.01), min(c + 2, 10.5), 50)
+
+    # Step 2: `go.Figure()` starts an empty chart, and each `add_trace` adds one
+    # curve or set of points. First the utility curve u(c)
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(
+            x=grid,
+            y=utility(grid, form),
+            name="u(c)",
+            line=dict(color=BLUE, width=4),
+        )
+    )
+    # the dashed tangent at c: u(c) + u'(c) (x - c), whose slope is u'(c)
+    fig.add_trace(
+        go.Scatter(
+            x=near,
+            y=u + mu * (near - c),
+            name="tangent",
+            mode="lines",
+            line=dict(color=GREEN, width=2, dash="dash"),
+        )
+    )
+    # the black dot at the chosen c
+    fig.add_trace(
+        go.Scatter(
+            x=[c],
+            y=[u],
+            name="chosen c",
+            mode="markers",
+            marker=dict(color="black", size=11),
+        )
+    )
+    label_utility(fig, form, mu)
+
+    # Step 3: the title reports u(c), u'(c) and the gain from one more unit. Fixed
+    # axis ranges, so that you can see what changes when you move a slider
+    fig.update_layout(
+        title=(
+            f"c = {c:.1f}:  u(c) = {u:.2f},  marginal utility u′(c) = {mu:.2f},  "
+            f"one more unit adds {gain:.2f}"
+        ),
+        showlegend=False,
+        xaxis=dict(title="Consumption, c", range=[0, 10.5]),
+        yaxis=dict(title="Utility", range=[-2.5, 3.5]),
+    )
     return fig
 ```
 
 Now the interactive version. Move the consumption slider and watch the tangent flatten.
 
-> **Python note.** `interact` turns each argument of a function into a widget and calls the function again every
-> time you move one. `ToggleButtons` is a row of buttons for a choice between a few options. The `;` at the end
-> only hides an extra line of text.
-
 ```{python}
 #| kind: widget
-interact(flow_utility,
-         c=FloatSlider(value=2.0, min=0.5, max=9.5, step=0.5, description="consumption c", style=WIDE),
-         form=ToggleButtons(options=["log", "square root"], value="log", description="utility"));
+# Fig. 1 with a slider and buttons. `interact` turns each argument of flow_utility
+# into a widget and calls the function again every time you move one;
+# `ToggleButtons` is a row of buttons for a choice between a few options. The `;`
+# at the end only hides an extra line of text.
+interact(
+    flow_utility,
+    c=FloatSlider(value=2.0, min=0.5, max=9.5, step=0.5,
+                  description="consumption c", style=WIDE),
+    form=ToggleButtons(options=["log", "square root"], value="log",
+                       description="utility"),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 1 with a precomputed slider for consumption
-slider_figure(flow_utility, "c", [0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 5.0, 6.0, 8.0, 9.5], start=2.0,
-              label="consumption c")
+# one picture of Fig. 1 per value of c; the slider shows one at a time
+slider_figure(
+    flow_utility,
+    "c",
+    [0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 5.0, 6.0, 8.0, 9.5],     # the values of c
+    start=2.0,
+    label="consumption c",
+)
 ```
 
 **Source.** Adapted from Fig. 16.1 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -1021,56 +1128,205 @@ The diagram draws dotted guides from each point down to the consumption axis. A 
 its label, so that the figure function stays short.
 
 ```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 2, a dotted guide down to the consumption axis
 def add_guide(fig, x, top, label):
-    """A dotted line from the consumption axis up to the point (x, top), with a label at the axis."""
-    fig.add_shape(type="line", x0=x, x1=x, y0=-2.5, y1=top, line=dict(color=GRAY, width=1, dash="dot"))
+    """A dotted line from the consumption axis up to the point (x, top).
+
+    Fig. 2 draws one under c1, c-bar and c2, with a label at the axis.
+
+    Arguments
+        fig   : the figure to draw on
+        x     : the consumption level, on the horizontal axis
+        top   : the height of the point: its utility
+        label : the text at the axis ("" for none)
+    Returns
+        the same figure, with the guide added
+    """
+    # `add_shape` draws a line: from the bottom of the chart (-2.5) up to the point
+    fig.add_shape(
+        type="line",
+        x0=x,
+        x1=x,
+        y0=-2.5,
+        y1=top,
+        line=dict(color=GRAY, width=1, dash="dot"),
+    )
+    # the label at the axis, unless it is empty
     if label:
-        fig.add_annotation(x=x, y=-2.5, text=label, showarrow=False, yanchor="bottom", xshift=10,
-                           font=dict(size=15))
+        fig.add_annotation(
+            x=x,
+            y=-2.5,
+            text=label,
+            showarrow=False,
+            yanchor="bottom",
+            xshift=10,
+            font=dict(size=15),
+        )
     return fig
 ```
 
+Then we compute the numbers the figure compares. `smoothing_gain` gives the smooth consumption $\bar{c}$,
+the utility of each consumption level, and the average utility of the uneven path.
+
 ```{python}
-def smoothing_diagram(c1=1.0, c2=5.0, form="log"):
-    """Fig. 16.2: utility from smoothing, u(c-bar), against the average of u(c1) and u(c2)."""
-    grid = np.linspace(0.01, 10, 1000)
-    c_bar = (c1 + c2) / 2                                    # the same consumption in both periods
+def smoothing_gain(c1, c2, form="log"):
+    """The smooth path against the uneven one, in utility (Fig. 2).
+
+    With beta = 1 and R = 0:  c-bar = (c1 + c2) / 2, and the average utility of the
+    uneven path is [u(c1) + u(c2)] / 2. The gain from smoothing is u(c-bar) minus it.
+
+    Arguments
+        c1, c2 : consumption today and in the future on the uneven path
+        form   : "log" (the default) or "square root"
+    Returns
+        c_bar          : the same consumption in both periods, c-bar
+        u1, u2, u_bar  : the utility of c1, of c2 and of c-bar
+        average        : the average utility of the uneven path
+    """
+    # the same consumption in both periods, with the same total
+    c_bar = (c1 + c2) / 2
+    # the utility of each consumption level
     u1, u2, u_bar = utility(c1, form), utility(c2, form), utility(c_bar, form)
-    average = (u1 + u2) / 2                                  # average utility of the uneven path
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=grid, y=utility(grid, form), line=dict(color=BLUE, width=4)))
-    fig.add_trace(go.Scatter(x=[c1, c2], y=[u1, u2], mode="lines", line=dict(color=GREEN, width=3, dash="dash")))
-    fig.add_trace(go.Scatter(x=[c1, c_bar, c2], y=[u1, u_bar, u2], mode="markers+text", text=["", "u(c̄)", ""],
-                             textposition="top left", marker=dict(color="black", size=11)))
+    # the average utility of the uneven path
+    average = (u1 + u2) / 2
+    return c_bar, u1, u2, u_bar, average
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 2, the points, their labels and the guides
+def smoothing_points(fig, c1, c2, c_bar, u1, u2, u_bar, average):
+    """The points of Fig. 2: u(c1), u(c-bar), u(c2) and the average utility.
+
+    Black dots on the curve, an open circle for the average utility of the uneven
+    path, and dotted guides down to the consumption axis (add_guide).
+
+    Arguments
+        fig            : the figure to draw on
+        c1, c2, c_bar  : consumption today, in the future, and smooth
+        u1, u2, u_bar  : their utilities
+        average        : the average utility of the uneven path
+    """
+    # Step 1: the three points on the curve; only u(c-bar) gets a label
+    fig.add_trace(
+        go.Scatter(
+            x=[c1, c_bar, c2],
+            y=[u1, u_bar, u2],
+            mode="markers+text",
+            text=["", "u(c̄)", ""],
+            textposition="top left",
+            marker=dict(color="black", size=11),
+        )
+    )
+    # Step 2: the open circle: average utility, the midpoint of the dashed line
     side = "bottom right"
     if c_bar > 8.5:
-        side = "bottom left"                                 # near the right edge: keep the label inside the chart
-    fig.add_trace(go.Scatter(x=[c_bar], y=[average], mode="markers+text", text=["average utility"], textposition=side,
-                             marker=dict(color="white", size=11, line=dict(color="black", width=1.5))))
+        side = "bottom left"    # near the right edge: keep the label inside the chart
+    fig.add_trace(
+        go.Scatter(
+            x=[c_bar],
+            y=[average],
+            mode="markers+text",
+            text=["average utility"],
+            textposition=side,
+            marker=dict(color="white", size=11, line=dict(color="black", width=1.5)),
+        )
+    )
+    # Step 3: a dotted guide under each point. `a if condition else b` gives a when
+    # the condition is true and b otherwise: c1 and c2 are labeled only when the
+    # labels do not overlap
     for x, top, label in [(c1, u1, "c₁"), (c_bar, u_bar, "c̄"), (c2, u2, "c₂")]:
-        add_guide(fig, x, top, label if label == "c̄" or abs(c2 - c1) >= 1.2 else "")   # no overlapping labels
-    fig.add_annotation(x=10, y=utility(10, form), text="u(c)", showarrow=False, xanchor="right", yshift=16)
-    fig.update_layout(title=f"c̄ = {c_bar:.1f}:  u(c̄) = {u_bar:.2f}  vs  average utility = {average:.2f}"
-                            f"   (gain from smoothing {u_bar - average:.2f})",
-                      showlegend=False,
-                      xaxis=dict(title="Consumption, c", range=[0, 10.5]),
-                      yaxis=dict(title="Utility", range=[-2.5, 3.5]))
+        add_guide(fig, x, top, label if label == "c̄" or abs(c2 - c1) >= 1.2 else "")
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 2, the gain from smoothing consumption
+def smoothing_diagram(c1=1.0, c2=5.0, form="log"):
+    """Utility from smoothing, u(c-bar), against the average of u(c1) and u(c2).
+
+    Draws Fig. 2 (adapted from Fig. 16.2 in Jones).
+
+    Arguments
+        c1   : consumption today on the uneven path, c1
+        c2   : consumption in the future on the uneven path, c2
+        form : "log" (the default) or "square root"
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the numbers of the figure (smoothing_gain)
+    c_bar, u1, u2, u_bar, average = smoothing_gain(c1, c2, form)
+    grid = np.linspace(0.01, 10, 1000)
+
+    # Step 2: the utility curve, and the dashed line between the two uneven points
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(
+            x=grid,
+            y=utility(grid, form),
+            line=dict(color=BLUE, width=4),
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=[c1, c2],
+            y=[u1, u2],
+            mode="lines",
+            line=dict(color=GREEN, width=3, dash="dash"),
+        )
+    )
+    # the points, their labels and the guides (smoothing_points)
+    smoothing_points(fig, c1, c2, c_bar, u1, u2, u_bar, average)
+
+    # Step 3: the curve's name at its right end
+    fig.add_annotation(
+        x=10,
+        y=utility(10, form),
+        text="u(c)",
+        showarrow=False,
+        xanchor="right",
+        yshift=16,
+    )
+    # Step 4: the title compares u(c-bar) with the average utility
+    fig.update_layout(
+        title=(
+            f"c̄ = {c_bar:.1f}:  u(c̄) = {u_bar:.2f}  "
+            f"vs  average utility = {average:.2f}"
+            f"   (gain from smoothing {u_bar - average:.2f})"
+        ),
+        showlegend=False,
+        xaxis=dict(title="Consumption, c", range=[0, 10.5]),
+        yaxis=dict(title="Utility", range=[-2.5, 3.5]),
+    )
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(smoothing_diagram,
-         c1=FloatSlider(value=1.0, min=0.5, max=9.5, step=0.5, description="consumption today c₁", style=WIDE),
-         c2=FloatSlider(value=5.0, min=0.5, max=9.5, step=0.5, description="consumption in the future c₂", style=WIDE),
-         form=ToggleButtons(options=["log", "square root"], value="log", description="utility"));
+# Fig. 2 with sliders for the two consumption levels, and buttons for the utility
+interact(
+    smoothing_diagram,
+    c1=FloatSlider(value=1.0, min=0.5, max=9.5, step=0.5,
+                   description="consumption today c₁", style=WIDE),
+    c2=FloatSlider(value=5.0, min=0.5, max=9.5, step=0.5,
+                   description="consumption in the future c₂", style=WIDE),
+    form=ToggleButtons(options=["log", "square root"], value="log",
+                       description="utility"),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 2 with a precomputed slider for future consumption
-slider_figure(smoothing_diagram, "c2", [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0], start=5.0,
-              label="consumption in the future c₂")
+# one picture of Fig. 2 per value of c2
+slider_figure(
+    smoothing_diagram,
+    "c2",
+    [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0],     # the values of c2
+    start=5.0,
+    label="consumption in the future c₂",
+)
 ```
 
 **Source.** Adapted from Fig. 16.2 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -1106,8 +1362,20 @@ saves nothing for the future. The function below picks the smaller of the two nu
 
 ```{python}
 def constrained_today(f_today, y_today, y_future, R):
-    """c_today when Irving cannot borrow: the plan of equation (6), but no more than f_today + y_today (equation 9)."""
+    """Consumption today when Irving cannot borrow.
+
+    Equation (9): the plan of equation (6), but no more than f_today + y_today
+
+    Arguments
+        f_today            : financial wealth today
+        y_today, y_future  : labor income today and in the future
+        R                  : the real interest rate
+    Returns
+        c_today under the borrowing constraint
+    """
+    # the plan he would choose if he could borrow; `later` is c_future
     wanted, later = consumption_plan(f_today, y_today, y_future, R)
+    # `min` picks the smaller number: he cannot spend more than he has today
     return min(wanted, f_today + y_today)
 ```
 
@@ -1115,27 +1383,42 @@ We now give both versions of Irving 0.01 more (100 dollars, if one unit is 10,00
 divide the change in consumption today by 0.01. The last row is a **tax cut today** of 0.01, paid for by a tax
 increase of $0.01(1+R)$ in the future, which leaves total wealth unchanged.
 
-> **Python note.** `shocks` is a *dictionary*: each entry pairs a name with three changes (to $f_{\text{today}}$,
-> $y_{\text{today}}$ and $y_{\text{future}}$). `.items()` hands the entries to the `for` loop one at a time.
-> `consumption_plan(...)[0]` keeps only the first of its two results, $c_{\text{today}}$. `rows.append(...)` adds one
-> row to a list, and `pd.DataFrame(rows, columns=[...])` turns the list of rows into a table with named columns.
-
 ```{python}
+# The MPC of each shock, with and without borrowing: the change in c_today
+# divided by the extra 0.01
+# Step 1: `shocks` is a dictionary: each entry pairs a name with three changes,
+# to f_today, y_today and y_future
 R, extra = 0.05, 0.01
-shocks = {"income today +0.01": (0, extra, 0),
-          "income in the future +0.01": (0, 0, extra),
-          "financial wealth +0.01": (extra, 0, 0),
-          "tax cut today, paid by a tax rise later": (0, extra, -extra * (1 + R))}
+shocks = {
+    "income today +0.01": (0, extra, 0),
+    "income in the future +0.01": (0, 0, extra),
+    "financial wealth +0.01": (extra, 0, 0),
+    # 0.01 more today, repaid with interest by a tax rise in the future
+    "tax cut today, paid by a tax rise later": (0, extra, -extra * (1 + R)),
+}
+# Step 2: `.items()` hands the entries to the `for` loop one at a time
 rows = []
 for shock, (d_f, d_today, d_future) in shocks.items():
+    # c_today before and after when Irving can borrow;
+    # `consumption_plan(...)[0]` keeps only the first of its two results, c_today
     free_before = consumption_plan(f_today, y_today, y_future, R)[0]
-    free_after = consumption_plan(f_today + d_f, y_today + d_today, y_future + d_future, R)[0]
+    free_after = consumption_plan(f_today + d_f, y_today + d_today,
+                                  y_future + d_future, R)[0]
+    # the same when he cannot borrow (constrained_today)
     tied_before = constrained_today(f_today, y_today, y_future, R)
-    tied_after = constrained_today(f_today + d_f, y_today + d_today, y_future + d_future, R)
-    free = round((free_after - free_before) / extra, 3) + 0.0     # + 0.0 turns a rounded -0.0 into 0.0
+    tied_after = constrained_today(f_today + d_f, y_today + d_today,
+                                   y_future + d_future, R)
+    # Step 3: the two MPCs; + 0.0 turns a rounded -0.0 into 0.0
+    free = round((free_after - free_before) / extra, 3) + 0.0
     tied = round((tied_after - tied_before) / extra, 3) + 0.0
+    # `rows.append(...)` adds one row to the list
     rows.append([shock, free, tied])
-mpc = pd.DataFrame(rows, columns=["Irving receives ...", "MPC, can borrow", "MPC, cannot borrow"])
+# Step 4: `pd.DataFrame(rows, columns=[...])` turns the list of rows into a table
+# with named columns
+mpc = pd.DataFrame(
+    rows,
+    columns=["Irving receives ...", "MPC, can borrow", "MPC, cannot borrow"],
+)
 mpc
 ```
 
@@ -1150,6 +1433,7 @@ With more periods of life the MPC shrinks. With $R=0$ and $\beta=1$, a consumer 
 an extra dollar evenly over them, so the MPC is $1/T$:
 
 ```{python}
+# The MPC with T periods left (R = 0, beta = 1): one dollar spread over T periods
 for T in [2, 3, 50, 80]:
     print(f"{T:>2} periods left: MPC = 1/{T} = {1 / T:.3f}")
 ```
@@ -1183,25 +1467,48 @@ The data are the debt of U.S. households and nonprofit organizations (mostly mor
 the Federal Reserve's *Financial Accounts of the United States*, divided by nominal GDP. One row is one quarter; the
 date is the first day of the quarter.
 
-> **Python note.** `pd.read_csv` reads a data file into a *DataFrame*, a table with named columns, and
-> `parse_dates=["date"]` turns the text in the `date` column into real dates. `.head()` shows the first five rows.
-
 ```{python}
+# Load the data of Fig. 3. `pd.read_csv` reads a data file into a DataFrame, a
+# table with named columns, and `parse_dates=["date"]` turns the text in the
+# `date` column into real dates
 debt = pd.read_csv(DATA_URL + "fig16-3.csv", parse_dates=["date"])
-ratio = debt.set_index("date").debt_gdp_pct          # the same numbers, with dates as row labels
+# the same numbers, with dates as row labels
+ratio = debt.set_index("date").debt_gdp_pct
+# `.head()` shows the first five rows
 debt.head()
 ```
 
-> **Python note.** `px.area` draws a line and fills the area below it, like the textbook's figure.
-> `ratio.idxmax()` gives the **date** of the largest value, and `peak.quarter` its quarter (1 to 4).
+The chart marks the quarter in which the debt ratio peaked. We find that quarter first.
 
 ```{python}
+# The quarter of the highest debt ratio: `ratio.idxmax()` gives the date of the
+# largest value, not the value itself
 peak = ratio.idxmax()
-fig = px.area(debt, x="date", y="debt_gdp_pct", labels={"date": "Year", "debt_gdp_pct": "Percent of GDP"},
-              title="Household debt doubled from 1970 to 2008, then households deleveraged")
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 3, household debt as a percentage of GDP
+# Step 1: `px.area` draws a line and fills the area below it, like the textbook
+fig = px.area(
+    debt,
+    x="date",
+    y="debt_gdp_pct",
+    labels={"date": "Year", "debt_gdp_pct": "Percent of GDP"},
+    title="Household debt doubled from 1970 to 2008, then households deleveraged",
+)
+# the blue line, with a light gray fill
 fig.update_traces(line=dict(color=BLUE, width=3), fillcolor="rgba(138, 150, 163, 0.3)")
-fig.add_annotation(x=peak, y=ratio[peak], text=f"peak {ratio[peak]:.1f}% in {peak.year}Q{peak.quarter}",
-                   ax=-90, ay=-10, font=dict(size=13))
+# Step 2: an arrow to the peak; `peak.quarter` is its quarter, 1 to 4
+fig.add_annotation(
+    x=peak,
+    y=ratio[peak],
+    text=f"peak {ratio[peak]:.1f}% in {peak.year}Q{peak.quarter}",
+    ax=-90,
+    ay=-10,
+    font=dict(size=13),
+)
+# Step 3: fixed axes, from mid-1969 to 2027
 fig.update_xaxes(range=["1969-07-01", "2027-01-01"])
 fig.update_yaxes(range=[40, 105], tickvals=[50, 60, 70, 80, 90, 100])
 fig.show()
@@ -1229,10 +1536,17 @@ Chart: inspired by Fig. 16.3 in Jones (2024), [*Macroeconomics*, 6th ed.](https:
 #### Key numbers: the textbook's debt facts
 
 ```{python}
-print(f"Highest value 1970-1984: {ratio['1970':'1984'].max():.1f}%   (textbook: typically less than 50)")
-print(f"Average of 2000: {ratio['2000'].mean():.1f}%                (textbook: about 67)")
-print(f"Peak: {ratio.max():.1f}% in {peak.year}Q{peak.quarter}             (textbook: nearly 100 by 2009)")
-print(f"2008 average / 1970 average: {ratio['2008'].mean() / ratio['1970'].mean():.2f}  (textbook: doubled)")
+# The textbook's debt facts, next to our data.
+# Step 1: `ratio['1970':'1984']` keeps the quarters from 1970 to 1984
+print(f"Highest value 1970-1984: {ratio['1970':'1984'].max():.1f}%"
+      "   (textbook: typically less than 50)")
+print(f"Average of 2000: {ratio['2000'].mean():.1f}%"
+      "                (textbook: about 67)")
+print(f"Peak: {ratio.max():.1f}% in {peak.year}Q{peak.quarter}"
+      "             (textbook: nearly 100 by 2009)")
+print(f"2008 average / 1970 average: {ratio['2008'].mean() / ratio['1970'].mean():.2f}"
+      "  (textbook: doubled)")
+# Step 2: the averages of three later years
 for year in ["2009", "2014", "2019"]:
     print(f"Average of {year}: {ratio[year].mean():.1f}%")
 ```
@@ -1245,6 +1559,7 @@ Let us rebuild the ratio from its two ingredients. The file `debt_levels.csv` ho
 dollars, as published today and as published on 30 March 2023, when the textbook was written.
 
 ```{python}
+# Load household debt and GDP in dollars, today's data and the March 2023 vintage
 levels = pd.read_csv(DATA_URL + "debt_levels.csv", parse_dates=["date"])
 levels.head(3)
 ```
@@ -1252,6 +1567,8 @@ levels.head(3)
 Dividing debt by GDP straight away gives nonsense:
 
 ```{python}
+# Debt / GDP in percent, straight from the two columns; `:,.0f` writes the number
+# with commas and no decimals
 naive = 100 * levels.debt_millions / levels.gdp_billions
 print(f"Debt / GDP in 1970Q1: {naive[0]:,.0f} percent?")
 ```
@@ -1262,21 +1579,38 @@ A program written in 2023 would silently give wrong answers today, so **always c
 Dividing debt by 1,000 fixes the units:
 
 ```{python}
+# The debt ratio in both vintages, with the units fixed
+# Step 1: today's data: debt in millions, divided by 1,000 to get billions
 levels["Data as of 2026"] = 100 * (levels.debt_millions / 1000) / levels.gdp_billions
-levels["Data as published in March 2023"] = 100 * levels.debt_billions_2023 / levels.gdp_billions_2023
+# the March 2023 vintage, when both series were in billions
+levels["Data as published in March 2023"] = (
+    100 * levels.debt_billions_2023 / levels.gdp_billions_2023
+)
+# Step 2: the revision, today minus 2023, in percentage points
 gap = levels["Data as of 2026"] - levels["Data as published in March 2023"]
-print(f"Largest gap from fig16-3.csv: {(levels['Data as of 2026'] - debt.debt_gdp_pct).abs().max():.4f}")
-print(f"Revision, today minus 2023: largest {gap.min():.1f} points, in {levels.date[gap.idxmin()]:%Y-%m}")
+# Step 3: our ratio against fig16-3.csv, then the largest revision and its date
+print(f"Largest gap from fig16-3.csv: "
+      f"{(levels['Data as of 2026'] - debt.debt_gdp_pct).abs().max():.4f}")
+print(f"Revision, today minus 2023: largest {gap.min():.1f} points, "
+      f"in {levels.date[gap.idxmin()]:%Y-%m}")
 ```
 
 The two vintages agree before 2000 but not after. In 2023 the statistical agency revised nominal GDP up, and a
 larger denominator means a smaller ratio. Click a legend entry to hide or show one line.
 
 ```{python}
-fig = px.line(levels, x="date", y=["Data as of 2026", "Data as published in March 2023"],
-              color_discrete_sequence=[BLUE, GREEN],
-              labels={"date": "Year", "value": "Percent of GDP", "variable": "Vintage"},
-              title="Revisions to GDP lowered the debt ratio after 2000 by up to 3.2 points")
+#| kind: drawing
+# @title Drawing code: Fig. 3, the debt ratio in two data vintages
+# Step 1: one line per vintage: `y` lists two columns, so px.line draws two lines
+fig = px.line(
+    levels,
+    x="date",
+    y=["Data as of 2026", "Data as published in March 2023"],
+    color_discrete_sequence=[BLUE, GREEN],
+    labels={"date": "Year", "value": "Percent of GDP", "variable": "Vintage"},
+    title="Revisions to GDP lowered the debt ratio after 2000 by up to 3.2 points",
+)
+# Step 2: the same fixed axes as Fig. 3
 fig.update_xaxes(range=["1969-07-01", "2027-01-01"])
 fig.update_yaxes(range=[40, 105], tickvals=[50, 60, 70, 80, 90, 100])
 fig.show()
@@ -1297,6 +1631,7 @@ measure, the debt of households and nonprofit institutions as a percentage of GD
 country and one quarter; `region` groups the countries by continent.
 
 ```{python}
+# Load the BIS data: one row per country and quarter
 debt_world = pd.read_csv(DATA_URL + "household_debt.csv", parse_dates=["date"])
 debt_world.head(3)
 ```
@@ -1305,59 +1640,114 @@ The series start in different years: in 1970 for the United States and Japan, bu
 countries on one chart, each country needs its own color, and it should keep that color when we add or remove other
 countries. Two small tools do this for all the multi-country charts of this notebook.
 
-> **Python note.** `px.colors.qualitative.Dark24` is a list of 24 colors, and `+` joins two lists. `enumerate`
-> numbers the items of a list as the loop runs (0, 1, 2, ...), and `i % len(PALETTE)` is the remainder of the
-> division, which starts again at 0 when the colors run out. `colors.update(fixed)` overwrites some entries of the
-> dictionary. In `latest_text`, `.groupby("country").tail(1)` keeps the last row of each country,
-> `.iloc[[0, -1]]` keeps the first and the last row of a table, and `for i, (_, row) in enumerate(...)` numbers
-> the rows that `.iterrows()` hands over one at a time.
-
 ```{python}
-PALETTE = px.colors.qualitative.Dark24 + px.colors.qualitative.Light24     # 48 distinct colors
+#| kind: drawing
+# @title Drawing code: Figs. 3, 4 and 5, one fixed color per country
+# `px.colors.qualitative.Dark24` is a list of 24 colors, and `+` joins two lists
+PALETTE = px.colors.qualitative.Dark24 + px.colors.qualitative.Light24   # 48 colors
 
 
 def country_colors(names, fixed):
-    """One fixed color per country, so that a country keeps its color when the selection changes."""
+    """One fixed color per country, so that a country keeps its color.
+
+    The multi-country charts of Figs. 3, 4 and 5 use it: a country keeps its color
+    when we add or remove other countries.
+
+    Arguments
+        names : the names of all countries in the data
+        fixed : countries with a color of their own, as {"United States": BLUE}
+    Returns
+        a dictionary: country name -> color
+    """
+    # Step 1: `enumerate` numbers the names as the loop runs (0, 1, 2, ...), and
+    # `i % len(PALETTE)` is the remainder of the division, which starts again at 0
+    # when the colors run out
     colors = {}
     for i, name in enumerate(sorted(names)):
         colors[name] = PALETTE[i % len(PALETTE)]
-    colors.update(fixed)                        # the textbook's countries keep the colors of the book
+    # Step 2: `colors.update(fixed)` overwrites some entries: the textbook's
+    # countries keep the colors of the book
+    colors.update(fixed)
     return colors
+```
 
-
+```{python}
+#| kind: drawing
+# @title Drawing code: Figs. 3, 4 and 5, the latest values for the chart titles
 def latest_text(data, column, time):
-    """The latest value of each chosen country, highest first; only the maximum and minimum for 3 or more."""
+    """The latest value of each chosen country, for a chart title.
+
+    Highest first; with 3 or more countries, only the maximum and the minimum.
+
+    Arguments
+        data   : the rows of the chosen countries
+        column : the column to report, e.g. "debt_gdp"
+        time   : the column with the dates or the years
+    Returns
+        a line of text such as "latest: United States 67.2"
+    """
     if len(data) == 0:
         return "choose at least one country"
-    last = data.sort_values(time).groupby("country").tail(1).sort_values(column, ascending=False)
+    # Step 1: sorted by time, `.groupby("country").tail(1)` keeps the last row of
+    # each country; then from the highest value down
+    last = data.sort_values(time).groupby("country").tail(1)
+    last = last.sort_values(column, ascending=False)
+    # Step 2: with 3 or more countries, `.iloc[[0, -1]]` keeps the first and the
+    # last row: the maximum and the minimum
     words = ["", ""]
     if len(last) > 2:
         last, words = last.iloc[[0, -1]], ["max ", "min "]
+    # Step 3: `.iterrows()` hands over the rows one at a time, and `enumerate`
+    # numbers them; `for i, (_, row) in ...` unpacks the number and the row
     parts = []
     for i, (_, row) in enumerate(last.iterrows()):
         parts.append(f"{words[i]}{row.country} {row[column]:.1f}")
     return "latest: " + ", ".join(parts)
 ```
 
-The chart function draws the countries in the tuple `countries`. The vertical axis has two fixed scales: up to 105
-percent, as in the textbook, and up to 140 percent when a country above 100 percent is chosen.
-`list(range(20, top, 20))` is the list of tick values 20, 40, 60, ... below `top`.
+The chart function `debt_by_country` draws the countries in the tuple `countries`, each in its own color. The
+vertical axis has two fixed scales: up to 105 percent, as in the textbook, and up to 140 percent when a country
+above 100 percent is chosen.
 
 ```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 3, household debt in the chosen countries
+# each country keeps its color; the United States is blue, as in Fig. 3
 DEBT_COLORS = country_colors(debt_world.country.unique(), {"United States": BLUE})
 
 
 def debt_by_country(countries=("United States",)):
-    """Fig. 16.3 for any countries: household debt in percent of GDP (BIS data)."""
+    """Household debt in percent of GDP, for any countries (BIS data).
+
+    Draws Fig. 3 for any countries (inspired by Fig. 16.3 in Jones).
+
+    Arguments
+        countries : a tuple of country names, e.g. ("United States", "Canada")
+    Returns
+        a Plotly figure
+    """
+    # Step 1: `.isin(countries)` keeps the rows of the chosen countries
     chosen = debt_world[debt_world.country.isin(countries)]
+    # two fixed scales: up to 105 percent, or 140 for the most indebted countries
     top = 105
     if chosen.debt_gdp.max() > 100:
-        top = 140                               # a second, fixed scale for the most indebted countries
-    fig = px.line(chosen, x="date", y="debt_gdp", color="country", hover_name="country",
-                  color_discrete_map=DEBT_COLORS, range_x=["1969-07-01", "2027-01-01"], range_y=[0, top],
-                  labels={"date": "Year", "debt_gdp": "Percent of GDP", "country": "Country"},
-                  title="Household debt, % of GDP, " + latest_text(chosen, "debt_gdp", "date"))
-    fig.update_yaxes(tickvals=list(range(20, top, 20)))      # no 0 next to the first year
+        top = 140
+    # Step 2: one line per country; the title reports the latest values
+    fig = px.line(
+        chosen,
+        x="date",
+        y="debt_gdp",
+        color="country",
+        hover_name="country",
+        color_discrete_map=DEBT_COLORS,
+        range_x=["1969-07-01", "2027-01-01"],
+        range_y=[0, top],
+        labels={"date": "Year", "debt_gdp": "Percent of GDP", "country": "Country"},
+        title="Household debt, % of GDP, " + latest_text(chosen, "debt_gdp", "date"),
+    )
+    # Step 3: `list(range(20, top, 20))` is the list 20, 40, 60, ... below top
+    # (no 0 next to the first year)
+    fig.update_yaxes(tickvals=list(range(20, top, 20)))
     fig.update_layout(legend_title_text="")
     return fig
 ```
@@ -1366,51 +1756,92 @@ The widget below is the Colab version. The website cannot run Python, so its ver
 shows the United States, and keeps the others one click away. The helper cell right after the widget does this for
 every multi-country chart.
 
-> **Python note.** `SelectMultiple` is a list in which you can pick several entries: hold Ctrl (Cmd on a Mac) and
-> click. The function then receives a *tuple* of names, such as `("United States", "Canada")`.
-
 ```{python}
 #| kind: widget
-interact(debt_by_country,
-         countries=SelectMultiple(options=sorted(debt_world.country.unique()), value=("United States",), rows=8,
-                                  description="countries", style=WIDE));
+# Fig. 3 with a list of countries. `SelectMultiple` is a list in which you can pick
+# several entries: hold Ctrl (Cmd on a Mac) and click. The function then receives
+# a tuple of names, such as ("United States", "Canada").
+interact(
+    debt_by_country,
+    countries=SelectMultiple(options=sorted(debt_world.country.unique()),
+                             value=("United States",), rows=8,
+                             description="countries", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: helper
-# @title Helper for the multi-country website figures (run this cell; you do not need to read it)
-G7 = ["Canada", "France", "Germany", "Italy", "Japan", "United Kingdom", "United States"]
+# @title Helper for the multi-country website figures (run it; no need to read it)
+# the G7 countries, for the G7 button
+G7 = ["Canada", "France", "Germany", "Italy", "Japan", "United Kingdom",
+      "United States"]
 
 
 def legend_menu(fig, data, shown):
-    """Website version of a multi-country chart: the countries in `shown` are drawn, every other country is
-    one click away in the legend, and buttons show a group (the textbook's countries, the G7, a region, all).
-    Traces that are not countries, such as averages, always stay visible."""
+    """Website version of a multi-country chart: a legend and buttons for groups.
+
+    The countries in `shown` are drawn, every other country is one click away in the
+    legend, and buttons show a group (the textbook's countries, the G7, a region,
+    all). Traces that are not countries, such as averages, always stay visible.
+    The website versions of Figs. 3, 4 and 5 use it.
+
+    Arguments
+        fig   : a chart with one line per country
+        data  : its data, with the columns country and region
+        shown : the countries drawn at first
+    Returns
+        the same figure, with the buttons
+    """
+    # Step 1: the groups of countries, one per button
     countries = set(data.country)
     groups = {"Textbook": list(shown), "G7": G7}
     for region in sorted(data.region.unique()):
         groups[region] = list(data[data.region == region].country.unique())
     groups["All"] = list(countries)
+    # Step 2: at first only the countries in `shown`; "legendonly" hides a line
+    # until you click its name in the legend
     for trace in fig.data:
         if trace.name in countries and trace.name not in shown:
             trace.visible = "legendonly"
+    # Step 3: one button per group, which shows that group's countries
     buttons = []
     for label, members in groups.items():
         visible = []
         for trace in fig.data:
-            visible.append(True if trace.name not in countries or trace.name in members else "legendonly")
+            visible.append(
+                True if trace.name not in countries or trace.name in members
+                else "legendonly"
+            )
         buttons.append(dict(label=label, method="restyle", args=[{"visible": visible}]))
-    fig.update_layout(updatemenus=[dict(type="buttons", direction="right", buttons=buttons, x=0, y=1.02,
-                                        xanchor="left", yanchor="bottom", pad=dict(r=4, t=0))],
-                      margin=dict(t=120))
+    # Step 4: the row of buttons above the chart, with room for it
+    fig.update_layout(
+        updatemenus=[
+            dict(
+                type="buttons",
+                direction="right",
+                buttons=buttons,
+                x=0,
+                y=1.02,
+                xanchor="left",
+                yanchor="bottom",
+                pad=dict(r=4, t=0),
+            )
+        ],
+        margin=dict(t=120),
+    )
     return fig
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 3 for all 43 countries (buttons and legend)
+# Step 1: the chart with every country
 fig = debt_by_country(tuple(debt_world.country.unique()))
-fig.update_layout(title="Household debt in 43 countries, percent of GDP (BIS)", height=560)
+fig.update_layout(
+    title="Household debt in 43 countries, percent of GDP (BIS)",
+    height=560,
+)
+# Step 2: the United States shown, the others one click away (legend_menu)
 legend_menu(fig, debt_world, ["United States"])
 ```
 
@@ -1460,10 +1891,13 @@ The **personal saving rate** is personal saving divided by disposable income (in
 Economic Analysis publishes it every month. The textbook plots quarterly values, so we load both versions.
 
 ```{python}
+# Load the saving rate: quarterly (the data of Fig. 4) and monthly
 saving = pd.read_csv(DATA_URL + "fig16-4.csv", parse_dates=["date"])
 monthly = pd.read_csv(DATA_URL + "saving_rate_monthly.csv", parse_dates=["date"])
+# the two series, with dates as row labels
 rate_q = saving.set_index("date").saving_rate
 rate_m = monthly.set_index("date").saving_rate
+# `.tail(3)` shows the last three rows
 monthly.tail(3)
 ```
 
@@ -1473,15 +1907,16 @@ monthly.tail(3)
 
 A quarterly value is the average of the three monthly values in that quarter. pandas does this in one step.
 
-> **Python note.** `.resample("QS")` groups a series with dates into quarters (`"QS"` labels each quarter by its
-> first day). `.mean()` then averages each group and `.count()` counts how many months each group has.
-> `quarterly[months == 3]` keeps only the quarters with all three months.
-
 ```{python}
+# From months to quarters: the average of the three months of each quarter.
+# Step 1: `.resample("QS")` groups the monthly series into quarters ("QS" labels
+# each quarter by its first day); `.mean()` averages each group and `.count()`
+# counts its months
 by_quarter = rate_m.resample("QS")
 quarterly = by_quarter.mean()
 months = by_quarter.count()
 print(months.tail(2))
+# Step 2: `quarterly[months == 3]` keeps only the quarters with all three months
 complete = quarterly[months == 3]
 print(f"Largest gap from fig16-4.csv: {(complete - rate_q).abs().max():.4f}")
 ```
@@ -1489,51 +1924,132 @@ print(f"Largest gap from fig16-4.csv: {(complete - rate_q).abs().max():.4f}")
 The last quarter has only two months, July and August 2026, so its average would not be comparable with the
 others. We drop it, and our quarterly series is then identical to the textbook-style file.
 
-The chart can show either version. The title reports the highest and lowest values.
+The chart can show either version. The title reports the highest and lowest values: `saving_extremes` picks the
+series and finds the dates of its extremes, and `when` writes a date as a quarter or a month.
 
 ```{python}
 def when(date, frequency):
-    """A date as '2020Q2' for quarterly data, or as 'Apr 2020' for monthly data."""
+    """A date as '2020Q2' for quarterly data, or as 'Apr 2020' for monthly data.
+
+    Used in the titles of Fig. 4 and in its Key numbers.
+
+    Arguments
+        date      : a date
+        frequency : "quarterly" or "monthly"
+    Returns
+        the date as text
+    """
     if frequency == "quarterly":
         return f"{date.year}Q{date.quarter}"
+    # `:%b %Y` writes the short name of the month, then the year
     return f"{date:%b %Y}"
 
 
-def saving_chart(frequency="quarterly"):
-    """Fig. 16.4: the personal saving rate, as quarterly averages or as monthly values."""
+def saving_extremes(frequency="quarterly"):
+    """The saving rate at one frequency, and the dates of its extremes (Fig. 4).
+
+    The data of Fig. 4: quarterly averages (fig16-4.csv) or the monthly values.
+
+    Arguments
+        frequency : "quarterly" or "monthly"
+    Returns
+        data      : the table to plot
+        rate      : the saving rate, with dates as row labels
+        high, low : the dates of the highest and of the lowest value
+    """
+    # Step 1: the quarterly or the monthly series
     if frequency == "quarterly":
         data, rate = saving, rate_q
     else:
         data, rate = monthly, rate_m
+    # Step 2: `.idxmax()` and `.idxmin()` give the dates of the extremes
     high, low = rate.idxmax(), rate.idxmin()
-    fig = px.area(data, x="date", y="saving_rate", labels={"date": "Year", "saving_rate": "Percent of disposable income"},
-                  title=f"{frequency.capitalize()} data: highest {rate[high]:.1f}% ({when(high, frequency)}), "
-                        f"lowest {rate[low]:.1f}% ({when(low, frequency)})")
-    fig.update_traces(line=dict(color=BLUE, width=2.5), fillcolor="rgba(138, 150, 163, 0.3)")
+    return data, rate, high, low
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 4, the personal saving rate
+def saving_chart(frequency="quarterly"):
+    """The personal saving rate, as quarterly averages or as monthly values.
+
+    Draws Fig. 4 (inspired by Fig. 16.4 in Jones).
+
+    Arguments
+        frequency : "quarterly" (the default) or "monthly"
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the data and its extremes (saving_extremes)
+    data, rate, high, low = saving_extremes(frequency)
+    # Step 2: the area chart; the title reports the highest and the lowest value
+    fig = px.area(
+        data,
+        x="date",
+        y="saving_rate",
+        labels={"date": "Year", "saving_rate": "Percent of disposable income"},
+        title=(
+            f"{frequency.capitalize()} data: "
+            f"highest {rate[high]:.1f}% ({when(high, frequency)}), "
+            f"lowest {rate[low]:.1f}% ({when(low, frequency)})"
+        ),
+    )
+    # the blue line, with a light gray fill
+    fig.update_traces(
+        line=dict(color=BLUE, width=2.5),
+        fillcolor="rgba(138, 150, 163, 0.3)",
+    )
+    # Step 3: fixed axes (no 0 next to the first year)
     fig.update_xaxes(range=["1969-07-01", "2027-01-01"])
-    fig.update_yaxes(range=[0, 35], tickvals=[5, 10, 15, 20, 25, 30, 35])     # no 0 next to the first year
+    fig.update_yaxes(range=[0, 35], tickvals=[5, 10, 15, 20, 25, 30, 35])
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(saving_chart, frequency=ToggleButtons(options=["quarterly", "monthly"], value="quarterly",
-                                               description="data"));
+# Fig. 4 with two buttons, for quarterly or for monthly data
+interact(
+    saving_chart,
+    frequency=ToggleButtons(options=["quarterly", "monthly"], value="quarterly",
+                            description="data"),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 4 with buttons for quarterly and monthly data
+# Step 1: both charts in one figure: the monthly line is added, hidden at first
 fig = saving_chart("quarterly")
 by_month = saving_chart("monthly")
 fig.add_trace(by_month.data[0])
 fig.data[1].visible = False
-buttons = [dict(label="quarterly", method="update",
-                args=[{"visible": [True, False]}, {"title.text": fig.layout.title.text}]),
-           dict(label="monthly", method="update",
-                args=[{"visible": [False, True]}, {"title.text": by_month.layout.title.text}])]
-fig.update_layout(updatemenus=[dict(type="buttons", direction="right", x=0.01, y=0.98, xanchor="left",
-                                    yanchor="top", buttons=buttons)])
+# Step 2: two buttons; each shows one line and its title
+buttons = [
+    dict(
+        label="quarterly",
+        method="update",
+        args=[{"visible": [True, False]}, {"title.text": fig.layout.title.text}],
+    ),
+    dict(
+        label="monthly",
+        method="update",
+        args=[{"visible": [False, True]}, {"title.text": by_month.layout.title.text}],
+    ),
+]
+# Step 3: the row of buttons, at the top left of the chart
+fig.update_layout(
+    updatemenus=[
+        dict(
+            type="buttons",
+            direction="right",
+            x=0.01,
+            y=0.98,
+            xanchor="left",
+            yanchor="top",
+            buttons=buttons,
+        )
+    ]
+)
 fig
 ```
 
@@ -1560,11 +2076,18 @@ Chart: inspired by Fig. 16.4 in Jones (2024), [*Macroeconomics*, 6th ed.](https:
 #### Key numbers: the textbook's saving facts
 
 ```{python}
-print(f"1970-1979 average: {rate_q['1970':'1979'].mean():.1f}%   1980-1984: {rate_q['1980':'1984'].mean():.1f}%"
+# The textbook's saving facts, next to our data.
+# Step 1: averages over periods; `rate_q['1970':'1979']` keeps the 1970s
+print(f"1970-1979 average: {rate_q['1970':'1979'].mean():.1f}%   "
+      f"1980-1984: {rate_q['1980':'1984'].mean():.1f}%"
       "   (textbook: more than 10)")
-print(f"2005-2007 average: {rate_q['2005':'2007'].mean():.1f}%                   (textbook: around 3)")
-print(f"2007 average of the months: {rate_m['2007'].mean():.1f}%            (textbook exercise: 2.5)")
-print(f"Latest quarter ({when(rate_q.index[-1], 'quarterly')}): {rate_q.iloc[-1]:.1f}%;   "
+print(f"2005-2007 average: {rate_q['2005':'2007'].mean():.1f}%"
+      "                   (textbook: around 3)")
+print(f"2007 average of the months: {rate_m['2007'].mean():.1f}%"
+      "            (textbook exercise: 2.5)")
+# Step 2: the latest quarter and the latest month; `.iloc[-1]` is the last value
+print(f"Latest quarter ({when(rate_q.index[-1], 'quarterly')}): "
+      f"{rate_q.iloc[-1]:.1f}%;   "
       f"latest month ({when(rate_m.index[-1], 'monthly')}): {rate_m.iloc[-1]:.1f}%")
 ```
 
@@ -1581,8 +2104,8 @@ States the OECD's rate is on average 0.2 points above the yearly average of the 
 0.7 points away.
 
 ```{python}
+# Load the OECD saving rates: one row per country and year
 saving_world = pd.read_csv(DATA_URL + "saving_rates.csv")
-SAVING_COLORS = country_colors(saving_world.country.unique(), {"United States": BLUE})
 saving_world.head(3)
 ```
 
@@ -1591,16 +2114,46 @@ spend more than their income by drawing on their wealth or borrowing, so the axi
 scale for the extreme countries.
 
 ```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 4, household saving in the chosen countries
+# each country keeps its color; the United States is blue
+SAVING_COLORS = country_colors(saving_world.country.unique(), {"United States": BLUE})
+
+
 def saving_by_country(countries=("United States",)):
-    """Fig. 16.4 for any countries: net household saving, percent of net disposable income (OECD, annual)."""
+    """Net household saving, percent of net disposable income, for any countries.
+
+    Draws Fig. 4 for any countries (inspired by Fig. 16.4 in Jones; OECD, annual).
+
+    Arguments
+        countries : a tuple of country names, e.g. ("United States", "Japan")
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the rows of the chosen countries
     chosen = saving_world[saving_world.country.isin(countries)]
+    # two fixed scales: -5 to 20 percent, or -30 to 45 for the extreme countries
     low, high = -5, 20
     if chosen.saving_rate.min() < -5 or chosen.saving_rate.max() > 20:
-        low, high = -30, 45                     # a second, fixed scale for the extreme countries
-    fig = px.line(chosen, x="year", y="saving_rate", color="country", hover_name="country",
-                  color_discrete_map=SAVING_COLORS, range_x=[1969, 2026], range_y=[low, high],
-                  labels={"year": "Year", "saving_rate": "Percent of disposable income", "country": "Country"},
-                  title="Saving, % of income, " + latest_text(chosen, "saving_rate", "year"))
+        low, high = -30, 45
+    # Step 2: one line per country; the title reports the latest values
+    fig = px.line(
+        chosen,
+        x="year",
+        y="saving_rate",
+        color="country",
+        hover_name="country",
+        color_discrete_map=SAVING_COLORS,
+        range_x=[1969, 2026],
+        range_y=[low, high],
+        labels={
+            "year": "Year",
+            "saving_rate": "Percent of disposable income",
+            "country": "Country",
+        },
+        title="Saving, % of income, " + latest_text(chosen, "saving_rate", "year"),
+    )
+    # Step 3: the zero line: below it, households spend more than their income
     fig.add_hline(y=0, line=dict(color="black", width=1))
     fig.update_layout(legend_title_text="")
     return fig
@@ -1608,16 +2161,28 @@ def saving_by_country(countries=("United States",)):
 
 ```{python}
 #| kind: widget
-interact(saving_by_country,
-         countries=SelectMultiple(options=sorted(saving_world.country.unique()), value=("United States",), rows=8,
-                                  description="countries", style=WIDE));
+# Fig. 4 for the countries you pick (hold Ctrl, or Cmd on a Mac, to pick several)
+interact(
+    saving_by_country,
+    countries=SelectMultiple(options=sorted(saving_world.country.unique()),
+                             value=("United States",), rows=8,
+                             description="countries", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: household saving rates in 35 countries (buttons and legend)
+# Step 1: the chart with every country
 fig = saving_by_country(tuple(saving_world.country.unique()))
-fig.update_layout(title="Household saving rates in 35 countries, percent of disposable income (OECD)", height=560)
+fig.update_layout(
+    title=(
+        "Household saving rates in 35 countries, "
+        "percent of disposable income (OECD)"
+    ),
+    height=560,
+)
+# Step 2: the United States shown, the others one click away (legend_menu)
 legend_menu(fig, saving_world, ["United States"])
 ```
 
@@ -1667,29 +2232,50 @@ Household **net worth** is everything households own (houses, stocks, bonds, dep
 Dividing it by a year of disposable income gives a ratio: a value of 5 means that households own five years of income.
 
 ```{python}
+# Load the data of Fig. 5: net worth in years of disposable income
 wealth = pd.read_csv(DATA_URL + "fig16-5.csv", parse_dates=["date"])
+# the same numbers, with dates as row labels
 net_worth = wealth.set_index("date").networth_dpi_ratio
 wealth.head()
 ```
 
 The chart marks three turning points. The loop adds one labelled arrow for each.
 
-> **Python note.** In the dictionary `EVENTS`, each key is a label and each value holds a date and the length of the
-> arrow (negative: the label sits above the line). `pd.Timestamp(...)` turns text into a date.
-
 ```{python}
-EVENTS = {"dot-com peak": ("1999-10-01", -40),
-          "housing peak": ("2006-10-01", -40),
-          "financial crisis": ("2009-04-01", 40)}
-fig = px.area(wealth, x="date", y="networth_dpi_ratio",
-              labels={"date": "Year", "networth_dpi_ratio": "Net worth / disposable income"},
-              title=f"Household wealth rose from {net_worth.iloc[0]:.1f} to {net_worth.iloc[-1]:.1f} "
-                    "times disposable income")
+#| kind: drawing
+# @title Drawing code: Fig. 5, household wealth as a ratio to income
+# Step 1: the turning points. In the dictionary EVENTS, each key is a label and
+# each value holds a date and the length of the arrow (negative: label above)
+EVENTS = {
+    "dot-com peak": ("1999-10-01", -40),
+    "housing peak": ("2006-10-01", -40),
+    "financial crisis": ("2009-04-01", 40),
+}
+# Step 2: the area chart; the title reports the first and the latest ratio
+fig = px.area(
+    wealth,
+    x="date",
+    y="networth_dpi_ratio",
+    labels={"date": "Year", "networth_dpi_ratio": "Net worth / disposable income"},
+    title=(
+        f"Household wealth rose from {net_worth.iloc[0]:.1f} "
+        f"to {net_worth.iloc[-1]:.1f} times disposable income"
+    ),
+)
 fig.update_traces(line=dict(color=BLUE, width=3), fillcolor="rgba(138, 150, 163, 0.3)")
+# Step 3: one labeled arrow per turning point; `pd.Timestamp(...)` turns text
+# into a date
 for label, (date, offset) in EVENTS.items():
     day = pd.Timestamp(date)
-    fig.add_annotation(x=day, y=net_worth[day], text=f"{label}: {net_worth[day]:.2f}", ax=0, ay=offset,
-                       font=dict(size=12))
+    fig.add_annotation(
+        x=day,
+        y=net_worth[day],
+        text=f"{label}: {net_worth[day]:.2f}",
+        ax=0,
+        ay=offset,
+        font=dict(size=12),
+    )
+# Step 4: fixed axes
 fig.update_xaxes(range=["1969-07-01", "2027-01-01"])
 fig.update_yaxes(range=[3, 9], tickvals=[4, 5, 6, 7, 8, 9])
 fig.show()
@@ -1716,14 +2302,17 @@ Chart: inspired by Fig. 16.5 in Jones (2024), [*Macroeconomics*, 6th ed.](https:
 If households save less when they feel wealthy, quarters with a high wealth ratio should have a low saving rate. To
 check, we put the two series side by side, one row per quarter.
 
-> **Python note.** `merge` joins two tables on a common column, here `date`, like matching rows by ID in a
-> spreadsheet. `.dt.year` takes the year out of a date, and `//` divides and drops the remainder, so
-> `1987 // 10 * 10` is 1980. `.astype(str)` turns numbers into text.
-
 ```{python}
+# Saving and wealth side by side, one row per quarter
+# Step 1: `merge` joins two tables on a common column, here `date`, like matching
+# rows by ID in a spreadsheet
 both = saving.merge(wealth, on="date")
+# Step 2: labels for the chart. `.dt.year` takes the year out of a date, `//`
+# divides and drops the remainder (1987 // 10 * 10 is 1980), and `.astype(str)`
+# turns numbers into text
 both["decade"] = (both.date.dt.year // 10 * 10).astype(str) + "s"
 both["quarter"] = both.date.dt.year.astype(str) + "Q" + both.date.dt.quarter.astype(str)
+# Step 3: the correlation of the two series
 corr = both.saving_rate.corr(both.networth_dpi_ratio)
 print(f"{len(both)} quarters; correlation between saving and wealth: {corr:.2f}")
 both.head(3)
@@ -1734,13 +2323,27 @@ The option `trendline="ols"` adds the best-fitting straight line, and `trendline
 all decades together. Hover over a point to see its quarter, and click a decade in the legend to hide it.
 
 ```{python}
-fig = px.scatter(both, x="networth_dpi_ratio", y="saving_rate", color="decade", hover_name="quarter",
-                 trendline="ols", trendline_scope="overall",
-                 color_discrete_sequence=["#9ecae1", "#5aa0d8", BLUE, GREEN, TEAL, "#0b4f47"],
-                 range_x=[4, 9], range_y=[-1, 27],
-                 labels={"networth_dpi_ratio": "Net worth / disposable income",
-                         "saving_rate": "Personal saving rate (percent)", "decade": "Decade"},
-                 title=f"Households saved less when they were wealthier (correlation {corr:.2f})")
+#| kind: drawing
+# @title Drawing code: Fig. 5, the saving rate against wealth
+# one point per quarter, colored by decade, and one straight line for all decades
+fig = px.scatter(
+    both,
+    x="networth_dpi_ratio",
+    y="saving_rate",
+    color="decade",
+    hover_name="quarter",
+    trendline="ols",
+    trendline_scope="overall",
+    color_discrete_sequence=["#9ecae1", "#5aa0d8", BLUE, GREEN, TEAL, "#0b4f47"],
+    range_x=[4, 9],
+    range_y=[-1, 27],
+    labels={
+        "networth_dpi_ratio": "Net worth / disposable income",
+        "saving_rate": "Personal saving rate (percent)",
+        "decade": "Decade",
+    },
+    title=f"Households saved less when they were wealthier (correlation {corr:.2f})",
+)
 fig.show()
 ```
 
@@ -1771,40 +2374,78 @@ of their wealth, and divide by a year of disposable income. For the United State
 the Federal Reserve's ratio of Fig. 5 in every year since 1995. The data are annual and start in 1995 at the earliest.
 
 ```{python}
+# Load the OECD household wealth data: one row per country and year
 wealth_world = pd.read_csv(DATA_URL + "household_wealth.csv")
-WEALTH_COLORS = country_colors(wealth_world.country.unique(), {"United States": BLUE})
 wealth_world.head(3)
 ```
 
 The chart keeps the textbook's scale, from 3 to 9 years of income, unless a chosen country leaves it.
 
 ```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 5, household wealth in the chosen countries
+# each country keeps its color; the United States is blue
+WEALTH_COLORS = country_colors(wealth_world.country.unique(), {"United States": BLUE})
+
+
 def wealth_by_country(countries=("United States",)):
-    """Fig. 16.5 for any countries: household net worth in years of disposable income (OECD, annual)."""
+    """Household net worth in years of disposable income, for any countries.
+
+    Draws Fig. 5 for any countries (inspired by Fig. 16.5 in Jones; OECD, annual).
+
+    Arguments
+        countries : a tuple of country names, e.g. ("United States", "Spain")
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the rows of the chosen countries
     chosen = wealth_world[wealth_world.country.isin(countries)]
+    # two fixed scales: 3 to 9 years of income, or 0 to 13 for the extreme countries
     low, high = 3, 9
     if chosen.net_worth_ratio.min() < 3 or chosen.net_worth_ratio.max() > 9:
-        low, high = 0, 13                       # a second, fixed scale for the extreme countries
-    fig = px.line(chosen, x="year", y="net_worth_ratio", color="country", hover_name="country",
-                  color_discrete_map=WEALTH_COLORS, range_x=[1994, 2026], range_y=[low, high],
-                  labels={"year": "Year", "net_worth_ratio": "Net worth / disposable income", "country": "Country"},
-                  title="Net worth / income, " + latest_text(chosen, "net_worth_ratio", "year"))
+        low, high = 0, 13
+    # Step 2: one line per country; the title reports the latest values
+    fig = px.line(
+        chosen,
+        x="year",
+        y="net_worth_ratio",
+        color="country",
+        hover_name="country",
+        color_discrete_map=WEALTH_COLORS,
+        range_x=[1994, 2026],
+        range_y=[low, high],
+        labels={
+            "year": "Year",
+            "net_worth_ratio": "Net worth / disposable income",
+            "country": "Country",
+        },
+        title="Net worth / income, " + latest_text(chosen, "net_worth_ratio", "year"),
+    )
     fig.update_layout(legend_title_text="")
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(wealth_by_country,
-         countries=SelectMultiple(options=sorted(wealth_world.country.unique()), value=("United States",), rows=8,
-                                  description="countries", style=WIDE));
+# Fig. 5 for the countries you pick (hold Ctrl, or Cmd on a Mac, to pick several)
+interact(
+    wealth_by_country,
+    countries=SelectMultiple(options=sorted(wealth_world.country.unique()),
+                             value=("United States",), rows=8,
+                             description="countries", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: household wealth in 26 countries (buttons and legend)
+# Step 1: the chart with every country
 fig = wealth_by_country(tuple(wealth_world.country.unique()))
-fig.update_layout(title="Household net worth in 26 countries, in years of disposable income (OECD)", height=560)
+fig.update_layout(
+    title="Household net worth in 26 countries, in years of disposable income (OECD)",
+    height=560,
+)
+# Step 2: the United States shown, the others one click away (legend_menu)
 legend_menu(fig, wealth_world, ["United States"])
 ```
 

@@ -1102,10 +1102,9 @@ If $P_t$ is the price level in year $t$, the inflation rate is the percentage ch
 $(P_{t+1} - P_t)/P_t$ (equation 1). Here the price level is the **consumer price index** (CPI), the price of a basket
 of consumer goods, averaged over the twelve months of each year.
 
-> **Python note.** `pd.read_csv(...)` reads a data file into a *DataFrame*, a table with named columns.
-> `.head()` shows its first five rows.
-
 ```{python}
+# Load the data of Fig. 1. `pd.read_csv` reads a data file into a DataFrame, a
+# table with named columns; `.head()` shows its first five rows
 us = pd.read_csv(DATA_URL + "fig8-1.csv")
 us.head()
 ```
@@ -1113,11 +1112,12 @@ us.head()
 Inflation is the growth rate of the price level, so we can also go back from inflation to the price level.
 Start at 100 in 1959 and multiply by $(1 + \pi_t/100)$ year after year.
 
-> **Python note.** `.cumprod()` is the *cumulative product*: its first value is the first number, its
-> second value the product of the first two numbers, and so on. `.tail()` shows the last five rows.
-
 ```{python}
+# The price level implied by the inflation rates: 100 in 1959, then times
+# (1 + pi/100) every year. `.cumprod()` is the cumulative product: its first value
+# is the first number, its second value the product of the first two, and so on
 us["price_level"] = 100 * (1 + us.inflation_cpi / 100).cumprod()
+# `.tail()` shows the last five rows
 us.tail()
 ```
 
@@ -1125,6 +1125,8 @@ The United States is only one country. The World Bank's World Development Indica
 series, CPI inflation, for almost every economy, and a wider file has them for 200 economies since 1960:
 
 ```{python}
+# Load the panel: CPI inflation of 200 economies since 1960, one row per economy and
+# year
 panel = pd.read_csv(DATA_URL + "inflation_panel.csv")
 panel.head()
 ```
@@ -1134,22 +1136,38 @@ behind Fig. 2, and `GID` rows fill gaps in the WDI from the World Bank's Global 
 Figs. 6 and 7). Before mixing the two files, we compare the WDI's U.S. numbers with the textbook's series:
 
 ```{python}
+# Compare the WDI's U.S. inflation with the textbook's series.
+# Step 1: `panel[panel.country == "United States"]` keeps the rows where the
+# condition is true; `set_index("year")` uses the years as row labels, so that the
+# two series line up year by year when we subtract them
 wdi_us = panel[panel.country == "United States"].set_index("year").inflation
 book_us = us.set_index("year").inflation_cpi
-print(f"WDI: {wdi_us.index.min()}-{wdi_us.index.max()};  fig8-1.csv: {book_us.index.min()}-{book_us.index.max()}")
-print(f"Largest difference in the years they share: {(wdi_us - book_us).abs().max():.2f} points")
+# Step 2: the years each series covers, and the largest gap in the years they share
+print(
+    f"WDI: {wdi_us.index.min()}-{wdi_us.index.max()};  "
+    f"fig8-1.csv: {book_us.index.min()}-{book_us.index.max()}"
+)
+print(
+    "Largest difference in the years they share: "
+    f"{(wdi_us - book_us).abs().max():.2f} points"
+)
 ```
 
 They agree within 0.09 points, but the WDI stops in 2024. So we keep the textbook's U.S. series and take every
 other country from the panel.
 
-> **Python note.** `pd.concat([a, b])` stacks two tables that have the same columns. `sorted(...)` puts the
-> names in alphabetical order, and `.unique()` lists each name once.
-
 ```{python}
+# Step 1: the textbook's U.S. series, with the panel's column names
 us_rows = us[["year", "inflation_cpi"]].rename(columns={"inflation_cpi": "inflation"})
 us_rows["country"] = "United States"
-all_inflation = pd.concat([panel[panel.country != "United States"], us_rows], ignore_index=True)
+# Step 2: every other country from the panel, then the U.S. rows.
+# `pd.concat([a, b])` stacks two tables that have the same columns
+all_inflation = pd.concat(
+    [panel[panel.country != "United States"], us_rows],
+    ignore_index=True,
+)
+# Step 3: the menu of countries. `.unique()` lists each name once, and `sorted(...)`
+# puts the names in alphabetical order
 CHOICES = sorted(all_inflation.country.unique())
 print(len(CHOICES), "economies to choose from")
 ```
@@ -1159,109 +1177,244 @@ The chart has two views. The price level is shown on a **ratio scale**, where eq
 year before its first inflation rate (1959 for the United States). Inflation rates differ hugely across countries,
 so the top of the inflation axis moves up in steps (15, 30, 60, 120, 250, 500 percent) when a country needs it.
 
-> **Python note.** `if ... else` runs one block of code or the other, and `return` inside a loop stops the
-> function at the first match. With `log_y=True` the vertical axis is a ratio scale; `tickvals` chooses the
-> numbers printed on it, and the `range` of a ratio axis is given in powers of 10 (`np.log10(80)`).
+First the data. `price_index` turns a country's inflation rates into its price level, and `inflation_data`
+keeps the rows of the countries you choose. The drawing code then draws one of the two views.
 
 ```{python}
-PRICE_TICKS = [100, 200, 400, 800, 1600]
+def price_index(rates):
+    """The price level implied by a series of inflation rates (Fig. 1).
+
+    Equation (1) turned around:  P_t+1 = (1 + pi_t / 100) P_t, starting at 100 in the
+    year before the first rate
+
+    Arguments
+        rates : inflation rates in percent, year by year
+    Returns
+        the price level in each year (100 in the year before the first rate)
+    """
+    # the cumulative product of the growth factors 1 + pi/100
+    return 100 * (1 + rates / 100).cumprod()
+
+
+def inflation_data(view, countries):
+    """The rows of the chosen countries, with their price levels when needed (Fig. 1).
+
+    Arguments
+        view      : "inflation rate" or "price level"
+        countries : the names of the chosen countries
+    Returns
+        a table with one row per country and year, sorted by country and year (with a
+        price_level column for the price-level view)
+    """
+    # Step 1: the chosen countries' rows. `.isin(countries)` is True for the rows
+    # whose country is in the list; `.copy()` makes a separate table, so that adding
+    # a column does not touch all_inflation
+    data = all_inflation[all_inflation.country.isin(countries)]
+    data = data.sort_values(["country", "year"]).copy()
+    # Step 2: the price level, country by country.
+    # `groupby("country").inflation.transform(price_index)` runs price_index
+    # separately on each country's rates and puts the results back in the rows
+    if view != "inflation rate":
+        data["price_level"] = data.groupby("country").inflation.transform(price_index)
+    return data
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 1, the inflation-rate view
+PRICE_TICKS = [100, 200, 400, 800, 1600]         # the ticks of the price-level axis
 CAPS = [15, 30, 60, 120, 250, 500]               # possible tops of the inflation axis
 
 
 def axis_top(value, caps):
-    """The smallest number in caps that is at least value (the largest one if none is)."""
+    """The smallest number in caps that is at least value.
+
+    The top of a vertical axis that rises in steps; the largest cap when none is big
+    enough.
+
+    Arguments
+        value : the largest number the axis must show
+        caps  : the possible tops, from small to large
+    Returns
+        the top of the axis
+    """
+    # `if` runs its indented line only when the condition is true, and `return`
+    # inside the loop stops the function at the first cap that fits
     for cap in caps:
         if value <= cap:
             return cap
     return caps[-1]
 
 
-def price_index(rates):
-    """Fig. 8.1: the price level implied by inflation rates (100 in the year before the first rate)."""
-    return 100 * (1 + rates / 100).cumprod()
-```
-
-> **Python note.** `px.line(..., color="country")` draws one line per country, and
-> `color_discrete_map=INFLATION_COLORS` fixes each country's color. `data.loc[data.inflation.idxmax()]` is the row
-> with the highest inflation.
-
-```{python}
 def rate_view(data):
-    """Fig. 8.1, inflation rates: one line per country; the top of the axis rises in steps."""
+    """The inflation rates of the chosen countries, one line per country.
+
+    Draws Fig. 1 (inspired by Fig. 8.1 in Jones), the inflation-rate view; the top of
+    the axis rises in steps.
+
+    Arguments
+        data : the chosen countries' rows (inflation_data)
+    Returns
+        fig   : a Plotly figure
+        title : its title, about the highest peak among the countries
+    """
+    # Step 1: one line per country. `px.line(..., color="country")` draws one line
+    # per country, and `color_discrete_map` fixes each country's color
     top = axis_top(data.inflation.max(), CAPS)
-    fig = px.line(data, x="year", y="inflation", color="country", hover_name="country",
-                  color_discrete_map=INFLATION_COLORS,
-                  labels={"year": "Year", "inflation": "Inflation rate (percent)", "country": "Country"})
+    fig = px.line(
+        data,
+        x="year",
+        y="inflation",
+        color="country",
+        hover_name="country",
+        color_discrete_map=INFLATION_COLORS,
+        labels={
+            "year": "Year",
+            "inflation": "Inflation rate (percent)",
+            "country": "Country",
+        },
+    )
     fig.update_traces(line=dict(width=2))
+    # one country: an area chart, as in the textbook
     if data.country.nunique() == 1:
-        fig.update_traces(fill="tozeroy")               # one country: an area chart, as in the textbook
+        fig.update_traces(fill="tozeroy")
+    # Step 2: a dashed zero line, and the axis from a little below zero to its top
     fig.add_hline(y=0, line_dash="dash", line_color=GRAY)
     fig.update_yaxes(range=[-2 * top / 15, top])
+    # Step 3: the title. `data.loc[data.inflation.idxmax()]` is the row with the
+    # highest inflation
     peak = data.loc[data.inflation.idxmax()]
-    title = f"{peak.country}: inflation peaked at {peak.inflation:,.1f}% in {peak.year:.0f}"
+    title = (
+        f"{peak.country}: inflation peaked at {peak.inflation:,.1f}% "
+        f"in {peak.year:.0f}"
+    )
     if peak.inflation > top:
-        title = f"{peak.country}: inflation peaked at {peak.inflation:,.0f}% in {peak.year:.0f} (axis cut at {top}%)"
+        title = (
+            f"{peak.country}: inflation peaked at {peak.inflation:,.0f}% "
+            f"in {peak.year:.0f} (axis cut at {top}%)"
+        )
     elif data.country.nunique() == 1:
         title = title + f"; {data.year.iloc[-1]}: {data.inflation.iloc[-1]:.1f}%"
     return fig, title
 ```
 
 ```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 1, the price-level view
 def level_view(data):
-    """Fig. 8.1, price levels on a ratio scale (100 in the year before each country's first rate)."""
-    fig = px.line(data, x="year", y="price_level", color="country", log_y=True, hover_name="country",
-                  color_discrete_map=INFLATION_COLORS,
-                  labels={"year": "Year", "price_level": "Price level (start = 100, ratio scale)", "country": "Country"})
+    """The price levels of the chosen countries, on a ratio scale.
+
+    Draws Fig. 1 (inspired by Fig. 8.1 in Jones), the price-level view: 100 in the year
+    before each country's first rate.
+
+    Arguments
+        data : the chosen countries' rows, with their price levels (inflation_data)
+    Returns
+        fig   : a Plotly figure
+        title : its title, about the largest rise in prices
+    """
+    # Step 1: one line per country; with `log_y=True` the vertical axis is a ratio
+    # scale
+    fig = px.line(
+        data,
+        x="year",
+        y="price_level",
+        color="country",
+        log_y=True,
+        hover_name="country",
+        color_discrete_map=INFLATION_COLORS,
+        labels={
+            "year": "Year",
+            "price_level": "Price level (start = 100, ratio scale)",
+            "country": "Country",
+        },
+    )
     fig.update_traces(line=dict(width=3))
+    # Step 2: the vertical axis. `tickvals` chooses the numbers printed on it, and the
+    # `range` of a ratio axis is given in powers of 10 (`np.log10(80)`)
     top = data.price_level.max()
     if top < 1500:
         fig.update_yaxes(tickvals=PRICE_TICKS, range=[np.log10(80), np.log10(1500)])
     else:
-        fig.update_yaxes(dtick=1, exponentformat="power", range=[np.log10(80), np.log10(2 * top)])   # ticks 10², 10³, ...
+        # one tick per power of ten, printed as 10^2, 10^3, ...
+        fig.update_yaxes(
+            dtick=1,
+            exponentformat="power",
+            range=[np.log10(80), np.log10(2 * top)],
+        )
+    # Step 3: the title: how many times prices rose in the country with the highest
+    # level, from the year before its first rate
     peak = data.loc[data.price_level.idxmax()]
     start = data[data.country == peak.country].year.min() - 1
-    factor = f"{peak.price_level / 100:,.3g}" if peak.price_level < 1e8 else f"about 10^{np.log10(peak.price_level / 100):.0f}"
-    return fig, f"{peak.country}: prices rose {factor}-fold from {start} to {peak.year:.0f}"
+    # `a if c else b` is a when c is true, b otherwise: huge factors as powers of 10
+    factor = (
+        f"{peak.price_level / 100:,.3g}"
+        if peak.price_level < 1e8
+        else f"about 10^{np.log10(peak.price_level / 100):.0f}"
+    )
+    return fig, (
+        f"{peak.country}: prices rose {factor}-fold from {start} to {peak.year:.0f}"
+    )
 ```
 
-> **Python note.** `groupby("country").inflation.transform(price_index)` runs `price_index` separately on each
-> country's rates and puts the results back in the original rows. `.copy()` makes a separate table, so that adding a
-> column does not touch `all_inflation`.
-
 ```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 1, the inflation rate or the price level
 def inflation_chart(view="inflation rate", countries=("United States",)):
-    """Fig. 8.1: CPI inflation, or the price level it adds up to, for the chosen countries."""
+    """CPI inflation, or the price level it adds up to, for the chosen countries.
+
+    Draws Fig. 1 (inspired by Fig. 8.1 in Jones).
+
+    Arguments
+        view      : "inflation rate" or "price level"
+        countries : the names of the countries to show
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the data (inflation_data); nothing chosen: show the textbook's country
     if len(countries) == 0:
-        countries = ("United States",)                 # nothing chosen: show the textbook's country
-    data = all_inflation[all_inflation.country.isin(countries)].sort_values(["country", "year"]).copy()
+        countries = ("United States",)
+    data = inflation_data(view, countries)
+    # Step 2: one of the two views; `if ... else` runs one block or the other
     if view == "inflation rate":
         fig, title = rate_view(data)
     else:
-        data["price_level"] = data.groupby("country").inflation.transform(price_index)
         fig, title = level_view(data)
     fig.update_layout(title=title, legend_title_text="")
     return fig
 ```
 
-> **Python note.** `interact` calls the function and redraws its figure every time you change a widget.
-> `ToggleButtons` shows one button per option, and the function receives the text of the chosen button.
-> `SelectMultiple` is a list from which you can pick several countries: hold Ctrl (Cmd on a Mac) and click.
-> The function receives the chosen names as a *tuple*, a list that cannot be changed. The `;` at the end only
-> hides an extra line of text.
-
 ```{python}
 #| kind: widget
-interact(inflation_chart, view=ToggleButtons(options=["inflation rate", "price level"], description="show"),
-         countries=SelectMultiple(options=CHOICES, value=["United States"], rows=8, description="countries"));
+# Fig. 1 with buttons and a list. `interact` calls inflation_chart and redraws its
+# figure every time you change a widget. `ToggleButtons` shows one button per
+# option, and the function receives the text of the chosen button. `SelectMultiple`
+# is a list from which you can pick several countries: hold Ctrl (Cmd on a Mac) and
+# click; the function receives the names as a tuple, a list that cannot be changed.
+# The `;` at the end only hides an extra line of text.
+interact(
+    inflation_chart,
+    view=ToggleButtons(options=["inflation rate", "price level"], description="show"),
+    countries=SelectMultiple(options=CHOICES, value=["United States"], rows=8,
+                             description="countries"),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: Fig. 1 with buttons for the two views and the G20 economies in the legend
-rate_fig, level_fig = inflation_chart("inflation rate", G20 + ["United States"]), inflation_chart("price level", G20 + ["United States"])
-book_rate, book_level = inflation_chart("inflation rate"), inflation_chart("price level")
+# @title Website version: Fig. 1 with buttons for the two views and the G20 economies
+# Step 1: both views with the G20 economies, and both views of the textbook
+rate_fig, level_fig = (
+    inflation_chart("inflation rate", G20 + ["United States"]),
+    inflation_chart("price level", G20 + ["United States"]),
+)
+book_rate, book_level = (
+    inflation_chart("inflation rate"),
+    inflation_chart("price level"),
+)
+# Step 2: every line in one figure; the price-level lines start hidden
 fig = go.Figure(layout=book_rate.layout)
-US_FIRST = ["United States"] + G20                  # the United States first in the legend
+US_FIRST = ["United States"] + G20          # the United States first in the legend
 rate_traces = [t for c in US_FIRST for t in rate_fig.data if t.name == c]
 level_traces = [t for c in US_FIRST for t in level_fig.data if t.name == c]
 for t in rate_traces:
@@ -1269,21 +1422,32 @@ for t in rate_traces:
 for t in level_traces:
     fig.add_trace(t.update(visible=False))
 legend_only(fig, ["United States"])
+# Step 3: the lines a button shows: the United States drawn, the others in the legend
 n = len(rate_fig.data)
 shown = []
 for t in rate_traces:
     shown.append(True if t.name == "United States" else "legendonly")
+# Step 4: the title, axis and zero line of each view
 LOG_TICKS = PRICE_TICKS + [10 ** k for k in range(4, 17)]
-rate_layout = {"title.text": book_rate.layout.title.text, "yaxis.type": "linear", "yaxis.autorange": True,
-              "yaxis.tickvals": None, "yaxis.dtick": None, "yaxis.title.text": book_rate.layout.yaxis.title.text,
-              "shapes": [s.to_plotly_json() for s in book_rate.layout.shapes]}
-level_layout = {"title.text": book_level.layout.title.text, "yaxis.type": "log", "yaxis.autorange": True,
-               "yaxis.tickvals": LOG_TICKS, "yaxis.title.text": book_level.layout.yaxis.title.text, "shapes": []}
-fig.update_yaxes(autorange=True)                    # the axis fits the countries you switch on
-fig.update_layout(updatemenus=[dict(type="buttons", direction="right", x=0.01, y=0.98, xanchor="left",
-                                    yanchor="top", buttons=[
-    dict(label="inflation rate", method="update", args=[{"visible": shown + [False] * n}, rate_layout]),
-    dict(label="price level", method="update", args=[{"visible": [False] * n + shown}, level_layout])])])
+rate_layout = {"title.text": book_rate.layout.title.text, "yaxis.type": "linear",
+               "yaxis.autorange": True, "yaxis.tickvals": None, "yaxis.dtick": None,
+               "yaxis.title.text": book_rate.layout.yaxis.title.text,
+               "shapes": [s.to_plotly_json() for s in book_rate.layout.shapes]}
+level_layout = {"title.text": book_level.layout.title.text, "yaxis.type": "log",
+                "yaxis.autorange": True, "yaxis.tickvals": LOG_TICKS,
+                "yaxis.title.text": book_level.layout.yaxis.title.text, "shapes": []}
+fig.update_yaxes(autorange=True)            # the axis fits the countries you switch on
+# Step 5: the two buttons, in the top-left corner
+fig.update_layout(updatemenus=[dict(
+    type="buttons", direction="right", x=0.01, y=0.98, xanchor="left", yanchor="top",
+    buttons=[
+        # each button shows its view's lines and sets its title and axis
+        dict(label="inflation rate", method="update",
+             args=[{"visible": shown + [False] * n}, rate_layout]),
+        dict(label="price level", method="update",
+             args=[{"visible": [False] * n + shown}, level_layout]),
+    ],
+)])
 fig
 ```
 
@@ -1315,15 +1479,18 @@ any of the 200).*
 
 #### Key numbers: the Great Inflation and after
 
-> **Python note.** `set_index("year")` uses the years as row labels, so `rate.loc[1960:1964]` keeps the
-> rows from 1960 to 1964 and `rate[1980]` picks one number.
-
 ```{python}
+# The textbook's numbers. With the years as row labels, `rate.loc[1960:1964]` keeps
+# the rows from 1960 to 1964 and `rate[1980]` picks one number
 rate = us.set_index("year").inflation_cpi
 print(f"Average 1960-1964:  {rate.loc[1960:1964].mean():.2f}%")
 print(f"Peak:               {rate.max():.2f}% in {rate.idxmax()}")
 print(f"Average 2000-2019:  {rate.loc[2000:2019].mean():.2f}%")
-print(f"2009: {rate[2009]:.2f}%   2022: {rate[2022]:.2f}%   {rate.index[-1]}: {rate.iloc[-1]:.2f}%")
+# the deflation of 2009, the Covid-19 peak of 2022, and the latest year
+print(
+    f"2009: {rate[2009]:.2f}%   2022: {rate[2022]:.2f}%   "
+    f"{rate.index[-1]}: {rate.iloc[-1]:.2f}%"
+)
 ```
 
 The textbook's numbers hold: about 1.3 percent a year in the early 1960s ("on the order of 2 percent"), a peak
@@ -1338,11 +1505,20 @@ How do we compare 27 cents in 1950 with \$3.50 in 2022? A longer CPI series, fro
 1774. Table 8.1 rescales it so that 2022 = 100; we add a column with the latest year, 2025, as the base.
 
 ```{python}
+# Table 8.1: the CPI with 2022 = 100 and with 2025 = 100, in selected years
 cpi = pd.read_csv(DATA_URL + "us_cpi.csv").set_index("year").cpi
 years = [1900, 1930, 1950, 1960, 1970, 1980, 1990, 2000, 2010, 2022, 2025]
-table = pd.DataFrame({"CPI, 2022 = 100": 100 * cpi[years] / cpi[2022],
-                      "CPI, 2025 = 100": 100 * cpi[years] / cpi[2025]})
-table["Textbook (2022 = 100)"] = [2.78, 5.71, 8.23, 10.12, 13.27, 28.15, 44.66, 58.84, 74.51, 100.00, None]
+# rescale: divide by the base year's CPI and multiply by 100
+table = pd.DataFrame(
+    {
+        "CPI, 2022 = 100": 100 * cpi[years] / cpi[2022],
+        "CPI, 2025 = 100": 100 * cpi[years] / cpi[2025],
+    }
+)
+# the textbook's column, to compare (it has no 2025)
+table["Textbook (2022 = 100)"] = [
+    2.78, 5.71, 8.23, 10.12, 13.27, 28.15, 44.66, 58.84, 74.51, 100.00, None,
+]
 table.round(2)
 ```
 
@@ -1351,13 +1527,32 @@ ratio of the two price levels: $0.27 \times 100/8.23$ for 1950 to 2022.
 
 ```{python}
 def in_dollars_of(price, year, to_year=2025):
-    """Table 8.1 case study: the value of `price` dollars of `year`, in dollars of `to_year`."""
+    """The value of `price` dollars of `year`, in dollars of `to_year` (Table 8.1).
+
+    Equation (2): multiply by the ratio of the two price levels, P_to_year / P_year
+
+    Arguments
+        price   : a price in dollars of `year`
+        year    : the year of the price
+        to_year : the year whose dollars we want
+    Returns
+        the same price in dollars of to_year
+    """
+    # more dollars when prices rose from year to to_year
     return price * cpi[to_year] / cpi[year]
 
 
-print(f"27 cents of 1950 = {in_dollars_of(0.27, 1950, 2022):.2f} dollars of 2022 = {in_dollars_of(0.27, 1950):.2f} dollars of 2025")
+# Step 1: gasoline at 27 cents in 1950, in dollars of 2022 and of 2025
+print(
+    f"27 cents of 1950 = {in_dollars_of(0.27, 1950, 2022):.2f} dollars of 2022 = "
+    f"{in_dollars_of(0.27, 1950):.2f} dollars of 2025"
+)
 print(f"Prices rose {100 * (cpi[2025] / cpi[2022] - 1):.1f}% from 2022 to 2025")
-print(f"A 10,000-dollar pension of 1970 bought in 1983 what {in_dollars_of(10000, 1983, 1970):,.0f} dollars bought in 1970")
+# Step 2: Mr. Gambino's pension: 10,000 dollars of 1983 in dollars of 1970
+print(
+    f"A 10,000-dollar pension of 1970 bought in 1983 what "
+    f"{in_dollars_of(10000, 1983, 1970):,.0f} dollars bought in 1970"
+)
 ```
 
 Gasoline at 27 cents in 1950 cost \$3.28 in 2022 dollars, just a little less than its 2022 price. The last line
@@ -1387,6 +1582,8 @@ For each year, the textbook counts the share of countries with inflation above 2
 share, and the number of countries with data in each year.
 
 ```{python}
+# Load the data of Fig. 2: the share of countries with inflation above 25 percent,
+# and the number of countries with data, in each year
 high = pd.read_csv(DATA_URL + "fig8-2.csv")
 high.head()
 ```
@@ -1394,83 +1591,170 @@ high.head()
 To try other thresholds we need the inflation rate of every country in every year: the panel of Fig. 1. To
 redraw Fig. 8.2 we keep only its WDI rows, the data behind the textbook's figure.
 
-> **Python note.** `panel[panel.source == "WDI"]` keeps the rows where the condition is true.
-> `wdi.inflation > threshold` is a column of True/False values; its `.mean()` is the share of True values,
-> because True counts as 1 and False as 0. `groupby(wdi.year)` computes this share separately for each year.
-
 ```{python}
+# Step 1: the WDI rows only, the data behind Fig. 8.2
 wdi = panel[panel.source == "WDI"]
+# Step 2: the share above 25 percent in each year. `wdi.inflation > 25` is a column
+# of True/False values; its `.mean()` is the share of True values (True counts as 1,
+# False as 0), and `groupby(wdi.year)` computes this share separately for each year
 share_25 = 100 * (wdi.inflation > 25).groupby(wdi.year).mean()
-print(f"Largest difference from fig8-2.csv: {(share_25.values - high.share_above_25_pct.values).max():.3f} points")
+# Step 3: compare with the file of Fig. 8.2
+print(
+    "Largest difference from fig8-2.csv: "
+    f"{(share_25.values - high.share_above_25_pct.values).max():.3f} points"
+)
 ```
 
 The threshold of 25 percent reproduces the file of Fig. 8.2. Was high inflation a worldwide event, or did it hit
 some regions more than others? With the region of every economy from `countries.csv` we can compute the same share
 for a **group** of economies: the World Bank's seven regions, or the OECD members.
 
-> **Python note.** `.isin(codes)` is True for the rows whose code is in `codes`. `.size()` counts the rows of each
-> group: here, the number of economies with data in each year.
+`group_share` computes the share for one group. `group_shares` stacks the shares of several groups and finds
+the year in which the first one peaked.
 
 ```{python}
+# The groups to choose from: the world, the OECD members and the seven regions
 GROUPS = ["World", "OECD members"] + sorted(countries.region.unique())
-GROUP_COLORS = group_colors(GROUPS, [GROUPS], {"World": BLUE})   # the World keeps the textbook's blue
 
 
 def group_share(threshold, group):
-    """Fig. 8.2: the percentage of a group's reporting economies with inflation above `threshold`, by year."""
+    """The share of a group's economies with inflation above a threshold (Fig. 2).
+
+    The share in each year is the percentage of the group's economies with data that
+    have inflation above `threshold`, as in Fig. 8.2.
+
+    Arguments
+        threshold : the inflation threshold (percent)
+        group     : "World", "OECD members" or a World Bank region
+    Returns
+        a table with one row per year: year, share (percent), economies (the number of
+        economies with data) and group
+    """
+    # Step 1: the codes of the group's members
     if group == "World":
         members = countries.iso3
     elif group == "OECD members":
         members = countries.iso3[countries.oecd]
     else:
         members = countries.iso3[countries.region == group]
+    # Step 2: the members' rows: the codes that are in `members`
     sub = wdi[wdi.iso3.isin(members)]
-    share = (100 * (sub.inflation > threshold).groupby(sub.year).mean()).reset_index(name="share")
+    # Step 3: the share above the threshold in each year;
+    # `.reset_index(name="share")` turns the years back into a column
+    above = (sub.inflation > threshold).groupby(sub.year).mean()
+    share = (100 * above).reset_index(name="share")
+    # `.size()` counts the rows of each group: the economies with data in each year
     share["economies"] = sub.groupby("year").size().values
     share["group"] = group
     return share
-```
 
-```{python}
-def high_inflation_share(threshold=25, groups=("World",)):
-    """Fig. 8.2: the percentage of economies with inflation above `threshold` percent, for each group."""
-    if len(groups) == 0:
-        groups = ("World",)                             # nothing chosen: the textbook's view
+
+def group_shares(threshold, groups):
+    """The shares of Fig. 2 for several groups, and the first group's peak.
+
+    Arguments
+        threshold : the inflation threshold (percent)
+        groups    : the names of the chosen groups
+    Returns
+        shares : one table with the rows of every group (group_share)
+        peak   : the row of the first group's highest share
+    """
+    # Step 1: one table per group, stacked with `pd.concat`
     tables = []
     for group in groups:
         tables.append(group_share(threshold, group))
     shares = pd.concat(tables)
+    # Step 2: the year in which the first group's share peaked
     first = shares[shares.group == groups[0]]
     peak = first.loc[first.share.idxmax()]
-    fig = px.line(shares, x="year", y="share", color="group", hover_name="group", hover_data=["economies"],
-                  color_discrete_map=GROUP_COLORS, labels={"year": "Year", "share": "Fraction of countries (percent)"},
-                  title=f"Inflation above {threshold}%: {groups[0]} peaked at {peak.share:.1f}% in {peak.year:.0f}")
+    return shares, peak
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 2, the share of economies with high inflation
+# a color for each group; the World keeps the textbook's blue
+GROUP_COLORS = group_colors(GROUPS, [GROUPS], {"World": BLUE})
+
+
+def high_inflation_share(threshold=25, groups=("World",)):
+    """The percentage of economies with inflation above `threshold` percent, by group.
+
+    Draws Fig. 2 (inspired by Fig. 8.2 in Jones): one line per group.
+
+    Arguments
+        threshold : the inflation threshold (percent)
+        groups    : the names of the groups to show
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the numbers (group_shares); nothing chosen: the textbook's view
+    if len(groups) == 0:
+        groups = ("World",)
+    shares, peak = group_shares(threshold, groups)
+    # Step 2: one line per group; hover shows how many economies are behind a share
+    fig = px.line(
+        shares,
+        x="year",
+        y="share",
+        color="group",
+        hover_name="group",
+        hover_data=["economies"],
+        color_discrete_map=GROUP_COLORS,
+        labels={"year": "Year", "share": "Fraction of countries (percent)"},
+        title=(
+            f"Inflation above {threshold}%: {groups[0]} peaked at "
+            f"{peak.share:.1f}% in {peak.year:.0f}"
+        ),
+    )
     fig.update_traces(line=dict(width=2))
+    # one group: an area chart, as in the textbook
     if len(groups) == 1:
-        fig.update_traces(fill="tozeroy")               # one group: an area chart, as in the textbook
-    fig.update_yaxes(range=[0, 104], tickvals=[20, 40, 60, 80, 100])   # no label in the bottom-left corner
+        fig.update_traces(fill="tozeroy")
+    # Step 3: the axis up to just above 100; no label in the bottom-left corner
+    fig.update_yaxes(range=[0, 104], tickvals=[20, 40, 60, 80, 100])
     fig.update_layout(legend_title_text="")
     return fig
 ```
 
-> **Python note.** A `Dropdown` is a menu: the function receives the option you pick.
-
 ```{python}
 #| kind: widget
-interact(high_inflation_share,
-         threshold=Dropdown(options=[10, 25, 50, 100], value=25, description="inflation above (percent)", style=WIDE),
-         groups=SelectMultiple(options=GROUPS, value=["World"], rows=5, description="groups"));
+# Fig. 2 with a menu and a list. A `Dropdown` is a menu: the function receives the
+# option you pick
+interact(
+    high_inflation_share,
+    threshold=Dropdown(options=[10, 25, 50, 100], value=25,
+                       description="inflation above (percent)", style=WIDE),
+    groups=SelectMultiple(options=GROUPS, value=["World"], rows=5,
+                          description="groups"),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: Fig. 2 with a precomputed slider for the threshold and the groups in the legend
+# @title Website version: Fig. 2 with a precomputed slider for the threshold
 def all_groups(threshold):
-    """Website: Fig. 2 with every group as a line."""
+    """Fig. 2 with every group as a line, for the website.
+
+    Draws Fig. 2 for one threshold, with all groups.
+
+    Arguments
+        threshold : the inflation threshold (percent)
+    Returns
+        a Plotly figure
+    """
     return high_inflation_share(threshold, GROUPS)
 
 
-fig = slider_figure(all_groups, "threshold", [10, 25, 50, 100], start=25, label="inflation above (percent)")
+# one picture of Fig. 2 per threshold; only the World is drawn at first, the other
+# groups wait in the legend
+fig = slider_figure(
+    all_groups,
+    "threshold",
+    [10, 25, 50, 100],                  # the thresholds
+    start=25,
+    label="inflation above (percent)",
+)
 legend_only(fig, ["World"])
 ```
 
@@ -1504,10 +1788,18 @@ Chart: inspired by Fig. 8.2 in Jones (2024), [*Macroeconomics*, 6th ed.](https:/
 #### Key numbers: high inflation over time
 
 ```{python}
+# The textbook's description of Fig. 8.2, checked: the 1960s, the peak, the years
+# since 2002, and the number of countries with data
 print(f"1960s: at most {share_25.loc[1960:1969].max():.1f}% of countries")
 print(f"Peak: {share_25.max():.1f}% in {share_25.idxmax()}")
-print(f"2002-2025: at most {share_25.loc[2002:].max():.1f}% (in {share_25.loc[2002:].idxmax()});  2025: {share_25[2025]:.1f}%")
-print(f"Countries with data: {high.n_countries.iloc[0]} in 1960, {high.n_countries.max()} at most, {high.n_countries.iloc[-1]} in 2025")
+print(
+    f"2002-2025: at most {share_25.loc[2002:].max():.1f}% "
+    f"(in {share_25.loc[2002:].idxmax()});  2025: {share_25[2025]:.1f}%"
+)
+print(
+    f"Countries with data: {high.n_countries.iloc[0]} in 1960, "
+    f"{high.n_countries.max()} at most, {high.n_countries.iloc[-1]} in 2025"
+)
 ```
 
 The textbook's description holds: below 6 percent in the 1960s, 31.1 percent in 1994 ("almost one out of every
@@ -1548,6 +1840,7 @@ to the first year of the next:
 $$g = \left(\frac{X_{d+10}}{X_d}\right)^{1/10} - 1$$
 
 ```{python}
+# Load the data of Fig. 3: average money growth and inflation in each U.S. decade
 decades = pd.read_csv(DATA_URL + "fig8-3.csv")
 decades.tail()
 ```
@@ -1558,6 +1851,9 @@ money and the CPI for 18 rich economies since 1870. For the United States the fi
 Federal Reserve after 1958, exactly the series behind `fig8-3.csv`.
 
 ```{python}
+# Load yearly money and prices for 18 economies. The table shows each country's
+# first and last year and its number of years: `.agg([...])` computes several
+# numbers per group, and `.T` turns the table on its side (rows become columns)
 money_panel = pd.read_csv(DATA_URL + "money_prices_panel.csv")
 money_panel.groupby("country").year.agg(["min", "max", "count"]).T
 ```
@@ -1566,34 +1862,77 @@ money_panel.groupby("country").year.agg(["min", "max", "count"]).T
 countries. Two things to notice: the other countries stop in 2020, and some have gaps. Germany has no money data
 for 1923–1924 (the hyperinflation) and 1939–1947 (the war), and Belgium's money starts in 1979.
 
-> **Python note.** `range(1870, last, years)` counts 1870, 1870 + years, ... up to the year before `last`: the
-> first year of each period. `min(a, b)` is the smaller number, so the last period stops at the last year of data.
-> `x ** (1 / n)` is the n-th root. `and` is True only when both conditions are.
+`growth` computes an average annual growth rate, and `periods` applies it to the money and the prices of one
+country, period by period.
 
 ```{python}
 def growth(x, start, end):
-    """Average annual growth of x from start to end, in percent."""
+    """Average annual growth of x from start to end, in percent (Fig. 3).
+
+    The formula above with any number of years:  g = (x_end / x_start)^(1 / n) - 1,
+    with n = end - start
+
+    Arguments
+        x     : a series with the years as row labels (money or the CPI)
+        start : the first year
+        end   : the last year
+    Returns
+        the average annual growth rate (percent)
+    """
+    # `x ** (1 / n)` is the n-th root
     return 100 * ((x[end] / x[start]) ** (1 / (end - start)) - 1)
 
 
 def periods(years=10, country="United States"):
-    """Fig. 8.3: average money growth and inflation in periods of `years` years since 1870, for one country."""
+    """Average money growth and inflation in periods of `years` years, for one country.
+
+    The points of Fig. 3, one per period since 1870. The last period stops at the last
+    year of data, and its label gets a *.
+
+    Arguments
+        years   : the length of the periods
+        country : the country
+    Returns
+        a table: country, period (its label), start, end, money_growth, inflation
+    """
+    # Step 1: the country's rows, with the years as row labels
     data = money_panel[money_panel.country == country].set_index("year")
     last = data.index.max()
     rows = []
+    # Step 2: one pass per period. `range(1870, last, years)` counts 1870,
+    # 1870 + years, ... up to the year before `last`: the first year of each period
     for start in range(1870, last, years):
+        # `min(a, b)` is the smaller number: the last period stops at the last year
         end = min(start + years, last)
-        if start in data.index and end in data.index:      # skip periods that start or end in a gap
-            label = f"{start}s" if (years == 10 and end - start == 10) else f"{start}–{end}"
+        # skip periods that start or end in a gap (`and`: both must be true)
+        if start in data.index and end in data.index:
+            # a whole decade is labeled "1970s", any other period "1870–1875"
+            label = (
+                f"{start}s"
+                if (years == 10 and end - start == 10)
+                else f"{start}–{end}"
+            )
             if end - start < years:
                 label = label + "*"                       # * marks an unfinished period
-            rows.append([country, label, start, end, growth(data.money, start, end), growth(data.cpi, start, end)])
-    return pd.DataFrame(rows, columns=["country", "period", "start", "end", "money_growth", "inflation"])
+            # Step 3: the period's average money growth and inflation
+            rows.append([country, label, start, end,
+                         growth(data.money, start, end), growth(data.cpi, start, end)])
+    return pd.DataFrame(
+        rows,
+        columns=["country", "period", "start", "end", "money_growth", "inflation"],
+    )
+```
 
+With 10-year periods, the U.S. points should reproduce the textbook's file of Fig. 8.3.
 
+```{python}
+# Our decades against fig8-3.csv, for money growth and for inflation
 check = periods(10)
-print(f"Largest difference from fig8-3.csv: {(check.money_growth - decades.money_growth).abs().max():.3f} (money), "
-      f"{(check.inflation - decades.inflation).abs().max():.3f} (inflation)")
+print(
+    "Largest difference from fig8-3.csv: "
+    f"{(check.money_growth - decades.money_growth).abs().max():.3f} (money), "
+    f"{(check.inflation - decades.inflation).abs().max():.3f} (inflation)"
+)
 ```
 
 The quantity theory says $\pi = g_M + g_V - g_Y$. If velocity were constant and real GDP did not grow, every
@@ -1604,99 +1943,260 @@ Germany's 1920s are a problem for any chart: money grew by more than 1,000 perce
 decade*. The axes widen once (to 70 percent) when a country needs it, and points beyond that are listed in a note
 instead of squeezing all the others into a corner.
 
-> **Python note.** `.between(a, b)` is True for values from a to b. `table.drop(shown.index)` keeps the rows that
-> are *not* in `shown`. `.corr()` is the *correlation* of two columns: 1 for points on a rising straight line, 0 for
-> no relation.
+`period_table` collects the periods of the chosen countries and splits them into the points on the chart and
+the points beyond 70 percent. `money_points` adds the two numbers of the title: the average gap $g_M - \pi$
+and the correlation.
 
 ```{python}
+# The textbook's decades get a label on the chart; JST_COUNTRIES are the 18 economies
 KEY_DECADES = ["1870s", "1930s", "1940s", "1970s", "1980s", "2010s", "2020–2025*"]
 JST_COUNTRIES = sorted(money_panel.country.unique())
-MONEY_COLORS = group_colors(JST_COUNTRIES, [JST_COUNTRIES], BOOK_COLORS)   # the website lists all 18 together
 
 
 def period_table(years, countries):
-    """Fig. 8.3: the periods of all chosen countries, split into points on the chart and points beyond 70%."""
+    """The periods of the chosen countries, split into points on the chart and beyond.
+
+    The points of Fig. 3. The chart shows money growth and inflation from -10 to 70
+    percent; the points beyond are listed in a note.
+
+    Arguments
+        years     : the length of the periods
+        countries : the names of the chosen countries
+    Returns
+        inside : the periods on the chart, with a label column
+        off    : the periods beyond the chart
+    """
+    # Step 1: the periods of every chosen country, stacked in one table
     tables = []
     for country in countries:
         tables.append(periods(years, country))
     table = pd.concat(tables, ignore_index=True)
+    # Step 2: the points on the chart. `.between(a, b)` is True for values from a to b
     inside = table.money_growth.between(-10, 70) & table.inflation.between(-10, 70)
-    us_key = (table.country == "United States") & (table.period.isin(KEY_DECADES) | (years == 20))
-    table["label"] = table.period.where(us_key, "")   # labels for the textbook's decades; hover shows the rest
+    # Step 3: labels for the textbook's U.S. decades (all U.S. periods of 20 years);
+    # `.where(us_key, "")` keeps the period where us_key is True, and "" elsewhere
+    us_key = (table.country == "United States") & (
+        table.period.isin(KEY_DECADES) | (years == 20)
+    )
+    table["label"] = table.period.where(us_key, "")   # hover shows the other periods
+    # `~inside` means "not inside": the points off the chart
     return table[inside], table[~inside]
+
+
+def money_points(years, countries):
+    """The points of Fig. 3, the average gap g_M - pi, and the correlation.
+
+    The quantity theory, equation (5):  pi = g_M + g_V - g_Y, so the points lie below
+    the 45-degree line by g_Y - g_V on average.
+
+    Arguments
+        years     : the length of the periods
+        countries : the names of the chosen countries (the United States if none)
+    Returns
+        shown, off : the periods on the chart and beyond it (period_table)
+        gap        : the average gap g_M - pi on the chart (points)
+        r          : the correlation of money growth and inflation on the chart
+    """
+    # Step 1: the periods; nothing chosen: the United States
+    shown, off = period_table(
+        years, countries if len(countries) > 0 else ("United States",)
+    )
+    # Step 2: the average gap between money growth and inflation, about g_Y - g_V
+    gap = (shown.money_growth - shown.inflation).mean()
+    # Step 3: `.corr()` is the correlation of two columns: 1 for points on a rising
+    # straight line, 0 for no relation
+    r = shown.money_growth.corr(shown.inflation)
+    return shown, off, gap, r
 ```
 
 ```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 3, the 45-degree line and the quantity-theory line
 def add_reference_lines(fig, xr, gap, off):
-    """Fig. 8.3: the 45-degree line, the quantity-theory line pi = g_M - gap, and a note on points off the chart."""
+    """Add the two reference lines of Fig. 3, and a note on the points off the chart.
+
+    The dotted 45-degree line pi = g_M, the dashed quantity-theory line
+    pi = g_M - gap, a zero line, and a note that lists the points beyond the axes.
+
+    Arguments
+        fig : the figure of Fig. 3
+        xr  : the range of the horizontal axis, [left, right]
+        gap : the average gap g_M - pi (money_points)
+        off : the periods beyond the axes (period_table)
+    """
+    # Step 1: the two lines, from one end of the horizontal axis to the other.
+    # `go.Scatter(..., mode="lines")` is one line, and `add_trace` adds it
     g_M = np.array(xr)
-    fig.add_trace(go.Scatter(x=g_M, y=g_M, mode="lines", name="π = g_M (45-degree line)", line=dict(color=GRAY, dash="dot")))
-    fig.add_trace(go.Scatter(x=g_M, y=qt_inflation(g_M, gap), mode="lines", name=f"π = g_M − {gap:.1f}",
-                             line=dict(color=GREEN, width=3, dash="dash")))
+    fig.add_trace(
+        go.Scatter(
+            x=g_M,
+            y=g_M,
+            mode="lines",
+            name="π = g_M (45-degree line)",
+            line=dict(color=GRAY, dash="dot"),
+        )
+    )
+    # the quantity theory, equation (6) with the gap in place of g_Y
+    fig.add_trace(
+        go.Scatter(
+            x=g_M,
+            y=qt_inflation(g_M, gap),
+            mode="lines",
+            name=f"π = g_M − {gap:.1f}",
+            line=dict(color=GREEN, width=3, dash="dash"),
+        )
+    )
     fig.add_hline(y=0, line_dash="dash", line_color=GRAY, line_width=1)
+    # Step 2: one line of text per point off the chart; `.itertuples()` walks
+    # through the rows one at a time
     notes = []
     for row in off.itertuples():
-        notes.append(f"{row.country} {row.period}: money {row.money_growth:,.0f}%, inflation {row.inflation:,.0f}%")
+        notes.append(
+            f"{row.country} {row.period}: money {row.money_growth:,.0f}%, "
+            f"inflation {row.inflation:,.0f}%"
+        )
+    # Step 3: the note in the top-left corner; "<br>" starts a new line
     if len(notes) > 0:
-        fig.add_annotation(x=0.01, y=0.98, xref="paper", yref="paper", xanchor="left", yanchor="top", align="left",
-                           showarrow=False, text="Off the chart:<br>" + "<br>".join(notes), font=dict(size=12))
+        fig.add_annotation(
+            x=0.01, y=0.98, xref="paper", yref="paper",
+            xanchor="left", yanchor="top", align="left", showarrow=False,
+            text="Off the chart:<br>" + "<br>".join(notes),
+            font=dict(size=12),
+        )
 ```
 
 ```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 3, money growth against inflation
+# a color for each of the 18 countries; the website lists all 18 together
+MONEY_COLORS = group_colors(JST_COUNTRIES, [JST_COUNTRIES], BOOK_COLORS)
+
+
 def money_and_prices(years=10, countries=("United States",)):
-    """Fig. 8.3: money growth against inflation, one point per period of `years` years and country."""
-    shown, off = period_table(years, countries if len(countries) > 0 else ("United States",))
-    gap = (shown.money_growth - shown.inflation).mean()
-    r = shown.money_growth.corr(shown.inflation)
-    fig = px.scatter(shown, x="money_growth", y="inflation", color="country", text="label", hover_name="period",
-                     hover_data=["country"], color_discrete_map=MONEY_COLORS,
-                     labels={"money_growth": "Money growth (percent per year)", "inflation": "Inflation rate (percent per year)"},
-                     title=f"{years}-year periods: correlation {r:.2f}, average gap g_M − π = {gap:.1f} points")
-    fig.update_traces(marker=dict(size=11), textposition="top center", textfont=dict(size=11))
-    wide = shown.money_growth.max() > 18 or shown.inflation.max() > 17 or shown.inflation.min() < -5
-    xr, yr = ([-8, 70], [-10, 70]) if wide else ([-3, 18], [-5, 17])   # widen once, when a country needs it
+    """Money growth against inflation, one point per period and country.
+
+    Draws Fig. 3 (inspired by Fig. 8.3 in Jones), with the 45-degree line and the
+    quantity-theory line.
+
+    Arguments
+        years     : the length of the periods
+        countries : the names of the countries to show
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the numbers of the figure (money_points)
+    shown, off, gap, r = money_points(years, countries)
+    # Step 2: one point per period, colored by country, with the textbook's labels
+    fig = px.scatter(
+        shown,
+        x="money_growth",
+        y="inflation",
+        color="country",
+        text="label",
+        hover_name="period",
+        hover_data=["country"],
+        color_discrete_map=MONEY_COLORS,
+        labels={
+            "money_growth": "Money growth (percent per year)",
+            "inflation": "Inflation rate (percent per year)",
+        },
+        title=(
+            f"{years}-year periods: correlation {r:.2f}, "
+            f"average gap g_M − π = {gap:.1f} points"
+        ),
+    )
+    fig.update_traces(
+        marker=dict(size=11),
+        textposition="top center",
+        textfont=dict(size=11),
+    )
+    # Step 3: the axes widen once, when a country needs it
+    wide = (
+        shown.money_growth.max() > 18
+        or shown.inflation.max() > 17
+        or shown.inflation.min() < -5
+    )
+    xr, yr = ([-8, 70], [-10, 70]) if wide else ([-3, 18], [-5, 17])
     if wide:
-        fig.update_traces(mode="markers")             # zoomed out, the decade labels would pile up: hover instead
+        # zoomed out, the decade labels would pile up: hover instead
+        fig.update_traces(mode="markers")
+    # Step 4: the reference lines and the axes; `orientation="h"` lays the legend
+    # out in a row, below the chart
     add_reference_lines(fig, xr, gap, off)
     fig.update_xaxes(range=xr)
     fig.update_yaxes(range=yr)
-    fig.update_layout(legend=dict(orientation="h", y=-0.15, yanchor="top"), legend_title_text="")
+    fig.update_layout(
+        legend=dict(orientation="h", y=-0.15, yanchor="top"),
+        legend_title_text="",
+    )
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(money_and_prices,
-         years=Dropdown(options=[5, 10, 20], value=10, description="years per period", style=WIDE),
-         countries=SelectMultiple(options=JST_COUNTRIES, value=["United States"], rows=6, description="countries"));
+# Fig. 3 with a menu for the length of the periods and a list of countries
+interact(
+    money_and_prices,
+    years=Dropdown(options=[5, 10, 20], value=10,
+                   description="years per period", style=WIDE),
+    countries=SelectMultiple(options=JST_COUNTRIES, value=["United States"], rows=6,
+                             description="countries"),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: Fig. 3 with a precomputed slider for the length of the periods and 17 more countries
+# @title Website version: Fig. 3 with a precomputed slider for the length of periods
 def money_website(years):
-    """Website: the textbook's U.S. figure, plus the other 17 countries' periods (hidden until clicked)."""
+    """The textbook's U.S. figure, plus the periods of the other 17 countries.
+
+    Draws Fig. 3 for the website: the other countries stay hidden until clicked.
+
+    Arguments
+        years : the length of the periods
+    Returns
+        a Plotly figure
+    """
+    # Step 1: Fig. 3 for the United States
     fig = money_and_prices(years)
+    # Step 2: the periods of the other 17 countries
     tables = []
     for country in JST_COUNTRIES:
         if country != "United States":
             tables.append(periods(years, country))
-    extra = px.scatter(pd.concat(tables), x="money_growth", y="inflation", color="country", hover_name="period",
-                       hover_data=["country"], color_discrete_map=MONEY_COLORS)
+    extra = px.scatter(
+        pd.concat(tables),
+        x="money_growth",
+        y="inflation",
+        color="country",
+        hover_name="period",
+        hover_data=["country"],
+        color_discrete_map=MONEY_COLORS,
+    )
+    # Step 3: their points, a little smaller, go into Fig. 3
     for t in extra.data:
         fig.add_trace(t.update(marker_size=9))
     return fig
 
 
+# Step 4: the names of the textbook view's traces, the ones drawn at the start
 book_names = []
 for t in money_and_prices(10).data:
     book_names.append(t.name)
-fig = slider_figure(money_website, "years", [5, 10, 20], start=10, label="years per period")
+# Step 5: one picture per length of the periods; the other countries wait in the legend
+fig = slider_figure(
+    money_website,
+    "years",
+    [5, 10, 20],                        # the lengths of the periods
+    start=10,
+    label="years per period",
+)
 legend_only(fig, book_names)
-fig.update_xaxes(autorange=True)                    # the axes fit the countries you switch on
+# the axes fit the countries you switch on
+fig.update_xaxes(autorange=True)
 fig.update_yaxes(autorange=True)
-fig.update_layout(height=600)                       # room for the legend below the plot ...
-fig.layout.sliders[0].pad.t = 140                   # ... and for the slider below the legend
+fig.update_layout(height=600)           # room for the legend below the plot ...
+fig.layout.sliders[0].pad.t = 140       # ... and for the slider below the legend
 fig
 ```
 
@@ -1735,15 +2235,18 @@ What counts as money? The narrowest measure is **currency**. The **monetary base
 hold at the central bank, **M1** adds checking accounts, and **M2** adds savings and money market accounts.
 A monthly file from the Federal Reserve has all four, in billions of dollars.
 
-> **Python note.** `parse_dates=["date"]` turns text such as `"2023-01-01"` into real dates.
-> `.loc[[...]]` picks rows by their labels, and `.T` *transposes* the table: rows become columns.
-> `{last:%B %Y}` prints a date as "August 2026".
-
 ```{python}
-supply = pd.read_csv(DATA_URL + "money_supply.csv", parse_dates=["date"]).set_index("date")
+# Step 1: load the money supply. `parse_dates=["date"]` turns text such as
+# "2023-01-01" into real dates, which become the row labels
+supply = pd.read_csv(DATA_URL + "money_supply.csv", parse_dates=["date"])
+supply = supply.set_index("date")
+# Step 2: January 2023 and the latest month. `.loc[[...]]` picks rows by their labels,
+# and `.T` turns the table on its side
 last = supply.index[-1]
 table = supply.loc[[pd.Timestamp("2023-01-01"), last]].T
+# `{last:%B %Y}` prints a date as "August 2026"
 table.columns = ["January 2023", f"{last:%B %Y}"]
+# Step 3: the textbook's numbers, to compare
 table["Textbook (Jan. 2023)"] = [2300, 5300, 19600, 21300]
 table.round(0)
 ```
@@ -1752,6 +2255,7 @@ January 2023 reproduces the textbook's table within its rounding. Something odd 
 large as M2. Look at the spring of 2020:
 
 ```{python}
+# The months from March to July 2020 (dates written as text work as row labels)
 supply.loc["2020-03":"2020-07"]
 ```
 
@@ -1768,15 +2272,33 @@ The quantity theory assumes a constant velocity. The quantity equation, equation
 $V = PY/M$, nominal GDP divided by money. A small annual file has nominal GDP, currency and M2.
 
 ```{python}
+# Velocity, V = PY / M, from the quantity equation (3): nominal GDP divided by M2
 yearly = pd.read_csv(DATA_URL + "us_money_annual.csv").set_index("year")
 yearly["velocity"] = yearly.nominal_gdp / yearly.m2
-fig = px.line(yearly.reset_index(), x="year", y="velocity", hover_name="year",
-              labels={"year": "Year", "velocity": "Velocity of M2 (nominal GDP / M2)"},
-              title="M2 velocity stayed near 1.8 until about 1990, then rose and fell")
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 3, the velocity of M2
+# the velocity line, year by year; hover shows each year's value
+fig = px.line(
+    yearly.reset_index(),
+    x="year",
+    y="velocity",
+    hover_name="year",
+    labels={"year": "Year", "velocity": "Velocity of M2 (nominal GDP / M2)"},
+    title="M2 velocity stayed near 1.8 until about 1990, then rose and fell",
+)
 fig.update_traces(line=dict(color=BLUE, width=3))
-fig.update_yaxes(range=[0, 2.5], tickvals=[0.5, 1, 1.5, 2, 2.5])   # no label in the bottom-left corner
+# no label in the bottom-left corner
+fig.update_yaxes(range=[0, 2.5], tickvals=[0.5, 1, 1.5, 2, 2.5])
 fig.show()
-print(yearly.velocity.loc[[1960, 1970, 1980, 1990, 1997, 2007, 2021, 2025]].round(2).to_dict())
+# M2 velocity in the years that the text below discusses, as {year: velocity}
+print(
+    yearly.velocity.loc[[1960, 1970, 1980, 1990, 1997, 2007, 2021, 2025]]
+    .round(2)
+    .to_dict()
+)
 ```
 
 **Sources.** Data: [U.S. Bureau of Economic Analysis, Gross Domestic Product (`GDPA`), via FRED](https://fred.stlouisfed.org/series/GDPA);
@@ -1813,6 +2335,7 @@ Each row is one economy. The columns are average annual money growth (broad mone
 inflation, in percent, for two periods: the textbook's 1990–2021 and the latest 1990–2025.
 
 ```{python}
+# Load the data of Fig. 4: average money growth and inflation by economy
 world = pd.read_csv(DATA_URL + "fig8-4.csv")
 world.head()
 ```
@@ -1824,8 +2347,11 @@ a few broad-money **series breaks** (a currency reform shows up as money "growth
 deleted. One country is new compared with the textbook:
 
 ```{python}
-world[world.iso3.isin(["VEN", "COD", "GEO", "BRA", "JPN", "CHE"])][["country", "money_growth_1990_2025", "inflation_1990_2025",
-                                                                     "n_money_1990_2025", "n_infl_1990_2025"]]
+# Six economies to look at closely: their averages and the years behind them
+world[world.iso3.isin(["VEN", "COD", "GEO", "BRA", "JPN", "CHE"])][
+    ["country", "money_growth_1990_2025", "inflation_1990_2025",
+     "n_money_1990_2025", "n_infl_1990_2025"]
+]
 ```
 
 Venezuela's average inflation of 2,614 percent is not an error: it is the hyperinflation of 2017–2021 (Fig. 7),
@@ -1835,37 +2361,118 @@ so we keep Venezuela and label it.
 Inflation ranges from under 1 to over 2,000 percent, so both axes use a ratio scale, as in the textbook. We
 label a few economies; hover over any point to see its name and how many years of data are behind its two averages.
 
-> **Python note.** `.map(LABELS)` replaces each code with its label from the dictionary `LABELS`; codes that
-> are not in it become empty (`NaN`), and `.fillna("")` turns those into empty text. `np.geomspace(a, b, 200)`
-> gives 200 numbers from `a` to `b` that are evenly spaced on a ratio scale.
+`above_line` finds the columns of the chosen period and counts the economies that lie above the
+quantity-theory line.
 
 ```{python}
-LABELS = {"JPN": "Japan", "CHE": "Switzerland", "DNK": "Denmark", "TUR": "Turkey", "ARG": "Argentina",
-          "RUS": "Russia", "GEO": "Georgia", "BRA": "Brazil", "AGO": "Angola", "COD": "Congo, Dem. Rep.",
-          "VEN": "Venezuela", "UKR": "Ukraine"}
-world["label"] = world.iso3.map(LABELS).fillna("")
-POSITIONS = {"COD": "middle left", "BRA": "bottom right", "AGO": "top left"}   # labels that would be cut off or overlap
-world["position"] = world.iso3.map(POSITIONS).fillna("middle right")
-MONEY_TICKS = [2, 4, 8, 16, 32, 64, 128, 256, 512]
-INFLATION_TICKS = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048]   # no label in the bottom-left corner
+def above_line(g_Y, period):
+    """The columns of a period, and the economies above the quantity-theory line.
+
+    Fig. 4 and equation (6):  pi = g_M - g_Y. An economy lies above the line when its
+    inflation is higher than its money growth minus g_Y.
+
+    Arguments
+        g_Y    : the growth rate of real GDP in the line (percent)
+        period : "1990–2025" or "1990–2021"
+    Returns
+        x, y     : the names of the money-growth and inflation columns of the period
+        n_m, n_p : the names of the columns with the years behind each average
+        above    : the number of economies above the line
+    """
+    # Step 1: the column names of the period, e.g. "money_growth_1990_2025"
+    suffix = period.replace("–", "_")
+    x, y = "money_growth_" + suffix, "inflation_" + suffix
+    n_m, n_p = "n_money_" + suffix, "n_infl_" + suffix
+    # Step 2: count the economies above the line (True counts as 1)
+    above = (world[y] > qt_inflation(world[x], g_Y)).sum()
+    return x, y, n_m, n_p, above
 ```
 
 ```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 4, the labels and the ticks
+# Step 1: the economies with a label. `.map(LABELS)` replaces each code with its
+# label from the dictionary LABELS; codes that are not in it become empty (NaN), and
+# `.fillna("")` turns those into empty text
+LABELS = {
+    "JPN": "Japan",
+    "CHE": "Switzerland",
+    "DNK": "Denmark",
+    "TUR": "Turkey",
+    "ARG": "Argentina",
+    "RUS": "Russia",
+    "GEO": "Georgia",
+    "BRA": "Brazil",
+    "AGO": "Angola",
+    "COD": "Congo, Dem. Rep.",
+    "VEN": "Venezuela",
+    "UKR": "Ukraine",
+}
+world["label"] = world.iso3.map(LABELS).fillna("")
+# Step 2: where each label goes: right of its point, except labels that would be
+# cut off or overlap
+POSITIONS = {"COD": "middle left", "BRA": "bottom right", "AGO": "top left"}
+world["position"] = world.iso3.map(POSITIONS).fillna("middle right")
+# Step 3: the ticks of the two ratio axes; no label in the bottom-left corner
+MONEY_TICKS = [2, 4, 8, 16, 32, 64, 128, 256, 512]
+INFLATION_TICKS = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048]
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 4, money growth and inflation by economy
 def world_money(g_Y=3.0, period="1990–2025"):
-    """Fig. 8.4: average money growth and inflation by economy, with the line pi = g_M - g_Y."""
-    suffix = period.replace("–", "_")
-    x, y, n_m, n_p = "money_growth_" + suffix, "inflation_" + suffix, "n_money_" + suffix, "n_infl_" + suffix
-    above = (world[y] > qt_inflation(world[x], g_Y)).sum()
-    fig = px.scatter(world, x=x, y=y, text="label", hover_name="country", log_x=True, log_y=True,
-                     hover_data=[n_m, n_p],                       # years behind each average, shown on hover
-                     labels={x: f"Money growth, {period} average (percent, ratio scale)",
-                             y: "Inflation rate (percent, ratio scale)",
-                             n_m: "years of money data", n_p: "years of inflation data"},
-                     title=f"π = g_M − g_Y with g_Y = {g_Y:.0f}%: {above} of {len(world)} economies lie above the line")
-    fig.update_traces(marker=dict(color=TEAL, size=8), textposition=list(world.position), textfont=dict(color=BLUE, size=11))
+    """Average money growth and inflation by economy, with the line pi = g_M - g_Y.
+
+    Draws Fig. 4 (inspired by Fig. 8.4 in Jones), with both axes on a ratio scale.
+
+    Arguments
+        g_Y    : the growth rate of real GDP in the quantity-theory line (percent)
+        period : "1990–2025" or "1990–2021"
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the numbers of the figure (above_line)
+    x, y, n_m, n_p, above = above_line(g_Y, period)
+    # Step 2: one point per economy; `log_x` and `log_y` make both axes ratio scales
+    fig = px.scatter(
+        world,
+        x=x,
+        y=y,
+        text="label",
+        hover_name="country",
+        log_x=True,
+        log_y=True,
+        hover_data=[n_m, n_p],                # years behind each average, on hover
+        labels={
+            x: f"Money growth, {period} average (percent, ratio scale)",
+            y: "Inflation rate (percent, ratio scale)",
+            n_m: "years of money data",
+            n_p: "years of inflation data",
+        },
+        title=(
+            f"π = g_M − g_Y with g_Y = {g_Y:.0f}%: "
+            f"{above} of {len(world)} economies lie above the line"
+        ),
+    )
+    fig.update_traces(
+        marker=dict(color=TEAL, size=8),
+        textposition=list(world.position),
+        textfont=dict(color=BLUE, size=11),
+    )
+    # Step 3: the quantity-theory line. `np.geomspace(a, b, 200)` gives 200 numbers
+    # from a to b that are evenly spaced on a ratio scale
     g_M = np.geomspace(g_Y + 0.4, 900, 200)
-    fig.add_trace(go.Scatter(x=g_M, y=qt_inflation(g_M, g_Y), mode="lines", name=f"Quantity theory, π = g_M − {g_Y:.0f}",
-                             line=dict(color=GREEN, width=3, dash="dash")))
+    fig.add_trace(
+        go.Scatter(
+            x=g_M,
+            y=qt_inflation(g_M, g_Y),
+            mode="lines",
+            name=f"Quantity theory, π = g_M − {g_Y:.0f}",
+            line=dict(color=GREEN, width=3, dash="dash"),
+        )
+    )
+    # Step 4: the axes (ranges in powers of 10), and the legend bottom right
     fig.update_xaxes(tickvals=MONEY_TICKS, range=[np.log10(1.5), np.log10(900)])
     fig.update_yaxes(tickvals=INFLATION_TICKS, range=[np.log10(0.3), np.log10(4000)])
     fig.update_layout(legend=dict(x=0.99, y=0.02, xanchor="right", yanchor="bottom"))
@@ -1876,15 +2483,26 @@ Move the slider to change the growth rate of real GDP in the quantity-theory lin
 
 ```{python}
 #| kind: widget
-interact(world_money,
-         g_Y=FloatSlider(value=3, min=0, max=8, step=1, description="real GDP growth g_Y (percent)", style=WIDE),
-         period=ToggleButtons(options=["1990–2025", "1990–2021"], description="period"));
+# Fig. 4 with a slider for real GDP growth in the line, and buttons for the period
+interact(
+    world_money,
+    g_Y=FloatSlider(value=3, min=0, max=8, step=1,
+                    description="real GDP growth g_Y (percent)", style=WIDE),
+    period=ToggleButtons(options=["1990–2025", "1990–2021"], description="period"),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: Fig. 4 with a precomputed slider for real GDP growth in the quantity-theory line
-slider_figure(world_money, "g_Y", [0, 1, 2, 3, 4, 5, 6, 7, 8], start=3, label="real GDP growth g_Y (percent)")
+# @title Website version: Fig. 4 with a precomputed slider for real GDP growth
+# one picture of Fig. 4 per value of g_Y
+slider_figure(
+    world_money,
+    "g_Y",
+    [0, 1, 2, 3, 4, 5, 6, 7, 8],        # the values of g_Y
+    start=3,
+    label="real GDP growth g_Y (percent)",
+)
 ```
 
 **Sources.** Data: [World Bank, World Development Indicators, Broad money growth (`FM.LBL.BMNY.ZG`)](https://databank.worldbank.org/metadataglossary/world-development-indicators/series/FM.LBL.BMNY.ZG);
@@ -1911,17 +2529,28 @@ Chart: inspired by Fig. 8.4 in Jones (2024), [*Macroeconomics*, 6th ed.](https:/
 
 #### Key numbers: how well does the quantity theory fit?
 
-> **Python note.** `np.log10` takes logarithms, the numbers behind a ratio scale. The correlation of the logs
-> measures how close the points are to a straight line on the chart.
-
 ```{python}
+# How well the quantity theory fits, in both periods. `np.log10` takes logarithms,
+# the numbers behind a ratio scale: the correlation of the logs measures how close
+# the points are to a straight line on the chart
 for period in ["1990_2021", "1990_2025"]:
     g, p = world["money_growth_" + period], world["inflation_" + period]
-    print(f"{period}: correlation of the logs {np.log10(g).corr(np.log10(p)):.2f}; "
-          f"median gap g_M - pi {(g - p).median():.1f} points; inflation above money growth in {(p > g).sum()} economies")
-print("Middle half of money growth:", world.money_growth_1990_2025.quantile([0.25, 0.75]).round(1).tolist(),
-      " of inflation:", world.inflation_1990_2025.quantile([0.25, 0.75]).round(1).tolist())
-textbook = world.set_index("country").loc[["Denmark", "Switzerland", "Turkiye", "Argentina"]]
+    print(
+        f"{period}: correlation of the logs {np.log10(g).corr(np.log10(p)):.2f}; "
+        f"median gap g_M - pi {(g - p).median():.1f} points; "
+        f"inflation above money growth in {(p > g).sum()} economies"
+    )
+# the middle half of each column: from the 25th to the 75th percentile
+print(
+    "Middle half of money growth:",
+    world.money_growth_1990_2025.quantile([0.25, 0.75]).round(1).tolist(),
+    " of inflation:",
+    world.inflation_1990_2025.quantile([0.25, 0.75]).round(1).tolist(),
+)
+# the textbook's four examples, in the 1990-2021 averages
+textbook = world.set_index("country").loc[
+    ["Denmark", "Switzerland", "Turkiye", "Argentina"]
+]
 textbook[["money_growth_1990_2021", "inflation_1990_2021"]].round(1)
 ```
 
@@ -1960,6 +2589,7 @@ The nominal rate is the return on 3-month U.S. Treasury bills, averaged over eac
 looked up: we compute it with equation (8), $R = i - \pi$, using the CPI inflation of Fig. 1.
 
 ```{python}
+# Load the data of Fig. 5: the 3-month Treasury-bill rate and CPI inflation
 rates = pd.read_csv(DATA_URL + "fig8-5.csv")
 rates.head()
 ```
@@ -1967,8 +2597,12 @@ rates.head()
 The file already has a `real_rate` column. Let us check it with our function `real_rate` from "Model in code".
 
 ```{python}
+# The real rate by equation (8), R = i - pi, against the file's column
 R = real_rate(rates.nominal_tbill_3m, rates.inflation_cpi)
-print(f"Largest difference from the file's real rate: {(R - rates.real_rate).abs().max():.3f} points")
+print(
+    "Largest difference from the file's real rate: "
+    f"{(R - rates.real_rate).abs().max():.3f} points"
+)
 ```
 
 The same calculation works for any country with a short-term interest rate. A wider file has 3-month rates for
@@ -1976,6 +2610,7 @@ The same calculation works for any country with a short-term interest rate. A wi
 panel of Fig. 1:
 
 ```{python}
+# Load the 3-month rates of 50 economies, and show five rows of 2024
 rates_panel = pd.read_csv(DATA_URL + "interest_rates_panel.csv")
 rates_panel[rates_panel.year == 2024].head()
 ```
@@ -1989,52 +2624,131 @@ Before plotting, we give the columns readable names for the legend. Inflation is
 the legend to show it. Hover over the chart to read all three numbers of a year and check that $i = R + \pi$.
 Rates in some countries were much higher than in the United States, so the vertical axis widens in steps.
 
+`country_rates` keeps the rows of one country and counts its years with a negative real rate.
+
 ```{python}
+def country_rates(country):
+    """One country's rates, and its number of years with a negative real rate (Fig. 5).
+
+    Equation (8):  R = i - pi, the column real_rate of the file
+
+    Arguments
+        country : the name of the country
+    Returns
+        data     : the country's rows: year, short_rate (i), inflation (pi) and
+                   real_rate (R)
+        negative : the number of years with R < 0
+    """
+    data = rates_panel[rates_panel.country == country]
+    # True counts as 1, so `.sum()` counts the years with a negative real rate
+    negative = (data.real_rate < 0).sum()
+    return data, negative
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 5, the steps of the vertical axis
 RATE_RANGES = [[-10, 16], [-20, 32], [-40, 64], [-80, 128], [-200, 250]]
 
 
 def rate_range(low, high):
-    """The first range in RATE_RANGES that contains both low and high (the widest one if none does)."""
+    """The first range in RATE_RANGES that contains both low and high.
+
+    The vertical axis of Fig. 5 widens in steps; the widest range when none is wide
+    enough.
+
+    Arguments
+        low  : the lowest number the axis must show
+        high : the highest number the axis must show
+    Returns
+        the range of the axis, [bottom, top]
+    """
+    # Step 1: the ranges, from narrow to wide: return the first one that fits
     for bottom, top in RATE_RANGES:
         if bottom <= low and high <= top:
             return [bottom, top]
+    # Step 2: none fits: the widest one
     return RATE_RANGES[-1]
 ```
 
 ```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 5, real and nominal interest rates
 def interest_rates(country="United States"):
-    """Fig. 8.5: the nominal rate i, the real rate R = i - pi and inflation pi of one country."""
-    data = rates_panel[rates_panel.country == country]
-    named = data.rename(columns={"short_rate": "Nominal rate, i", "real_rate": "Real rate, R = i − π",
-                                 "inflation": "Inflation, π"})
-    negative = (data.real_rate < 0).sum()
-    fig = px.line(named, x="year", y=["Nominal rate, i", "Real rate, R = i − π", "Inflation, π"], hover_name="year",
-                  color_discrete_sequence=[BLUE, GREEN, ORANGE], labels={"year": "Year", "value": "Percent"},
-                  title=f"{country}: the real rate R = i − π was negative in {negative} of {data.real_rate.count()} years")
+    """The nominal rate i, the real rate R = i - pi and inflation pi of one country.
+
+    Draws Fig. 5 (inspired by Fig. 8.5 in Jones); inflation starts hidden, in the
+    legend.
+
+    Arguments
+        country : the name of the country
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the numbers (country_rates), with readable column names for the legend
+    data, negative = country_rates(country)
+    named = data.rename(
+        columns={
+            "short_rate": "Nominal rate, i",
+            "real_rate": "Real rate, R = i − π",
+            "inflation": "Inflation, π",
+        }
+    )
+    # Step 2: one line per rate: a list of columns as `y` draws one line per column
+    fig = px.line(
+        named,
+        x="year",
+        y=["Nominal rate, i", "Real rate, R = i − π", "Inflation, π"],
+        hover_name="year",
+        color_discrete_sequence=[BLUE, GREEN, ORANGE],
+        labels={"year": "Year", "value": "Percent"},
+        title=(
+            f"{country}: the real rate R = i − π was negative in {negative} of "
+            f"{data.real_rate.count()} years"
+        ),
+    )
     fig.update_traces(line=dict(width=3))
-    fig.update_traces(selector=dict(name="Inflation, π"), visible="legendonly", line=dict(dash="dot"))
+    # inflation is dotted, and hidden until you click it in the legend
+    fig.update_traces(
+        selector=dict(name="Inflation, π"),
+        visible="legendonly",
+        line=dict(dash="dot"),
+    )
     fig.add_hline(y=0, line_dash="dash", line_color=GRAY)
+    # Step 3: the vertical axis widens in steps (rate_range); no label in the corner
     yr = rate_range(data[["short_rate", "inflation", "real_rate"]].min().min(),
                     data[["short_rate", "inflation", "real_rate"]].max().max())
-    fig.update_yaxes(range=yr, tickvals=[-5, 0, 5, 10, 15] if yr == [-10, 16] else None)   # no label in the corner
+    fig.update_yaxes(range=yr, tickvals=[-5, 0, 5, 10, 15] if yr == [-10, 16] else None)
     fig.update_xaxes(range=[1959, 2026])
-    fig.update_layout(hovermode="x unified", legend=dict(orientation="h", y=-0.15, yanchor="top"), legend_title_text="")
+    # Step 4: hover shows the three rates of a year; the legend goes below the chart
+    fig.update_layout(
+        hovermode="x unified",
+        legend=dict(orientation="h", y=-0.15, yanchor="top"),
+        legend_title_text="",
+    )
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(interest_rates, country=Dropdown(options=sorted(rates_panel.country.unique()), value="United States",
-                                          description="country", style=WIDE));
+# Fig. 5 with a menu of 50 countries
+interact(
+    interest_rates,
+    country=Dropdown(options=sorted(rates_panel.country.unique()),
+                     value="United States", description="country", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 5 with a menu of 50 countries
+# Step 1: Fig. 5 for every country
 RATE_COUNTRIES = sorted(rates_panel.country.unique())
 figures = {}
 for c in RATE_COUNTRIES:
     figures[c] = interest_rates(c)
+# Step 2: all their lines in one figure, only the United States drawn at first;
+# `owner` remembers the country of each line
 fig = go.Figure(layout=figures["United States"].layout)
 owner = []
 for c in RATE_COUNTRIES:
@@ -2043,16 +2757,28 @@ for c in RATE_COUNTRIES:
             t.visible = False
         fig.add_trace(t)
         owner.append(c)
+# Step 3: one menu entry per country: its lines, its title and its axis
 buttons = []
 for c in RATE_COUNTRIES:
+    # the country's lines drawn (inflation in the legend), the others hidden
     shown = []
     for o, t in zip(owner, fig.data):
-        shown.append(("legendonly" if t.name == "Inflation, π" else True) if o == c else False)
+        shown.append(
+            ("legendonly" if t.name == "Inflation, π" else True) if o == c else False
+        )
     lay = figures[c].layout
     buttons.append(dict(label=c, method="update", args=[{"visible": shown}, {
-        "title.text": lay.title.text, "yaxis.range": list(lay.yaxis.range), "yaxis.tickvals": lay.yaxis.tickvals}]))
-fig.update_layout(updatemenus=[dict(buttons=buttons, active=RATE_COUNTRIES.index("United States"), x=0.01, y=0.98,
-                                    xanchor="left", yanchor="top")])
+        "title.text": lay.title.text,
+        "yaxis.range": list(lay.yaxis.range),
+        "yaxis.tickvals": lay.yaxis.tickvals,
+    }]))
+# Step 4: the menu in the top-left corner, set to the United States
+fig.update_layout(
+    updatemenus=[
+        dict(buttons=buttons, active=RATE_COUNTRIES.index("United States"),
+             x=0.01, y=0.98, xanchor="left", yanchor="top")
+    ]
+)
 fig
 ```
 
@@ -2087,12 +2813,27 @@ Chart: inspired by Fig. 8.5 in Jones (2024), [*Macroeconomics*, 6th ed.](https:/
 #### Key numbers: real rates
 
 ```{python}
+# The textbook's statements about Fig. 8.5, checked one by one
 r = rates.set_index("year")
-print(f"Highest nominal rate: {r.nominal_tbill_3m.max():.1f}% in {r.nominal_tbill_3m.idxmax()}")
-print(f"2009: nominal {r.nominal_tbill_3m[2009]:.2f}%, inflation {r.inflation_cpi[2009]:.2f}%, real {r.real_rate[2009]:.2f}%")
+print(
+    f"Highest nominal rate: {r.nominal_tbill_3m.max():.1f}% "
+    f"in {r.nominal_tbill_3m.idxmax()}"
+)
+print(
+    f"2009: nominal {r.nominal_tbill_3m[2009]:.2f}%, "
+    f"inflation {r.inflation_cpi[2009]:.2f}%, real {r.real_rate[2009]:.2f}%"
+)
+# `.tolist()` turns the years into a plain list
 print("Years with a negative real rate:", r.index[r.real_rate < 0].tolist())
-print(f"Lowest real rate: {r.real_rate.min():.2f}% in {r.real_rate.idxmin()};  {r.index[-1]}: {r.real_rate.iloc[-1]:.2f}%")
-print(f"Average real rate: 1960-2022 {r.real_rate.loc[:2022].mean():.2f}%, 1960-2007 {r.real_rate.loc[:2007].mean():.2f}%")
+print(
+    f"Lowest real rate: {r.real_rate.min():.2f}% in {r.real_rate.idxmin()};  "
+    f"{r.index[-1]}: {r.real_rate.iloc[-1]:.2f}%"
+)
+# the average over two spans; `.loc[:2022]` keeps the years up to 2022
+print(
+    f"Average real rate: 1960-2022 {r.real_rate.loc[:2022].mean():.2f}%, "
+    f"1960-2007 {r.real_rate.loc[:2007].mean():.2f}%"
+)
 ```
 
 Most of the textbook's statements hold: a nominal peak of 14.0 percent in 1981, a real rate above the nominal
@@ -2131,10 +2872,15 @@ three countries that went through one, and the file of Fig. 8.7 three more. We l
 and 7 share one table.
 
 ```{python}
+# Load the data of Figs. 6 and 7: one column per country, renamed with capitals
 hyper = pd.read_csv(DATA_URL + "fig8-6.csv")
-hyper = hyper.rename(columns={"argentina": "Argentina", "brazil": "Brazil", "russia": "Russia"})
+hyper = hyper.rename(
+    columns={"argentina": "Argentina", "brazil": "Brazil", "russia": "Russia"}
+)
 latam = pd.read_csv(DATA_URL + "fig8-7.csv")
-latam = latam.rename(columns={"mexico": "Mexico", "nigeria": "Nigeria", "venezuela": "Venezuela"})
+latam = latam.rename(
+    columns={"mexico": "Mexico", "nigeria": "Nigeria", "venezuela": "Venezuela"}
+)
 hyper.head()
 ```
 
@@ -2150,6 +2896,7 @@ Every other country comes from the panel of Fig. 1. Before using it, look at one
 Zimbabwe, whose hyperinflation peaked in November 2008:
 
 ```{python}
+# Zimbabwe's rows from 2000 to 2009 (`&` joins conditions that must all be true)
 panel[(panel.country == "Zimbabwe") & (panel.year >= 2000) & (panel.year <= 2009)]
 ```
 
@@ -2158,21 +2905,33 @@ when, according to the textbook, prices were doubling roughly every day. Zimbabw
 down during the crisis, and no reliable annual series exists. We drop Zimbabwe's values for 2001–2008. (The same years
 enter Zimbabwe's average in Fig. 4, so its point there is not reliable either.)
 
-> **Python note.** `~` means "not": `panel[~bad]` keeps every row where `bad` is False. `.melt(id_vars="year", ...)`
-> turns the country columns of the textbook's files into rows, one row per country and year, the shape of the panel.
-> `HIGH` lists Fig. 7's countries (peaks of 100 to 500 percent, `|` adds the textbook's three), and `PATH_COLORS`
-> gives the countries of each list different colors.
-
 ```{python}
+# Step 1: drop Zimbabwe's 2001-2008. `~` means "not": `panel[~bad]` keeps every row
+# where `bad` is False
 bad = (panel.country == "Zimbabwe") & (panel.year >= 2001) & (panel.year <= 2008)
 clean = panel[~bad]
-book = pd.concat([hyper.melt(id_vars="year", var_name="country", value_name="inflation"),
-                  latam.melt(id_vars="year", var_name="country", value_name="inflation")]).dropna()
-paths = pd.concat([book, clean[~clean.country.isin(book.country.unique())]], ignore_index=True)   # textbook files, then the panel
+# Step 2: the textbook's files in the shape of the panel. `.melt(id_vars="year", ...)`
+# turns the country columns into rows, one row per country and year; `.dropna()`
+# drops the rows without a number
+book = pd.concat(
+    [
+        hyper.melt(id_vars="year", var_name="country", value_name="inflation"),
+        latam.melt(id_vars="year", var_name="country", value_name="inflation"),
+    ]
+).dropna()
+# Step 3: the textbook's files, then every other country of the cleaned panel
+paths = pd.concat(
+    [book, clean[~clean.country.isin(book.country.unique())]],
+    ignore_index=True,
+)
+# Step 4: each country's highest rate. HYPER: peaks above 500 percent; HIGH, the
+# list of Fig. 7: peaks of 100 to 500 percent, and `|` adds the textbook's three
 peaks = paths.groupby("country").inflation.max()
 HYPER = sorted(peaks[peaks > 500].index)
-HIGH = sorted(set(peaks[(peaks > 100) & (peaks <= 500)].index) | {"Mexico", "Nigeria", "Venezuela"})   # Fig. 7's list
-PATH_COLORS = group_colors(sorted(paths.country.unique()), [HYPER, HIGH], BOOK_COLORS)
+HIGH = sorted(
+    set(peaks[(peaks > 100) & (peaks <= 500)].index)
+    | {"Mexico", "Nigeria", "Venezuela"}
+)
 print(len(HYPER), "economies with at least one year above 500%:", HYPER)
 ```
 
@@ -2180,63 +2939,142 @@ On a linear scale, the peaks of thousands of percent flatten everything else. A 
 inflation at once, but it cannot show zero or negative rates: Argentina's deflation of 2001 (−1.1 percent) simply
 leaves a gap. The axes widen when a country with a higher peak is added.
 
+`disinflation` finds the highest peak among the chosen countries, and the year in which that country's
+inflation fell below 25 percent again. `chosen_paths` keeps the rows of the chosen countries.
+
 ```{python}
-RATIO_TICKS = [0.3, 1, 3, 10, 30, 100, 300, 1000, 3000, 10000, 30000, 100000]   # no label in the bottom-left corner
-LINEAR_TICKS = [500, 1000, 1500, 2000, 2500, 3000]                            # (the textbook's linear scale)
-LINEAR_TOPS = [3500, 7000, 15000, 75000]
-
-
 def disinflation(data):
-    """Figs. 8.6-8.7: the highest peak among the chosen countries, and when that country fell below 25%."""
+    """The highest peak among the chosen countries, and when it fell below 25 percent.
+
+    The title of Figs. 6 and 7: the country, its peak, and the first later year with
+    inflation below 25 percent (or the last year, if it is still above).
+
+    Arguments
+        data : the chosen countries' rows of `paths`
+    Returns
+        a line of text
+    """
+    # Step 1: the row with the highest inflation, and that country's rows
     top = data.loc[data.inflation.idxmax()]
     own = data[data.country == top.country]
+    # Step 2: the later years with inflation below 25 percent
     later = own[(own.year > top.year) & (own.inflation < 25)]
     if len(later) > 0:
-        return f"{top.country}: {top.inflation:,.0f}% in {top.year:.0f}, below 25% by {later.year.min():.0f}"
-    return f"{top.country}: {top.inflation:,.0f}% in {top.year:.0f}, still above 25% in {own.year.max():.0f}"
+        return (
+            f"{top.country}: {top.inflation:,.0f}% in {top.year:.0f}, "
+            f"below 25% by {later.year.min():.0f}"
+        )
+    return (
+        f"{top.country}: {top.inflation:,.0f}% in {top.year:.0f}, "
+        f"still above 25% in {own.year.max():.0f}"
+    )
+
+
+def chosen_paths(countries, scale):
+    """The rows of Figs. 6 and 7 for the chosen countries, and their title.
+
+    Arguments
+        countries : the names of the chosen countries (Argentina if none)
+        scale     : "linear" or "ratio"
+    Returns
+        data  : the chosen countries' rows (only the positive rates on a ratio scale)
+        title : the highest peak and when it ended (disinflation)
+    """
+    # Step 1: the chosen countries' rows, and the title
+    chosen = countries if len(countries) > 0 else ("Argentina",)
+    data = paths[paths.country.isin(chosen)]
+    title = disinflation(data)
+    # Step 2: a ratio scale cannot show zero or falling prices
+    if scale == "ratio":
+        data = data[data.inflation > 0]
+    return data, title
 ```
 
 ```{python}
+#| kind: drawing
+# @title Drawing code: Figs. 6 and 7, inflation on a linear or a ratio scale
+# Step 1: the ticks of the two scales, and the possible tops of the linear axis
+RATIO_TICKS = [0.3, 1, 3, 10, 30, 100, 300, 1000, 3000, 10000, 30000, 100000]
+LINEAR_TICKS = [500, 1000, 1500, 2000, 2500, 3000]      # the textbook's linear scale
+LINEAR_TOPS = [3500, 7000, 15000, 75000]
+# a color for every country; the countries of each list get different colors
+PATH_COLORS = group_colors(sorted(paths.country.unique()), [HYPER, HIGH], BOOK_COLORS)
+
+
 def inflation_paths(countries=("Argentina", "Brazil", "Russia"), scale="linear"):
-    """Figs. 8.6 and 8.7: inflation in the chosen countries, on a linear or a ratio scale."""
-    data = paths[paths.country.isin(countries if len(countries) > 0 else ("Argentina",))]
-    title = disinflation(data)
-    if scale == "ratio":
-        data = data[data.inflation > 0]                  # a ratio scale cannot show zero or falling prices
-    fig = px.line(data, x="year", y="inflation", color="country", log_y=(scale == "ratio"), hover_name="country",
-                  color_discrete_map=PATH_COLORS, title=title,
-                  labels={"year": "Year", "inflation": "Inflation rate (percent)", "country": "Country"})
+    """Inflation in the chosen countries, on a linear or a ratio scale.
+
+    Draws Figs. 6 and 7 (inspired by Figs. 8.6 and 8.7 in Jones).
+
+    Arguments
+        countries : the names of the countries to show
+        scale     : "linear" or "ratio"
+    Returns
+        a Plotly figure
+    """
+    # Step 2: the numbers (chosen_paths), then one line per country
+    data, title = chosen_paths(countries, scale)
+    fig = px.line(
+        data,
+        x="year",
+        y="inflation",
+        color="country",
+        log_y=(scale == "ratio"),
+        hover_name="country",
+        color_discrete_map=PATH_COLORS,
+        title=title,
+        labels={
+            "year": "Year",
+            "inflation": "Inflation rate (percent)",
+            "country": "Country",
+        },
+    )
     fig.update_traces(line=dict(width=3))
-    fig.add_hline(y=500, line_dash="dot", line_color=GRAY, annotation_text="500%: hyperinflation",
+    # the dotted line at 500 percent, where hyperinflation starts
+    fig.add_hline(y=500, line_dash="dot", line_color=GRAY,
+                  annotation_text="500%: hyperinflation",
                   annotation_position="bottom left")
+    # Step 3: the vertical axis, from the highest rate shown
     peak = data.inflation.max()
     if scale == "ratio":
         top = 5000 if peak < 5000 else 200000
         fig.update_yaxes(tickvals=RATIO_TICKS, range=[np.log10(0.1), np.log10(top)])
     else:
         top = axis_top(1.1 * peak, LINEAR_TOPS)
-        fig.update_yaxes(tickvals=LINEAR_TICKS if top == 3500 else None, range=[-top / 35, top])
+        fig.update_yaxes(tickvals=LINEAR_TICKS if top == 3500 else None,
+                         range=[-top / 35, top])
+    # Step 4: the years, and hover that shows every country of a year
     fig.update_xaxes(range=[1960, 2026])
     fig.update_layout(hovermode="x unified", legend_title_text="")
     return fig
 ```
 
-> **Python note.** Several widgets in one `interact` call: each argument of the function gets its own widget.
-
 ```{python}
 #| kind: widget
-interact(inflation_paths, countries=SelectMultiple(options=sorted(paths.country.unique()), value=["Argentina", "Brazil", "Russia"],
-                                                   rows=8, description="countries"),
-         scale=ToggleButtons(options=["linear", "ratio"], description="vertical scale"));
+# Fig. 6 with a list of countries and buttons for the scale. With several widgets in
+# one `interact` call, each argument of the function gets its own widget
+interact(
+    inflation_paths,
+    countries=SelectMultiple(options=sorted(paths.country.unique()),
+                             value=["Argentina", "Brazil", "Russia"],
+                             rows=8, description="countries"),
+    scale=ToggleButtons(options=["linear", "ratio"], description="vertical scale"),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: Fig. 6 with buttons for the vertical scale and the 31 hyperinflations in the legend
+# @title Website version: Fig. 6 with scale buttons and the 31 hyperinflations
+# Step 1: every hyperinflation, with the title of the default view
 fig = inflation_paths(HYPER, "linear")
-fig.update_layout(title=inflation_paths(("Argentina", "Brazil", "Russia"), "linear").layout.title)   # the title of the default view
+fig.update_layout(
+    title=inflation_paths(("Argentina", "Brazil", "Russia"), "linear").layout.title
+)
+# Step 2: the textbook's three drawn, the others in the legend
 legend_only(fig, ["Argentina", "Brazil", "Russia"])
-fig.update_xaxes(tickvals=[1970, 1980, 1990, 2000, 2010, 2020])   # no year label in the bottom-left corner
+# no 1960 in the bottom-left corner
+fig.update_xaxes(tickvals=[1970, 1980, 1990, 2000, 2010, 2020])
+# Step 3: buttons for a linear or a ratio scale
 scale_buttons(fig, RATIO_TICKS, start="linear")
 ```
 
@@ -2277,23 +3115,48 @@ money: when the price level doubles, a 200-dollar bill buys only what 100 dollar
 
 ```{python}
 def money_printed(G, T, dB):
-    """Equation (9): the new money the government must issue, Delta M = G - T - Delta B."""
+    """The new money the government must issue: the inflation tax.
+
+    Equation (9) solved for Delta M:  Delta M = G - T - Delta B
+
+    Arguments
+        G  : government spending (percent of GDP)
+        T  : taxes (percent of GDP)
+        dB : new borrowing, Delta B (percent of GDP)
+    Returns
+        the new money, Delta M (percent of GDP)
+    """
+    # the spending that taxes and borrowing do not pay for
     return G - T - dB
 
 
-print(f"Spending 25% of GDP, taxes 20%, new borrowing 2%: new money = {money_printed(25, 20, 2):.0f}% of GDP")
-print(f"If lenders stop lending (new borrowing 0%):        new money = {money_printed(25, 20, 0):.0f}% of GDP")
-print(f"Real value of 200 dollars of currency after prices double: {200 / 2:.0f} dollars of today")
+# Step 1: a deficit of 5 percent of GDP, with and without new borrowing
+print(
+    "Spending 25% of GDP, taxes 20%, new borrowing 2%: "
+    f"new money = {money_printed(25, 20, 2):.0f}% of GDP"
+)
+print(
+    "If lenders stop lending (new borrowing 0%):        "
+    f"new money = {money_printed(25, 20, 0):.0f}% of GDP"
+)
+# Step 2: the inflation tax: when prices double, money buys half as much
+print(
+    "Real value of 200 dollars of currency after prices double: "
+    f"{200 / 2:.0f} dollars of today"
+)
 ```
 
 In the United States, the inflation tax is tiny. Measured as new currency issued each year, as a percentage of GDP:
 
-> **Python note.** `.diff()` gives the change from the previous row: here, the currency added in each year.
-
 ```{python}
+# New currency each year, as a percentage of GDP. `.diff()` gives the change from
+# the previous row: here, the currency added in each year
 yearly["new_currency"] = 100 * yearly.currency.diff() / yearly.nominal_gdp
 print(yearly.new_currency.loc[[1975, 1980, 2000, 2020, 2025]].round(2).to_dict())
-print(f"Largest: {yearly.new_currency.max():.2f}% of GDP in {yearly.new_currency.idxmax()}")
+print(
+    f"Largest: {yearly.new_currency.max():.2f}% of GDP "
+    f"in {yearly.new_currency.idxmax()}"
+)
 ```
 
 Even in the Great Inflation, new currency brought in about 0.4 percent of GDP, and the largest value since 1960 is
@@ -2320,6 +3183,7 @@ Set $\Delta M = 0$ in equation (9) and solve for $\Delta B$. Then `money_printed
 **Goal.** Compare high inflation with hyperinflation, and follow Venezuela's recent hyperinflation.
 
 ```{python}
+# The last nine years of the textbook's file of Fig. 8.7
 latam.tail(9)
 ```
 
@@ -2334,31 +3198,59 @@ ratio scale. Add any country from the menu: the 31 hyperinflations of Fig. 6, or
 inflation that never reached 500 percent, like Mexico. Which are they? `peaks`, from Fig. 6, has each country's
 highest inflation rate.
 
-> **Python note.** `orientation="h"` makes the bars horizontal, which leaves room for long country names.
+```{python}
+# The economies whose inflation peaked between 100 and 500 percent, from the lowest
+# peak to the highest; `.reset_index()` turns the country names back into a column
+high_peaks = peaks[(peaks > 100) & (peaks <= 500)].sort_values().reset_index()
+```
 
 ```{python}
-high_peaks = peaks[(peaks > 100) & (peaks <= 500)].sort_values().reset_index()
-fig = px.bar(high_peaks, x="inflation", y="country", orientation="h", height=560,
-             labels={"inflation": "Highest inflation rate (percent)", "country": ""},
-             title=f"{len(high_peaks)} economies peaked between 100% and 500%: high inflation, no hyperinflation")
+#| kind: drawing
+# @title Drawing code: Fig. 7, the peaks of high inflation without hyperinflation
+# one bar per economy; `orientation="h"` makes the bars horizontal, which leaves
+# room for long country names
+fig = px.bar(
+    high_peaks,
+    x="inflation",
+    y="country",
+    orientation="h",
+    height=560,
+    labels={"inflation": "Highest inflation rate (percent)", "country": ""},
+    title=(
+        f"{len(high_peaks)} economies peaked between 100% and 500%: "
+        "high inflation, no hyperinflation"
+    ),
+)
 fig.update_traces(marker_color=TEAL)
 fig.show()
 ```
 
 ```{python}
 #| kind: widget
-interact(inflation_paths, countries=SelectMultiple(options=sorted(paths.country.unique()), value=["Mexico", "Nigeria", "Venezuela"],
-                                                   rows=8, description="countries"),
-         scale=ToggleButtons(options=["ratio", "linear"], description="vertical scale"));
+# Fig. 7: the same function as Fig. 6, with the textbook's three countries of
+# Fig. 8.7, starting on the ratio scale
+interact(
+    inflation_paths,
+    countries=SelectMultiple(options=sorted(paths.country.unique()),
+                             value=["Mexico", "Nigeria", "Venezuela"],
+                             rows=8, description="countries"),
+    scale=ToggleButtons(options=["ratio", "linear"], description="vertical scale"),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: Fig. 7 with buttons for the vertical scale and more high-inflation countries in the legend
+# @title Website version: Fig. 7 with scale buttons and the high-inflation countries
+# Step 1: every country of the list HIGH, with the title of the default view
 fig = inflation_paths(HIGH, "ratio")
-fig.update_layout(title=inflation_paths(("Mexico", "Nigeria", "Venezuela"), "ratio").layout.title)   # the default view's title
+fig.update_layout(
+    title=inflation_paths(("Mexico", "Nigeria", "Venezuela"), "ratio").layout.title
+)
+# Step 2: the textbook's three drawn, the others in the legend
 legend_only(fig, ["Mexico", "Nigeria", "Venezuela"])
-fig.update_xaxes(tickvals=[1970, 1980, 1990, 2000, 2010, 2020])   # no year label in the bottom-left corner
+# no 1960 in the bottom-left corner
+fig.update_xaxes(tickvals=[1970, 1980, 1990, 2000, 2010, 2020])
+# Step 3: buttons for a ratio or a linear scale
 scale_buttons(fig, RATIO_TICKS, start="ratio")
 ```
 
@@ -2390,11 +3282,18 @@ between 100 and 500 percent: high inflation that never became a hyperinflation.*
 #### Key numbers: Venezuela and the definition of hyperinflation
 
 ```{python}
+# Venezuela's inflation since 2016, and its years above 500 percent; `.dropna()`
+# drops the years without a number
 v = latam.set_index("year").Venezuela.dropna()
 print("Venezuela:", v.loc[2016:].round(0).to_dict())
 print("Years above 500%:", v.index[v > 500].tolist())
-print(f"Mexico's peak: {latam.Mexico.max():.1f}% in {latam.year[latam.Mexico.idxmax()]}; "
-      f"Nigeria's peak: {latam.Nigeria.max():.1f}% in {latam.year[latam.Nigeria.idxmax()]}")
+# the peaks of Mexico and Nigeria, and the number of hyperinflations
+print(
+    f"Mexico's peak: {latam.Mexico.max():.1f}% "
+    f"in {latam.year[latam.Mexico.idxmax()]}; "
+    f"Nigeria's peak: {latam.Nigeria.max():.1f}% "
+    f"in {latam.year[latam.Nigeria.idxmax()]}"
+)
 print(f"Economies with at least one year above 500% (cleaned panel): {len(HYPER)}")
 ```
 

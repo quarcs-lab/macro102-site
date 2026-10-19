@@ -1132,56 +1132,161 @@ Panel (a) draws actual output $Y_t$ around a smooth potential output $\bar{Y}_t$
 output $\tilde{Y}_t$ from equation (1): the same wiggle, with the trend taken out. The gray bars in panel (a)
 are the gaps $Y - \bar{Y}$ at the top of the boom and at the bottom of the slump.
 
-> **Python note.** `np.linspace(0, 8, 200)` creates 200 evenly spaced numbers from 0 to 8: the
-> years at which we draw the curves. `make_subplots(rows=1, cols=2)` makes a figure with two panels,
-> and `row=..., col=...` tells `add_trace` where to draw. `fig.add_hline` draws a horizontal line. We fix
-> the axis ranges so that you can *see* the curves move when a parameter changes.
+The function below draws both panels. It only calls the output functions of "Model in code", so all of its
+code is drawing code: open it to see how the two panels are built.
 
 ```{python}
-def fluctuations(A=2.0, g=2.0):
-    """Fig. 9.1: actual and potential output (a) and short-run output (b), over one 8-year cycle."""
-    t = np.linspace(0, 8, 201)                          # time, in years: t[50] = 2 and t[150] = 6
-    Y, Ybar = actual_output(t, A, g), potential_output(t, g)
-    fig = make_subplots(rows=1, cols=2, subplot_titles=("(a) Actual and potential output",
-                                                        "(b) Short-run output, Ỹ (percent)"))
-    fig.add_trace(go.Scatter(x=t, y=Y, name="Actual output, Y", line=dict(color=BLUE, width=3)), row=1, col=1)
-    fig.add_trace(go.Scatter(x=t, y=Ybar, name="Potential output, Ȳ", line=dict(color=GREEN, width=3, dash="dash")),
-                  row=1, col=1)
-    fig.add_trace(go.Scatter(x=[2, 2, None, 6, 6], y=[Ybar[50], Y[50], None, Ybar[150], Y[150]],   # boom and slump
-                             name="Gap, Y − Ȳ", mode="lines", line=dict(color=GRAY, width=4)), row=1, col=1)
-    fig.add_trace(go.Scatter(x=t, y=short_run_output(Y, Ybar), name="Short-run output, Ỹ",
-                             line=dict(color=TEAL, width=3)), row=1, col=2)
-    fig.add_hline(y=0, line=dict(color=GREEN, width=2, dash="dash"), row=1, col=2)      # Ỹ = 0: output at potential
-    add_end_label(fig, 8, Y[-1], "Y", BLUE, "bottom", 1, 1)          # Y and Ȳ meet at t = 8: one above,
-    add_end_label(fig, 8, Ybar[-1], "Ȳ", GREEN, "top", 1, 1)         # one below
+#| kind: drawing
+# @title Drawing code: Fig. 1, panel (b), short-run output
+def fluctuations_panel_b(fig, t, Y, Ybar, A):
+    """Panel (b) of Fig. 1: short-run output over one cycle, with a boom and a slump.
+
+    The teal curve is Y~ from equation (1), and the dashed line Y~ = 0 is output at
+    potential.
+
+    Arguments
+        fig  : the two-panel figure; panel (b) is row 1, column 2
+        t    : the times, in years
+        Y    : actual output at those times, Y
+        Ybar : potential output at those times, Ybar
+        A    : the size of the swings, in percent
+    """
+    # Step 1: the curve of short-run output, equation (1)
+    fig.add_trace(
+        go.Scatter(
+            x=t,
+            y=short_run_output(Y, Ybar),
+            name="Short-run output, Ỹ",
+            line=dict(color=TEAL, width=3),
+        ),
+        row=1,
+        col=2,
+    )
+    # Step 2: `fig.add_hline` draws a horizontal line, here at Y~ = 0: output at
+    # potential
+    fig.add_hline(y=0, line=dict(color=GREEN, width=2, dash="dash"), row=1, col=2)
     add_end_label(fig, 8, 0, "Ỹ", TEAL, "bottom", 1, 2)
-    fig.add_annotation(x=2, y=A, xref="x2", yref="y2", text="Boom: Ỹ > 0", showarrow=False, yshift=14)
-    fig.add_annotation(x=6, y=-A, xref="x2", yref="y2", text="Slump: Ỹ < 0", showarrow=False, yshift=-14)
+    # Step 3: the labels of the boom (year 2) and the slump (year 6); xref="x2"
+    # and yref="y2" place them in panel (b)
+    fig.add_annotation(
+        x=2,
+        y=A,
+        xref="x2",
+        yref="y2",
+        text="Boom: Ỹ > 0",
+        showarrow=False,
+        yshift=14,
+    )
+    fig.add_annotation(
+        x=6,
+        y=-A,
+        xref="x2",
+        yref="y2",
+        text="Slump: Ỹ < 0",
+        showarrow=False,
+        yshift=-14,
+    )
+    # the vertical axis of panel (b), fixed
+    fig.update_yaxes(range=[-5.2, 5.2], row=1, col=2)
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 1, actual, potential and short-run output
+def fluctuations(A=2.0, g=2.0):
+    """Actual and potential output (a) and short-run output (b), over one 8-year cycle.
+
+    Draws Fig. 1 (adapted from Fig. 9.1 in Jones). The gray bars in panel (a) are the
+    gaps Y - Ybar at the top of the boom (year 2) and the bottom of the slump (year 6).
+
+    Arguments
+        A : the size of the swings, in percent
+        g : growth rate of potential output, g-bar, in percent
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the curves, equation (2). `np.linspace(0, 8, 201)` gives 201 evenly
+    # spaced times from 0 to 8 years: t[50] = 2 and t[150] = 6
+    t = np.linspace(0, 8, 201)
+    Y, Ybar = actual_output(t, A, g), potential_output(t, g)
+
+    # Step 2: `make_subplots(rows=1, cols=2)` makes two panels side by side, and
+    # `row=..., col=...` tells `add_trace` which panel to draw in
+    titles = ("(a) Actual and potential output", "(b) Short-run output, Ỹ (percent)")
+    fig = make_subplots(rows=1, cols=2, subplot_titles=titles)
+
+    # Step 3: panel (a). `go.Scatter` is one curve, and `add_trace` adds it
+    actual = go.Scatter(
+        x=t,
+        y=Y,
+        name="Actual output, Y",
+        line=dict(color=BLUE, width=3),
+    )
+    fig.add_trace(actual, row=1, col=1)
+    trend = go.Scatter(
+        x=t,
+        y=Ybar,
+        name="Potential output, Ȳ",
+        line=dict(color=GREEN, width=3, dash="dash"),
+    )
+    fig.add_trace(trend, row=1, col=1)
+    # the gray bars: the gaps at the boom and the slump; `None` breaks the line
+    gaps = go.Scatter(
+        x=[2, 2, None, 6, 6],
+        y=[Ybar[50], Y[50], None, Ybar[150], Y[150]],
+        name="Gap, Y − Ȳ",
+        mode="lines",
+        line=dict(color=GRAY, width=4),
+    )
+    fig.add_trace(gaps, row=1, col=1)
+    # Y and Ybar meet at t = 8: one name above, one below
+    add_end_label(fig, 8, Y[-1], "Y", BLUE, "bottom", 1, 1)
+    add_end_label(fig, 8, Ybar[-1], "Ȳ", GREEN, "top", 1, 1)
+
+    # Step 4: panel (b), with the function above
+    fluctuations_panel_b(fig, t, Y, Ybar, A)
+
+    # Step 5: fixed axes, so that you can see the curves move when a parameter
+    # changes; the title reports the swings and the growth of potential output
     fig.update_xaxes(title_text="Time (years)", range=[0, 8])
     fig.update_yaxes(title_text="Output", range=[94, 145], row=1, col=1)
-    fig.update_yaxes(range=[-5.2, 5.2], row=1, col=2)
-    fig.update_layout(title=f"Boom: Ỹ = +{A:.1f}%   Slump: Ỹ = −{A:.1f}%   |   potential grows {g:.1f}% a year",
-                      showlegend=False)
+    fig.update_layout(
+        title=(
+            f"Boom: Ỹ = +{A:.1f}%   Slump: Ỹ = −{A:.1f}%   |   "
+            f"potential grows {g:.1f}% a year"
+        ),
+        showlegend=False,
+    )
     return fig
 ```
 
 Now the interactive version. Move the sliders and compare the two panels.
 
-> **Python note.** `interact` turns each argument of a function into a slider and calls the
-> function again every time you move one. The `;` at the end only hides an extra line of text.
-
 ```{python}
 #| kind: widget
-interact(fluctuations,
-         A=FloatSlider(value=2.0, min=0.5, max=4.0, step=0.5, description="size of the swings A (%)", style=WIDE),
-         g=FloatSlider(value=2.0, min=0.0, max=4.0, step=0.5, description="growth of potential g (% a year)",
-                       style=WIDE));
+# Fig. 1 with sliders. `interact` turns each argument of fluctuations into a
+# slider, and draws the figure again every time you move one. The `;` at the end
+# only hides an extra line of text.
+interact(
+    fluctuations,
+    A=FloatSlider(value=2.0, min=0.5, max=4.0, step=0.5,
+                  description="size of the swings A (%)", style=WIDE),
+    g=FloatSlider(value=2.0, min=0.0, max=4.0, step=0.5,
+                  description="growth of potential g (% a year)", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: Fig. 1 with a precomputed slider for the growth of potential output
-slider_figure(fluctuations, "g", [0.0, 0.5, 1.0, 2.0, 3.0, 4.0], start=2.0, label="growth of potential g (% a year)")
+# @title Website version: Fig. 1 with a precomputed slider for the growth of potential
+# one picture of Fig. 1 per value of g; the slider shows one at a time
+slider_figure(
+    fluctuations,
+    "g",
+    [0.0, 0.5, 1.0, 2.0, 3.0, 4.0],     # the values of g
+    start=2.0,
+    label="growth of potential g (% a year)",
+)
 ```
 
 **Source.** Adapted from Fig. 9.1 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -1226,10 +1331,9 @@ Four U.S. series show what a recession looks like: GDP against its potential, sh
 The Congressional Budget Office (CBO) estimates U.S. potential output from 1949 on, with a version of the
 Solow model. Our data file adds an estimate for 1929–1948, a very smooth trend through actual GDP.
 
-> **Python note.** `.head()` shows the first five rows of a DataFrame, which is always a good first look at
-> new data.
-
 ```{python}
+# Load the data of Fig. 2, one row per year. `.head()` shows the first five rows,
+# always a good first look at new data.
 gdp = pd.read_csv(DATA_URL + "fig9-2.csv")
 gdp.head()
 ```
@@ -1237,11 +1341,11 @@ gdp.head()
 Each row is a year. `gdp_actual` and `gdp_potential` are real GDP in trillions of 2022 dollars. We first
 compute short-run output with our function `short_run_output`, which works on whole columns at once.
 
-> **Python note.** `gdp["gap"] = ...` adds a new column, computed row by row from two other columns.
-> `gdp[gdp.year <= 1946]` keeps only the rows where the condition is true.
-
 ```{python}
+# Short-run output Y~ of every year, equation (1). `gdp["gap"] = ...` adds a new
+# column, computed row by row from two other columns.
 gdp["gap"] = short_run_output(gdp.gdp_actual, gdp.gdp_potential)
+# `gdp[gdp.year <= 1946]` keeps only the rows where the condition is true
 gdp[gdp.year <= 1946].round(2)
 ```
 
@@ -1254,29 +1358,100 @@ where a number comes from**, and treat the 1929–1948 gaps with care.
 Now the chart. On a **ratio scale** (a logarithmic axis), equal distances mean equal percentage changes. You can
 also pick another country. Its GDP comes from the OECD, in trillions of 2021 dollars at PPP, and starts later.
 
-> **Python note.** `rename(columns={...})` gives the columns readable names for the legend. `px.line`
-> with a list `y=[...]` draws one line per column. `log_y=True` gives a ratio scale, `tickvals` sets the
-> numbers printed on the axis, and on a ratio scale the axis `range` is given in powers of ten: `np.log10(0.9)`.
+First the data of the chart: `gdp_levels` gives actual and potential GDP of one country, with readable
+column names for the legend.
 
 ```{python}
-us_levels = gdp.rename(columns={"gdp_actual": "Actual GDP", "gdp_potential": "Potential GDP"})
-TICKS = [1, 2, 4, 8, 16, 32]
-LEVEL_COUNTRIES = ["United States"] + sorted(others.dropna(subset=["gdp_real"]).country.unique())
+# Step 1: the U.S. levels. `rename(columns={...})` gives the columns readable
+# names for the legend.
+us_levels = gdp.rename(
+    columns={"gdp_actual": "Actual GDP", "gdp_potential": "Potential GDP"}
+)
+# Step 2: the countries of the menu: the United States first, then every country
+# with real GDP. `.dropna(subset=[...])` drops the rows with no value in that
+# column, `.unique()` lists each name once, and `sorted` sorts them.
+LEVEL_COUNTRIES = ["United States"] + sorted(
+    others.dropna(subset=["gdp_real"]).country.unique()
+)
 
 
 def gdp_levels(country):
-    """Fig. 9.2: actual and potential GDP of one country (U.S.: CBO, 2022 dollars; others: OECD, 2021 PPP dollars)."""
+    """Actual and potential GDP of one country (Fig. 2).
+
+    The United States: the CBO's data, in trillions of 2022 dollars. Other
+    countries: the OECD's, in trillions of 2021 dollars at PPP.
+
+    Arguments
+        country : the country's name, e.g. "Greece"
+    Returns
+        a table with the columns year, "Actual GDP" and "Potential GDP"
+    """
     if country == "United States":
         return us_levels
+    # the country's years with real GDP, with the same column names as the U.S.
     data = others[others.country == country].dropna(subset=["gdp_real"])
-    return data.rename(columns={"gdp_real": "Actual GDP", "gdp_potential": "Potential GDP"})
+    return data.rename(
+        columns={"gdp_real": "Actual GDP", "gdp_potential": "Potential GDP"}
+    )
+```
+
+The title of the chart states a finding. `gdp_title` finds the deepest slump below potential output, with
+equation (1).
+
+```{python}
+def gdp_title(country, data):
+    """A title with the finding of Fig. 2: the deepest slump below potential output.
+
+    Short-run output Y~ of every year, equation (1); the title reports its lowest
+    value and the year.
+
+    Arguments
+        country : the country's name
+        data    : its table, from gdp_levels
+    Returns
+        the title, a line of text
+    """
+    # Step 1: short-run output Y~ of every year, equation (1)
+    gaps = short_run_output(data["Actual GDP"], data["Potential GDP"])
+    if country == "United States":
+        return (
+            "Actual and potential GDP move together, "
+            "except in the 1930s and 1940s"
+        )
+    # Step 2: `.notna().any()` is True when a column has at least one number, and
+    # `.idxmin()` gives the row label of the smallest value
+    if gaps.notna().any():
+        return (
+            f"{country}: the deepest slump was {-gaps.min():.1f}% below potential, "
+            f"in {data.year[gaps.idxmin()]}"
+        )
+    return f"{country}: actual GDP only (the OECD estimates no potential output)"
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 2, the tick values of the ratio scale
+# the U.S. ticks: each one doubles the one before
+TICKS = [1, 2, 4, 8, 16, 32]
 
 
 def ratio_ticks(low, high):
-    """Tick values 1, 2, 5, 10, 20, ... (more of them for a narrow range) from low to high."""
+    """Tick values 1, 2, 5, 10, 20, ... from low to high, for a ratio scale.
+
+    A narrow range gets more ticks, so that the axis always shows a few numbers.
+
+    Arguments
+        low, high : the bottom and the top of the axis
+    Returns
+        a list of tick values
+    """
+    # Step 1: the steps within each power of ten (`a if c else b` picks one)
     steps = [1, 2, 5] if high / low > 8 else [1, 1.5, 2, 3, 5, 7]
+    # a narrow range needs more ticks
     if high / low < 3:
-        steps = [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 7, 8]       # a narrow range needs more ticks
+        steps = [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 7, 8]
+    # Step 2: every step times every power of ten from 0.001 to 100 that lies
+    # between low and high
     ticks = []
     for power in range(-3, 3):
         for step in steps:
@@ -1285,52 +1460,82 @@ def ratio_ticks(low, high):
     return ticks
 ```
 
-> **Python note.** `.idxmin()` gives the row label of the smallest value, and `.notna().any()` is True when a
-> column has at least one number.
-
 ```{python}
-def gdp_title(country, data):
-    """Fig. 9.2: a title with the finding: the deepest slump below potential output."""
-    gaps = short_run_output(data["Actual GDP"], data["Potential GDP"])
-    if country == "United States":
-        return "Actual and potential GDP move together, except in the 1930s and 1940s"
-    if gaps.notna().any():
-        return f"{country}: the deepest slump was {-gaps.min():.1f}% below potential, in {data.year[gaps.idxmin()]}"
-    return f"{country}: actual GDP only (the OECD estimates no potential output)"
-```
-
-```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 2, real GDP, actual and potential
 def gdp_chart(scale="ratio", country="United States"):
-    """Fig. 9.2: real GDP, actual and potential, of one country (ratio or linear scale)."""
+    """Real GDP, actual and potential, of one country, on a ratio or a linear scale.
+
+    Draws Fig. 2 (inspired by Fig. 9.2 in Jones).
+
+    Arguments
+        scale   : "ratio" or "linear", the vertical scale
+        country : the country's name
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the data, the unit of the vertical axis and the title
     data = gdp_levels(country)
-    unit = "Trillions of 2022 dollars" if country == "United States" else "Trillions of 2021 dollars (PPP)"
+    unit = (
+        "Trillions of 2022 dollars"
+        if country == "United States"
+        else "Trillions of 2021 dollars (PPP)"
+    )
     title = gdp_title(country, data)
-    fig = px.line(data, x="year", y=["Actual GDP", "Potential GDP"], log_y=(scale == "ratio"), title=title,
-                  color_discrete_sequence=[BLUE, GREEN], labels={"year": "Year", "value": unit, "variable": "Series"})
+
+    # Step 2: `px.line` with a list `y=[...]` draws one line per column, and
+    # `log_y=True` gives a ratio scale
+    fig = px.line(
+        data,
+        x="year",
+        y=["Actual GDP", "Potential GDP"],
+        log_y=(scale == "ratio"),
+        title=title,
+        color_discrete_sequence=[BLUE, GREEN],
+        labels={"year": "Year", "value": unit, "variable": "Series"},
+    )
+    # potential GDP dashed, actual GDP thick
     fig.update_traces(selector=dict(name="Potential GDP"), line_dash="dash")
     fig.update_traces(selector=dict(name="Actual GDP"), line_width=3)
+
+    # Step 3: the vertical axis. `tickvals` sets the numbers printed on the axis,
+    # and on a ratio scale the axis `range` is given in powers of ten:
+    # `np.log10(0.9)`
     if country == "United States":
         ticks, ratio_range, linear_top = TICKS, [np.log10(0.9), np.log10(32)], 30
     else:
+        # from 10 percent below the lowest GDP to 10 percent above the highest
         low, high = 0.9 * data["Actual GDP"].min(), 1.1 * data["Actual GDP"].max()
-        ticks, ratio_range, linear_top = ratio_ticks(low, high), [np.log10(low), np.log10(high)], 1.05 * high
+        ticks = ratio_ticks(low, high)
+        ratio_range = [np.log10(low), np.log10(high)]
+        linear_top = 1.05 * high
     if scale == "ratio":
         fig.update_yaxes(tickvals=ticks, range=ratio_range)
     else:
         fig.update_yaxes(range=[0, linear_top])
+    # Step 4: the horizontal axis, from the year before the first one to 2026
     fig.update_xaxes(range=[data.year.min() - 1, 2026])
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(gdp_chart, scale=ToggleButtons(options=["ratio", "linear"], value="ratio", description="vertical scale"),
-         country=Dropdown(options=LEVEL_COUNTRIES, value="United States", description="country", style=WIDE));
+# Fig. 2 with buttons and a menu. `ToggleButtons` shows its options as buttons,
+# and `Dropdown` is a menu that shows one choice at a time.
+interact(
+    gdp_chart,
+    scale=ToggleButtons(options=["ratio", "linear"], value="ratio",
+                        description="vertical scale"),
+    country=Dropdown(options=LEVEL_COUNTRIES, value="United States",
+                     description="country", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 2 with a country menu and buttons for the vertical scale
+# Step 1: the chart of every country, all their lines in one figure; `owner`
+# remembers the country of each line, and only the U.S. lines start visible
 figures, traces, owner = {}, [], []
 for c in LEVEL_COUNTRIES:
     figures[c] = gdp_chart("ratio", c)
@@ -1339,6 +1544,8 @@ for c in LEVEL_COUNTRIES:
         traces.append(t)
         owner.append(c)
 fig = go.Figure(data=traces, layout=figures["United States"].layout)
+# Step 2: one menu entry per country: it shows that country's lines, with its
+# title and axes
 menu = []
 for c in LEVEL_COUNTRIES:
     lay = figures[c].layout
@@ -1346,14 +1553,21 @@ for c in LEVEL_COUNTRIES:
     for o in owner:
         shown.append(o == c)
     menu.append(dict(label=c, method="update", args=[{"visible": shown}, {
-        "title.text": lay.title.text, "yaxis.type": "log", "yaxis.range": list(lay.yaxis.range),
-        "yaxis.tickvals": list(lay.yaxis.tickvals), "yaxis.title.text": lay.yaxis.title.text,
+        "title.text": lay.title.text,
+        "yaxis.type": "log",
+        "yaxis.range": list(lay.yaxis.range),
+        "yaxis.tickvals": list(lay.yaxis.tickvals),
+        "yaxis.title.text": lay.yaxis.title.text,
         "xaxis.range": list(lay.xaxis.range)}]))
+# Step 3: the menu at the top left, and two buttons for the scale at the bottom right
 fig.update_layout(updatemenus=[
     dict(buttons=menu, x=0.01, y=0.98, xanchor="left", yanchor="top"),
-    dict(type="buttons", direction="right", x=0.99, y=0.02, xanchor="right", yanchor="bottom", buttons=[
-        dict(label="ratio scale", method="relayout", args=[{"yaxis.type": "log", "yaxis.autorange": True}]),
-        dict(label="linear scale", method="relayout", args=[{"yaxis.type": "linear", "yaxis.autorange": True}])])])
+    dict(type="buttons", direction="right", x=0.99, y=0.02, xanchor="right",
+         yanchor="bottom", buttons=[
+             dict(label="ratio scale", method="relayout",
+                  args=[{"yaxis.type": "log", "yaxis.autorange": True}]),
+             dict(label="linear scale", method="relayout",
+                  args=[{"yaxis.type": "linear", "yaxis.autorange": True}])])])
 fig
 ```
 
@@ -1386,25 +1600,42 @@ Chart: inspired by Fig. 9.2 in Jones (2024), [*Macroeconomics*, 6th ed.](https:/
 
 #### Key numbers: the Depression, the war and slower potential growth
 
-> **Python note.** `set_index("year")` labels the rows by year, so `potential[2007]` is the value for 2007.
-> `.loc[1930:1939]` keeps the rows from 1930 to 1939, and `.mean()` averages them.
+We label the rows by year and print six numbers from the data of Fig. 2.
 
 ```{python}
+# Key numbers of Fig. 2. Step 1: `set_index("year")` labels the rows by year, so
+# `potential[2007]` is the value for 2007.
 by_year = gdp.set_index("year")
 potential = by_year.gdp_potential
 
 
 def potential_growth(start, end):
-    """Average annual growth of potential output from year start to year end, in percent."""
+    """Average annual growth of potential output from year start to year end.
+
+    The growth rate that turns Ybar_start into Ybar_end in (end - start) years:
+    (Ybar_end / Ybar_start)^(1 / (end - start)) - 1, in percent.
+
+    Arguments
+        start, end : the first and the last year
+    Returns
+        the average annual growth rate, in percent
+    """
     return 100 * ((potential[end] / potential[start]) ** (1 / (end - start)) - 1)
 
 
+# Step 2: the numbers. `.loc[1930:1939]` keeps the rows from 1930 to 1939, and
+# `.mean()` averages them.
 print(f"Average gap in the 1930s:           {by_year.gap.loc[1930:1939].mean():+.1f}%")
 print(f"Gap in 1944 (World War II):         {by_year.gap[1944]:+.1f}%")
-print(f"Largest gap since 1950:             {by_year.gap.loc[1950:].min():+.1f}% in {by_year.gap.loc[1950:].idxmin()}")
-print(f"Potential growth 1990-2007:         {potential_growth(1990, 2007):.1f}% a year")
-print(f"Potential growth 2007-2019:         {potential_growth(2007, 2019):.1f}% a year")
-print(f"Real GDP in 2022:                   {by_year.gdp_actual[2022]:.2f} trillion dollars")
+# the lowest gap since 1950, and its year
+print(f"Largest gap since 1950:             {by_year.gap.loc[1950:].min():+.1f}% "
+      f"in {by_year.gap.loc[1950:].idxmin()}")
+print(f"Potential growth 1990-2007:         "
+      f"{potential_growth(1990, 2007):.1f}% a year")
+print(f"Potential growth 2007-2019:         "
+      f"{potential_growth(2007, 2019):.1f}% a year")
+print(f"Real GDP in 2022:                   "
+      f"{by_year.gdp_actual[2022]:.2f} trillion dollars")
 ```
 
 Output was on average 11 percent below potential in the 1930s. Since 1950 no gap has been as large as
@@ -1433,10 +1664,10 @@ recessions shaded.
 The data file has quarterly real GDP and CBO potential GDP since 1970. The recessions are shaded with
 `shade_recessions` from "Model in code".
 
-> **Python note.** `parse_dates=["date"]` turns text such as `"2020-04-01"` into real dates, so that
-> Plotly and pandas can work with them. `.tail()` shows the last five rows.
-
 ```{python}
+# Load the quarterly data of Fig. 3. `parse_dates=["date"]` turns text such as
+# "2020-04-01" into real dates, so that Plotly and pandas can work with them;
+# `.tail()` shows the last five rows.
 gap = pd.read_csv(DATA_URL + "fig9-3.csv", parse_dates=["date"])
 gap.tail()
 ```
@@ -1445,8 +1676,10 @@ gap.tail()
 Let us check that with our own function:
 
 ```{python}
+# Our own Y~ from the two levels, equation (1), minus the file's column
 check = short_run_output(gap.gdp_real, gap.gdp_potential) - gap.short_run_output
-print(f"Largest difference from our own calculation: {check.abs().max():.4f} percentage points")
+print(f"Largest difference from our own calculation: "
+      f"{check.abs().max():.4f} percentage points")
 ```
 
 The column `short_run_output_book_vintage` is the *same* calculation with the data **as they were published in
@@ -1458,68 +1691,165 @@ vintages shows how much revisions matter.
 The OECD's annual short-run output of other countries can go on the same chart. Each of their points is a whole
 year, drawn in the middle of the year. The shaded bands stay the U.S. recessions.
 
-> **Python note.** The shaded bands are the recessions. `fig.add_hline` draws a horizontal line, here at
-> $\tilde{Y} = 0$. `pd.to_datetime(... + "-07-01")` turns a year into the date of 1 July of that year.
-
 ```{python}
-vintages = gap.rename(columns={"short_run_output": "Data as of 2026",
-                               "short_run_output_book_vintage": "Data as published in 2023"})
-annual_gaps = others.dropna(subset=["output_gap"])[["country", "year", "output_gap"]].copy()
-annual_gaps["date"] = pd.to_datetime(annual_gaps.year.astype(str) + "-07-01")   # the middle of each year
+# Step 1: the two U.S. vintages, with names for the legend
+vintages = gap.rename(
+    columns={
+        "short_run_output": "Data as of 2026",
+        "short_run_output_book_vintage": "Data as published in 2023",
+    }
+)
+# Step 2: the other countries' annual Y~. `.copy()` makes a separate table, so
+# that adding a column to it does not touch `others`.
+annual_gaps = others.dropna(subset=["output_gap"])
+annual_gaps = annual_gaps[["country", "year", "output_gap"]].copy()
+# `pd.to_datetime(... + "-07-01")` turns a year into the date of 1 July of that
+# year, the middle of the year
+annual_gaps["date"] = pd.to_datetime(annual_gaps.year.astype(str) + "-07-01")
+# Step 3: the countries of the menu, the United States first
 GAP_COUNTRIES = ["United States"] + sorted(annual_gaps.country.unique())
-GAP_RANGES = [[-11, 5], [-13, 19]]                 # the textbook's range, and a wider one for other countries
 ```
 
 ```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 3, the other countries' lines
+# the vertical ranges of Fig. 3: the textbook's, and a wider one for other countries
+GAP_RANGES = [[-11, 5], [-13, 19]]
+
+
+def add_gap_countries(fig, data):
+    """Add the annual short-run output of the chosen countries to Fig. 3.
+
+    One line with markers per country, in the country's color, and a title that
+    names the deepest slump shown.
+
+    Arguments
+        fig  : the figure of Fig. 3
+        data : the chosen countries' rows of annual_gaps
+    """
+    # Step 1: one line per country (`color="country"`), with a marker on each
+    # year; `color_discrete_map` gives each country its own color
+    extra = px.line(
+        data,
+        x="date",
+        y="output_gap",
+        color="country",
+        markers=True,
+        hover_name="year",
+        color_discrete_map=COLORS,
+    )
+    fig.add_traces(extra.data)
+    # Step 2: the title names the deepest slump: the row with the lowest Y~
+    low = data.loc[data.output_gap.idxmin()]
+    fig.update_layout(
+        title=(
+            f"U.S. recessions shaded. Deepest slump shown: {low.country}, "
+            f"{low.output_gap:.1f}% in {low.year}"
+        )
+    )
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 3, U.S. economic fluctuations
 def fluctuations_chart(countries=("United States",)):
-    """Fig. 9.3: short-run output; U.S. quarterly (two data vintages), other countries annual (OECD)."""
-    fig = px.line(vintages, x="date", y=["Data as of 2026", "Data as published in 2023"], color_discrete_sequence=[BLUE, GRAY],
-                  labels={"date": "Year", "value": "Short-run output, Ỹ (percent)", "variable": "Data vintage"},
-                  title="Short-run output falls sharply in every recession (shaded)")
+    """Short-run output: U.S. quarterly (two data vintages), other countries annual.
+
+    Draws Fig. 3 (inspired by Fig. 9.3 in Jones), with the U.S. recessions shaded.
+
+    Arguments
+        countries : the countries to show (a tuple of names)
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the U.S. lines, one per data vintage
+    fig = px.line(
+        vintages,
+        x="date",
+        y=["Data as of 2026", "Data as published in 2023"],
+        color_discrete_sequence=[BLUE, GRAY],
+        labels={
+            "date": "Year",
+            "value": "Short-run output, Ỹ (percent)",
+            "variable": "Data vintage",
+        },
+        title="Short-run output falls sharply in every recession (shaded)",
+    )
+    # today's data thick, the 2023 data dotted
     fig.update_traces(selector=dict(name="Data as of 2026"), line_width=3)
     fig.update_traces(selector=dict(name="Data as published in 2023"), line_dash="dot")
+    # hide the U.S. lines when other countries are chosen without it
     if "United States" not in countries and len(countries) > 0:
         fig.update_traces(visible=False)
+
+    # Step 2: the chosen countries; `.isin(countries)` is True for their rows
     data = annual_gaps[annual_gaps.country.isin(countries)]
     if len(data) > 0:
-        extra = px.line(data, x="date", y="output_gap", color="country", markers=True, hover_name="year", color_discrete_map=COLORS)
-        fig.add_traces(extra.data)
-        low = data.loc[data.output_gap.idxmin()]
-        fig.update_layout(title=f"U.S. recessions shaded. Deepest slump shown: {low.country}, {low.output_gap:.1f}% in {low.year}")
+        add_gap_countries(fig, data)
+
+    # Step 3: the line Y~ = 0 (output at potential), and the recessions shaded
     fig.add_hline(y=0, line_dash="dash", line_color="black", line_width=1)
     shade_recessions(fig, "1970-01-01")
     fig.update_xaxes(range=["1970-01-01", "2026-07-01"])
+
+    # Step 4: the textbook's vertical axis, or a wider one when a country needs
+    # room (then `tickvals=None` lets Plotly choose the ticks)
     wide = len(data) > 0 and (data.output_gap.min() < -11 or data.output_gap.max() > 5)
-    fig.update_yaxes(range=GAP_RANGES[1] if wide else GAP_RANGES[0], tickvals=None if wide else [-10, -8, -6, -4, -2, 0, 2, 4])
-    if len(data) == 0:                             # the textbook's view: the legend fits inside the plot
-        fig.update_layout(legend=dict(x=0.99, y=0.99, xanchor="right", yanchor="top", bgcolor="rgba(255,255,255,0.8)"))
+    fig.update_yaxes(
+        range=GAP_RANGES[1] if wide else GAP_RANGES[0],
+        tickvals=None if wide else [-10, -8, -6, -4, -2, 0, 2, 4],
+    )
+
+    # Step 5: in the textbook's view the legend fits inside the plot
+    if len(data) == 0:
+        fig.update_layout(
+            legend=dict(
+                x=0.99,
+                y=0.99,
+                xanchor="right",
+                yanchor="top",
+                bgcolor="rgba(255,255,255,0.8)",   # white, a little see-through
+            )
+        )
     fig.update_layout(legend_title_text="")
     return fig
 ```
 
-> **Python note.** `SelectMultiple` is a list from which you can pick several countries: hold Ctrl (Cmd on a Mac)
-> and click. The function receives the chosen names as a *tuple*, a list that cannot be changed.
-
 ```{python}
 #| kind: widget
-interact(fluctuations_chart, countries=SelectMultiple(options=GAP_COUNTRIES, value=["United States"], rows=8,
-                                                      description="countries"));
+# Fig. 3 with a list of countries. `SelectMultiple` is a list from which you can
+# pick several countries: hold Ctrl (Cmd on a Mac) and click. The function
+# receives the chosen names as a tuple, a list that cannot be changed.
+interact(
+    fluctuations_chart,
+    countries=SelectMultiple(options=GAP_COUNTRIES, value=["United States"], rows=8,
+                             description="countries"),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 3 with the other countries in the legend
+# Step 1: the U.S. chart, and every other country's line, hidden in the legend
 fig = fluctuations_chart()
-extra = px.line(annual_gaps, x="date", y="output_gap", color="country", markers=True, hover_name="year",
-                color_discrete_map=COLORS)
+extra = px.line(annual_gaps, x="date", y="output_gap", color="country", markers=True,
+                hover_name="year", color_discrete_map=COLORS)
 add_legend_traces(fig, extra.data)
+# the two U.S. lines come first
 n_us, n_all = 2, len(fig.data)
-fig.update_yaxes(autorange=True)                    # the axis fits the countries you switch on
-fig.update_layout(legend=dict(x=1.02, y=1, xanchor="left", yanchor="top"), margin=dict(t=120),
-                  updatemenus=[dict(type="buttons", direction="right", x=0, y=1.02, xanchor="left", yanchor="bottom",
-                                    buttons=[
-    dict(label="the textbook's view", method="restyle", args=[{"visible": [True] * n_us + ["legendonly"] * (n_all - n_us)}]),
-    dict(label="all countries", method="restyle", args=[{"visible": [True] * n_all}])])])
+# the axis fits the countries you switch on
+fig.update_yaxes(autorange=True)
+# Step 2: two buttons: the U.S. lines only, or every country
+fig.update_layout(
+    legend=dict(x=1.02, y=1, xanchor="left", yanchor="top"),
+    margin=dict(t=120),
+    updatemenus=[dict(type="buttons", direction="right", x=0, y=1.02,
+                      xanchor="left", yanchor="bottom", buttons=[
+        dict(label="the textbook's view", method="restyle",
+             args=[{"visible": [True] * n_us + ["legendonly"] * (n_all - n_us)}]),
+        dict(label="all countries", method="restyle",
+             args=[{"visible": [True] * n_all}])])],
+)
 fig
 ```
 
@@ -1555,19 +1885,24 @@ The textbook says output fell "nearly 8 percent below potential" in 1982, "more 
 and "more than 10 percent" in 2020. We look for the lowest $\tilde{Y}$ from the start of each recession to one
 year after its end, in both vintages.
 
-> **Python note.** With dates as row labels, `series[peak:end]` keeps the rows between two dates.
-> `pd.DateOffset(years=1)` adds one year to a date. Each pass of the loop adds one row to the list `rows`,
-> which becomes a DataFrame at the end.
-
 ```{python}
+# The lowest Y~ from the start of each recession to one year after its end.
+# Step 1: with dates as row labels, `series[peak:end]` keeps the rows between two
+# dates, and `pd.DateOffset(years=1)` adds one year to a date.
 series = gap.set_index("date")
 rows = []
 for peak, trough in zip(recessions.peak, recessions.trough):
     if peak.year >= 1970:
         window = series[peak:trough + pd.DateOffset(years=1)]
+        # each pass adds one row to the list `rows`; `strftime("%Y-%m")` writes
+        # the date as "1973-11"
         rows.append([peak.strftime("%Y-%m"), window.short_run_output.min(),
                      window.short_run_output_book_vintage.min()])
-pd.DataFrame(rows, columns=["Recession starts", "Lowest Ỹ, data of 2026", "Lowest Ỹ, data of 2023"]).round(2)
+# Step 2: the list becomes a table
+pd.DataFrame(
+    rows,
+    columns=["Recession starts", "Lowest Ỹ, data of 2026", "Lowest Ỹ, data of 2023"],
+).round(2)
 ```
 
 The 2023 vintage reproduces the textbook's numbers: $-7.88$ in 1982, $-5.48$ in 2009 and $-10.42$ in 2020.
@@ -1576,8 +1911,11 @@ know more now. Potential output is never observed, only estimated, and every new
 **When you quote a number, say which vintage of the data it comes from.**
 
 ```{python}
+# The share of quarters with Y~ between -4 and +4 percent: `.between(-4, 4)` is
+# True or False for each quarter, and the mean of True/False is the share of True
 inside = gap.short_run_output.between(-4, 4)
-print(f"Quarters with Y~ between -4% and +4%: {100 * inside.mean():.1f}% of {len(gap)} quarters since 1970")
+print(f"Quarters with Y~ between -4% and +4%: {100 * inside.mean():.1f}% "
+      f"of {len(gap)} quarters since 1970")
 ```
 
 <!-- cell -->
@@ -1587,15 +1925,20 @@ print(f"Quarters with Y~ between -4% and +4%: {100 * inside.mean():.1f}% of {len
 The OECD also estimates the U.S. output gap, with its own model of potential output. Our file has it, so we can
 compare it with the CBO's, averaged over the four quarters of each year.
 
-> **Python note.** `pd.DataFrame({"OECD": a, "CBO": b})` lines up two series by their labels, here the years.
-> `.dropna()` keeps the years in which both exist.
-
 ```{python}
+# The OECD's and the CBO's U.S. output gap, year by year.
+# Step 1: the OECD's annual gap, and the CBO's quarterly gap averaged by year.
+# `groupby(gap.date.dt.year)` puts the quarters of each year in one group, and
+# `.mean()` averages each group.
 oecd_us = panel[panel.country == "United States"].set_index("year").output_gap
 cbo_us = gap.groupby(gap.date.dt.year).short_run_output.mean()
+# Step 2: `pd.DataFrame({"OECD": a, "CBO": b})` lines up the two series by their
+# labels, here the years; `.dropna()` keeps the years in which both exist
 two = pd.DataFrame({"OECD": oecd_us, "CBO": cbo_us}).dropna()
+# Step 3: how close they are: the correlation (`.corr`), the largest difference
 print(f"{two.index.min()}-{two.index.max()}: correlation {two.OECD.corr(two.CBO):.2f}, "
-      f"largest difference {(two.OECD - two.CBO).abs().max():.1f} points in {(two.OECD - two.CBO).abs().idxmax()}")
+      f"largest difference {(two.OECD - two.CBO).abs().max():.1f} points "
+      f"in {(two.OECD - two.CBO).abs().idxmax()}")
 two.loc[[1992, 2000, 2009, 2020, 2025]].round(2)
 ```
 
@@ -1612,11 +1955,12 @@ measure it. We walk through the quarters, and each time $\tilde{Y}$ turns negati
 until output is back at potential. A quarter is a quarter of a year, so each quarter adds $-\tilde{Y}/4$ percent of
 a year's GDP.
 
-> **Python note.** `series.short_run_output.items()` hands over one (date, value) pair at a time. `None` means
-> "no value yet": `start is None` is true while we are not inside a slump. `total += x` is short for
-> `total = total + x`.
-
 ```{python}
+# The output lost in each slump, from the quarter Y~ turns negative until output
+# is back at potential.
+# Step 1: walk through the quarters. `.items()` hands over one (date, value) pair
+# at a time. `None` means "no value yet": `start is None` is true while we are not
+# inside a slump. `total += x` is short for `total = total + x`.
 slumps = []
 start, total = None, 0.0
 for date, value in series.short_run_output.items():
@@ -1624,11 +1968,17 @@ for date, value in series.short_run_output.items():
         if start is None:                      # a new slump begins
             start, total = date, 0.0
         total += -value / 4                    # lost output, percent of a year's GDP
-    elif start is not None:                    # output is back at potential: the slump is over
+    # output is back at potential: the slump is over
+    elif start is not None:
+        # its length in years: `.days` counts the days between two dates
         years = (date - start).days / 365.25
         slumps.append([start.strftime("%Y-%m"), date.strftime("%Y-%m"), years, total])
         start = None
-slumps = pd.DataFrame(slumps, columns=["Slump starts", "Back at potential", "Years", "Lost output (% of GDP)"])
+# Step 2: the table of the slumps that lasted a year or more
+slumps = pd.DataFrame(
+    slumps,
+    columns=["Slump starts", "Back at potential", "Years", "Lost output (% of GDP)"],
+)
 slumps[slumps.Years >= 1].round(1)
 ```
 
@@ -1639,7 +1989,9 @@ below potential for many years: the early 1980s and the years after the Great Re
 In dollars, 6 percent of 2022 GDP is a lot of money. With the textbook's U.S. population of 330 million:
 
 ```{python}
-loss = 0.06 * by_year.gdp_actual[2022] * 1e12          # 6 percent of 2022 GDP, in dollars
+# 6 percent of 2022 GDP, in dollars (`1e12` is a trillion), per person and per
+# family; `:,.0f` writes a number with commas between the thousands
+loss = 0.06 * by_year.gdp_actual[2022] * 1e12
 print(f"6% of 2022 GDP: {loss / 1e12:.2f} trillion dollars")
 print(f"Per person:     {loss / 330e6:,.0f} dollars")
 print(f"Per family of four: {4 * loss / 330e6:,.0f} dollars")
@@ -1667,6 +2019,7 @@ were a weaker decade?
 **Goal.** See recessions in the labor market: the monthly percent change in the number of jobs since 1980.
 
 ```{python}
+# Load the monthly job changes of Fig. 4, and look up April 2020
 jobs = pd.read_csv(DATA_URL + "fig9-4.csv", parse_dates=["date"])
 april_2020 = jobs.set_index("date").emp_change_pct["2020-04-01"]
 print(f"{len(jobs)} months; change in April 2020: {april_2020:.2f}%")
@@ -1682,6 +2035,8 @@ employment with a household survey, the labour force survey, usually every quart
 numbers, and a wider file has them, with the percent change from the quarter before:
 
 ```{python}
+# Load the OECD's quarterly employment changes, and show the five largest falls
+# in the second quarter of 2020 (`sort_values` sorts from the smallest up)
 emp_q = pd.read_csv(DATA_URL + "employment_quarterly.csv", parse_dates=["date"])
 emp_q[emp_q.date == "2020-04-01"].sort_values("emp_change_pct").head()
 ```
@@ -1690,55 +2045,121 @@ The second quarter of 2020 shows how differently countries went through the Covi
 quarterly, so they are not directly comparable with the monthly U.S. bars, but each country's own chart shows its
 recessions the same way.
 
-> **Python note.** `px.bar` draws one bar per row. `fig.add_annotation` writes a label with an arrow
-> that points at a data point; `ax` and `ay` set where the label sits, in pixels from that point.
-> `f"{date:%B %Y}"` prints a date as "April 2020", and `date.quarter` is its quarter of the year (1 to 4).
-
 ```{python}
 def employment_data(country):
-    """Fig. 9.4: the employment changes of one country (U.S.: monthly payroll jobs; others: quarterly, OECD)."""
+    """The employment changes of one country, and how often they are measured (Fig. 4).
+
+    The United States: monthly payroll jobs (BLS). Other countries: quarterly
+    employment (OECD).
+
+    Arguments
+        country : the country's name
+    Returns
+        data : its rows, with the columns date and emp_change_pct
+        freq : "Monthly" or "Quarterly"
+    """
     if country == "United States":
         return jobs, "Monthly"
+    # the rows of one country
     return emp_q[emp_q.country == country], "Quarterly"
 ```
 
 ```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 4, changes in employment
 def employment_chart(view="full range", country="United States"):
-    """Fig. 9.4: the percent change in employment from the month (or quarter) before."""
+    """The percent change in employment from the month (or quarter) before.
+
+    Draws Fig. 4 (inspired by Fig. 9.4 in Jones), with the largest fall labeled.
+
+    Arguments
+        view    : "full range" or "zoom on normal months"
+        country : the country's name
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the data, and the month (or quarter) with the largest fall.
+    # `f"{date:%B %Y}"` writes a date as "April 2020", and `date.quarter` is its
+    # quarter of the year (1 to 4).
     data, freq = employment_data(country)
     low = data.loc[data.emp_change_pct.idxmin()]
-    when = f"{low.date:%B %Y}" if country == "United States" else f"{low.date.year} Q{low.date.quarter}"
-    title = "Employment grows in most months; 2008–09 and April 2020 stand out"
-    if country != "United States":
-        title = f"{country}: employment fell most in {when}, by {-low.emp_change_pct:.1f}% in one quarter"
-    fig = px.bar(data, x="date", y="emp_change_pct", title=title,
-                 labels={"date": "Year", "emp_change_pct": f"{freq} change in employment (percent)"})
+    # the date of the largest fall, and the title
+    if country == "United States":
+        when = f"{low.date:%B %Y}"
+        title = "Employment grows in most months; 2008–09 and April 2020 stand out"
+    else:
+        when = f"{low.date.year} Q{low.date.quarter}"
+        title = (
+            f"{country}: employment fell most in {when}, "
+            f"by {-low.emp_change_pct:.1f}% in one quarter"
+        )
+
+    # Step 2: `px.bar` draws one bar per row
+    fig = px.bar(
+        data,
+        x="date",
+        y="emp_change_pct",
+        title=title,
+        labels={
+            "date": "Year",
+            "emp_change_pct": f"{freq} change in employment (percent)",
+        },
+    )
     fig.update_traces(marker_color=BLUE, marker_line_width=0)
     fig.add_hline(y=0, line_dash="dash", line_color="black", line_width=1)
+
+    # Step 3: the full range labels the largest fall. `add_annotation` writes a
+    # label with an arrow that points at a data point; `ax` and `ay` set where the
+    # label sits, in pixels from that point.
     if view == "full range":
-        fig.add_annotation(x=low.date, y=low.emp_change_pct, text=f"{when}: {low.emp_change_pct:.1f}%",
-                           showarrow=True, arrowhead=2, ax=-110, ay=0)
+        fig.add_annotation(
+            x=low.date,
+            y=low.emp_change_pct,
+            text=f"{when}: {low.emp_change_pct:.1f}%",
+            showarrow=True,
+            arrowhead=2,
+            ax=-110,
+            ay=0,
+        )
         if country == "United States":
-            fig.update_yaxes(range=[-15, 4.5], tickvals=[-14, -12, -10, -8, -6, -4, -2, 0, 2, 4])
+            fig.update_yaxes(
+                range=[-15, 4.5],
+                tickvals=[-14, -12, -10, -8, -6, -4, -2, 0, 2, 4],
+            )
     else:
-        fig.update_yaxes(range=[-1, 2], tickvals=[-0.5, 0, 0.5, 1, 1.5])   # no label in the bottom-left corner
-    fig.update_xaxes(range=[data.date.min() - pd.DateOffset(months=6), data.date.max() + pd.DateOffset(months=6)])
+        # the zoom; no label in the bottom-left corner
+        fig.update_yaxes(range=[-1, 2], tickvals=[-0.5, 0, 0.5, 1, 1.5])
+
+    # Step 4: half a year of space at both ends of the horizontal axis
+    pad = pd.DateOffset(months=6)
+    fig.update_xaxes(range=[data.date.min() - pad, data.date.max() + pad])
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(employment_chart, view=Dropdown(options=["full range", "zoom on normal months"], value="full range",
-                                         description="view", style=WIDE),
-         country=Dropdown(options=["United States"] + sorted(emp_q.country[emp_q.country != "United States"].unique()), value="United States",
-                          description="country", style=WIDE));
+# Fig. 4 with two menus: the view and the country
+interact(
+    employment_chart,
+    view=Dropdown(options=["full range", "zoom on normal months"], value="full range",
+                  description="view", style=WIDE),
+    country=Dropdown(
+        options=["United States"]
+        + sorted(emp_q.country[emp_q.country != "United States"].unique()),
+        value="United States",
+        description="country", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: Fig. 4 with a country menu and buttons for the full range and the zoom
-EMP_COUNTRIES = ["United States"] + sorted(emp_q.country[emp_q.country != "United States"].unique())
+# @title Website version: Fig. 4 with a country menu and buttons for the view
+# Step 1: the countries of the menu, and an empty chart with the U.S. layout
+EMP_COUNTRIES = ["United States"] + sorted(
+    emp_q.country[emp_q.country != "United States"].unique())
 fig = go.Figure(layout=employment_chart().layout)
+# Step 2: each country's bars (only the U.S. ones visible), and a menu entry that
+# shows them, with that country's title, label and axes
 menu = []
 for c in EMP_COUNTRIES:
     f = employment_chart("full range", c)
@@ -1747,16 +2168,24 @@ for c in EMP_COUNTRIES:
     for k in range(len(EMP_COUNTRIES)):
         shown.append(EMP_COUNTRIES[k] == c)
     menu.append(dict(label=c, method="update", args=[{"visible": shown}, {
-        "title.text": f.layout.title.text, "annotations": [a.to_plotly_json() for a in f.layout.annotations],
-        "yaxis.autorange": True, "yaxis.tickvals": None, "xaxis.range": list(f.layout.xaxis.range),
+        "title.text": f.layout.title.text,
+        "annotations": [a.to_plotly_json() for a in f.layout.annotations],
+        "yaxis.autorange": True,
+        "yaxis.tickvals": None,
+        "xaxis.range": list(f.layout.xaxis.range),
         "yaxis.title.text": f.layout.yaxis.title.text}]))
+# Step 3: the country menu, next to two buttons for the view
 fig.update_layout(updatemenus=[
-    dict(buttons=menu, x=0.45, y=0.98, xanchor="left", yanchor="top"),       # next to the view buttons
-    dict(type="buttons", direction="right", x=0.01, y=0.98, xanchor="left", yanchor="top", buttons=[
-        dict(label="full range", method="relayout",
-             args=[{"yaxis.autorange": True, "yaxis.tickvals": None, "annotations[0].visible": True}]),
-        dict(label="zoom on normal months", method="relayout",
-             args=[{"yaxis.range": [-1, 2], "yaxis.tickvals": [-0.5, 0, 0.5, 1, 1.5], "annotations[0].visible": False}])])])
+    dict(buttons=menu, x=0.45, y=0.98, xanchor="left", yanchor="top"),
+    dict(type="buttons", direction="right", x=0.01, y=0.98, xanchor="left",
+         yanchor="top", buttons=[
+             dict(label="full range", method="relayout",
+                  args=[{"yaxis.autorange": True, "yaxis.tickvals": None,
+                         "annotations[0].visible": True}]),
+             dict(label="zoom on normal months", method="relayout",
+                  args=[{"yaxis.range": [-1, 2],
+                         "yaxis.tickvals": [-0.5, 0, 0.5, 1, 1.5],
+                         "annotations[0].visible": False}])])])
 fig
 ```
 
@@ -1792,14 +2221,28 @@ labor force of about 160 million people, that is a loss of 1.6 to 3.2 million jo
 lost, from the peak month to the lowest employment up to two years later. A wider data file has the number of jobs.
 
 ```{python}
-payroll = pd.read_csv(DATA_URL + "payroll_employment.csv", parse_dates=["date"]).set_index("date").payroll_millions
-print(f"1 to 2 points of a 160 million labor force: {0.01 * 160:.1f} to {0.02 * 160:.1f} million jobs")
+# Jobs lost in each recession since 1980.
+# Step 1: the number of payroll jobs, in millions, with the months as row labels
+payroll = (
+    pd.read_csv(DATA_URL + "payroll_employment.csv", parse_dates=["date"])
+    .set_index("date")
+    .payroll_millions
+)
+# the textbook's rule of thumb: 1 to 2 percent of a labor force of 160 million
+print(f"1 to 2 points of a 160 million labor force: "
+      f"{0.01 * 160:.1f} to {0.02 * 160:.1f} million jobs")
+# Step 2: the jobs at the peak, and the fewest up to two years after the trough
 rows = []
 for peak, trough in zip(recessions.peak, recessions.trough):
     if peak.year >= 1980:
         lowest = payroll[peak:trough + pd.DateOffset(years=2)].min()
-        rows.append([peak.strftime("%Y-%m"), payroll[peak], lowest, payroll[peak] - lowest])
-pd.DataFrame(rows, columns=["Recession starts", "Jobs at peak (millions)", "Lowest after", "Jobs lost"]).round(2)
+        rows.append([peak.strftime("%Y-%m"), payroll[peak], lowest,
+                     payroll[peak] - lowest])
+pd.DataFrame(
+    rows,
+    columns=["Recession starts", "Jobs at peak (millions)", "Lowest after",
+             "Jobs lost"],
+).round(2)
 ```
 
 The four recessions from 1980 to 2001 cost between 1.3 and 2.8 million jobs, just as the textbook's rule of thumb
@@ -1825,13 +2268,14 @@ says. The Great Recession cost 8.7 million jobs and the Covid-19 recession 21.9 
 The textbook uses the annual inflation rate of the consumer price index (CPI). We also load the monthly
 12-month inflation rate from a wider data file.
 
-> **Python note.** `pd.to_datetime(inflation.year, format="%Y")` turns a year such as 1980 into the date
-> 1 January 1980, so that the annual points line up with the shaded recession months.
-
 ```{python}
+# Load the annual inflation of Fig. 5, and the monthly CPI.
+# `pd.to_datetime(inflation.year, format="%Y")` turns a year such as 1980 into the
+# date 1 January 1980, so that the annual points line up with the recession months.
 inflation = pd.read_csv(DATA_URL + "fig9-5.csv")
 inflation["date"] = pd.to_datetime(inflation.year, format="%Y")
 monthly = pd.read_csv(DATA_URL + "cpi_monthly.csv", parse_dates=["date"])
+# the months with no CPI: `.isna()` is True where a value is missing
 monthly[monthly.cpi.isna()]
 ```
 
@@ -1845,71 +2289,174 @@ shaded bands stay the U.S. recessions: other countries had their own, at other d
 steps when a country with higher inflation is added.
 
 ```{python}
-other_inflation = others.dropna(subset=["inflation"])[["country", "year", "inflation"]].copy()
+# Annual CPI inflation of the other countries, with a date for each year
+other_inflation = others.dropna(subset=["inflation"])
+other_inflation = other_inflation[["country", "year", "inflation"]].copy()
 other_inflation["date"] = pd.to_datetime(other_inflation.year, format="%Y")
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 5, the other countries' lines and the vertical axis
+# the vertical ranges of Fig. 5, from the textbook's to the widest
 INFLATION_RANGES = [[-2.5, 15.5], [-5, 31], [-10, 62], [-20, 124], [-50, 310]]
 
 
 def inflation_range(low, high):
-    """The first range in INFLATION_RANGES that contains low and high (the widest one if none does)."""
+    """The first range in INFLATION_RANGES that contains low and high.
+
+    The axis widens in steps, so that it only moves when a country needs more room.
+
+    Arguments
+        low, high : the lowest and the highest value to show
+    Returns
+        [bottom, top] (the widest range if none contains both)
+    """
+    # the first range that holds both values
     for bottom, top in INFLATION_RANGES:
         if bottom <= low and high <= top:
             return [bottom, top]
     return INFLATION_RANGES[-1]
+
+
+def add_inflation_countries(fig, data):
+    """Add the annual inflation of the chosen countries to Fig. 5.
+
+    One line with markers per country, a title that names the highest inflation
+    shown, and a vertical axis wide enough for every point.
+
+    Arguments
+        fig  : the figure of Fig. 5
+        data : the chosen countries' rows of other_inflation
+    """
+    # Step 1: one line per country, in its own color
+    extra = px.line(
+        data,
+        x="date",
+        y="inflation",
+        color="country",
+        markers=True,
+        hover_name="year",
+        color_discrete_map=COLORS,
+    )
+    fig.add_traces(extra.data)
+    # Step 2: the title names the highest inflation shown
+    top = data.loc[data.inflation.idxmax()]
+    fig.update_layout(
+        title=(
+            f"U.S. recessions shaded. Highest inflation shown: {top.country}, "
+            f"{top.inflation:,.1f}% in {top.year}"
+        )
+    )
+    # Step 3: the vertical axis holds every point, and zero
+    low, high = min(data.inflation.min(), 0), max(data.inflation.max(), 0)
+    fig.update_yaxes(range=inflation_range(low, high))
 ```
 
 ```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 5, inflation in the United States
 def inflation_chart(countries=("United States",)):
-    """Fig. 9.5: annual CPI inflation (U.S.: also the monthly 12-month rate), with the U.S. recessions shaded."""
-    fig = px.line(inflation, x="date", y="inflation_cpi", markers=True,
-                  labels={"date": "Year", "inflation_cpi": "Inflation rate (percent)"},
-                  title="Inflation usually peaks near the start of a recession and then falls")
-    fig.update_traces(line=dict(color=BLUE, width=3), name="United States, annual", showlegend=True)
+    """Annual CPI inflation (U.S.: also the monthly 12-month rate), recessions shaded.
+
+    Draws Fig. 5 (inspired by Fig. 9.5 in Jones).
+
+    Arguments
+        countries : the countries to show (a tuple of names)
+    Returns
+        a Plotly figure
+    """
+    # Step 1: U.S. annual inflation, with a marker on each year
+    fig = px.line(
+        inflation,
+        x="date",
+        y="inflation_cpi",
+        markers=True,
+        labels={"date": "Year", "inflation_cpi": "Inflation rate (percent)"},
+        title="Inflation usually peaks near the start of a recession and then falls",
+    )
+    fig.update_traces(
+        line=dict(color=BLUE, width=3),
+        name="United States, annual",
+        showlegend=True,
+    )
+    # Step 2: the monthly 12-month rate since 1960, a thin line
     recent = monthly[monthly.date >= "1960-01-01"]
-    fig.add_trace(go.Scatter(x=recent.date, y=recent.inflation_12m, name="United States, 12-month rate, monthly",
-                             mode="lines", line=dict(color=TEAL, width=1)))
+    monthly_line = go.Scatter(
+        x=recent.date,
+        y=recent.inflation_12m,
+        name="United States, 12-month rate, monthly",
+        mode="lines",
+        line=dict(color=TEAL, width=1),
+    )
+    fig.add_trace(monthly_line)
+    # hide the U.S. lines when other countries are chosen without it
     if "United States" not in countries and len(countries) > 0:
         fig.update_traces(visible=False)
+
+    # Step 3: the chosen countries, or the textbook's vertical axis
     data = other_inflation[other_inflation.country.isin(countries)]
     if len(data) > 0:
-        extra = px.line(data, x="date", y="inflation", color="country", markers=True, hover_name="year", color_discrete_map=COLORS)
-        fig.add_traces(extra.data)
-        top = data.loc[data.inflation.idxmax()]
-        fig.update_layout(title=f"U.S. recessions shaded. Highest inflation shown: {top.country}, {top.inflation:,.1f}% in {top.year}")
+        add_inflation_countries(fig, data)
+    else:
+        fig.update_yaxes(range=[-2.5, 15.5])
+
+    # Step 4: the zero line, the recessions, the years shown
     fig.add_hline(y=0, line_color="black", line_width=1)
     shade_recessions(fig)
-    fig.update_yaxes(range=inflation_range(min(data.inflation.min(), 0), max(data.inflation.max(), 0)) if len(data) > 0 else [-2.5, 15.5])
     fig.update_xaxes(range=["1959-07-01", "2026-07-01"])
-    if len(data) == 0:                             # the textbook's view: the legend fits inside the plot
-        fig.update_layout(legend=dict(x=0.99, y=0.99, xanchor="right", yanchor="top", bgcolor="rgba(255,255,255,0.8)"))
+    # in the textbook's view the legend fits inside the plot
+    if len(data) == 0:
+        fig.update_layout(
+            legend=dict(
+                x=0.99,
+                y=0.99,
+                xanchor="right",
+                yanchor="top",
+                bgcolor="rgba(255,255,255,0.8)",   # white, a little see-through
+            )
+        )
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(inflation_chart, countries=SelectMultiple(options=["United States"] + sorted(other_inflation.country.unique()),
-                                                   value=["United States"], rows=8, description="countries"));
+# Fig. 5 with a list of countries (hold Ctrl or Cmd to pick several)
+interact(
+    inflation_chart,
+    countries=SelectMultiple(
+        options=["United States"] + sorted(other_inflation.country.unique()),
+        value=["United States"], rows=8, description="countries"),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: Fig. 5 with a menu of country groups and the countries in the legend
+# @title Website version: Fig. 5 with a menu of country groups and a country legend
+# Step 1: the U.S. chart, and every other country's line in the legend
 fig = inflation_chart()
+# the U.S. lines come first
 n_us = len(fig.data)
-extra = px.line(other_inflation, x="date", y="inflation", color="country", markers=True, hover_name="year",
-                color_discrete_map=COLORS)
+extra = px.line(other_inflation, x="date", y="inflation", color="country",
+                markers=True, hover_name="year", color_discrete_map=COLORS)
 add_legend_traces(fig, extra.data)
+# Step 2: one menu entry per group: the group's countries go in the legend
+# ("legendonly": click a name to draw it), and the others are hidden
 buttons = []
 for group, members in GROUPS_9.items():
     shown = [True] * n_us
     for t in extra.data:
         shown.append("legendonly" if t.name in members else False)
     buttons.append(dict(label=group, method="restyle", args=[{"visible": shown}]))
+# Step 3: the G7 at the start
 for t in fig.data[n_us:]:
     t.visible = "legendonly" if t.name in GROUPS_9["G7"] else False
-fig.update_yaxes(autorange=True)                    # the axis fits the countries you switch on
-fig.update_layout(updatemenus=[dict(buttons=buttons, x=0.01, y=0.98, xanchor="left", yanchor="top")],
-                  legend=dict(x=1.02, y=1, xanchor="left", yanchor="top"))
+# the axis fits the countries you switch on
+fig.update_yaxes(autorange=True)
+fig.update_layout(
+    updatemenus=[dict(buttons=buttons, x=0.01, y=0.98, xanchor="left", yanchor="top")],
+    legend=dict(x=1.02, y=1, xanchor="left", yanchor="top"),
+)
 fig
 ```
 
@@ -1939,13 +2486,23 @@ Chart: inspired by Fig. 9.5 in Jones (2024), [*Macroeconomics*, 6th ed.](https:/
 
 #### Key numbers: inflation before and after each recession
 
+For each recession we list inflation in the year it starts, its highest rate during the recession, and the
+rate in the year after it ends.
+
 ```{python}
+# Inflation around each recession, from the annual data.
+# Step 1: annual inflation, with the years as row labels
 pi = inflation.set_index("year").inflation_cpi
+# Step 2: one row per recession
 rows = []
 for peak, trough in zip(recessions.peak, recessions.trough):
-    rows.append([peak.year, pi[peak.year], pi.loc[peak.year:trough.year].max(), pi[trough.year + 1]])
-pd.DataFrame(rows, columns=["Recession starts", "Inflation that year", "Highest in the recession",
-                            "Year after it ends"]).round(2)
+    rows.append([peak.year, pi[peak.year], pi.loc[peak.year:trough.year].max(),
+                 pi[trough.year + 1]])
+pd.DataFrame(
+    rows,
+    columns=["Recession starts", "Inflation that year", "Highest in the recession",
+             "Year after it ends"],
+).round(2)
 ```
 
 In every recession before 2020, inflation in the year after the recession ended was lower than at its start.
@@ -1953,9 +2510,13 @@ The Covid-19 recession is the exception in annual data: 1.25 percent in 2020, 4.
 data tell a different story:
 
 ```{python}
+# 12-month inflation around the Covid-19 recession, and annual inflation in the
+# Volcker years
 rate = monthly.set_index("date").inflation_12m
-print(f"12-month inflation, February 2020: {rate['2020-02-01']:.2f}%   April 2020: {rate['2020-04-01']:.2f}%")
-print(f"Inflation 1979: {pi[1979]:.2f}%   1980: {pi[1980]:.2f}%   1983: {pi[1983]:.2f}%")
+print(f"12-month inflation, February 2020: {rate['2020-02-01']:.2f}%   "
+      f"April 2020: {rate['2020-04-01']:.2f}%")
+print(f"Inflation 1979: {pi[1979]:.2f}%   1980: {pi[1980]:.2f}%   "
+      f"1983: {pi[1983]:.2f}%")
 ```
 
 From February to April 2020, the two months of the Covid-19 recession, 12-month inflation fell from 2.34 to
@@ -1995,14 +2556,70 @@ $$\Delta\pi_t = \bar{\nu}\,\tilde{Y}_t$$
 When output is at potential ($\tilde{Y} = 0$), inflation is steady. Our function `phillips_curve` from "Model
 in code" draws the line. The black dot is the economy, at the short-run output you choose.
 
-> **Python note.** `fig.add_shape(type="line", ...)` draws a straight segment, here the dashed guides from the
-> dot to the axes. An `if ... elif ... else` block picks one of three cases.
+The function below draws the figure. It only calls `phillips_curve`, so all of its code is drawing code:
+open it to see how the line, the dot and the dashed guides are placed.
 
 ```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 6, the economy on the Phillips curve
+def mark_economy(fig, Y_tilde, dpi):
+    """Mark the economy on the Phillips curve of Fig. 6: a dot and two guides.
+
+    Also writes which side of the chart is a slump and which a boom.
+
+    Arguments
+        fig     : the figure of Fig. 6
+        Y_tilde : short-run output Y~, in percent
+        dpi     : the change in inflation at Y~, delta pi
+    """
+    # Step 1: the economy, a black dot
+    dot = go.Scatter(
+        x=[Y_tilde],
+        y=[dpi],
+        name="The economy",
+        mode="markers",
+        marker=dict(color="black", size=13),
+    )
+    fig.add_trace(dot)
+    # Step 2: dashed guides from the dot to the axes; `add_shape(type="line", ...)`
+    # draws a straight segment
+    guide = dict(color=GRAY, dash="dash")
+    fig.add_shape(type="line", x0=Y_tilde, y0=-3.2, x1=Y_tilde, y1=dpi, line=guide)
+    fig.add_shape(type="line", x0=-6.5, y0=dpi, x1=Y_tilde, y1=dpi, line=guide)
+    # Step 3: the two sides of the chart
+    fig.add_annotation(
+        x=-3.2,
+        y=2.8,
+        text="← Ỹ < 0: output below potential",
+        showarrow=False,
+    )
+    fig.add_annotation(
+        x=3.2,
+        y=-2.8,
+        text="Ỹ > 0: output above potential →",
+        showarrow=False,
+    )
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 6, the Phillips curve
 def phillips_diagram(nu=0.33, Y_tilde=0.0):
-    """Fig. 9.6: the Phillips curve delta pi = nu * Y_tilde, with the economy at Y_tilde."""
-    Y_end = min(6.0, 2.6 / nu)                          # stop the line where its name still fits below the top
+    """The Phillips curve delta pi = nu-bar * Y~, with the economy at Y_tilde.
+
+    Draws Fig. 6 (adapted from Fig. 9.6 in Jones).
+
+    Arguments
+        nu      : slope of the Phillips curve, nu-bar
+        Y_tilde : short-run output Y~, in percent
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the line, stopped where its name still fits below the top
+    Y_end = min(6.0, 2.6 / nu)
     Y = np.linspace(-Y_end, Y_end, 100)
+    # Step 2: the change in inflation at Y~, equation (5). An `if ... elif ...
+    # else` block picks one of three cases.
     dpi = phillips_curve(Y_tilde, nu)
     if dpi > 0:
         verdict = "inflation rises"
@@ -2010,34 +2627,65 @@ def phillips_diagram(nu=0.33, Y_tilde=0.0):
         verdict = "inflation falls"
     else:
         verdict = "inflation is steady"
+
+    # Step 3: the Phillips curve and its name, then the economy
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=Y, y=phillips_curve(Y, nu), name="Phillips curve", line=dict(color=TEAL, width=4)))
-    add_end_label(fig, Y_end, phillips_curve(Y_end, nu), "Phillips curve", TEAL, "bottom", xanchor="right")
-    fig.add_trace(go.Scatter(x=[Y_tilde], y=[dpi], name="The economy", mode="markers",
-                             marker=dict(color="black", size=13)))
-    fig.add_shape(type="line", x0=Y_tilde, y0=-3.2, x1=Y_tilde, y1=dpi, line=dict(color=GRAY, dash="dash"))
-    fig.add_shape(type="line", x0=-6.5, y0=dpi, x1=Y_tilde, y1=dpi, line=dict(color=GRAY, dash="dash"))
-    fig.add_annotation(x=-3.2, y=2.8, text="← Ỹ < 0: output below potential", showarrow=False)
-    fig.add_annotation(x=3.2, y=-2.8, text="Ỹ > 0: output above potential →", showarrow=False)
-    fig.update_layout(title=f"Ỹ = {Y_tilde:+.2f}%  →  Δπ = {nu:.2f} × ({Y_tilde:+.2f}) = {dpi:+.2f} points: {verdict}",
-                      xaxis=dict(title="Short-run output, Ỹ (percent)", range=[-6.5, 6.5], tickvals=[-4, -2, 0, 2, 4, 6]),
-                      yaxis=dict(title="Change in inflation, Δπ (points)", range=[-3.2, 3.2], tickvals=[-2, -1, 0, 1, 2, 3]),
-                      showlegend=False)                  # tick values: no labels in the bottom-left corner
+    curve = go.Scatter(
+        x=Y,
+        y=phillips_curve(Y, nu),
+        name="Phillips curve",
+        line=dict(color=TEAL, width=4),
+    )
+    fig.add_trace(curve)
+    add_end_label(fig, Y_end, phillips_curve(Y_end, nu), "Phillips curve", TEAL,
+                  "bottom", xanchor="right")
+    mark_economy(fig, Y_tilde, dpi)
+
+    # Step 4: the title does the arithmetic of equation (5); the tick values leave
+    # no labels in the bottom-left corner
+    fig.update_layout(
+        title=(
+            f"Ỹ = {Y_tilde:+.2f}%  →  Δπ = {nu:.2f} × ({Y_tilde:+.2f}) = "
+            f"{dpi:+.2f} points: {verdict}"
+        ),
+        xaxis=dict(
+            title="Short-run output, Ỹ (percent)",
+            range=[-6.5, 6.5],
+            tickvals=[-4, -2, 0, 2, 4, 6],
+        ),
+        yaxis=dict(
+            title="Change in inflation, Δπ (points)",
+            range=[-3.2, 3.2],
+            tickvals=[-2, -1, 0, 1, 2, 3],
+        ),
+        showlegend=False,
+    )
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(phillips_diagram,
-         nu=FloatSlider(value=0.33, min=0.05, max=0.5, step=0.01, description="slope ν", style=WIDE),
-         Y_tilde=FloatSlider(value=0.0, min=-5.0, max=5.0, step=0.5, description="short-run output Ỹ (%)", style=WIDE));
+# Fig. 6 with sliders for the slope and for short-run output
+interact(
+    phillips_diagram,
+    nu=FloatSlider(value=0.33, min=0.05, max=0.5, step=0.01,
+                   description="slope ν", style=WIDE),
+    Y_tilde=FloatSlider(value=0.0, min=-5.0, max=5.0, step=0.5,
+                        description="short-run output Ỹ (%)", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 6 with a precomputed slider for short-run output
-slider_figure(phillips_diagram, "Y_tilde", [-4.0, -3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0, 4.0], start=0.0,
-              label="short-run output Ỹ (percent)")
+# one picture of Fig. 6 per value of Y~
+slider_figure(
+    phillips_diagram,
+    "Y_tilde",
+    [-4.0, -3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0, 4.0],     # the values of Y~
+    start=0.0,
+    label="short-run output Ỹ (percent)",
+)
 ```
 
 **Source.** Adapted from Fig. 9.6 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -2064,14 +2712,15 @@ model then predicts falling inflation, and inflation did fall to about 3 percent
 Let us check the model's prediction for 1981–1983 with the annual short-run output of Fig. 7 below.
 
 ```{python}
+# Load the annual data of Fig. 7, and keep the Volcker years 1981-1983 (`&` means
+# "and"). `.copy()` makes a separate small table, so that adding a column to
+# `volcker` does not touch `phillips`.
 phillips = pd.read_csv(DATA_URL + "fig9-7.csv")
 volcker = phillips[(phillips.year >= 1981) & (phillips.year <= 1983)].copy()
+# the change in inflation that the Phillips curve predicts, equation (5)
 volcker["predicted_change"] = phillips_curve(volcker.short_run_output)
 volcker[["year", "short_run_output", "d_inflation", "predicted_change"]].round(2)
 ```
-
-> **Python note.** `.copy()` makes a separate small table, so that adding a column to `volcker` does not touch
-> `phillips`.
 
 The model gets the direction right in all three years. It predicts a smaller fall than actually happened, a
 sign that the Phillips curve is not the whole story (Fig. 7).
@@ -2100,76 +2749,181 @@ We loaded `fig9-7.csv` above as `phillips`. Its columns are `short_run_output` (
 quarters), `inflation_cpi` ($\pi$), `d_inflation` ($\Delta\pi_t = \pi_t - \pi_{t-1}$) and `d_inflation_fitted`.
 
 ```{python}
+# the first five years of the Phillips curve data
 phillips.head()
 ```
 
-> **Python note.** `np.polyfit(x, y, 1)` fits the best straight line $y = a + bx$ through the points (by least
-> squares, also called OLS) and returns the slope $b$ first and the intercept $a$ second.
+Then we fit the best straight line through the points, as a benchmark for the model.
 
 ```{python}
+# `np.polyfit(x, y, 1)` fits the best straight line y = a + b x through the
+# points (by least squares, also called OLS) and returns the slope b first and
+# the intercept a second
 slope, intercept = np.polyfit(phillips.short_run_output, phillips.d_inflation, 1)
-print(f"OLS line: delta pi = {intercept:.2f} + {slope:.2f} x Y~   ({phillips.year.min()}-{phillips.year.max()})")
+print(f"OLS line: delta pi = {intercept:.2f} + {slope:.2f} x Y~   "
+      f"({phillips.year.min()}-{phillips.year.max()})")
 ```
 
 The fitted slope is about 0.35, close to the textbook's "about 1/3". Now we draw the data with our *model* line
 $\Delta\pi = \bar{\nu}\tilde{Y}$, and you choose $\bar{\nu}$. The title adds up the **squared misses**, the squared vertical
 distances between the points and the line. The smaller that number, the better the line fits.
 
-> **Python note.** `.where(condition, "")` keeps a value where the condition is true and puts `""` elsewhere, so
-> only a few years get a text label (hover over any point to see its year). `np.where(condition, a, b)` picks `a`
-> or `b` row by row.
-
 ```{python}
+# Step 1: the years that get a text label on the chart. `.where(condition, "")`
+# keeps a value where the condition is true and puts "" elsewhere, so only a few
+# years get a label (hover over any point to see its year).
 LABELS = [1966, 1974, 1975, 1979, 1982, 1983, 2009, 2020, 2021, 2022, 2023, 2024, 2025]
 phillips["label"] = phillips.year.astype(str).where(phillips.year.isin(LABELS), "")
-phillips["period"] = np.where(phillips.year <= 2022, "1961–2022 (in the textbook)", "2023–2025 (new data)")
-X_RANGES, Y_RANGES = [[-8.5, 6.5], [-13, 19]], [[-5.5, 5.5], [-12, 12]]   # the textbook's ranges, and wider ones
-
-
-def wider(values, ranges):
-    """The first range that holds all values (the last one if none does)."""
-    for low, high in ranges:
-        if low <= values.min() and values.max() <= high:
-            return [low, high]
-    return ranges[-1]
+# Step 2: two periods, two colors. `np.where(condition, a, b)` picks a or b row
+# by row.
+phillips["period"] = np.where(
+    phillips.year <= 2022, "1961–2022 (in the textbook)", "2023–2025 (new data)"
+)
 ```
 
 For another country, the points are the OECD's output gap and the change in World Bank CPI inflation.
 
-> **Python note.** `.diff()` gives the change from the row before: here, $\Delta\pi_t = \pi_t - \pi_{t-1}$.
-
 ```{python}
 def phillips_data(country):
-    """Fig. 9.7: one point per year, short-run output and the change in inflation (U.S.: the textbook's data)."""
+    """One point per year: short-run output and the change in inflation (Fig. 7).
+
+    The United States: the textbook's data. Other countries: the OECD's output gap
+    and the change in World Bank CPI inflation.
+
+    Arguments
+        country : the country's name
+    Returns
+        a table with the columns year, short_run_output, d_inflation, label, period
+    """
     if country == "United States":
         return phillips
+    # Step 1: the country's rows. `.diff()` gives the change from the row before:
+    # here delta pi_t = pi_t - pi_(t-1).
     data = others[others.country == country].copy()
     data["d_inflation"] = data.inflation.diff()
-    data = data.rename(columns={"output_gap": "short_run_output"}).dropna(subset=["short_run_output", "d_inflation"])
+    # Step 2: the U.S. column names, and only the years with both values
+    data = data.rename(columns={"output_gap": "short_run_output"})
+    data = data.dropna(subset=["short_run_output", "d_inflation"])
+    # Step 3: no year labels, and one period: the years of the data
     data["label"] = ""
     data["period"] = f"{data.year.min()}–{data.year.max()} (OECD data)"
     return data
 ```
 
+`phillips_misses` computes the numbers in the title: the sum of the squared misses of the model line, and
+the OLS slope for comparison.
+
 ```{python}
-def phillips_fit(nu=0.33, country="United States"):
-    """Fig. 9.7: the data with the model line delta pi = nu * Y_tilde; the title measures the fit."""
+def phillips_misses(nu, country):
+    """How well the Phillips curve fits one country's points (Fig. 7).
+
+    Equation (5) predicts the change in inflation, delta pi = nu-bar * Y~; a miss
+    is the actual change minus the predicted one.
+
+    Arguments
+        nu      : slope of the model line, nu-bar
+        country : the country's name
+    Returns
+        data    : the country's points, from phillips_data
+        squared : the sum of the squared misses (smaller: a better fit)
+        ols     : the slope of the OLS line, for comparison
+    """
     data = phillips_data(country)
+    # the vertical distances between the points and the model line
     misses = data.d_inflation - phillips_curve(data.short_run_output, nu)
+    squared = (misses ** 2).sum()
+    # `[0]` keeps the slope of the fitted line
     ols = np.polyfit(data.short_run_output, data.d_inflation, 1)[0]
-    fig = px.scatter(data, x="short_run_output", y="d_inflation", color="period", text="label", hover_name="year",
-                     color_discrete_sequence=[GREEN, "#0b4f47"],
-                     labels={"short_run_output": "Short-run output, Ỹ (percent)",
-                             "d_inflation": "Change in inflation, Δπ (points)", "period": "Years"})
+    return data, squared, ols
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Figs. 7 and 8, axes that widen when the points need room
+# the axis ranges of Fig. 7: the textbook's, and wider ones for other countries
+X_RANGES, Y_RANGES = [[-8.5, 6.5], [-13, 19]], [[-5.5, 5.5], [-12, 12]]
+
+
+def wider(values, ranges):
+    """The first range that holds all values (the last one if none does).
+
+    Used for the axes of Figs. 7 and 8.
+
+    Arguments
+        values : the points' values on one axis (a column of data)
+        ranges : the ranges to try, from the narrowest to the widest
+    Returns
+        [low, high]
+    """
+    for low, high in ranges:
+        # does this range hold the smallest and the largest value?
+        if low <= values.min() and values.max() <= high:
+            return [low, high]
+    return ranges[-1]
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 7, measuring the Phillips curve
+def phillips_fit(nu=0.33, country="United States"):
+    """The data with the model line delta pi = nu-bar * Y~; the title measures the fit.
+
+    Draws Fig. 7 (inspired by Fig. 9.7 in Jones).
+
+    Arguments
+        nu      : slope of the model line, nu-bar
+        country : the country's name
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the points and the fit (phillips_misses)
+    data, squared, ols = phillips_misses(nu, country)
+
+    # Step 2: one point per year, colored by period, a few of them labeled
+    fig = px.scatter(
+        data,
+        x="short_run_output",
+        y="d_inflation",
+        color="period",
+        text="label",
+        hover_name="year",
+        color_discrete_sequence=[GREEN, "#0b4f47"],
+        labels={
+            "short_run_output": "Short-run output, Ỹ (percent)",
+            "d_inflation": "Change in inflation, Δπ (points)",
+            "period": "Years",
+        },
+    )
     fig.update_traces(textposition="middle right", textfont_size=11, marker_size=9)
+
+    # Step 3: the axes, wider when the points need room; the model line spans the
+    # whole horizontal axis
     xr, yr = wider(data.short_run_output, X_RANGES), wider(data.d_inflation, Y_RANGES)
-    Y = np.linspace(xr[0], xr[1], 50)                # the model line spans the whole x-axis
-    fig.add_trace(go.Scatter(x=Y, y=phillips_curve(Y, nu), name=f"Model: Δπ = {nu:.2f} × Ỹ", mode="lines",
-                             line=dict(color=BLUE, width=3)))
-    off = (~data.d_inflation.between(yr[0], yr[1]) | ~data.short_run_output.between(xr[0], xr[1])).sum()
+    Y = np.linspace(xr[0], xr[1], 50)
+    model = go.Scatter(
+        x=Y,
+        y=phillips_curve(Y, nu),
+        name=f"Model: Δπ = {nu:.2f} × Ỹ",
+        mode="lines",
+        line=dict(color=BLUE, width=3),
+    )
+    fig.add_trace(model)
+
+    # Step 4: count the points beyond the axes (`~` means "not", `|` means "or")
+    outside_y = ~data.d_inflation.between(yr[0], yr[1])
+    outside_x = ~data.short_run_output.between(xr[0], xr[1])
+    off = (outside_y | outside_x).sum()
     note = f"  |  {off} off the chart" if off > 0 else ""
-    fig.update_layout(title=f"{country}, ν = {nu:.2f}: squared misses {(misses ** 2).sum():,.1f}  |  OLS slope {ols:.2f}{note}",
-                      xaxis_range=xr, yaxis_range=yr)
+
+    # Step 5: the title reports the fit
+    fig.update_layout(
+        title=(
+            f"{country}, ν = {nu:.2f}: squared misses {squared:,.1f}  |  "
+            f"OLS slope {ols:.2f}{note}"
+        ),
+        xaxis_range=xr,
+        yaxis_range=yr,
+    )
     return fig
 ```
 
@@ -2178,21 +2932,36 @@ the title.
 
 ```{python}
 #| kind: widget
-interact(phillips_fit, nu=FloatSlider(value=0.33, min=0.0, max=1.0, step=0.01, description="model slope ν", style=WIDE),
-         country=Dropdown(options=GAP_COUNTRIES, value="United States", description="country", style=WIDE));
+# Fig. 7 with a slider for the model slope and a country menu
+interact(
+    phillips_fit,
+    nu=FloatSlider(value=0.33, min=0.0, max=1.0, step=0.01,
+                   description="model slope ν", style=WIDE),
+    country=Dropdown(options=GAP_COUNTRIES, value="United States",
+                     description="country", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: Fig. 7 with a precomputed slider for the model slope and the other countries in the legend
-fig = slider_figure(phillips_fit, "nu", [0.0, 0.1, 0.2, 0.25, 0.33, 0.4, 0.5, 0.75, 1.0], start=0.33, label="model slope ν")
+# @title Website version: Fig. 7 with a precomputed slider and a country legend
+# Step 1: one picture of Fig. 7 per value of nu
+fig = slider_figure(
+    phillips_fit,
+    "nu",
+    [0.0, 0.1, 0.2, 0.25, 0.33, 0.4, 0.5, 0.75, 1.0],     # the values of nu
+    start=0.33,
+    label="model slope ν",
+)
+# Step 2: every other country's points, in the legend. `pd.concat` stacks the
+# tables of the list `points` into one.
 points = []
 for c in GAP_COUNTRIES[1:]:
     data = phillips_data(c)
     data["country"] = c
     points.append(data)
-extra = px.scatter(pd.concat(points), x="short_run_output", y="d_inflation", color="country", hover_name="year",
-                   color_discrete_map=COLORS)
+extra = px.scatter(pd.concat(points), x="short_run_output", y="d_inflation",
+                   color="country", hover_name="year", color_discrete_map=COLORS)
 add_legend_traces(fig, extra.data)
 fig
 ```
@@ -2227,12 +2996,15 @@ The textbook says that in 2020 output was about 5 percent below potential and in
 In today's data the 2020 point sits much further right. The quarterly file of Fig. 3 has both vintages, so we
 can compute the annual average of $\tilde{Y}$ for each.
 
-> **Python note.** `groupby(gap.date.dt.year)` puts the quarters of each year in one group, and `.mean()` averages
-> each group. `merge` joins two tables on a common column, here `year`.
-
 ```{python}
-annual = gap.groupby(gap.date.dt.year)[["short_run_output", "short_run_output_book_vintage"]].mean()
+# The annual average of Y~ in both vintages, next to the change in inflation.
+# Step 1: average the quarters of each year (`groupby`, as for the two agencies)
+annual = gap.groupby(gap.date.dt.year)[
+    ["short_run_output", "short_run_output_book_vintage"]
+].mean()
+# the years become a column named year
 annual = annual.rename_axis("year").reset_index()
+# Step 2: `merge` joins two tables on a common column, here `year`
 compare = phillips[["year", "d_inflation"]].merge(annual, on="year")
 compare[compare.year.isin([2019, 2020, 2021, 2022])].round(2)
 ```
@@ -2268,15 +3040,25 @@ Output below potential also means more people out of work. Okun's law puts a num
 in the long run (Chapter 7). Here $\bar{u}$ is the CBO's estimate.
 
 ```{python}
+# Load the data of Fig. 8, and check that cyclical unemployment is u - u-bar
 okun = pd.read_csv(DATA_URL + "fig9-8.csv")
-gap_check = (okun.unrate - okun.nrou_short_term - okun.cyclical_unemployment).abs().max()
-print(f"cyclical_unemployment = unrate - nrou_short_term (largest difference {gap_check:.3f})")
+gap_check = (
+    okun.unrate - okun.nrou_short_term - okun.cyclical_unemployment
+).abs().max()
+print(f"cyclical_unemployment = unrate - nrou_short_term "
+      f"(largest difference {gap_check:.3f})")
 okun.head()
 ```
 
+The best straight line through the points gives the slope of Okun's law in the data.
+
 ```{python}
-slope_okun, intercept_okun = np.polyfit(okun.short_run_output, okun.cyclical_unemployment, 1)
-print(f"OLS line: u - u_bar = {intercept_okun:.2f} + ({slope_okun:.2f}) x Y~   ({okun.year.min()}-{okun.year.max()})")
+# the OLS line through the points, with `np.polyfit` as for the Phillips curve
+slope_okun, intercept_okun = np.polyfit(
+    okun.short_run_output, okun.cyclical_unemployment, 1
+)
+print(f"OLS line: u - u_bar = {intercept_okun:.2f} + ({slope_okun:.2f}) x Y~   "
+      f"({okun.year.min()}-{okun.year.max()})")
 ```
 
 As with the Phillips curve, choose the slope of the model line `okun_law` and watch the squared misses.
@@ -2287,10 +3069,17 @@ unemployment rate (a Hodrick–Prescott trend). Cyclical unemployment is then $u
 choice matter? We can try it on the United States, where we have both:
 
 ```{python}
+# Okun's slope for the United States with a smooth trend as the natural rate.
+# Step 1: the U.S. rows of the OECD panel, with the years as row labels
 us_oecd = panel[panel.country == "United States"].set_index("year")
-trial = pd.DataFrame({"Y_tilde": okun.set_index("year").short_run_output,
-                      "cyclical": us_oecd.unemployment - us_oecd.unemployment_trend}).dropna()
-print(f"Okun slope with the CBO natural rate: {slope_okun:.2f};  with a smooth trend instead: "
+# Step 2: Y~ (CBO) and u minus its trend, lined up by year
+trial = pd.DataFrame({
+    "Y_tilde": okun.set_index("year").short_run_output,
+    "cyclical": us_oecd.unemployment - us_oecd.unemployment_trend,
+}).dropna()
+# Step 3: the two slopes
+print(f"Okun slope with the CBO natural rate: {slope_okun:.2f};  "
+      f"with a smooth trend instead: "
       f"{np.polyfit(trial.Y_tilde, trial.cyclical, 1)[0]:.2f}")
 ```
 
@@ -2298,59 +3087,160 @@ The slope is smaller with the trend, because a trend follows unemployment up in 
 slump as "natural". Keep this in mind when you compare countries: their slopes use the trend, the U.S. one the CBO.
 
 ```{python}
-okun["label"] = okun.year.astype(str).where(okun.year.isin([1966, 1969, 1982, 2009, 2010, 2020, 2021]), "")
-OKUN_Y_RANGES = [[-3.5, 4.5], [-7, 9]]          # the textbook's range, and a wider one
+# The year labels of Fig. 8, and the data of one country
+okun["label"] = okun.year.astype(str).where(
+    okun.year.isin([1966, 1969, 1982, 2009, 2010, 2020, 2021]), ""
+)
 
 
 def okun_data(country):
-    """Fig. 9.8: one point per year, short-run output and cyclical unemployment (U.S.: the textbook's data)."""
+    """One point per year: short-run output and cyclical unemployment (Fig. 8).
+
+    The United States: the textbook's data. Other countries: the OECD's output gap,
+    and the unemployment rate minus its smooth trend.
+
+    Arguments
+        country : the country's name
+    Returns
+        a table with the columns year, short_run_output, cyclical_unemployment, label
+    """
     if country == "United States":
         return okun
+    # Step 1: cyclical unemployment, u minus its trend
     data = others[others.country == country].copy()
     data["cyclical_unemployment"] = data.unemployment - data.unemployment_trend
-    data = data.rename(columns={"output_gap": "short_run_output"}).dropna(subset=["short_run_output", "cyclical_unemployment"])
+    # Step 2: the U.S. column names, and only the years with both values
+    data = data.rename(columns={"output_gap": "short_run_output"})
+    data = data.dropna(subset=["short_run_output", "cyclical_unemployment"])
     data["label"] = ""
     return data
 ```
 
+`okun_misses` computes the numbers in the title: the sum of the squared misses of the model line, and the
+OLS slope.
+
 ```{python}
-def okun_fit(slope=-0.5, country="United States"):
-    """Fig. 9.8: the data with the model line u - u_bar = slope * Y_tilde; the title measures the fit."""
+def okun_misses(slope, country):
+    """How well Okun's law fits one country's points (Fig. 8).
+
+    Equation (8) predicts cyclical unemployment, u - u-bar = slope * Y~; a miss is
+    the actual value minus the predicted one.
+
+    Arguments
+        slope   : Okun's slope of the model line
+        country : the country's name
+    Returns
+        data    : the country's points, from okun_data
+        squared : the sum of the squared misses (smaller: a better fit)
+        ols     : the slope of the OLS line, for comparison
+    """
     data = okun_data(country)
+    # the vertical distances between the points and the model line
     misses = data.cyclical_unemployment - okun_law(data.short_run_output, slope)
+    squared = (misses ** 2).sum()
+    # the slope of the fitted line
     ols = np.polyfit(data.short_run_output, data.cyclical_unemployment, 1)[0]
-    fig = px.scatter(data, x="short_run_output", y="cyclical_unemployment", text="label", hover_name="year",
-                     color_discrete_sequence=[GREEN],
-                     labels={"short_run_output": "Short-run output, Ỹ (percent)",
-                             "cyclical_unemployment": "Cyclical unemployment, u − ū (points)"})
-    fig.update_traces(textposition="middle right", textfont_size=11, marker_size=9, showlegend=True,
-                      name=f"{country}, {data.year.min()}–{data.year.max()}")
-    xr, yr = wider(data.short_run_output, X_RANGES), wider(data.cyclical_unemployment, OKUN_Y_RANGES)
-    Y = np.linspace(xr[0], xr[1], 50)                # the model line spans the whole x-axis
-    fig.add_trace(go.Scatter(x=Y, y=okun_law(Y, slope), name=f"Model: u − ū = {slope:.2f} × Ỹ", mode="lines",
-                             line=dict(color=BLUE, width=3)))
-    fig.update_layout(title=f"{country}, slope {slope:.2f}: squared misses {(misses ** 2).sum():.2f}  |  OLS slope {ols:.2f}",
-                      xaxis_range=xr, yaxis_range=yr)
+    return data, squared, ols
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 8, Okun's law
+# the vertical ranges of Fig. 8: the textbook's, and a wider one
+OKUN_Y_RANGES = [[-3.5, 4.5], [-7, 9]]
+
+
+def okun_fit(slope=-0.5, country="United States"):
+    """The data with the model line u - u-bar = slope * Y~; the title measures the fit.
+
+    Draws Fig. 8 (inspired by Fig. 9.8 in Jones).
+
+    Arguments
+        slope   : Okun's slope of the model line
+        country : the country's name
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the points and the fit (okun_misses)
+    data, squared, ols = okun_misses(slope, country)
+
+    # Step 2: one point per year, a few of them labeled
+    fig = px.scatter(
+        data,
+        x="short_run_output",
+        y="cyclical_unemployment",
+        text="label",
+        hover_name="year",
+        color_discrete_sequence=[GREEN],
+        labels={
+            "short_run_output": "Short-run output, Ỹ (percent)",
+            "cyclical_unemployment": "Cyclical unemployment, u − ū (points)",
+        },
+    )
+    fig.update_traces(
+        textposition="middle right",
+        textfont_size=11,
+        marker_size=9,
+        showlegend=True,
+        name=f"{country}, {data.year.min()}–{data.year.max()}",
+    )
+
+    # Step 3: the axes, wider when the points need room, and the model line
+    xr = wider(data.short_run_output, X_RANGES)
+    yr = wider(data.cyclical_unemployment, OKUN_Y_RANGES)
+    Y = np.linspace(xr[0], xr[1], 50)
+    model = go.Scatter(
+        x=Y,
+        y=okun_law(Y, slope),
+        name=f"Model: u − ū = {slope:.2f} × Ỹ",
+        mode="lines",
+        line=dict(color=BLUE, width=3),
+    )
+    fig.add_trace(model)
+
+    # Step 4: the title reports the fit
+    fig.update_layout(
+        title=(
+            f"{country}, slope {slope:.2f}: squared misses {squared:.2f}  |  "
+            f"OLS slope {ols:.2f}"
+        ),
+        xaxis_range=xr,
+        yaxis_range=yr,
+    )
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(okun_fit, slope=FloatSlider(value=-0.5, min=-1.0, max=0.0, step=0.01, description="model slope", style=WIDE),
-         country=Dropdown(options=GAP_COUNTRIES, value="United States", description="country", style=WIDE));
+# Fig. 8 with a slider for the model slope and a country menu
+interact(
+    okun_fit,
+    slope=FloatSlider(value=-0.5, min=-1.0, max=0.0, step=0.01,
+                      description="model slope", style=WIDE),
+    country=Dropdown(options=GAP_COUNTRIES, value="United States",
+                     description="country", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: Fig. 8 with a precomputed slider for the model slope and the other countries in the legend
-fig = slider_figure(okun_fit, "slope", [-1.0, -0.8, -0.7, -0.6, -0.5, -0.4, -0.3, -0.2, 0.0], start=-0.5, label="model slope")
+# @title Website version: Fig. 8 with a precomputed slider and a country legend
+# Step 1: one picture of Fig. 8 per value of the slope
+fig = slider_figure(
+    okun_fit,
+    "slope",
+    [-1.0, -0.8, -0.7, -0.6, -0.5, -0.4, -0.3, -0.2, 0.0],     # the slopes
+    start=-0.5,
+    label="model slope",
+)
+# Step 2: every other country's points, in the legend
 points = []
 for c in GAP_COUNTRIES[1:]:
     data = okun_data(c)
     data["country"] = c
     points.append(data)
-extra = px.scatter(pd.concat(points), x="short_run_output", y="cyclical_unemployment", color="country",
-                   hover_name="year", color_discrete_map=COLORS)
+extra = px.scatter(pd.concat(points), x="short_run_output", y="cyclical_unemployment",
+                   color="country", hover_name="year", color_discrete_map=COLORS)
 add_legend_traces(fig, extra.data)
 fig
 ```
@@ -2382,15 +3272,18 @@ above). The title's numbers are for the United States.*
 
 #### Key numbers: Okun's law in 2009 and 2020
 
+For 2009 and 2020 we compare the cyclical unemployment that Okun's law predicts with the data.
+
 ```{python}
+# Okun's law against the data in 2009 and 2020.
+# `okun[okun.year == year].iloc[0]` picks the one row of that year, and
+# `row.short_run_output` reads one value from it.
 for year in [2009, 2020]:
     row = okun[okun.year == year].iloc[0]
     print(f"{year}: Y~ = {row.short_run_output:+.2f}%, Okun predicts u - u_bar = "
-          f"{okun_law(row.short_run_output):+.2f}, actual {row.cyclical_unemployment:+.2f}")
+          f"{okun_law(row.short_run_output):+.2f}, "
+          f"actual {row.cyclical_unemployment:+.2f}")
 ```
-
-> **Python note.** `okun[okun.year == year].iloc[0]` picks the one row of that year, and `row.short_run_output`
-> reads one value from it.
 
 In both years the rule of thumb falls short. In 2009 it predicts unemployment 2.3 points above the natural rate,
 against 3.9 in the data, and in 2020 it predicts 1.6 points against 3.6. Part of the reason is the data revisions of
@@ -2431,19 +3324,32 @@ $$\pi_t = \pi_{t-1} + \bar{\nu}\,\tilde{Y}_t$$
 With the textbook's slope $\bar{\nu} = 1$, inflation goes from 2 to 5, 8 and 11 percent in three years, the straight-line climb that equation (6)
 predicts for a gap held constant. A computer can apply this equation year after year: a **simulation**.
 
-> **Python note.** A `for` loop repeats the indented lines once for each year. `pi_path[-1]` is the last
-> number in the list, last year's inflation, and `pi_path.append(...)` adds this year's at the end.
-> `range(1, years + 1)` counts 1, 2, ..., years.
-
 ```{python}
 def simulate_inflation(pi_bar=2.0, nu=1.0, Y_tilde=3.0, years=5):
-    """Inflation year by year when output is held at Y_tilde: pi_t = pi_(t-1) + nu * Y_tilde."""
-    pi_path = [pi_bar]                                    # year 0: inflation at its long-run rate
+    """Inflation year by year when output is held at Y_tilde.
+
+    Equation (5) applied once a year:  pi_t = pi_(t-1) + nu-bar * Y~
+
+    Arguments
+        pi_bar  : inflation in year 0, the long-run rate pi-bar, in percent
+        nu      : slope of the Phillips curve, nu-bar
+        Y_tilde : short-run output Y~, held constant, in percent
+        years   : the number of years of the boom
+    Returns
+        the years 0 to years, and inflation in each of them (two arrays)
+    """
+    # Step 1: year 0, inflation at its long-run rate
+    pi_path = [pi_bar]
+    # Step 2: `range(1, years + 1)` counts 1, 2, ..., years. `pi_path[-1]` is the
+    # last number in the list, last year's inflation, and `pi_path.append(...)`
+    # adds this year's at the end.
     for year in range(1, years + 1):
         pi_path.append(pi_path[-1] + phillips_curve(Y_tilde, nu))
+    # `np.arange(years + 1)` gives the years 0, 1, ..., years
     return np.arange(years + 1), np.array(pi_path)
 
 
+# the textbook's exercise: nu-bar = 1, output 3 percent above potential
 years, pi_path = simulate_inflation()
 print("Inflation, years 0 to 5:", pi_path)
 ```
@@ -2452,30 +3358,126 @@ The figure has two panels: (a) the Phillips curve with the economy at potential 
 dots), and (b) the inflation path $\pi$ that the boom produces, against long-run inflation $\bar{\pi}$ (dashed).
 
 ```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 9, panel (a), the Phillips curve
+def booming_panel_a(nu, Y_tilde, dpi):
+    """The two-panel figure of Fig. 9, with panel (a): the Phillips curve.
+
+    Two black dots on the curve: the economy at potential and in the boom.
+
+    Arguments
+        nu      : slope of the Phillips curve, nu-bar
+        Y_tilde : short-run output Y~ in the boom, in percent
+        dpi     : the change in inflation in the boom, delta pi
+    Returns
+        the two-panel Plotly figure
+    """
+    # Step 1: two panels side by side
+    fig = make_subplots(
+        rows=1,
+        cols=2,
+        subplot_titles=("(a) The Phillips curve", "(b) Inflation, year by year"),
+    )
+    # Step 2: the Phillips curve, equation (5)
+    Y = np.linspace(-6.5, 6.5, 100)
+    curve = go.Scatter(
+        x=Y,
+        y=phillips_curve(Y, nu),
+        name="Phillips curve",
+        line=dict(color=TEAL, width=4),
+    )
+    fig.add_trace(curve, row=1, col=1)
+    # Step 3: the economy at potential (0, 0) and in the boom
+    dots = go.Scatter(
+        x=[0, Y_tilde],
+        y=[0, dpi],
+        name="At potential and in the boom",
+        mode="markers",
+        marker=dict(color="black", size=12),
+    )
+    fig.add_trace(dots, row=1, col=1)
+    # Step 4: the fixed axes of panel (a)
+    fig.update_xaxes(
+        title_text="Short-run output, Ỹ (percent)",
+        range=[-6.5, 6.5],
+        tickvals=[-4, -2, 0, 2, 4, 6],
+        row=1,
+        col=1,
+    )
+    fig.update_yaxes(
+        title_text="Change in inflation, Δπ",
+        range=[-6.5, 6.5],
+        tickvals=[-4, -2, 0, 2, 4, 6],
+        row=1,
+        col=1,
+    )
+    return fig
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 9, the booming economy
 def booming_economy(pi_bar=2.0, nu=1.0, Y_tilde=3.0):
-    """Fig. 9.9: the economy held at Y_tilde on the Phillips curve (a) and the inflation path (b)."""
+    """The economy held at Y_tilde on the Phillips curve (a) and the inflation path (b).
+
+    Draws Fig. 9 (adapted from Fig. 9.9 in Jones); panel (b) is our own addition.
+
+    Arguments
+        pi_bar  : long-run inflation, pi-bar, in percent
+        nu      : slope of the Phillips curve, nu-bar
+        Y_tilde : short-run output Y~, held constant, in percent
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the simulation, and the change in inflation each year
     years, pi_path = simulate_inflation(pi_bar, nu, Y_tilde)
     dpi = phillips_curve(Y_tilde, nu)
-    Y = np.linspace(-6.5, 6.5, 100)
-    fig = make_subplots(rows=1, cols=2, subplot_titles=("(a) The Phillips curve", "(b) Inflation, year by year"))
-    fig.add_trace(go.Scatter(x=Y, y=phillips_curve(Y, nu), name="Phillips curve", line=dict(color=TEAL, width=4)),
-                  row=1, col=1)
-    fig.add_trace(go.Scatter(x=[0, Y_tilde], y=[0, dpi], name="At potential and in the boom", mode="markers",
-                             marker=dict(color="black", size=12)), row=1, col=1)
-    fig.add_trace(go.Scatter(x=years, y=pi_path, name="Inflation, π", mode="lines+markers",
-                             line=dict(color=BLUE, width=3), marker=dict(size=9)), row=1, col=2)
-    fig.add_trace(go.Scatter(x=[0, 5], y=[pi_bar, pi_bar], name="Long-run inflation, π̄", mode="lines",
-                             line=dict(color=GRAY, dash="dash")), row=1, col=2)
-    up = pi_path[-1] >= pi_bar                            # does inflation end above its long-run rate?
+
+    # Step 2: the figure with panel (a)
+    fig = booming_panel_a(nu, Y_tilde, dpi)
+
+    # Step 3: panel (b): inflation year by year, and long-run inflation (dashed)
+    path = go.Scatter(
+        x=years,
+        y=pi_path,
+        name="Inflation, π",
+        mode="lines+markers",
+        line=dict(color=BLUE, width=3),
+        marker=dict(size=9),
+    )
+    fig.add_trace(path, row=1, col=2)
+    long_run = go.Scatter(
+        x=[0, 5],
+        y=[pi_bar, pi_bar],
+        name="Long-run inflation, π̄",
+        mode="lines",
+        line=dict(color=GRAY, dash="dash"),
+    )
+    fig.add_trace(long_run, row=1, col=2)
+    # the names: does inflation end above its long-run rate?
+    up = pi_path[-1] >= pi_bar
     add_end_label(fig, 5, pi_path[-1], "π", BLUE, "bottom" if up else "top", 1, 2)
     add_end_label(fig, 5, pi_bar, "π̄", GRAY, "top" if up else "bottom", 1, 2)
-    fig.update_xaxes(title_text="Short-run output, Ỹ (percent)", range=[-6.5, 6.5], tickvals=[-4, -2, 0, 2, 4, 6], row=1, col=1)
-    fig.update_yaxes(title_text="Change in inflation, Δπ", range=[-6.5, 6.5], tickvals=[-4, -2, 0, 2, 4, 6], row=1, col=1)
+
+    # Step 4: the fixed axes of panel (b)
     fig.update_xaxes(title_text="Years of the boom", range=[-0.3, 5.3], row=1, col=2)
-    fig.update_yaxes(title_text="Inflation (percent)", range=[-36, 42], tickvals=[-30, -20, -10, 0, 10, 20, 30], row=1, col=2)
-    fig.update_layout(title=f"Δπ = {nu:.2f} × ({Y_tilde:+.2f}) = {dpi:+.2f} a year: "
-                            f"π = {pi_path[0]:.2f} → {pi_path[1]:.2f} → {pi_path[2]:.2f} → {pi_path[3]:.2f}%",
-                      showlegend=False)
+    fig.update_yaxes(
+        title_text="Inflation (percent)",
+        range=[-36, 42],
+        tickvals=[-30, -20, -10, 0, 10, 20, 30],
+        row=1,
+        col=2,
+    )
+
+    # Step 5: the title shows the first years of the inflation path
+    fig.update_layout(
+        title=(
+            f"Δπ = {nu:.2f} × ({Y_tilde:+.2f}) = {dpi:+.2f} a year: "
+            f"π = {pi_path[0]:.2f} → {pi_path[1]:.2f} → {pi_path[2]:.2f} → "
+            f"{pi_path[3]:.2f}%"
+        ),
+        showlegend=False,
+    )
     return fig
 ```
 
@@ -2484,17 +3486,31 @@ sliders, then press **Run the economy**.
 
 ```{python}
 #| kind: widget
+# Fig. 9 with a button. `interact_manual` adds a button, and nothing happens until
+# you press it; `.options(manual_name=...)` writes the button's label.
 run_economy = interact_manual.options(manual_name="Run the economy")
-run_economy(booming_economy,
-            pi_bar=FloatSlider(value=2.0, min=0.0, max=6.0, step=0.5, description="long-run inflation π̄ (%)", style=WIDE),
-            nu=FloatSlider(value=1.0, min=0.1, max=1.5, step=0.01, description="slope ν", style=WIDE),
-            Y_tilde=FloatSlider(value=3.0, min=-4.0, max=4.0, step=0.5, description="short-run output Ỹ (%)", style=WIDE));
+run_economy(
+    booming_economy,
+    pi_bar=FloatSlider(value=2.0, min=0.0, max=6.0, step=0.5,
+                       description="long-run inflation π̄ (%)", style=WIDE),
+    nu=FloatSlider(value=1.0, min=0.1, max=1.5, step=0.01,
+                   description="slope ν", style=WIDE),
+    Y_tilde=FloatSlider(value=3.0, min=-4.0, max=4.0, step=0.5,
+                        description="short-run output Ỹ (%)", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: Fig. 9 with a precomputed slider for the slope of the Phillips curve
-slider_figure(booming_economy, "nu", [0.25, 0.33, 0.5, 0.75, 1.0, 1.5], start=1.0, label="slope of the Phillips curve ν")
+# @title Website version: Fig. 9 with a precomputed slider for the slope
+# one picture of Fig. 9 per value of nu
+slider_figure(
+    booming_economy,
+    "nu",
+    [0.25, 0.33, 0.5, 0.75, 1.0, 1.5],     # the values of nu
+    start=1.0,
+    label="slope of the Phillips curve ν",
+)
 ```
 
 **Source.** Adapted from Fig. 9.9 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612),

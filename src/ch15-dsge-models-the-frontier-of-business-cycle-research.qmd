@@ -1104,10 +1104,8 @@ Solow model of Chapter 5 and let total factor productivity $\bar{A}$ jump up and
 Growth accounting (Chapter 6) measures TFP growth as the part of output growth that capital and labor do not
 explain (equation 3). The data are John Fernald's series for the U.S. business sector (Federal Reserve Bank of San Francisco).
 
-> **Python note.** `pd.read_csv(...)` reads a data file into a *DataFrame*, a table with named columns.
-> `.head()` shows its first five rows.
-
 ```{python}
+# Load the data of Fig. 1 and look at its first five rows (`.head()`)
 tfp = pd.read_csv(DATA_URL + "fig15-1.csv")
 tfp.head()
 ```
@@ -1115,38 +1113,81 @@ tfp.head()
 Each row is one year: `tfp_growth` is TFP growth in percent. To shade the recessions, we also read the NBER
 recession dates, from the month before each recession (the peak) to its last month (the trough).
 
-> **Python note.** `for peak, trough in zip(...)` walks through the two columns together, one recession at a
-> time. Our years are plain numbers, so the function turns each date into a decimal year: July 1953 becomes
-> 1953 + 6/12 = 1953.5. `fig.add_vrect` shades the band between two x values.
-
 ```{python}
+# Step 1: the NBER recession dates; `parse_dates` reads the two columns as dates
 recessions = pd.read_csv(DATA_URL + "recessions.csv", parse_dates=["peak", "trough"])
 
 
+def recession_bands(dates):
+    """The recessions as bands of decimal years, from peak to trough (Fig. 1).
+
+    Our years are plain numbers, so each date becomes a decimal year: July 1953
+    becomes 1953 + 6/12 = 1953.5. A band runs from the start of the peak month to
+    the end of the trough month.
+
+    Arguments
+        dates : the table of recession dates, with the columns peak and trough
+    Returns
+        a list of (start, end) pairs of decimal years, one per recession
+    """
+    bands = []
+    # `zip(...)` walks through the two columns together, one recession at a time
+    for peak, trough in zip(dates.peak, dates.trough):
+        start = peak.year + (peak.month - 1) / 12     # the start of the peak month
+        end = trough.year + trough.month / 12         # the end of the trough month
+        bands.append((start, end))
+    return bands
+
+
+# Step 2: the last three recessions
+recessions.tail(3)
+```
+
+Before we draw, we find the smallest and the largest TFP growth rate: the title of the chart reports them.
+
+```{python}
+# The range of TFP growth, in percent: `.min()` and `.max()` are the smallest and
+# the largest value of the column tfp_growth
+low, high = tfp.tfp_growth.min(), tfp.tfp_growth.max()
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 1, U.S. TFP growth and the recessions
 def shade_recessions(fig):
-    """Shade every NBER recession (Fig. 15.1), with its dates written as decimal years."""
-    for peak, trough in zip(recessions.peak, recessions.trough):
-        start = peak.year + (peak.month - 1) / 12
-        end = trough.year + trough.month / 12
+    """Shade every NBER recession on a chart with years on the horizontal axis.
+
+    Used by Fig. 1 (inspired by Fig. 15.1 in Jones); the bands come from
+    recession_bands.
+
+    Arguments
+        fig : the Plotly figure to shade
+    Returns
+        the same figure
+    """
+    for start, end in recession_bands(recessions):
+        # `add_vrect` shades the band between two x values
         fig.add_vrect(x0=start, x1=end, fillcolor=BLUE, opacity=0.12, line_width=0)
     return fig
 
 
-recessions.tail(3)
-```
-
-> **Python note.** `px.line(tfp, x="year", y="tfp_growth")` draws a line chart from two columns of the table, and
-> `labels={...}` gives the columns readable names on the axes. `tfp.tfp_growth.min()` is the smallest value of the
-> column. `fig.update_traces(...)` restyles the line, and `fig.add_hline(y=0)` adds a horizontal line at zero.
-
-```{python}
-low, high = tfp.tfp_growth.min(), tfp.tfp_growth.max()
-fig = px.line(tfp, x="year", y="tfp_growth", markers=True,
-              labels={"year": "Year", "tfp_growth": "TFP growth (percent per year)"},
-              title=f"U.S. TFP growth swings between {low:.1f} and +{high:.1f} percent a year")
+# Step 1: `px.line` draws a line chart from two columns of the table, and
+# `labels={...}` gives the columns readable names on the axes
+fig = px.line(
+    tfp,
+    x="year",
+    y="tfp_growth",
+    markers=True,
+    labels={"year": "Year", "tfp_growth": "TFP growth (percent per year)"},
+    title=f"U.S. TFP growth swings between {low:.1f} and +{high:.1f} percent a year",
+)
+# Step 2: `update_traces` restyles the line: blue, with small dots
 fig.update_traces(line=dict(color=BLUE, width=2), marker=dict(size=5))
+# a dashed line at zero growth; `add_hline` draws a horizontal line
 fig.add_hline(y=0, line_dash="dash", line_color=GRAY)
+# the recessions, as shaded bands
 shade_recessions(fig)
+# Step 3: fixed axes
 fig.update_xaxes(range=[1948, 2027])
 fig.update_yaxes(range=[-3, 5], tickvals=[-2, -1, 0, 1, 2, 3, 4])
 fig.show()
@@ -1182,6 +1223,9 @@ estimates this change in **utilization** and removes it (equation 4); the textbo
 series. The wider file `tfp_annual.csv` holds both, with the growth of business output:
 
 ```{python}
+# Load the wider file: business output growth, the raw Solow residual, utilization
+# and adjusted TFP growth, one row per year.
+# `annual.year.isin([...])` is True for the years in the list, so we see four rows
 annual = pd.read_csv(DATA_URL + "tfp_annual.csv")
 annual[annual.year.isin([2001, 2008, 2009, 2020])]
 ```
@@ -1190,44 +1234,101 @@ In 2009 output fell by 3.75 percent. The raw Solow residual (`tfp_solow`) fell s
 utilization fell by 3.68 percent, so the adjusted TFP growth (`tfp_util`) is +3.53 percent. To compare the two
 measures in one chart, we stack them in one long table.
 
-> **Python note.** `annual.year.isin([...])` is true for the years in the list, so the line above keeps four
-> rows. `melt` turns columns into rows: the two TFP columns become one column `tfp_growth`, and a new
-> column `measure` says which series each row comes from. `.map({...})` replaces each code with a readable
-> name. `np.where(condition, a, b)` gives `a` where the condition holds and `b` elsewhere.
-
 ```{python}
-long = annual.melt(id_vars=["year", "gdp_growth"], value_vars=["tfp_solow", "tfp_util"],
-                   var_name="measure", value_name="tfp_growth")
-long["measure"] = long.measure.map({"tfp_solow": "Raw Solow residual",
-                                    "tfp_util": "Utilization-adjusted TFP (textbook)"})
+# Step 1: `melt` turns columns into rows: the two TFP columns become one column,
+# tfp_growth, and a new column, measure, says which series each row comes from
+long = annual.melt(
+    id_vars=["year", "gdp_growth"],
+    value_vars=["tfp_solow", "tfp_util"],
+    var_name="measure",
+    value_name="tfp_growth",
+)
+# Step 2: `.map({...})` replaces each code with a readable name
+long["measure"] = long.measure.map(
+    {
+        "tfp_solow": "Raw Solow residual",
+        "tfp_util": "Utilization-adjusted TFP (textbook)",
+    }
+)
+# Step 3: `np.where(condition, a, b)` gives a where the condition holds and b
+# elsewhere: here, whether GDP fell or grew that year
 long["GDP"] = np.where(long.gdp_growth < 0, "GDP fell", "GDP grew")
 long.head()
 ```
 
-> **Python note.** `facet_col="measure"` draws one panel per measure. `np.polyfit(x, y, 1)` fits a straight
-> least-squares line and returns its slope and intercept; the first loop draws one such line in each panel, fitted
-> to that panel's points only, with `add_scatter(..., row=1, col=k)`. `.corr()` computes the correlation of two
-> columns, between −1 and 1. The second loop shortens the panel titles, which Plotly writes as "measure=...", and
-> `legend_title_text=""` removes the legend's title.
+Next we measure how closely each TFP series moves with GDP: the correlation of the two growth rates, and a least-squares line for each measure.
 
 ```{python}
+# Step 1: `.corr()` is the correlation of two columns, between -1 and 1
 r_raw = annual.gdp_growth.corr(annual.tfp_solow)
 r_util = annual.gdp_growth.corr(annual.tfp_util)
-fig = px.scatter(long, x="gdp_growth", y="tfp_growth", facet_col="measure", color="GDP", hover_name="year",
-                 color_discrete_map={"GDP grew": BLUE, "GDP fell": GREEN},
-                 labels={"gdp_growth": "GDP growth (%)", "tfp_growth": "TFP growth (%)"},
-                 range_x=[-4.5, 10], range_y=[-5, 7.5],
-                 title=f"Raw TFP moves with GDP (r = {r_raw:.2f}); adjusted TFP does not (r = {r_util:.2f})")
-x_line = np.array([-4.5, 10])
-for k, measure in enumerate(["tfp_solow", "tfp_util"], start=1):   # panel 1 = raw, panel 2 = adjusted
+
+
+def least_squares_line(measure):
+    """The least-squares line of a TFP measure on GDP growth (Fig. 1, which TFP).
+
+    TFP growth = intercept + slope * GDP growth, fitted to the years with data.
+
+    Arguments
+        measure : a column of annual, "tfp_solow" or "tfp_util"
+    Returns
+        slope, intercept : the slope and the intercept of the line
+    """
+    # the years that have both growth rates (`.dropna()` drops the others)
     points = annual[["gdp_growth", measure]].dropna()
+    # `np.polyfit(x, y, 1)` fits a straight line by least squares and returns its
+    # slope and intercept
     slope, intercept = np.polyfit(points.gdp_growth, points[measure], 1)
-    fig.add_scatter(x=x_line, y=intercept + slope * x_line, mode="lines", line_color=GRAY,
-                    name="Least-squares line", showlegend=(k == 1), row=1, col=k)
+    return slope, intercept
+
+
+# Step 2: the two ends of each line, at the edges of the horizontal axis
+x_line = np.array([-4.5, 10])
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 1, raw and adjusted TFP against GDP growth
+# Step 1: one point per year; `facet_col="measure"` draws one panel per measure,
+# and the color says whether GDP fell
+fig = px.scatter(
+    long,
+    x="gdp_growth",
+    y="tfp_growth",
+    facet_col="measure",
+    color="GDP",
+    hover_name="year",
+    color_discrete_map={"GDP grew": BLUE, "GDP fell": GREEN},
+    labels={"gdp_growth": "GDP growth (%)", "tfp_growth": "TFP growth (%)"},
+    range_x=[-4.5, 10],
+    range_y=[-5, 7.5],
+    title=(
+        f"Raw TFP moves with GDP (r = {r_raw:.2f}); "
+        f"adjusted TFP does not (r = {r_util:.2f})"
+    ),
+)
+# Step 2: the least-squares line of each panel, fitted to that panel's points
+# only; `add_scatter(..., row=1, col=k)` adds it to panel k (1 = raw, 2 = adjusted)
+for k, measure in enumerate(["tfp_solow", "tfp_util"], start=1):
+    slope, intercept = least_squares_line(measure)
+    fig.add_scatter(
+        x=x_line,
+        y=intercept + slope * x_line,
+        mode="lines",
+        line_color=GRAY,
+        name="Least-squares line",
+        showlegend=(k == 1),           # one legend entry for both lines
+        row=1,
+        col=k,
+    )
+# Step 3: Plotly writes the panel titles as "measure=..."; `.split("=")[-1]`
+# keeps the part after the "="
 for annotation in fig.layout.annotations:
     annotation.text = annotation.text.split("=")[-1]
-fig.update_xaxes(tickvals=[-2, 0, 2, 4, 6, 8])          # no tick labels in the bottom-left corner
+# Step 4: the tick marks; no tick labels in the bottom-left corner
+fig.update_xaxes(tickvals=[-2, 0, 2, 4, 6, 8])
 fig.update_yaxes(tickvals=[-4, -2, 0, 2, 4, 6])
+# `legend_title_text=""` removes the legend's title
 fig.update_layout(legend_title_text="")
 fig.show()
 ```
@@ -1256,6 +1357,8 @@ United States, PWT's TFP growth has a correlation of 0.93 with Fernald's raw res
 adjusted series.
 
 ```{python}
+# Load the PWT growth rates and look at Japan's last three years.
+# `world[world.country == "Japan"]` keeps the rows of one country
 world = pd.read_csv(DATA_URL + "pwt_growth.csv")
 world[world.country == "Japan"].tail(3)
 ```
@@ -1264,57 +1367,142 @@ Each row is one country in one year: `tfp_growth` and `gdp_growth` are the growt
 in percent (100 times the change in the log), and `region` is the World Bank region. The chart marks the years in
 which real GDP fell, so you can check the RBC story country by country: does TFP fall when GDP falls?
 
-> **Python note.** `world[world.country == country]` keeps the rows of one country. `(fell.tfp_growth < 0).sum()`
-> counts the true values. `go.Scatter(..., mode="markers")` adds points without a line. The `for top in [...]`
-> loop tries wider and wider axes and `return`s the first one that holds every point, so the axis only widens
-> when a country needs it. `"year" if n == 1 else "years"` picks the right word.
-
+First we compute, for one country, the years in which real GDP fell and how many of them also saw TFP fall.
 The website cannot run Python, so after the widget a helper cell precomputes the chart for every country and joins
 them with a menu.
 
 ```{python}
+def gdp_fall_years(country):
+    """The years in which a country's GDP fell, and how often TFP fell too (Fig. 1).
+
+    The RBC check, country by country: does TFP fall when GDP falls?
+
+    Arguments
+        country : the country's name, as in the column country of world
+    Returns
+        data : the country's rows of world
+        fell : the rows of the years in which real GDP fell
+        hit  : the number of those years in which TFP growth was negative too
+    """
+    # Step 1: the rows of one country, then the years in which GDP fell
+    data = world[world.country == country]
+    fell = data[data.gdp_growth < 0]
+    # Step 2: `fell.tfp_growth < 0` is True or False for each year, and `.sum()`
+    # counts the True values
+    hit = (fell.tfp_growth < 0).sum()
+    return data, fell, hit
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 1 for any country, TFP growth and the years GDP fell
 def growth_axis(low, high):
-    """A y-axis range that holds every point: +-6, +-12, +-25, +-60 or +-110 percent, the narrowest that fits."""
+    """A y-axis range that holds every point, the narrowest that fits.
+
+    The choices are +-6, +-12, +-25, +-60 or +-110 percent, so the axis only
+    widens when a country needs it.
+
+    Arguments
+        low, high : the smallest and the largest value to show
+    Returns
+        the range [bottom, top] of the axis
+    """
+    # try wider and wider axes; `return` stops at the first one that fits
     for top in [6, 12, 25, 60, 110]:
         if -top <= low and high <= top:
             return [-1.05 * top, 1.05 * top]
 
 
 def tfp_country_chart(country="United States"):
-    """Fig. 15.1 for any country: raw TFP growth (PWT 11.0), with the years in which real GDP fell marked."""
-    data = world[world.country == country]
-    fell = data[data.gdp_growth < 0]
-    hit = (fell.tfp_growth < 0).sum()
+    """TFP growth of one country, with the years in which real GDP fell marked.
+
+    Draws Fig. 1 for any country (inspired by Fig. 15.1 in Jones), with raw TFP
+    growth from PWT 11.0.
+
+    Arguments
+        country : the country's name
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the numbers of the chart (gdp_fall_years);
+    # `a if condition else b`: "year" for one year, "years" otherwise
+    data, fell, hit = gdp_fall_years(country)
     years = "year" if len(fell) == 1 else "years"
-    fig = px.line(data, x="year", y="tfp_growth", markers=True, color_discrete_sequence=[BLUE],
-                  labels={"year": "Year", "tfp_growth": "TFP growth (percent per year)"},
-                  title=f"{country}: TFP also fell in {hit} of the {len(fell)} {years} in which GDP fell")
-    fig.update_traces(name="TFP growth (PWT, raw)", showlegend=True, line_width=2, marker_size=5)
-    fig.add_trace(go.Scatter(x=fell.year, y=fell.tfp_growth, mode="markers", name="A year in which GDP fell",
-                             marker=dict(color=GREEN, size=11, symbol="diamond")))
+    # Step 2: TFP growth year by year, a blue line with dots
+    fig = px.line(
+        data,
+        x="year",
+        y="tfp_growth",
+        markers=True,
+        color_discrete_sequence=[BLUE],
+        labels={"year": "Year", "tfp_growth": "TFP growth (percent per year)"},
+        title=(
+            f"{country}: TFP also fell in {hit} of the {len(fell)} {years} "
+            f"in which GDP fell"
+        ),
+    )
+    fig.update_traces(
+        name="TFP growth (PWT, raw)",
+        showlegend=True,
+        line_width=2,
+        marker_size=5,
+    )
+    # Step 3: the years in which GDP fell, as green diamonds;
+    # `go.Scatter(..., mode="markers")` adds points without a line
+    fig.add_trace(
+        go.Scatter(
+            x=fell.year,
+            y=fell.tfp_growth,
+            mode="markers",
+            name="A year in which GDP fell",
+            marker=dict(color=GREEN, size=11, symbol="diamond"),
+        )
+    )
+    # Step 4: zero growth, fixed years, and a y-axis that fits this country
     fig.add_hline(y=0, line_dash="dash", line_color=GRAY)
     fig.update_xaxes(range=[1953, 2025])
     fig.update_yaxes(range=growth_axis(data.tfp_growth.min(), data.tfp_growth.max()))
+    # the legend in the bottom-left corner
     fig.update_layout(legend=dict(x=0.01, y=0.01, xanchor="left", yanchor="bottom"))
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(tfp_country_chart, country=Dropdown(options=sorted(world.country.unique()), value="United States",
-                                             description="country", style=WIDE));
+# Fig. 1 for any country, with a menu. `interact` turns each argument of the
+# function into a widget, here a `Dropdown` menu of the country names
+# (`sorted(world.country.unique())`: each name once, in alphabetical order), and
+# draws the figure again every time you pick one. The `;` at the end only hides
+# an extra line of text.
+interact(
+    tfp_country_chart,
+    country=Dropdown(options=sorted(world.country.unique()), value="United States",
+                     description="country", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: helper
 # @title Helper for the website country menu (run this cell; you do not need to read it)
 def dropdown_figure(make_figure, name, values, start):
-    """Precompute make_figure(name=value) for every value and join the results with a dropdown menu.
+    """Precompute make_figure(name=value) for every value, joined by a dropdown menu.
 
-    Like slider_figure, but each choice also sets its own axis ranges.
+    Like slider_figure, but each choice also sets its own axis ranges. Used by the
+    website version of Fig. 1 for any country.
+
+    Arguments
+        make_figure : the figure function, e.g. tfp_country_chart
+        name        : the argument that the menu sets, e.g. "country"
+        values      : the choices of the menu
+        start       : the choice shown first
+    Returns
+        a Plotly figure with a dropdown menu
     """
+    # Step 1: draw the figure once for every value
     figures = [make_figure(**{name: v}) for v in values]
     first = values.index(start)
+    # Step 2: copy every trace into one figure; only the start value's are visible.
+    # `owner` remembers which value each trace belongs to
     fig = go.Figure(layout=figures[first].layout)
     owner = []
     for i, f in enumerate(figures):
@@ -1322,20 +1510,49 @@ def dropdown_figure(make_figure, name, values, start):
             trace.visible = (i == first)
             fig.add_trace(trace)
             owner.append(i)
+    # Step 3: one menu entry per value: its traces, its title and its axis ranges
     buttons = []
     for i, f in enumerate(figures):
-        layout = {"title": f.layout.title.to_plotly_json(), "xaxis.range": f.layout.xaxis.range,
-                  "yaxis.range": f.layout.yaxis.range}
-        buttons.append(dict(method="update", label=str(values[i]), args=[{"visible": [o == i for o in owner]}, layout]))
-    fig.update_layout(updatemenus=[dict(buttons=buttons, active=first, direction="down", x=1, y=1.02,
-                                        xanchor="right", yanchor="bottom")], margin=dict(t=110))
+        layout = {
+            "title": f.layout.title.to_plotly_json(),
+            "xaxis.range": f.layout.xaxis.range,
+            "yaxis.range": f.layout.yaxis.range,
+        }
+        buttons.append(
+            dict(
+                method="update",
+                label=str(values[i]),
+                args=[{"visible": [o == i for o in owner]}, layout],
+            )
+        )
+    # Step 4: the menu, just above the top-right corner of the chart
+    fig.update_layout(
+        updatemenus=[
+            dict(
+                buttons=buttons,
+                active=first,
+                direction="down",
+                x=1,
+                y=1.02,
+                xanchor="right",
+                yanchor="bottom",
+            )
+        ],
+        margin=dict(t=110),
+    )
     return fig
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 1 for any country, with a country menu
-dropdown_figure(tfp_country_chart, "country", sorted(world.country.unique()), start="United States")
+# one picture of Fig. 1 per country; the menu shows one at a time
+dropdown_figure(
+    tfp_country_chart,
+    "country",
+    sorted(world.country.unique()),
+    start="United States",
+)
 ```
 
 **Sources.** Data: Groningen Growth and Development Centre, [Penn World Table 11.0](https://www.rug.nl/ggdc/productivity/pwt/)
@@ -1368,18 +1585,23 @@ On the website, pick a country in the menu above the chart.
 The textbook says TFP growth is negative in some years, but not in 2001 or 2020, and that 2009 brought a big
 positive shock. We check these statements, and count how often each TFP measure fell in a year when GDP fell.
 
-> **Python note.** `tfp[tfp.year <= 2022]` keeps the rows for which the condition is true (a *filter*).
-> `len(...)` counts rows, and `.sum()` of a true/false column counts the true values.
-
 ```{python}
-book_years = tfp[tfp.year <= 2022]                      # the textbook's span
+# Step 1: the years of negative TFP growth in the textbook's span.
+# `tfp[tfp.year <= 2022]` keeps the rows for which the condition is True (a
+# filter), and `len(...)` counts the rows
+book_years = tfp[tfp.year <= 2022]
 negative = book_years[book_years.tfp_growth < 0]
 print(f"Years with negative TFP growth, 1950-2022: {len(negative)}")
 print(list(negative.year))
+# Step 2: the years in which business output fell, and how often each TFP measure
+# fell too; `.sum()` of a True/False column counts the True values
 fell = annual[annual.gdp_growth < 0]
 print(f"Years in which business output fell: {len(fell)}")
 print(f"  raw Solow residual also fell in {(fell.tfp_solow < 0).sum()} of them")
-print(f"  utilization-adjusted TFP fell in {(fell.tfp_util < 0).sum()} of them: {list(fell.year[fell.tfp_util < 0])}")
+print(
+    f"  utilization-adjusted TFP fell in {(fell.tfp_util < 0).sum()} of them: "
+    f"{list(fell.year[fell.tfp_util < 0])}"
+)
 ```
 
 These are current data. Fernald revises his series as the BEA and BLS revise theirs, so recent years differ from
@@ -1419,33 +1641,67 @@ $$L^d:\ w = \frac{2}{3}\cdot\frac{\bar{A}K^{1/3}}{L^{1/3}} \qquad\qquad L^s = \b
 The parameter $\bar{\ell}$ sets the overall amount of labor supply: when $c = w$, people supply exactly
 $L^s = \bar{\ell}$. Move the sliders to see which curve each parameter shifts.
 
+The function `labor_market` draws the two curves and marks where they cross. It only calls `equilibrium` and the curves of Model in code, so all of its code is drawing code.
+
 ```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 2, the labor market
 def labor_market(A=A_BAR, c=C_BAR, ell=ELL_BAR):
-    """Fig. 15.2: labor demand and labor supply cross at employment L0 and the real wage w0."""
+    """Labor demand and labor supply cross at employment L0 and the real wage w0.
+
+    Draws Fig. 2 (adapted from Fig. 15.2 in Jones).
+
+    Arguments
+        A   : TFP, A-bar
+        c   : consumption, c
+        ell : the labor-supply scale, ell-bar
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the equilibrium, equation (7), with no sales tax
     L0, w0 = equilibrium(A, 0.0, c, ell)
+    # Step 2: the two curves; the supply curve's name is left out when it would sit
+    # on the demand curve's
     fig = go.Figure()
     d_end = add_curve(fig, L_GRID, demand_wage(L_GRID, A), "L<sup>d</sup>", BLUE)
-    add_curve(fig, L_GRID, supply_wage(L_GRID, c, ell), "L<sup>s</sup>", TEAL, avoid=d_end)
+    add_curve(fig, L_GRID, supply_wage(L_GRID, c, ell), "L<sup>s</sup>", TEAL,
+              avoid=d_end)
+    # Step 3: the equilibrium point, with guides to both axes
     add_point(fig, L0, w0, "")
-    title = f"Equilibrium: employment L₀ = {L0:.2f}, real wage w₀ = {w0:.2f}, output Y = {output(L0, A):.2f}"
+    # Step 4: the title reports L0, w0 and output
+    title = (
+        f"Equilibrium: employment L₀ = {L0:.2f}, real wage w₀ = {w0:.2f}, "
+        f"output Y = {output(L0, A):.2f}"
+    )
     return labor_axes(fig, title)
 ```
 
-> **Python note.** `interact` turns each argument of a function into a slider and calls the function again
-> every time you move one. The `;` at the end only hides an extra line of text.
-
 ```{python}
 #| kind: widget
-interact(labor_market,
-         A=FloatSlider(value=1.0, min=0.6, max=1.3, step=0.05, description="TFP Ā", style=WIDE),
-         c=FloatSlider(value=0.6, min=0.5, max=0.8, step=0.05, description="consumption c", style=WIDE),
-         ell=FloatSlider(value=0.9, min=0.5, max=1.2, step=0.1, description="labor-supply scale ℓ̄", style=WIDE));
+# Fig. 2 with sliders. A `FloatSlider` is a slider for a decimal number: its start
+# value, range and step, then its label
+interact(
+    labor_market,
+    A=FloatSlider(value=1.0, min=0.6, max=1.3, step=0.05,
+                  description="TFP Ā", style=WIDE),
+    c=FloatSlider(value=0.6, min=0.5, max=0.8, step=0.05,
+                  description="consumption c", style=WIDE),
+    ell=FloatSlider(value=0.9, min=0.5, max=1.2, step=0.1,
+                    description="labor-supply scale ℓ̄", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 2 with a precomputed slider for consumption
-slider_figure(labor_market, "c", [0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8], start=0.6, label="consumption c")
+# one picture of Fig. 2 per value of c
+slider_figure(
+    labor_market,
+    "c",
+    [0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8],     # the values of c
+    start=0.6,
+    label="consumption c",
+)
 ```
 
 **Source.** Adapted from Fig. 15.2 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -1493,50 +1749,89 @@ purchases (Fig. 5) and good news about the future (Fig. 9). Its three arguments 
 can change: TFP $\bar{A}'$, the sales tax $\tau$ and consumption $c'$. When a curve moves, its old position stays
 behind as a dashed gray line.
 
-> **Python note.** `abs(x)` is the absolute value of `x`. Slider values are not always exact (0.6 can arrive as
-> 0.6000000000000001), so we ask whether a value differs from the baseline by more than 0.001 rather than
-> testing `!=`. `a if condition else b` picks `a` when the condition holds and `b` otherwise. `min(a, b)` is the
-> smaller of two numbers.
+`labor_shock` only calls `equilibrium` and the curves of Model in code, so all of its code is drawing code: open it to see how the curves, the points and the arrows are placed.
 
 ```{python}
+#| kind: drawing
+# @title Drawing code: Figs. 3, 4, 5 and 9, a shock in the labor market
 def labor_shock(A_new=A_BAR, tau=0.0, c_new=C_BAR):
-    """Figs. 15.3-15.5 and 15.14: a shock to TFP, a sales tax or consumption moves the economy from A to B."""
+    """A shock to TFP, a sales tax or consumption moves the economy from A to B.
+
+    Draws Figs. 3, 4, 5 and 9 (adapted from Fig. 15.3 to Fig. 15.5 and Fig. 15.14
+    in Jones). A curve that moves leaves its old position behind as a dashed line.
+
+    Arguments
+        A_new : TFP after the shock, A-bar'
+        tau   : the sales tax, tau
+        c_new : consumption after the shock, c'
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the equilibrium before (A) and after (B) the shock, equation (7)
     L0, w0 = equilibrium()
     L1, w1 = equilibrium(A_new, tau, c_new)
+    # Step 2: which curves move? Slider values are not always exact (0.6 can arrive
+    # as 0.6000000000000001), so we ask whether a value differs from the baseline by
+    # more than 0.001 rather than testing `!=`; `abs(x)` is the absolute value
     demand_moves = abs(A_new - A_BAR) > 0.001 or tau > 0.001
     supply_moves = abs(c_new - C_BAR) > 0.001
-    d_label = "L<sup>d</sup>′" if demand_moves else "L<sup>d</sup>"     # a prime marks a curve that moved
+    # a prime marks a curve that moved; `a if condition else b` picks a when the
+    # condition holds and b otherwise
+    d_label = "L<sup>d</sup>′" if demand_moves else "L<sup>d</sup>"
     s_label = "L<sup>s</sup>′" if supply_moves else "L<sup>s</sup>"
+    # Step 3: the curves after the shock
     fig = go.Figure()
     d_end = add_curve(fig, L_GRID, demand_wage(L_GRID, A_new, tau), d_label, BLUE)
-    s_end = add_curve(fig, L_GRID, supply_wage(L_GRID, c_new), s_label, TEAL, avoid=d_end)
+    s_end = add_curve(fig, L_GRID, supply_wage(L_GRID, c_new), s_label, TEAL,
+                      avoid=d_end)
+    # Step 4: a curve that moved: its old position (dashed gray) and an arrow
     if demand_moves:
-        add_curve(fig, L_GRID, demand_wage(L_GRID), "L<sup>d</sup>", GRAY, "dash", avoid=d_end)
+        add_curve(fig, L_GRID, demand_wage(L_GRID), "L<sup>d</sup>", GRAY, "dash",
+                  avoid=d_end)
         add_arrow(fig, 1.45, demand_wage(1.45), 1.45, demand_wage(1.45, A_new, tau))
     if supply_moves:
-        add_curve(fig, L_GRID, supply_wage(L_GRID), "L<sup>s</sup>", GRAY, "dash", avoid=s_end)
-        w_arrow = min(0.95, 1.75 * c_new / ELL_BAR)     # low enough that the arrow ends inside the axes
-        add_arrow(fig, labor_supply(w_arrow), w_arrow, labor_supply(w_arrow, c_new), w_arrow)
+        add_curve(fig, L_GRID, supply_wage(L_GRID), "L<sup>s</sup>", GRAY, "dash",
+                  avoid=s_end)
+        # low enough that the arrow ends inside the axes
+        w_arrow = min(0.95, 1.75 * c_new / ELL_BAR)
+        add_arrow(fig, labor_supply(w_arrow), w_arrow, labor_supply(w_arrow, c_new),
+                  w_arrow)
+    # Step 5: the points A and B, and arrows along both axes
     add_point(fig, L0, w0, "A")
     if demand_moves or supply_moves:
         add_point(fig, L1, w1, "B")
         add_arrow(fig, 0.05, w0, 0.05, w1)          # the real wage moves ...
         add_arrow(fig, L0, 0.05, L1, 0.05)          # ... and so does employment
-    return labor_axes(fig, f"Employment {L0:.2f} → {L1:.2f},   real wage {w0:.2f} → {w1:.2f}")
+    # Step 6: the title reports both changes
+    title = f"Employment {L0:.2f} → {L1:.2f},   real wage {w0:.2f} → {w1:.2f}"
+    return labor_axes(fig, title)
 ```
 
 ```{python}
 #| kind: widget
-interact(labor_shock,
-         A_new=FloatSlider(value=0.8, min=0.6, max=1.4, step=0.05, description="TFP after the shock Ā′", style=WIDE),
-         tau=FloatSlider(value=0.0, min=0.0, max=0.5, step=0.05, description="sales tax τ", style=WIDE),
-         c_new=FloatSlider(value=0.6, min=0.4, max=0.8, step=0.05, description="consumption c′", style=WIDE));
+# Fig. 3 with sliders: TFP after the shock, the sales tax and consumption
+interact(
+    labor_shock,
+    A_new=FloatSlider(value=0.8, min=0.6, max=1.4, step=0.05,
+                      description="TFP after the shock Ā′", style=WIDE),
+    tau=FloatSlider(value=0.0, min=0.0, max=0.5, step=0.05,
+                    description="sales tax τ", style=WIDE),
+    c_new=FloatSlider(value=0.6, min=0.4, max=0.8, step=0.05,
+                      description="consumption c′", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 3 with a precomputed slider for TFP
-slider_figure(labor_shock, "A_new", [0.7, 0.8, 0.9, 1.0, 1.1, 1.2], start=0.8, label="TFP after the shock Ā′")
+# one picture of Fig. 3 per value of A-bar'
+slider_figure(
+    labor_shock,
+    "A_new",
+    [0.7, 0.8, 0.9, 1.0, 1.1, 1.2],     # the values of A-bar'
+    start=0.8,
+    label="TFP after the shock Ā′",
+)
 ```
 
 **Source.** Adapted from Fig. 15.3 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -1585,9 +1880,18 @@ the TFP shock has decayed to about half its size. If a shock keeps the fraction 
 then by equation (1) $\rho^{16} = 1/2$:
 
 ```{python}
+# Step 1: the quarterly persistence rho that halves the shock in 16 quarters
 rho = 0.5 ** (1 / 16)
-print(f"Quarterly persistence rho = {rho:.3f}: the shock keeps {100 * rho:.1f}% of its size each quarter")
-print(f"Left after 1 year: {100 * rho ** 4:.0f}%,  after 4 years: {100 * rho ** 16:.0f}%,  after 8 years: {100 * rho ** 32:.0f}%")
+print(
+    f"Quarterly persistence rho = {rho:.3f}: "
+    f"the shock keeps {100 * rho:.1f}% of its size each quarter"
+)
+# Step 2: what is left after 1, 4 and 8 years (4, 16 and 32 quarters)
+print(
+    f"Left after 1 year: {100 * rho ** 4:.0f}%,  "
+    f"after 4 years: {100 * rho ** 16:.0f}%,  "
+    f"after 8 years: {100 * rho ** 32:.0f}%"
+)
 ```
 
 ### Fig. 4: The imposition of a sales tax in the DSGE model
@@ -1604,16 +1908,29 @@ the tax slider set to 20 percent and TFP at its baseline.
 
 ```{python}
 #| kind: widget
-interact(labor_shock,
-         A_new=FloatSlider(value=1.0, min=0.6, max=1.4, step=0.05, description="TFP Ā′", style=WIDE),
-         tau=FloatSlider(value=0.2, min=0.0, max=0.5, step=0.05, description="sales tax τ", style=WIDE),
-         c_new=FloatSlider(value=0.6, min=0.4, max=0.8, step=0.05, description="consumption c′", style=WIDE));
+# Fig. 4: the function of Fig. 3, with a 20 percent sales tax and TFP at baseline
+interact(
+    labor_shock,
+    A_new=FloatSlider(value=1.0, min=0.6, max=1.4, step=0.05,
+                      description="TFP Ā′", style=WIDE),
+    tau=FloatSlider(value=0.2, min=0.0, max=0.5, step=0.05,
+                    description="sales tax τ", style=WIDE),
+    c_new=FloatSlider(value=0.6, min=0.4, max=0.8, step=0.05,
+                      description="consumption c′", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 4 with a precomputed slider for the sales tax
-slider_figure(labor_shock, "tau", [0.0, 0.1, 0.2, 0.3, 0.4], start=0.2, label="sales tax τ")
+# one picture of Fig. 4 per value of tau
+slider_figure(
+    labor_shock,
+    "tau",
+    [0.0, 0.1, 0.2, 0.3, 0.4],     # the values of tau
+    start=0.2,
+    label="sales tax τ",
+)
 ```
 
 **Source.** Adapted from Fig. 15.4 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -1630,6 +1947,8 @@ slider_figure(labor_shock, "tau", [0.0, 0.1, 0.2, 0.3, 0.4], start=0.2, label="s
 #### Key numbers: a tax and a TFP shock
 
 ```{python}
+# The equilibrium with a 20 percent sales tax, and with TFP down to 0.8:
+# only the product (1 - tau) * A-bar matters, so the two are the same
 L_tax, w_tax = equilibrium(tau=0.2)
 L_tfp, w_tfp = equilibrium(A=0.8)
 print(f"Sales tax 20%:   employment {L_tax:.4f},  real wage {w_tax:.4f}")
@@ -1663,16 +1982,29 @@ in purchases of 0.1 (10 percent of output); a temporary rise would cut consumpti
 
 ```{python}
 #| kind: widget
-interact(labor_shock,
-         A_new=FloatSlider(value=1.0, min=0.6, max=1.4, step=0.05, description="TFP Ā′", style=WIDE),
-         tau=FloatSlider(value=0.0, min=0.0, max=0.5, step=0.05, description="sales tax τ", style=WIDE),
-         c_new=FloatSlider(value=0.5, min=0.4, max=0.8, step=0.05, description="consumption c′", style=WIDE));
+# Fig. 5: the function of Fig. 3, with consumption down from 0.6 to 0.5
+interact(
+    labor_shock,
+    A_new=FloatSlider(value=1.0, min=0.6, max=1.4, step=0.05,
+                      description="TFP Ā′", style=WIDE),
+    tau=FloatSlider(value=0.0, min=0.0, max=0.5, step=0.05,
+                    description="sales tax τ", style=WIDE),
+    c_new=FloatSlider(value=0.5, min=0.4, max=0.8, step=0.05,
+                      description="consumption c′", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 5 with a precomputed slider for consumption
-slider_figure(labor_shock, "c_new", [0.4, 0.45, 0.5, 0.55, 0.6], start=0.5, label="consumption c′")
+# one picture of Fig. 5 per value of c'
+slider_figure(
+    labor_shock,
+    "c_new",
+    [0.4, 0.45, 0.5, 0.55, 0.6],     # the values of c'
+    start=0.5,
+    label="consumption c′",
+)
 ```
 
 **Source.** Adapted from Fig. 15.5 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -1740,34 +2072,131 @@ This figure function covers one event in three periods, and Fig. 7 reuses it:
 - period 2: eventually the nominal wage adjusts and the market clears again (this last step is not in the textbook
   figures; it is what happens once wages are flexible).
 
-> **Python note.** `real_wages[t]` takes element number `t` of a list, counting from 0, and `"ABC"[t]` the
-> letter number `t` of a text. `min(a, b)` is the smaller of two numbers and `max(a, b)` the larger. An
-> `IntSlider` is a slider for whole numbers, here the period. A function may have several `return` lines: it stops
-> at the first one it reaches.
+First the economics. `sticky_wage_periods` computes the real wage in each period and, by equation (8), employment and unemployment.
 
 ```{python}
-P0 = 1.0          # the price level before the monetary expansion
+# The price level before the monetary expansion
+P0 = 1.0
 
 
-def add_wage_line(fig, w, label, color, dash="solid", above=False):
-    """A horizontal line at the real wage w, labelled just right of the axes (above or below the line)."""
-    fig.add_trace(go.Scatter(x=[0.02, L_RANGE[1]], y=[w, w], mode="lines", showlegend=False, hoverinfo="skip",
-                             line=dict(color=color, width=3, dash=dash)))
-    fig.add_annotation(x=L_RANGE[1], y=w, text=label, showarrow=False, xanchor="left",
-                       yanchor="bottom" if above else "top", font=dict(color=color, size=15))
+def sticky_wage_periods(P_new, W_bar):
+    """Real wage, employment and unemployment in periods 0, 1 and 2 (Figs. 6, 7).
 
+    The real wage w = W/P is W-bar/P0, then W-bar/P', then the market-clearing w*
+    once the nominal wage has adjusted. Equation (8): employment is the short side
+    of the market, L = min(L^d(w), L^s(w)); unemployment is L^s(w) - L^d(w) when
+    that is positive.
 
-def add_gap(fig, L_from, L_to, w, text):
-    """A bracket from L_from to L_to above the real wage w (clear of the point letters), with a text over it."""
-    fig.add_trace(go.Scatter(x=[L_from, L_from, L_to, L_to], y=[w + 0.07, w + 0.1, w + 0.1, w + 0.07],
-                             mode="lines", showlegend=False, hoverinfo="skip", line=dict(color="black", width=1.5)))
-    fig.add_annotation(x=(L_from + L_to) / 2, y=w + 0.1, text=text, showarrow=False, yanchor="bottom",
-                       font=dict(size=13))
+    Arguments
+        P_new : the price level after the monetary expansion, P'
+        W_bar : the sticky nominal wage, W-bar
+    Returns
+        L_star, w_star : employment and the real wage where the market clears
+        real_wages     : the real wage W/P in periods 0, 1 and 2 (a list)
+        employment     : employment in each period (a list)
+        unemployment   : unemployment in each period (a list)
+    """
+    # Step 1: the market-clearing point, and W/P in periods 0, 1 and 2
+    L_star, w_star = equilibrium()
+    real_wages = [W_bar / P0, W_bar / P_new, w_star]
+    # Step 2: in each period the short side of the market decides employment;
+    # `max(a, 0.0)` keeps unemployment from going below zero
+    employment, unemployment = [], []
+    for w in real_wages:
+        employment.append(min(labor_demand(w), labor_supply(w)))
+        unemployment.append(max(labor_supply(w) - labor_demand(w), 0.0))
+    return L_star, w_star, real_wages, employment, unemployment
 ```
 
 ```{python}
+#| kind: drawing
+# @title Drawing code: Figs. 6 and 7, a wage line and the unemployment bracket
+def add_wage_line(fig, w, label, color, dash="solid", above=False):
+    """A horizontal line at the real wage w, labeled just right of the axes.
+
+    Used by Fig. 6 and Fig. 7: the sticky real wage W-bar/P.
+
+    Arguments
+        fig   : the Plotly figure
+        w     : the real wage, W/P
+        label : the line's name
+        color : its color
+        dash  : "solid" or "dash"
+        above : True to write the name above the line, False below it
+    """
+    # the line, from the vertical axis to the right edge of the chart
+    fig.add_trace(
+        go.Scatter(
+            x=[0.02, L_RANGE[1]],
+            y=[w, w],
+            mode="lines",
+            showlegend=False,
+            hoverinfo="skip",
+            line=dict(color=color, width=3, dash=dash),
+        )
+    )
+    # its name, just right of the axes
+    fig.add_annotation(
+        x=L_RANGE[1],
+        y=w,
+        text=label,
+        showarrow=False,
+        xanchor="left",
+        yanchor="bottom" if above else "top",
+        font=dict(color=color, size=15),
+    )
+
+
+def add_gap(fig, L_from, L_to, w, text):
+    """A bracket from L_from to L_to above the real wage w, with a text over it.
+
+    Used by Fig. 6 and Fig. 7 for the unemployment gap, drawn clear of the point
+    letters.
+
+    Arguments
+        fig          : the Plotly figure
+        L_from, L_to : the two ends of the bracket, on the employment axis
+        w            : the real wage
+        text         : the text over the bracket
+    """
+    # the bracket: 0.1 above the wage line, with short ends down to 0.07
+    fig.add_trace(
+        go.Scatter(
+            x=[L_from, L_from, L_to, L_to],
+            y=[w + 0.07, w + 0.1, w + 0.1, w + 0.07],
+            mode="lines",
+            showlegend=False,
+            hoverinfo="skip",
+            line=dict(color="black", width=1.5),
+        )
+    )
+    # the text, centered over the bracket
+    fig.add_annotation(
+        x=(L_from + L_to) / 2,
+        y=w + 0.1,
+        text=text,
+        showarrow=False,
+        yanchor="bottom",
+        font=dict(size=13),
+    )
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Figs. 6 and 7, sticky wages period by period
 def letter_side(w, w_old, w_star):
-    """Where to write a point's letter, so that it stays clear of the old wage line w_old above it."""
+    """Where to write a point's letter, clear of the old wage line w_old above it.
+
+    Used by Fig. 6 and Fig. 7. A function may have several `return` lines: it stops
+    at the first one it reaches.
+
+    Arguments
+        w      : the real wage at the point
+        w_old  : the real wage of period 0
+        w_star : the market-clearing real wage
+    Returns
+        a Plotly text position, such as "top right"
+    """
     if w > w_old - 0.01:
         return "top right"             # no old line just above the point
     if w > w_star + 0.01:
@@ -1776,45 +2205,83 @@ def letter_side(w, w_old, w_star):
 ```
 
 ```{python}
+#| kind: drawing
+# @title Drawing code: Figs. 6 and 7, the labor market with a sticky wage
 def sticky_wages(t=0, P_new=1.05, W_bar=0.75):
-    """Figs. 15.6-15.7: period 0 sticky wage W_bar; period 1 prices rise to P_new; period 2 W has adjusted."""
-    L_star, w_star = equilibrium()
-    real_wages = [W_bar / P0, W_bar / P_new, w_star]          # W/P in periods 0, 1 and 2
+    """The labor market with a sticky nominal wage, in period t.
+
+    Draws Fig. 6 and Fig. 7 (adapted from Figs. 15.6 and 15.7 in Jones): in period 0
+    the nominal wage is stuck at W-bar; in period 1 prices rise to P'; in period 2
+    W has adjusted.
+
+    Arguments
+        t     : the period, 0, 1 or 2
+        P_new : the price level after the monetary expansion, P'
+        W_bar : the sticky nominal wage, W-bar
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the numbers of the figure (sticky_wage_periods); `real_wages[t]` is
+    # element number t of the list, counting from 0
+    numbers = sticky_wage_periods(P_new, W_bar)
+    L_star, w_star, real_wages, employment, unemployment = numbers
     labels = ["W̄/P<sub>0</sub>", "W̄/P′", "W′/P′"]
     w = real_wages[t]
-    employed = min(labor_demand(w), labor_supply(w))          # the short side of the market decides
-    gap = max(labor_supply(w) - labor_demand(w), 0.0)
+    employed = employment[t]
+    gap = unemployment[t]
+    # Step 2: the two curves (the demand curve named at its top end, clear of the
+    # wage line), and an unlabeled dot where the market would clear
     fig = go.Figure()
-    add_curve(fig, L_GRID, demand_wage(L_GRID), "L<sup>d</sup>", BLUE, start=True)   # top label, clear of W/P
+    add_curve(fig, L_GRID, demand_wage(L_GRID), "L<sup>d</sup>", BLUE, start=True)
     add_curve(fig, L_GRID, supply_wage(L_GRID), "L<sup>s</sup>", TEAL)
-    add_point(fig, L_star, w_star, "", guides=False)          # where the market would clear
+    add_point(fig, L_star, w_star, "", guides=False)
+    # Step 3: after period 0, the old wage line and point A stay, with arrows
     if t > 0:
         w_A = real_wages[0]
-        L_A = min(labor_demand(w_A), labor_supply(w_A))
-        add_wage_line(fig, w_A, labels[0], GRAY, "dash", above=w_A >= w)    # labels on the outer sides
+        L_A = employment[0]
+        # the two wage lines carry their names on their outer sides
+        add_wage_line(fig, w_A, labels[0], GRAY, "dash", above=w_A >= w)
         add_point(fig, L_A, w_A, "A")
         add_arrow(fig, 0.05, w_A, 0.05, w)
         add_arrow(fig, L_A, 0.05, employed, 0.05)
+    # Step 4: this period's wage line and point; `"ABC"[t]` is letter number t
     add_wage_line(fig, w, labels[t], GREEN, above=t > 0 and real_wages[0] < w)
     add_point(fig, employed, w, "ABC"[t], where=letter_side(w, real_wages[0], w_star))
+    # Step 5: the unemployment bracket, when the gap is visible
     if gap > 0.02:
         add_gap(fig, labor_demand(w), labor_supply(w), w, "Unemployment")
-    return labor_axes(fig, f"Period {t}: real wage W/P = {w:.2f}, employment {employed:.2f}, "
-                           f"unemployment {gap:.2f}", "Real wage, W/P")
+    # Step 6: the title reports the period's numbers
+    title = (
+        f"Period {t}: real wage W/P = {w:.2f}, employment {employed:.2f}, "
+        f"unemployment {gap:.2f}"
+    )
+    return labor_axes(fig, title, "Real wage, W/P")
 ```
 
 ```{python}
 #| kind: widget
-interact(sticky_wages,
-         t=IntSlider(value=0, min=0, max=2, description="period t", style=WIDE),
-         P_new=FloatSlider(value=1.05, min=1.0, max=1.25, step=0.05, description="new price level P′", style=WIDE),
-         W_bar=FloatSlider(value=0.75, min=0.6, max=0.9, step=0.05, description="sticky nominal wage W̄", style=WIDE));
+# Fig. 6 with sliders. An `IntSlider` is a slider for whole numbers, here the period
+interact(
+    sticky_wages,
+    t=IntSlider(value=0, min=0, max=2, description="period t", style=WIDE),
+    P_new=FloatSlider(value=1.05, min=1.0, max=1.25, step=0.05,
+                      description="new price level P′", style=WIDE),
+    W_bar=FloatSlider(value=0.75, min=0.6, max=0.9, step=0.05,
+                      description="sticky nominal wage W̄", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 6 with a precomputed slider for the sticky wage
-slider_figure(sticky_wages, "W_bar", [0.7, 0.75, 0.8, 0.85, 0.9], start=0.75, label="sticky nominal wage W̄")
+# one picture of Fig. 6 per value of W-bar
+slider_figure(
+    sticky_wages,
+    "W_bar",
+    [0.7, 0.75, 0.8, 0.85, 0.9],     # the values of W-bar
+    start=0.75,
+    label="sticky nominal wage W̄",
+)
 ```
 
 **Source.** Adapted from Fig. 15.6 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -1853,15 +2320,21 @@ the period slider to 2 to let the nominal wage adjust.
 
 ```{python}
 #| kind: widget
-interact(sticky_wages,
-         t=IntSlider(value=1, min=0, max=2, description="period t", style=WIDE),
-         P_new=FloatSlider(value=1.05, min=1.0, max=1.25, step=0.05, description="new price level P′", style=WIDE),
-         W_bar=FloatSlider(value=0.75, min=0.6, max=0.9, step=0.05, description="sticky nominal wage W̄", style=WIDE));
+# Fig. 7: the function of Fig. 6, now in period 1
+interact(
+    sticky_wages,
+    t=IntSlider(value=1, min=0, max=2, description="period t", style=WIDE),
+    P_new=FloatSlider(value=1.05, min=1.0, max=1.25, step=0.05,
+                      description="new price level P′", style=WIDE),
+    W_bar=FloatSlider(value=0.75, min=0.6, max=0.9, step=0.05,
+                      description="sticky nominal wage W̄", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 7 with a precomputed slider for the period
+# one picture of Fig. 7 per period: 0, 1 and 2
 slider_figure(sticky_wages, "t", [0, 1, 2], start=1, label="period t")
 ```
 
@@ -1907,53 +2380,142 @@ $Y_0 = 1$, so point $A$ is the baseline. A monetary expansion raises the output 
 demand shifts right, and to attract the extra workers the nominal wage must rise. With prices stuck, the real wage
 $W/P$ rises too: the economy moves up along the labor supply curve to $B$.
 
+`sticky_price_point` computes the two points of the figure: the labor that firms need for the output demanded, from equation (9), and the real wage at which people supply it.
+
 ```{python}
-Y0 = 1.0          # output demanded before the shock: the flexible-price output of the baseline
+# Output demanded before the shock: the flexible-price output of the baseline
+Y0 = 1.0
 
 
-def add_vertical(fig, L, label, color, dash="solid"):
-    """A vertical labor demand curve at L (sticky prices), labelled just above the top of the axes."""
-    fig.add_trace(go.Scatter(x=[L, L], y=[0.02, W_RANGE[1]], mode="lines", showlegend=False, hoverinfo="skip",
-                             line=dict(color=color, width=3, dash=dash)))
-    fig.add_annotation(x=L, y=W_RANGE[1], text=label, showarrow=False, yanchor="bottom",
-                       font=dict(color=color, size=15))
+def sticky_price_point(Y_new, c_new):
+    """Employment and the real wage before and after a demand shock (Figs. 8, 10).
+
+    Equation (9): with sticky prices, firms hire the labor needed for the output
+    demanded, L = (Y / (A-bar K^(1/3)))^(3/2). The real wage is read off the labor
+    supply curve, equation (6), at that L.
+
+    Arguments
+        Y_new : the output demanded after the shock, Y'
+        c_new : consumption after the shock, c'
+    Returns
+        L0, L1 : employment before (A) and after (B) the shock
+        w0, w1 : the real wage W/P before and after the shock
+    """
+    # Step 1: the labor needed for the output demanded, before and after
+    L0, L1 = labor_needed(Y0), labor_needed(Y_new)
+    # Step 2: the real wage at which people supply exactly that labor
+    w0, w1 = supply_wage(L0), supply_wage(L1, c_new)
+    return L0, L1, w0, w1
 ```
 
 ```{python}
+#| kind: drawing
+# @title Drawing code: Figs. 8 and 10, a vertical labor demand curve
+def add_vertical(fig, L, label, color, dash="solid"):
+    """A vertical labor demand curve at L, labeled just above the top of the axes.
+
+    Used by Fig. 8 and Fig. 10: with sticky prices, labor demand does not depend on
+    the wage.
+
+    Arguments
+        fig   : the Plotly figure
+        L     : employment, where the line stands
+        label : the line's name ("" for none)
+        color : its color
+        dash  : "solid" or "dash"
+    """
+    # the line, from the bottom to the top of the axes
+    fig.add_trace(
+        go.Scatter(
+            x=[L, L],
+            y=[0.02, W_RANGE[1]],
+            mode="lines",
+            showlegend=False,
+            hoverinfo="skip",
+            line=dict(color=color, width=3, dash=dash),
+        )
+    )
+    # its name, just above the axes
+    fig.add_annotation(
+        x=L,
+        y=W_RANGE[1],
+        text=label,
+        showarrow=False,
+        yanchor="bottom",
+        font=dict(color=color, size=15),
+    )
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Figs. 8 and 10, the labor market with sticky prices
 def sticky_prices(Y_new=1.15, c_new=C_BAR):
-    """Figs. 15.8 and 15.15: labor demand is the vertical line at the labor needed for the output demanded."""
-    L0, L1 = labor_needed(Y0), labor_needed(Y_new)
-    w0, w1 = supply_wage(L0), supply_wage(L1, c_new)
+    """The labor market with sticky prices: labor demand is a vertical line.
+
+    Draws Fig. 8 and Fig. 10 (adapted from Figs. 15.8 and 15.15 in Jones): the line
+    stands at the labor needed for the output demanded.
+
+    Arguments
+        Y_new : the output demanded after the shock, Y'
+        c_new : consumption after the shock, c'
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the numbers of the figure (sticky_price_point)
+    L0, L1, w0, w1 = sticky_price_point(Y_new, c_new)
+    # Step 2: which curves move (by more than 0.001)? A prime marks a curve that moved
     demand_moves, supply_moves = abs(Y_new - Y0) > 0.001, abs(c_new - C_BAR) > 0.001
     d_label = "L<sup>d</sup>′" if demand_moves else "L<sup>d</sup>"
     s_label = "L<sup>s</sup>′" if supply_moves else "L<sup>s</sup>"
+    # Step 3: labor demand now, and its old position dashed gray (without a name
+    # when the two lines are too close for two names)
     fig = go.Figure()
     add_vertical(fig, L1, d_label, BLUE)
     if demand_moves:
-        add_vertical(fig, L0, "L<sup>d</sup>" if abs(L1 - L0) > 0.1 else "", GRAY, "dash")
+        add_vertical(fig, L0, "L<sup>d</sup>" if abs(L1 - L0) > 0.1 else "", GRAY,
+                     "dash")
+    # Step 4: labor supply now, and its old position when it moved
     end = add_curve(fig, L_GRID, supply_wage(L_GRID, c_new), s_label, TEAL)
     if supply_moves:
-        add_curve(fig, L_GRID, supply_wage(L_GRID), "L<sup>s</sup>", GRAY, "dash", avoid=end)
+        add_curve(fig, L_GRID, supply_wage(L_GRID), "L<sup>s</sup>", GRAY, "dash",
+                  avoid=end)
+    # Step 5: the points A and B, and arrows along both axes
     add_point(fig, L0, w0, "A")
     if demand_moves or supply_moves:
-        add_point(fig, L1, w1, "B", where="bottom right")     # below-right of B no curve passes
+        add_point(fig, L1, w1, "B", where="bottom right")   # no curve passes there
         add_arrow(fig, L0, 0.05, L1, 0.05)
         add_arrow(fig, 0.05, w0, 0.05, w1)
-    title = f"Output {Y0:.2f} → {Y_new:.2f}: employment {L0:.2f} → {L1:.2f}, real wage {w0:.2f} → {w1:.2f}"
+    # Step 6: the title reports output, employment and the real wage
+    title = (
+        f"Output {Y0:.2f} → {Y_new:.2f}: employment {L0:.2f} → {L1:.2f}, "
+        f"real wage {w0:.2f} → {w1:.2f}"
+    )
     return labor_axes(fig, title, "Real wage, W/P")
 ```
 
 ```{python}
 #| kind: widget
-interact(sticky_prices,
-         Y_new=FloatSlider(value=1.15, min=0.8, max=1.3, step=0.05, description="output demanded Y′", style=WIDE),
-         c_new=FloatSlider(value=0.6, min=0.4, max=0.7, step=0.05, description="consumption c′", style=WIDE));
+# Fig. 8 with sliders: the output demanded and consumption
+interact(
+    sticky_prices,
+    Y_new=FloatSlider(value=1.15, min=0.8, max=1.3, step=0.05,
+                      description="output demanded Y′", style=WIDE),
+    c_new=FloatSlider(value=0.6, min=0.4, max=0.7, step=0.05,
+                      description="consumption c′", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 8 with a precomputed slider for the output demanded
-slider_figure(sticky_prices, "Y_new", [0.9, 1.0, 1.05, 1.1, 1.15, 1.2, 1.3], start=1.15, label="output demanded Y′")
+# one picture of Fig. 8 per value of Y'
+slider_figure(
+    sticky_prices,
+    "Y_new",
+    [0.9, 1.0, 1.05, 1.1, 1.15, 1.2, 1.3],     # the values of Y'
+    start=1.15,
+    label="output demanded Y′",
+)
 ```
 
 **Source.** Adapted from Fig. 15.8 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -2024,28 +2586,54 @@ The function `good_news` handles this event twice: with flexible prices it calls
 with sticky prices (Fig. 10) it calls `sticky_prices` from Fig. 8. With sticky prices, firms must also
 produce the extra consumption, so the output demanded rises by the same amount as consumption.
 
-> **Python note.** A `ToggleButtons` widget shows a row of buttons, one per option; the function receives the
-> text of the selected button.
+`good_news` only picks one of the two figure functions, so all of its code is drawing code. With sticky prices, it raises the output demanded by the rise in consumption.
 
 ```{python}
+#| kind: drawing
+# @title Drawing code: Figs. 9 and 10, good news about the future
 def good_news(c_new=0.7, prices="flexible"):
-    """Figs. 15.14-15.15: good news raises consumption today from 0.6 to c_new."""
+    """Good news raises consumption today from 0.6 to c_new.
+
+    Draws Fig. 9 and Fig. 10 (adapted from Figs. 15.14 and 15.15 in Jones), with
+    flexible prices (labor_shock) or sticky prices (sticky_prices).
+
+    Arguments
+        c_new  : consumption after the news, c'
+        prices : "flexible" or "sticky"
+    Returns
+        a Plotly figure
+    """
+    # flexible prices: only labor supply moves, as in Fig. 5
     if prices == "flexible":
         return labor_shock(c_new=c_new)
-    return sticky_prices(Y_new=Y0 + (c_new - C_BAR), c_new=c_new)     # demand rises with consumption
+    # sticky prices: demand rises with consumption, Y' = Y0 + (c' - c)
+    return sticky_prices(Y_new=Y0 + (c_new - C_BAR), c_new=c_new)
 ```
 
 ```{python}
 #| kind: widget
-interact(good_news,
-         c_new=FloatSlider(value=0.7, min=0.5, max=0.8, step=0.05, description="consumption after the news c′", style=WIDE),
-         prices=ToggleButtons(options=["flexible", "sticky"], value="flexible", description="prices"));
+# Fig. 9 with a slider and buttons. `ToggleButtons` shows a row of buttons, one per
+# option; good_news receives the text of the selected button
+interact(
+    good_news,
+    c_new=FloatSlider(value=0.7, min=0.5, max=0.8, step=0.05,
+                      description="consumption after the news c′", style=WIDE),
+    prices=ToggleButtons(options=["flexible", "sticky"], value="flexible",
+                         description="prices"),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 9 with a precomputed slider for consumption
-slider_figure(good_news, "c_new", [0.5, 0.6, 0.7, 0.8], start=0.7, label="consumption after the news c′")
+# one picture of Fig. 9 per value of c'
+slider_figure(
+    good_news,
+    "c_new",
+    [0.5, 0.6, 0.7, 0.8],     # the values of c'
+    start=0.7,
+    label="consumption after the news c′",
+)
 ```
 
 **Source.** Adapted from Fig. 15.14 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612),
@@ -2085,15 +2673,27 @@ labor they need. Use the buttons (in Colab) or the slider (on the website) to sw
 
 ```{python}
 #| kind: widget
-interact(good_news,
-         c_new=FloatSlider(value=0.7, min=0.5, max=0.8, step=0.05, description="consumption after the news c′", style=WIDE),
-         prices=ToggleButtons(options=["flexible", "sticky"], value="sticky", description="prices"));
+# Fig. 10: the function of Fig. 9, with the sticky-prices button selected
+interact(
+    good_news,
+    c_new=FloatSlider(value=0.7, min=0.5, max=0.8, step=0.05,
+                      description="consumption after the news c′", style=WIDE),
+    prices=ToggleButtons(options=["flexible", "sticky"], value="sticky",
+                         description="prices"),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: Fig. 10 with a precomputed slider between flexible and sticky prices
-slider_figure(good_news, "prices", ["flexible", "sticky"], start="sticky", label="prices")
+# @title Website version: Fig. 10 with a slider between flexible and sticky prices
+# a slider with two steps: flexible prices, then sticky prices
+slider_figure(
+    good_news,
+    "prices",
+    ["flexible", "sticky"],
+    start="sticky",
+    label="prices",
+)
 ```
 
 **Source.** Adapted from Fig. 15.15 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612),

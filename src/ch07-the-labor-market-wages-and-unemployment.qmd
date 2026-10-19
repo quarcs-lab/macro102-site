@@ -1327,9 +1327,9 @@ The **employment-population ratio** is the percentage of the population aged 16 
 job. The data are monthly, from the Bureau of Labor Statistics. The recessions are shaded with
 `shade_recessions` from "Model in code".
 
-> **Python note.** `.tail()` shows the last five rows of a DataFrame.
-
 ```{python}
+# Load the data of Fig. 1: the monthly employment-population ratio.
+# `.tail()` shows the last five rows of the table
 emp = pd.read_csv(DATA_URL + "fig7-1.csv", parse_dates=["date"])
 emp.tail()
 ```
@@ -1337,17 +1337,25 @@ emp.tail()
 September 2025 is followed by November 2025: October 2025 is missing because the survey was not
 carried out during that autumn's federal government shutdown. The chart simply joins the two months.
 
-> **Python note.** `px.area` draws a line and fills the area below it. `tickvals` chooses the numbers
-> printed on an axis. `rangeslider_visible=True` adds a small copy of the chart below the axis: drag
-> its handles to zoom in on a period.
-
 ```{python}
-fig = px.area(emp, x="date", y="emp_pop_ratio", hover_name="date",
-              labels={"date": "Year", "emp_pop_ratio": "Employment-population ratio (%)"},
-              title="More adults work than in 1960, but every recession cuts employment")
+#| kind: drawing
+# @title Drawing code: Fig. 1, the U.S. employment-population ratio
+# Step 1: `px.area` draws a line and fills the area below it
+fig = px.area(
+    emp,
+    x="date",
+    y="emp_pop_ratio",
+    hover_name="date",
+    labels={"date": "Year", "emp_pop_ratio": "Employment-population ratio (%)"},
+    title="More adults work than in 1960, but every recession cuts employment",
+)
 fig.update_traces(line=dict(color=TEAL, width=2))
+# Step 2: the shaded bands: every recession since 1960 (shade_recessions)
 shade_recessions(fig, "1960-01-01")
-fig.update_yaxes(range=[50, 66], tickvals=[52, 56, 60, 64])         # no label in the bottom-left corner
+# Step 3: the axes. `tickvals` chooses the numbers printed on an axis (here, no
+# label in the bottom-left corner). `rangeslider_visible=True` adds a small copy
+# of the chart below the axis: drag its handles to zoom in on a period
+fig.update_yaxes(range=[50, 66], tickvals=[52, 56, 60, 64])
 fig.update_xaxes(rangeslider_visible=True)
 fig.show()
 ```
@@ -1373,20 +1381,31 @@ Chart: inspired by Fig. 7.1 in Jones (2024), [*Macroeconomics*, 6th ed.](https:/
 
 #### Key numbers: the trend and the Great Recession
 
-> **Python note.** `set_index("date")` uses the dates as row labels, so `ratio.loc["1960"]` keeps every
-> month of 1960 and `ratio.loc["2009":"2012"]` every month from 2009 to 2012. `.idxmax()` and
-> `.idxmin()` give the row label (here, the month) of the largest and smallest value, and `:%B %Y`
-> prints a date as "April 2000".
-
 ```{python}
+# The key numbers of Fig. 1. `set_index("date")` uses the dates as row labels, so
+# `ratio.loc["1960"]` keeps every month of 1960 and `ratio.loc["2009":"2012"]`
+# every month from 2009 to 2012
 ratio = emp.set_index("date").emp_pop_ratio
 crisis = ratio.loc["2009":"2012"]
+# `.max()` is the largest value and `.idxmax()` its row label, here the month;
+# `:%B %Y` prints a date as "April 2000"
 print(f"1960 average:            {ratio.loc['1960'].mean():.1f}%")
 print(f"Peak:                    {ratio.max():.1f}% in {ratio.idxmax():%B %Y}")
 print(f"December 2006:           {ratio.loc['2006-12-01']:.1f}%")
-print(f"January 2010:            {ratio.loc['2010-01-01']:.1f}%  (lowest 2009-2012: {crisis.min():.1f}% in {crisis.idxmin():%B %Y})")
-print(f"Fall, Dec. 2006 to Jan. 2010: {ratio.loc['2006-12-01'] - ratio.loc['2010-01-01']:.1f} points")
-print(f"Covid low:               {ratio.min():.1f}% in {ratio.idxmin():%B %Y};  latest: {ratio.iloc[-1]:.1f}%")
+# the Great Recession: January 2010, and the lowest month of 2009-2012
+print(
+    f"January 2010:            {ratio.loc['2010-01-01']:.1f}%  "
+    f"(lowest 2009-2012: {crisis.min():.1f}% in {crisis.idxmin():%B %Y})"
+)
+print(
+    "Fall, Dec. 2006 to Jan. 2010: "
+    f"{ratio.loc['2006-12-01'] - ratio.loc['2010-01-01']:.1f} points"
+)
+# the Covid-19 low, and the latest month (`.iloc[-1]`: the last value)
+print(
+    f"Covid low:               {ratio.min():.1f}% in {ratio.idxmin():%B %Y};  "
+    f"latest: {ratio.iloc[-1]:.1f}%"
+)
 ```
 
 The textbook's numbers hold: 56 percent in 1960, 63.4 percent at the end of 2006, and a fall of about
@@ -1400,20 +1419,34 @@ the low point came later, in November 2010).
 The textbook says that the rise in the ratio came entirely from women. A second file splits the ratio
 by sex. We average the months of each year to compare years.
 
-> **Python note.** `px.line(..., y=["men", "women"])` draws one line per column, and the legend names
-> the columns. `groupby(emp_sex.date.dt.year).mean()` collects the rows of each calendar year and
-> averages them, and `.loc[[1960, 2000, 2019, 2025]]` picks four rows by their label.
+```{python}
+# Load the ratios of men and women, then average the months of each year.
+# `groupby(emp_sex.date.dt.year)` collects the rows of each calendar year, and
+# `.mean()` averages them
+emp_sex = pd.read_csv(DATA_URL + "emp_pop_by_sex.csv", parse_dates=["date"])
+yearly = emp_sex.groupby(emp_sex.date.dt.year)[["men", "women"]].mean()
+```
 
 ```{python}
-emp_sex = pd.read_csv(DATA_URL + "emp_pop_by_sex.csv", parse_dates=["date"])
-fig = px.line(emp_sex, x="date", y=["men", "women"], hover_name="date",
-              labels={"date": "Year", "value": "Employment-population ratio (%)", "variable": "Group"},
-              title="Fewer men and many more women work than in the 1950s")
+#| kind: drawing
+# @title Drawing code: Fig. 1, men and women
+# Step 1: `y=["men", "women"]` draws one line per column, and the legend names
+# the columns
+fig = px.line(
+    emp_sex,
+    x="date",
+    y=["men", "women"],
+    hover_name="date",
+    labels={
+        "date": "Year",
+        "value": "Employment-population ratio (%)",
+        "variable": "Group",
+    },
+    title="Fewer men and many more women work than in the 1950s",
+)
+# Step 2: the shaded bands: every recession since 1948
 shade_recessions(fig, "1948-01-01")
 fig.show()
-yearly = emp_sex.groupby(emp_sex.date.dt.year)[["men", "women"]].mean()
-print(yearly.loc[[1960, 2000, 2019, 2025]].round(1))
-print(f"Women's peak: {emp_sex.women.max():.1f}% in {emp_sex.date[emp_sex.women.idxmax()]:%B %Y}")
 ```
 
 **Sources.** Data: U.S. Bureau of Labor Statistics, Current Population Survey, employment-population ratios of
@@ -1425,6 +1458,19 @@ Prepared files: [`data/ch07/emp_pop_by_sex.csv`](https://github.com/quarcs-lab/m
 Chart: inspired by Fig. 7.1 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
+
+The next cell prints the yearly averages of four years, and the month of women's peak.
+
+```{python}
+# Four years of the `yearly` table: `.loc[[1960, 2000, 2019, 2025]]` picks four
+# rows by their label
+print(yearly.loc[[1960, 2000, 2019, 2025]].round(1))
+# women's highest ratio, and its month: `idxmax` gives the row, `date[...]` its date
+print(
+    f"Women's peak: {emp_sex.women.max():.1f}% in "
+    f"{emp_sex.date[emp_sex.women.idxmax()]:%B %Y}"
+)
+```
 
 Women's ratio rose from 35.5 percent in 1960 to a peak of 58.0 percent in April 2000. Men's fell from
 78.9 percent in 1960 to 66.6 percent in 2019 and 64.9 percent in 2025. Both numbers match the textbook.
@@ -1438,6 +1484,7 @@ country in the same way, for people aged 15 and over. The World Bank publishes t
 in 1991. A wider file holds them, one row per country and year.
 
 ```{python}
+# Load the ILO estimates: one row per country and year
 world_emp = pd.read_csv(DATA_URL + "emp_pop_countries.csv")
 world_emp.head()
 ```
@@ -1446,36 +1493,94 @@ These are annual *model estimates*: where a country has no labor survey in a yea
 with a statistical model. For the United States they run about 0.7 points below the BLS ratio above,
 because the ILO counts people from age 15 (the BLS from 16).
 
-> **Python note.** `.isin(names)` keeps the rows of the chosen countries. `color_discrete_map` gives each
-> line its fixed color. A `SelectMultiple` is a list in which you can pick several items: hold Ctrl (Cmd on
-> a Mac) while you click. In the check below, `.dropna()` drops the empty cells and `.iloc[[0, 1, -1]]`
-> picks rows by position (`-1` is the last row).
+First the data: `emp_pop_latest` picks the rows of the chosen countries, and each
+country's ratio in the latest year, which the title reports.
 
 ```{python}
+# The countries of the picker, A to Z, and each country's World Bank region:
+# `dict(zip(a, b))` pairs each country with its region
 EMP_COUNTRIES = sorted(world_emp.country.unique())
 EMP_REGIONS = dict(zip(world_emp.country, world_emp.region))
-EMP_SHOWN = ["United States", "Germany", "Japan"]           # the website's default view
-EMP_COLORS = group_colors(EMP_SHOWN + EMP_COUNTRIES, region_groups(EMP_REGIONS, EMP_SHOWN), BOOK_COLORS)
+
+
+def emp_pop_latest(names):
+    """The rows of the chosen countries, and their ratios in the latest year (Fig. 1).
+
+    Arguments
+        names : the countries to show
+    Returns
+        chosen : their rows of world_emp
+        last   : the latest year of those rows
+        latest : each country's employment-population ratio in that year
+    """
+    # Step 1: `.isin(names)` is True for the rows of the chosen countries
+    chosen = world_emp[world_emp.country.isin(names)]
+    # Step 2: the latest year, and each country's ratio in it (country -> percent)
+    last = chosen.year.max()
+    latest = chosen[chosen.year == last].set_index("country").emp_pop_ratio
+    return chosen, last, latest
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 1 for any countries, ages 15+
+# the website's default view, and one fixed color per country (group_colors)
+EMP_SHOWN = ["United States", "Germany", "Japan"]
+EMP_COLORS = group_colors(
+    EMP_SHOWN + EMP_COUNTRIES,
+    region_groups(EMP_REGIONS, EMP_SHOWN),
+    BOOK_COLORS,
+)
 
 
 def emp_pop_countries(names=("United States",)):
-    """Fig. 7.1 for any countries: employment-population ratio, ages 15+ (ILO estimates)."""
-    chosen = world_emp[world_emp.country.isin(names)]
+    """The employment-population ratio, ages 15+, of any countries (ILO estimates).
+
+    Draws Fig. 1 for any countries (inspired by Fig. 7.1 in Jones), with the highest
+    and the lowest ratio of the latest year in the title.
+
+    Arguments
+        names : the countries to draw
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the data (emp_pop_latest); a message when no country is picked
+    chosen, last, latest = emp_pop_latest(names)
     if len(chosen) == 0:
         return go.Figure(layout=dict(title="Pick at least one country"))
-    last = chosen.year.max()
-    latest = chosen[chosen.year == last].set_index("country").emp_pop_ratio
-    title = f"Share of adults with a job in {last}: {latest.idxmax()} {latest.max():.1f}%"
+    # Step 2: the title, the highest ratio first and the lowest second
+    title = (
+        f"Share of adults with a job in {last}: "
+        f"{latest.idxmax()} {latest.max():.1f}%"
+    )
     if len(latest) > 1:
-        title = title + f", {latest.idxmin()} {latest.min():.1f}%"       # highest first, lowest second
-    fig = px.line(chosen, x="year", y="emp_pop_ratio", color="country", hover_name="country",
-                  color_discrete_map=EMP_COLORS, title=title,
-                  labels={"year": "Year", "emp_pop_ratio": "Employed, % of population 15+", "country": "Country"})
+        title = title + f", {latest.idxmin()} {latest.min():.1f}%"
+    # Step 3: one line per country; `color_discrete_map` gives each line its
+    # fixed color
+    fig = px.line(
+        chosen,
+        x="year",
+        y="emp_pop_ratio",
+        color="country",
+        hover_name="country",
+        color_discrete_map=EMP_COLORS,
+        title=title,
+        labels={
+            "year": "Year",
+            "emp_pop_ratio": "Employed, % of population 15+",
+            "country": "Country",
+        },
+    )
+    # Step 4: the U.S. range, or one wider range for countries far from the U.S.
     low, high = 50, 66
     if chosen.emp_pop_ratio.min() < low or chosen.emp_pop_ratio.max() > high:
-        low, high = 15, 90                       # one wider range for countries far from the U.S.
+        low, high = 15, 90
     fig.update_yaxes(range=[low, high])
-    fig.update_xaxes(range=[1990, 2026], tickvals=[1995, 2000, 2005, 2010, 2015, 2020, 2025])      # no label at the bottom-left corner
+    # no tick label in the bottom-left corner
+    fig.update_xaxes(
+        range=[1990, 2026],
+        tickvals=[1995, 2000, 2005, 2010, 2015, 2020, 2025],
+    )
     return fig
 ```
 
@@ -1484,25 +1589,30 @@ then click a country in the legend to add it.**
 
 ```{python}
 #| kind: widget
-interact(emp_pop_countries,
-         names=SelectMultiple(options=EMP_COUNTRIES, value=("United States", "Germany", "Japan"), rows=10,
-                              description="countries", style=WIDE));
+# Fig. 1 with a country picker. `interact` calls emp_pop_countries and redraws the
+# figure every time you change the choice. A `SelectMultiple` is a list in which
+# you can pick several items: hold Ctrl (Cmd on a Mac) while you click. The `;`
+# at the end only hides an extra line of text.
+interact(
+    emp_pop_countries,
+    names=SelectMultiple(options=EMP_COUNTRIES,
+                         value=("United States", "Germany", "Japan"), rows=10,
+                         description="countries", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: Fig. 1 for every country (pick a region, then click a country in the legend)
+# @title Website version: Fig. 1 for every country (pick a region, then a country)
+# every country in one chart, with a menu of regions (region_menu)
 fig = emp_pop_countries(tuple(EMP_COUNTRIES))
 region_menu(fig, EMP_REGIONS, shown=EMP_SHOWN, label="U.S., Germany, Japan")
-fig.update_layout(title="Since 2000 the U.S. ratio has fallen, while Germany's and Japan's have risen")
-fig.update_yaxes(autorange=True)              # the axis adapts to the countries you add
+fig.update_layout(
+    title=("Since 2000 the U.S. ratio has fallen, "
+           "while Germany's and Japan's have risen")
+)
+fig.update_yaxes(autorange=True)    # the axis adapts to the countries you add
 fig
-```
-
-```{python}
-ratios = world_emp.pivot(index="year", columns="country", values="emp_pop_ratio")
-print(ratios.loc[[2000, 2025], ["United States", "Germany", "Japan", "France", "Italy"]])
-print(ratios.loc[2025].dropna().sort_values().iloc[[0, 1, 2, -3, -2, -1]])
 ```
 
 **Sources.** Data: International Labour Organization, modelled estimates, published in the
@@ -1512,6 +1622,21 @@ Prepared file: [`data/ch07/emp_pop_countries.csv`](https://github.com/quarcs-lab
 Chart: inspired by Fig. 7.1 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
+
+The next cell checks the numbers of What to notice: five countries in 2000 and 2025,
+and the lowest and the highest ratios of 2025.
+
+```{python}
+# The ratios as a wide table: `.pivot(...)` turns the long table into one row per
+# year and one column per country
+ratios = world_emp.pivot(index="year", columns="country", values="emp_pop_ratio")
+print(
+    ratios.loc[[2000, 2025], ["United States", "Germany", "Japan", "France", "Italy"]]
+)
+# `.dropna()` drops the empty cells, and `.iloc[[0, 1, 2, -3, -2, -1]]` picks rows
+# by position (`-1` is the last): the three lowest and the three highest of 2025
+print(ratios.loc[2025].dropna().sort_values().iloc[[0, 1, 2, -3, -2, -1]])
+```
 
 **What to notice.**
 
@@ -1547,13 +1672,27 @@ available to work. The **labor force** is everybody who is employed or unemploye
 **unemployment rate** is the share of the labor force that is unemployed.
 
 ```{python}
+# Load the data of Fig. 2: the monthly U.S. unemployment rate
 unrate = pd.read_csv(DATA_URL + "fig7-2.csv", parse_dates=["date"])
-fig = px.area(unrate, x="date", y="unemployment_rate", hover_name="date",
-              labels={"date": "Year", "unemployment_rate": "Unemployment rate (%)"},
-              title="Unemployment jumps in every recession and falls slowly afterwards")
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 2, the U.S. unemployment rate
+# Step 1: the rate as a filled area
+fig = px.area(
+    unrate,
+    x="date",
+    y="unemployment_rate",
+    hover_name="date",
+    labels={"date": "Year", "unemployment_rate": "Unemployment rate (%)"},
+    title="Unemployment jumps in every recession and falls slowly afterwards",
+)
 fig.update_traces(line=dict(color=BLUE, width=2))
+# Step 2: the shaded bands: every recession since 1950
 shade_recessions(fig, "1950-01-01")
-fig.update_yaxes(range=[0, 16], tickvals=[2, 4, 6, 8, 10, 12, 14])   # no label in the bottom-left corner
+# Step 3: no tick label in the bottom-left corner, and the range slider below
+fig.update_yaxes(range=[0, 16], tickvals=[2, 4, 6, 8, 10, 12, 14])
 fig.update_xaxes(rangeslider_visible=True)
 fig.show()
 ```
@@ -1579,9 +1718,18 @@ Chart: inspired by Fig. 7.2 in Jones (2024), [*Macroeconomics*, 6th ed.](https:/
 #### Key numbers: peaks and recoveries
 
 ```{python}
+# The key numbers of Fig. 2: the rates, with the months as row labels
 u = unrate.set_index("date").unemployment_rate
-print(f"May 2007: {u.loc['2007-05-01']:.1f}%   October 2009: {u.loc['2009-10-01']:.1f}%")
-print(f"February 2020: {u.loc['2020-02-01']:.1f}%   April 2020: {u.loc['2020-04-01']:.1f}%")
+print(
+    f"May 2007: {u.loc['2007-05-01']:.1f}%   "
+    f"October 2009: {u.loc['2009-10-01']:.1f}%"
+)
+print(
+    f"February 2020: {u.loc['2020-02-01']:.1f}%   "
+    f"April 2020: {u.loc['2020-04-01']:.1f}%"
+)
+# the months after each peak; `after_2009[after_2009 < 4]` keeps the months below
+# 4 percent, and `.index[0]` is the first of them
 after_2009 = u.loc["2009-11":]
 after_2020 = u.loc["2020-05":]
 print(f"First month below 4% after 2009:  {after_2009[after_2009 < 4].index[0]:%B %Y}")
@@ -1600,15 +1748,18 @@ under two years.
 A wider file holds the monthly levels behind the unemployment rate, in millions of people. We rebuild
 Table 7.1 for January 2023, the textbook's month, and for the latest month.
 
-> **Python note.** `.loc[["2023-01-01", last]]` picks two rows by their dates, and `.T` *transposes*
-> the table: rows become columns, so each month becomes a column.
-
 ```{python}
-force = pd.read_csv(DATA_URL + "labor_force.csv", parse_dates=["date"]).set_index("date")
+# Step 1: the monthly levels in millions, with the dates as row labels, and the
+# unemployment rate computed from them
+force = pd.read_csv(DATA_URL + "labor_force.csv", parse_dates=["date"])
+force = force.set_index("date")
 force["unemployment_rate"] = 100 * force.unemployed / force.labor_force
+# Step 2: `.loc[[...]]` picks two rows by their dates (January 2023 and the latest
+# month), and `.T` transposes the table: each month becomes a column
 last = force.index[-1]
 table = force.loc[[pd.Timestamp("2023-01-01"), last]].T
 table.columns = ["January 2023", f"{last:%B %Y}"]
+# Step 3: the textbook's numbers, for comparison
 table["Textbook (Jan. 2023)"] = [266, 166, 160, 5.7, 100, 3.4]
 table.round(2)
 ```
@@ -1621,8 +1772,15 @@ The textbook also notes that, with about 266 million people aged 16 and over, on
 employment-population ratio is 2.7 million jobs:
 
 ```{python}
-print(f"1% of the population 16+, January 2023: {0.01 * force.loc['2023-01-01', 'population']:.2f} million people")
-print(f"1% of the population 16+, {last:%B %Y}:  {0.01 * force.loc[last, 'population']:.2f} million people")
+# One percent of the population aged 16 and over, in millions of people
+print(
+    "1% of the population 16+, January 2023: "
+    f"{0.01 * force.loc['2023-01-01', 'population']:.2f} million people"
+)
+print(
+    f"1% of the population 16+, {last:%B %Y}:  "
+    f"{0.01 * force.loc[last, 'population']:.2f} million people"
+)
 ```
 
 <!-- cell -->
@@ -1634,7 +1792,12 @@ definition as the United States (no job, looking for one, available to work). A 
 rates of 34 OECD countries, from the FRED database.
 
 ```{python}
-monthly = pd.read_csv(DATA_URL + "unemployment_countries_monthly.csv", parse_dates=["date"])
+# Load the monthly rates of 34 OECD countries. `groupby("country").date.min()`
+# gives each country's first month; the five latest starts come last
+monthly = pd.read_csv(
+    DATA_URL + "unemployment_countries_monthly.csv",
+    parse_dates=["date"],
+)
 monthly.groupby("country").date.min().sort_values().tail()
 ```
 
@@ -1642,27 +1805,80 @@ The series start at different dates: Canada, Japan and the United States in 1955
 1980s, Germany in 1991 (after reunification), Turkey in 2005 and Israel in 2012. New Zealand and Switzerland
 publish only quarterly rates. The U.S. rows are the BLS rate of the chart above.
 
-> **Python note.** `.idxmax()` gives the row label of the largest value, and `.loc[...]` then picks that
-> whole row, so `peak.country` and `peak.date` tell us where and when unemployment was highest. `:%B %Y`
-> prints a date as "April 2020".
+First the data: `unemployment_peak` picks the rows of the chosen countries and finds
+the highest monthly rate among them, which the title reports.
 
 ```{python}
+# The countries of the picker, A to Z
 MONTHLY_COUNTRIES = sorted(monthly.country.unique())
-MONTHLY_SHOWN = ["United States", "Germany"]                # the website's default view
-MONTHLY_COLORS = group_colors(MONTHLY_SHOWN + MONTHLY_COUNTRIES, [MONTHLY_SHOWN, MONTHLY_COUNTRIES], BOOK_COLORS)
+
+
+def unemployment_peak(names):
+    """The monthly rates of the chosen countries, and the highest of them (Fig. 2).
+
+    Arguments
+        names : the countries to show
+    Returns
+        chosen : their rows of monthly
+        peak   : the row of the highest rate (its country, date and rate)
+    """
+    # Step 1: the rows of the chosen countries
+    chosen = monthly[monthly.country.isin(names)]
+    if len(chosen) == 0:
+        return chosen, None                    # nothing chosen: no peak
+    # Step 2: `.idxmax()` gives the row label of the highest rate, and `.loc[...]`
+    # picks that whole row, so `peak.country` and `peak.date` say where and when
+    peak = chosen.loc[chosen.unemployment_rate.idxmax()]
+    return chosen, peak
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 2 for OECD countries
+# the website's default view, and one fixed color per country (group_colors)
+MONTHLY_SHOWN = ["United States", "Germany"]
+MONTHLY_COLORS = group_colors(
+    MONTHLY_SHOWN + MONTHLY_COUNTRIES,
+    [MONTHLY_SHOWN, MONTHLY_COUNTRIES],
+    BOOK_COLORS,
+)
 
 
 def unemployment_countries(names=("United States",)):
-    """Fig. 7.2 for OECD countries: monthly harmonised unemployment rates, with the highest one in the title."""
-    chosen = monthly[monthly.country.isin(names)]
+    """The monthly harmonised unemployment rates of OECD countries.
+
+    Draws Fig. 2 for any OECD countries (inspired by Fig. 7.2 in Jones), with the
+    highest rate in the title.
+
+    Arguments
+        names : the countries to draw
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the data (unemployment_peak); a message when no country is picked
+    chosen, peak = unemployment_peak(names)
     if len(chosen) == 0:
         return go.Figure(layout=dict(title="Pick at least one country"))
-    peak = chosen.loc[chosen.unemployment_rate.idxmax()]
-    fig = px.line(chosen, x="date", y="unemployment_rate", color="country", hover_name="country",
-                  color_discrete_map=MONTHLY_COLORS,
-                  title=f"Highest rate: {peak.country}, {peak.unemployment_rate:.1f}% in {peak.date:%B %Y}",
-                  labels={"date": "Year", "unemployment_rate": "Unemployment rate (%)", "country": "Country"})
-    high = 16 if chosen.unemployment_rate.max() <= 16 else 30     # widen only for very high rates
+    # Step 2: one line per country, in its fixed color
+    fig = px.line(
+        chosen,
+        x="date",
+        y="unemployment_rate",
+        color="country",
+        hover_name="country",
+        color_discrete_map=MONTHLY_COLORS,
+        title=(
+            f"Highest rate: {peak.country}, {peak.unemployment_rate:.1f}% "
+            f"in {peak.date:%B %Y}"
+        ),
+        labels={
+            "date": "Year",
+            "unemployment_rate": "Unemployment rate (%)",
+            "country": "Country",
+        },
+    )
+    # Step 3: 0 to 16 percent, widened only for very high rates; the range slider
+    high = 16 if chosen.unemployment_rate.max() <= 16 else 30
     fig.update_yaxes(range=[0, high])
     fig.update_xaxes(rangeslider_visible=True)
     return fig
@@ -1673,25 +1889,25 @@ legend to add it**, and double-click one to show it alone.
 
 ```{python}
 #| kind: widget
-interact(unemployment_countries,
-         names=SelectMultiple(options=MONTHLY_COUNTRIES, value=("United States",), rows=10,
-                              description="countries", style=WIDE));
+# Fig. 2 with a country picker (hold Ctrl or Cmd to pick several)
+interact(
+    unemployment_countries,
+    names=SelectMultiple(options=MONTHLY_COUNTRIES, value=("United States",), rows=10,
+                         description="countries", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: Fig. 2 for 34 OECD countries (click a country in the legend to add it)
+# @title Website version: Fig. 2 for 34 OECD countries (click a country in the legend)
+# every country in one chart; the legend buttons come from legend_menu
 fig = unemployment_countries(tuple(MONTHLY_COUNTRIES))
 legend_menu(fig, MONTHLY_SHOWN, label="U.S. and Germany")
-fig.update_layout(title="Covid-19 sent U.S. unemployment to 14.8%; Germany's barely moved")
-fig.update_yaxes(autorange=True)              # the axis adapts to the countries you add
+fig.update_layout(
+    title="Covid-19 sent U.S. unemployment to 14.8%; Germany's barely moved"
+)
+fig.update_yaxes(autorange=True)    # the axis adapts to the countries you add
 fig
-```
-
-```{python}
-rates = monthly.pivot(index="date", columns="country", values="unemployment_rate")
-print(rates.loc["2020-02-01":"2020-05-01", ["United States", "Canada", "Germany", "Japan"]])
-print(rates[["Spain", "Greece"]].max(), rates[["Spain", "Greece"]].idxmax(), sep="\n")
 ```
 
 **Sources.** Data: OECD, Main Economic Indicators, harmonised unemployment rates, via FRED, series `LRHUTTTT{CC}M156S`
@@ -1702,6 +1918,21 @@ Prepared file: [`data/ch07/unemployment_countries_monthly.csv`](https://github.c
 Chart: inspired by Fig. 7.2 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
+
+The next cell checks the numbers of What to notice: the spring of 2020 in four
+countries, and the euro-crisis peaks of Spain and Greece.
+
+```{python}
+# The rates as a wide table: one row per month, one column per country
+rates = monthly.pivot(index="date", columns="country", values="unemployment_rate")
+print(
+    rates.loc[
+        "2020-02-01":"2020-05-01", ["United States", "Canada", "Germany", "Japan"]
+    ]
+)
+# the highest rate of Spain and of Greece, and its month
+print(rates[["Spain", "Greece"]].max(), rates[["Spain", "Greece"]].idxmax(), sep="\n")
+```
 
 **What to notice.**
 
@@ -1742,37 +1973,71 @@ slopes up. They cross at $(L^*, w^*)$, equation (3). If the population is a fixe
 the employment-population ratio $L^*/N$. When you move a slider, the starting curves stay on the chart
 as dashed gray lines, so you can see the shift.
 
+The function below draws the diagram. It needs only `equilibrium` and the two lines
+of "Model in code", so all of its code is drawing code.
+
 ```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 3, the labor market
 def labor_market(a_d=100.0, b_d=1.0, a_s=10.0, b_s=1.0):
-    """Fig. 7.3: labor supply, labor demand and the equilibrium (L*, w*)."""
+    """Labor supply, labor demand and the equilibrium where they cross.
+
+    Draws Fig. 3 (adapted from Fig. 7.3 in Jones). Once a parameter differs from
+    Islandia's, the starting lines stay on the chart as dashed gray lines.
+
+    Arguments
+        a_d, b_d : intercept and slope of labor demand, a-bar_d and b-bar_d
+        a_s, b_s : intercept and slope of labor supply, a-bar_s and b-bar_s
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the equilibrium, equation (3)
     L_star, w_star = equilibrium(a_d, b_d, a_s, b_s)
+    # Step 2: the two lines; demand is labeled at its top-left end (`start=True`)
     fig = go.Figure()
     add_curve(fig, labor_supply(L_grid, a_s, b_s), "Lˢ", TEAL)
     add_curve(fig, labor_demand(L_grid, a_d, b_d), "Lᵈ", BLUE, start=True)
-    if (a_d, b_d, a_s, b_s) != (100.0, 1.0, 10.0, 1.0):          # keep the starting curves for comparison
+    # Step 3: the starting lines in dashed gray, once a parameter has moved
+    if (a_d, b_d, a_s, b_s) != (100.0, 1.0, 10.0, 1.0):
         add_curve(fig, labor_supply(L_grid), "", GRAY, "dash")
         add_curve(fig, labor_demand(L_grid), "", GRAY, "dash")
+    # Step 4: the equilibrium point, and a title with the wage and employment
     add_point(fig, L_star, w_star, "")
-    return market_axes(fig, f"The labor market clears at w* = {w_star:.1f} and L* = {L_star:.1f}")
+    return market_axes(
+        fig,
+        f"The labor market clears at w* = {w_star:.1f} and L* = {L_star:.1f}",
+    )
 ```
-
-> **Python note.** `interact` calls the function and redraws its figure every time you move a
-> slider. A `FloatSlider` chooses a number between `min` and `max` in steps of `step`, starting at
-> `value`. The `;` at the end only hides an extra line of text.
 
 ```{python}
 #| kind: widget
-interact(labor_market,
-         a_d=FloatSlider(value=100, min=80, max=120, step=5, description="demand intercept a_d", style=WIDE),
-         b_d=FloatSlider(value=1.0, min=0.75, max=1.5, step=0.25, description="demand slope b_d", style=WIDE),
-         a_s=FloatSlider(value=10, min=0, max=30, step=5, description="supply intercept a_s", style=WIDE),
-         b_s=FloatSlider(value=1.0, min=0.75, max=1.5, step=0.25, description="supply slope b_s", style=WIDE));
+# Fig. 3 with sliders. A `FloatSlider` chooses a number between `min` and `max` in
+# steps of `step`, starting at `value`; `interact` redraws the figure every time
+# you move one
+interact(
+    labor_market,
+    a_d=FloatSlider(value=100, min=80, max=120, step=5,
+                    description="demand intercept a_d", style=WIDE),
+    b_d=FloatSlider(value=1.0, min=0.75, max=1.5, step=0.25,
+                    description="demand slope b_d", style=WIDE),
+    a_s=FloatSlider(value=10, min=0, max=30, step=5,
+                    description="supply intercept a_s", style=WIDE),
+    b_s=FloatSlider(value=1.0, min=0.75, max=1.5, step=0.25,
+                    description="supply slope b_s", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 3 with a precomputed slider for the demand intercept
-slider_figure(labor_market, "a_d", [80, 90, 100, 110, 120], start=100, label="demand intercept a_d")
+# one picture of Fig. 3 per value of a_d; the slider shows one at a time
+slider_figure(
+    labor_market,
+    "a_d",
+    [80, 90, 100, 110, 120],     # the values of a_d
+    start=100,
+    label="demand intercept a_d",
+)
 ```
 
 **Source.** Adapted from Fig. 7.3 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -1812,36 +2077,98 @@ same amount of work as before, workers now need a higher wage from the firm, $w 
 Drawn against the wage firms pay, labor supply shifts **back** (up and to the left). The economy moves
 from $A$ to $B$ (equation 4).
 
+First we compute the numbers the figure reports. `tax_wedge` solves the market
+without the tax (point $A$) and with it (point $B$), and the wage workers keep at $B$.
+
 ```{python}
-def income_tax(tau=0.25, b_s=1.0):
-    """Fig. 7.4: a labor income tax tau shifts labor supply back; the economy moves from A to B."""
+def tax_wedge(tau, b_s):
+    """The labor market without (A) and with (B) a tax on labor income (Fig. 4).
+
+    Equations (3) and (4): workers keep (1 - tau) w of the wage w that firms pay
+
+    Arguments
+        tau : tax rate on labor income
+        b_s : slope of labor supply, b-bar_s
+    Returns
+        L_A, w_A : employment and the wage at A, without the tax
+        L_B, w_B : employment and the wage firms pay at B, with the tax
+        kept     : the wage workers keep at B, (1 - tau) w_B
+    """
+    # Step 1: the equilibrium without and with the tax
     L_A, w_A = equilibrium(b_s=b_s)
     L_B, w_B = equilibrium(b_s=b_s, tau=tau)
-    kept = (1 - tau) * w_B                                       # what workers keep at B
+    # Step 2: what workers keep at B; the gap w_B - kept is the tax per unit of work
+    kept = (1 - tau) * w_B
+    return L_A, w_A, L_B, w_B, kept
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 4, an income tax
+def income_tax(tau=0.25, b_s=1.0):
+    """A tax on labor income shifts labor supply back; the economy moves from A to B.
+
+    Draws Fig. 4 (adapted from Fig. 7.4 in Jones), with the tax wedge as a green bar.
+
+    Arguments
+        tau : tax rate on labor income
+        b_s : slope of labor supply, b-bar_s
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the numbers of the figure (tax_wedge)
+    L_A, w_A, L_B, w_B, kept = tax_wedge(tau, b_s)
+    # Step 2: the taxed supply line (the wage firms must pay is the old one divided
+    # by 1 - tau), the old one dashed, and demand
     fig = go.Figure()
     taxed = add_curve(fig, labor_supply(L_grid, b_s=b_s) / (1 - tau), "Lˢ′", TEAL)
     add_curve(fig, labor_supply(L_grid, b_s=b_s), "Lˢ", GRAY, "dash", avoid=taxed)
     add_curve(fig, labor_demand(L_grid), "Lᵈ", BLUE, start=True)
+    # Step 3: the points A and B; with no tax, B is the same point as A
     add_point(fig, L_A, w_A, "A")
-    if tau > 0:                                                  # with no tax, B is the same point as A
+    if tau > 0:
         add_point(fig, L_B, w_B, "B")
-    fig.add_trace(go.Scatter(x=[L_B, L_B], y=[kept, w_B], mode="lines+markers", name="Tax wedge",
-                             showlegend=True, line=dict(color=GREEN, width=6)))
-    title = f"τ = {tau:.0%}: L′ = {L_B:.1f}, firms pay w′ = {w_B:.1f}, workers keep {kept:.1f}"
+    # Step 4: the green bar at B, from the wage workers keep up to the wage firms pay
+    fig.add_trace(
+        go.Scatter(
+            x=[L_B, L_B],
+            y=[kept, w_B],
+            mode="lines+markers",
+            name="Tax wedge",
+            showlegend=True,
+            line=dict(color=GREEN, width=6),
+        )
+    )
+    title = (
+        f"τ = {tau:.0%}: L′ = {L_B:.1f}, firms pay w′ = {w_B:.1f}, "
+        f"workers keep {kept:.1f}"
+    )
     return market_axes(fig, title, y_title="Wage paid by firms, w")
 ```
 
 ```{python}
 #| kind: widget
-interact(income_tax,
-         tau=FloatSlider(value=0.25, min=0, max=0.5, step=0.05, description="tax rate τ", style=WIDE),
-         b_s=FloatSlider(value=1.0, min=0.5, max=2.0, step=0.25, description="supply slope b_s", style=WIDE));
+# Fig. 4 with sliders for the tax rate and the slope of labor supply
+interact(
+    income_tax,
+    tau=FloatSlider(value=0.25, min=0, max=0.5, step=0.05,
+                    description="tax rate τ", style=WIDE),
+    b_s=FloatSlider(value=1.0, min=0.5, max=2.0, step=0.25,
+                    description="supply slope b_s", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 4 with a precomputed slider for the tax rate
-slider_figure(income_tax, "tau", [0.0, 0.1, 0.2, 0.25, 0.3, 0.4, 0.5], start=0.25, label="tax rate τ")
+# one picture of Fig. 4 per tax rate
+slider_figure(
+    income_tax,
+    "tau",
+    [0.0, 0.1, 0.2, 0.25, 0.3, 0.4, 0.5],     # the values of tau
+    start=0.25,
+    label="tax rate τ",
+)
 ```
 
 **Source.** Adapted from Fig. 7.4 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -1880,39 +2207,85 @@ New rules that make firing workers costly, or a jump in the price of an input su
 firms less willing to hire. In the diagram, labor demand shifts down by an amount we call `shift`:
 $w = (\bar{a}_d - \text{shift}) - \bar{b}_d L$. The economy moves from $A$ to $B$.
 
-> **Python note.** `fig.add_annotation(...)` with `showarrow=True` draws an arrow from the point
-> (`ax`, `ay`) to the point (`x`, `y`). With `axref="x"` and `ayref="y"`, both points are given in the
-> units of the axes.
+The function below draws the diagram. It needs only the two equilibria of equation
+(3), from `equilibrium`, so all of its code is drawing code.
 
 ```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 5, a reduction in labor demand
 def demand_fall(shift=20.0, b_s=1.0):
-    """Fig. 7.5: labor demand shifts back by shift; the wage and employment both fall (A -> B)."""
+    """Labor demand shifts back by `shift`; the wage and employment both fall.
+
+    Draws Fig. 5 (adapted from Fig. 7.5 in Jones): the economy moves from A to B.
+
+    Arguments
+        shift : the fall in labor demand (its intercept falls from 100 to 100 - shift)
+        b_s   : slope of labor supply, b-bar_s
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the old and the new equilibrium, equation (3)
     L_A, w_A = equilibrium(b_s=b_s)
     L_B, w_B = equilibrium(a_d=100 - shift, b_s=b_s)
+    # Step 2: the new demand line, the old one dashed, and supply
     fig = go.Figure()
     after = add_curve(fig, labor_demand(L_grid, 100 - shift), "Lᵈ′", BLUE, start=True)
     add_curve(fig, labor_demand(L_grid), "Lᵈ", GRAY, "dash", start=True, avoid=after)
     add_curve(fig, labor_supply(L_grid, b_s=b_s), "Lˢ", TEAL)
+    # Step 3: the points A and B; with no fall, B is the same point as A
     add_point(fig, L_A, w_A, "A")
-    if shift > 0:                                                # with no fall, B is the same point as A
+    if shift > 0:
         add_point(fig, L_B, w_B, "B")
-        fig.add_annotation(x=60, y=labor_demand(60, 100 - shift) + 1, ax=60, ay=labor_demand(60) - 1,
-                           xref="x", yref="y", axref="x", ayref="y", text="", showarrow=True,
-                           arrowhead=3, arrowwidth=2, arrowcolor="black")
-    return market_axes(fig, f"Demand falls by {shift:.0f}: w {w_A:.1f} → {w_B:.1f}, L {L_A:.1f} → {L_B:.1f}")
+        # a black arrow at L = 60, from the old demand line down to the new one.
+        # `add_annotation` with `showarrow=True` draws an arrow from (ax, ay) to
+        # (x, y); with `axref="x"` and `ayref="y"` both points are in axis units
+        fig.add_annotation(
+            x=60,
+            y=labor_demand(60, 100 - shift) + 1,
+            ax=60,
+            ay=labor_demand(60) - 1,
+            xref="x",
+            yref="y",
+            axref="x",
+            ayref="y",
+            text="",
+            showarrow=True,
+            arrowhead=3,
+            arrowwidth=2,
+            arrowcolor="black",
+        )
+    return market_axes(
+        fig,
+        (
+            f"Demand falls by {shift:.0f}: w {w_A:.1f} → {w_B:.1f}, "
+            f"L {L_A:.1f} → {L_B:.1f}"
+        ),
+    )
 ```
 
 ```{python}
 #| kind: widget
-interact(demand_fall,
-         shift=FloatSlider(value=20, min=0, max=40, step=5, description="fall in labor demand", style=WIDE),
-         b_s=FloatSlider(value=1.0, min=0.5, max=2.0, step=0.25, description="supply slope b_s", style=WIDE));
+# Fig. 5 with sliders for the fall in labor demand and the slope of labor supply
+interact(
+    demand_fall,
+    shift=FloatSlider(value=20, min=0, max=40, step=5,
+                      description="fall in labor demand", style=WIDE),
+    b_s=FloatSlider(value=1.0, min=0.5, max=2.0, step=0.25,
+                    description="supply slope b_s", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 5 with a precomputed slider for the fall in labor demand
-slider_figure(demand_fall, "shift", [0, 10, 20, 30, 40], start=20, label="fall in labor demand")
+# one picture of Fig. 5 per size of the fall
+slider_figure(
+    demand_fall,
+    "shift",
+    [0, 10, 20, 30, 40],     # the values of shift
+    start=20,
+    label="fall in labor demand",
+)
 ```
 
 **Source.** Adapted from Fig. 7.5 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -1954,45 +2327,110 @@ $$L'' = \frac{(\bar{a}_d - \text{shift}) - \bar{w}}{\bar{b}_d}$$
 At $\bar{w}$, the number of people who want to work is still $L^*$, so $L^* - L''$ people would like a job
 but cannot find one. In Colab, choose **rigid** or **flexible** with the buttons to compare $C$ with $B$; the website version shows the rigid wage.
 
+First we compute the three points of the figure. `rigid_wage` finds $B$ (flexible
+wage), $C$ (rigid wage), and the people who want a job at $\bar{w}$ but have none.
+
 ```{python}
+def rigid_wage(shift):
+    """Employment after a fall in labor demand: flexible and rigid wage (Fig. 6).
+
+    Equations (3) and (5): with a flexible wage the market clears again at B; with a
+    rigid wage w-bar = w*, firms hire L'' = ((a_d - shift) - w-bar) / b_d, point C
+
+    Arguments
+        shift : the fall in labor demand
+    Returns
+        L_A, w_bar : employment and the wage before the fall (A); w* sets w-bar
+        L_B, w_B   : employment and the wage with a flexible wage (B)
+        L_C        : employment with the rigid wage (C)
+        jobless    : the people who want to work at w-bar but have no job
+    """
+    # Step 1: A, the old equilibrium, sets the rigid wage w-bar
+    L_A, w_bar = equilibrium()
+    # Step 2: B, with a flexible wage; C, firms' demand at w-bar
+    L_B, w_B = equilibrium(a_d=100 - shift)
+    L_C = demand_at_wage(w_bar, a_d=100 - shift)
+    # Step 3: want to work at w-bar (labor supply), minus the jobs at C
+    jobless = supply_at_wage(w_bar) - L_C
+    return L_A, w_bar, L_B, w_B, L_C, jobless
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 6, a reduction in labor demand with wage rigidity
 def wage_rigidity(shift=20.0, wage="rigid"):
-    """Fig. 7.6: labor demand falls; with a rigid wage w-bar the economy moves to C instead of B."""
-    L_A, w_bar = equilibrium()                                    # A: the old equilibrium sets w-bar
-    L_B, w_B = equilibrium(a_d=100 - shift)                      # B: the wage is flexible
-    L_C = demand_at_wage(w_bar, a_d=100 - shift)                 # C: firms' demand at w-bar
-    jobless = supply_at_wage(w_bar) - L_C                        # want to work at w-bar, but no job
+    """Labor demand falls; with a rigid wage w-bar the economy moves to C, not to B.
+
+    Draws Fig. 6 (adapted from Fig. 7.6 in Jones).
+
+    Arguments
+        shift : the fall in labor demand
+        wage  : "rigid" (point C, with the jobless gap) or "flexible" (point B)
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the numbers of the figure (rigid_wage)
+    L_A, w_bar, L_B, w_B, L_C, jobless = rigid_wage(shift)
+    # Step 2: the new demand line, the old one dashed, and supply; the point A
     fig = go.Figure()
     after = add_curve(fig, labor_demand(L_grid, 100 - shift), "Lᵈ′", BLUE, start=True)
     add_curve(fig, labor_demand(L_grid), "Lᵈ", GRAY, "dash", start=True, avoid=after)
     add_curve(fig, labor_supply(L_grid), "Lˢ", TEAL)
     add_point(fig, L_A, w_bar, "A")
+    # Step 3, rigid wage: the point C, and a green bar from C to A at w-bar
+    # (with no fall, C is the same point as A)
     if wage == "rigid":
-        if shift > 0:                                            # with no fall, C is the same point as A
+        if shift > 0:
             add_point(fig, L_C, w_bar, "C")
-        fig.add_trace(go.Scatter(x=[L_C, L_A], y=[w_bar, w_bar], mode="lines", name="Want a job, cannot find one",
-                                 showlegend=True, line=dict(color=GREEN, width=6)))
-        title = f"Rigid wage w̄ = {w_bar:.1f}: L″ = {L_C:.1f} (flexible: L′ = {L_B:.1f}); jobless gap {jobless:.1f}"
+        fig.add_trace(
+            go.Scatter(
+                x=[L_C, L_A],
+                y=[w_bar, w_bar],
+                mode="lines",
+                name="Want a job, cannot find one",
+                showlegend=True,
+                line=dict(color=GREEN, width=6),
+            )
+        )
+        title = (
+            f"Rigid wage w̄ = {w_bar:.1f}: L″ = {L_C:.1f} "
+            f"(flexible: L′ = {L_B:.1f}); jobless gap {jobless:.1f}"
+        )
+    # Step 3, flexible wage: the point B (with no fall, the same point as A)
     else:
-        if shift > 0:                                            # with no fall, B is the same point as A
+        if shift > 0:
             add_point(fig, L_B, w_B, "B")
-        title = f"Flexible wage: the wage falls to w′ = {w_B:.1f} and employment to L′ = {L_B:.1f}"
+        title = (
+            f"Flexible wage: the wage falls to w′ = {w_B:.1f} "
+            f"and employment to L′ = {L_B:.1f}"
+        )
     return market_axes(fig, title)
 ```
 
-> **Python note.** `ToggleButtons` shows one button per option; the function receives the text of the
-> chosen button.
-
 ```{python}
 #| kind: widget
-interact(wage_rigidity,
-         shift=FloatSlider(value=20, min=0, max=40, step=5, description="fall in labor demand", style=WIDE),
-         wage=ToggleButtons(options=["rigid", "flexible"], value="rigid", description="wage"));
+# Fig. 6 with a slider and two buttons. `ToggleButtons` shows one button per
+# option, and wage_rigidity receives the text of the chosen button
+interact(
+    wage_rigidity,
+    shift=FloatSlider(value=20, min=0, max=40, step=5,
+                      description="fall in labor demand", style=WIDE),
+    wage=ToggleButtons(options=["rigid", "flexible"], value="rigid",
+                       description="wage"),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: Fig. 6 (rigid wage) with a precomputed slider for the fall in labor demand
-slider_figure(wage_rigidity, "shift", [0, 10, 20, 30, 40], start=20, label="fall in labor demand")
+# @title Website version: Fig. 6 (rigid wage) with a precomputed slider for the fall
+# one picture of Fig. 6 per size of the fall, with the rigid wage
+slider_figure(
+    wage_rigidity,
+    "shift",
+    [0, 10, 20, 30, 40],     # the values of shift
+    start=20,
+    label="fall in labor demand",
+)
 ```
 
 **Source.** Adapted from Fig. 7.6 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -2024,28 +2462,76 @@ stops changing when the two flows are equal, which gives the steady-state rate o
 
 $$u^* = \frac{\bar{s}}{\bar{f} + \bar{s}}$$
 
-> **Python note.** `range(61)` counts 0, 1, ..., 60, one step per month. Each pass of the loop
-> stores the current rate with `.append` and then applies the two equations above once.
-> `interact_manual` adds a button, so nothing happens until you press it.
+First the economics: `bathtub_simulation` applies equation (6) month by month for five
+years, and computes the natural rate of equation (7).
 
 ```{python}
-def bathtub_path(s=0.01, f=0.20):
-    """The bathtub model, equations (6) and (7): simulate 60 months, starting at 10% unemployment."""
-    L_bar, U = 100.0, 10.0                     # labor force and unemployed (only the ratio matters)
+def bathtub_simulation(s, f):
+    """The bathtub model: 60 months of unemployment, starting at 10 percent.
+
+    Equation (6) once a month, E + U = L-bar and U' = U + s E - f U, and the
+    natural rate of equation (7), u* = s / (f + s)
+
+    Arguments
+        s : monthly job separation rate, s-bar
+        f : monthly job finding rate, f-bar
+    Returns
+        path   : a table with the month (0 to 60) and the unemployment rate (percent)
+        u_star : the natural rate of unemployment, in percent
+    """
+    # Step 1: the labor force and the unemployed (only their ratio matters)
+    L_bar, U = 100.0, 10.0
+    # Step 2: `range(61)` counts 0, 1, ..., 60, one step per month. Each pass
+    # stores the month and the current rate with `.append` (which adds one item to
+    # the end of a list), then applies equation (6) once
     months, rates = [], []
     for t in range(61):
         months.append(t)
         rates.append(100 * U / L_bar)
         E = L_bar - U                          # the labor force: E + U = L_bar
         U = U + s * E - f * U                  # equation (6)
-    u_star = 100 * s / (f + s)                 # equation (7)
+    # Step 3: the natural rate, equation (7), and the path as a table
+    u_star = 100 * s / (f + s)
     path = pd.DataFrame({"month": months, "rate": rates})
-    fig = px.line(path, x="month", y="rate", hover_name="month",
-                  labels={"month": "Months from the start", "rate": "Unemployment rate (percent)"},
-                  title=f"s = {s:.3f}, f = {f:.2f}: unemployment settles at u* = s/(f+s) = {u_star:.1f}%")
+    return path, u_star
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: the bathtub model of unemployment
+def bathtub_path(s=0.01, f=0.20):
+    """Unemployment month by month, and the natural rate it settles at.
+
+    Draws the bathtub figure of this section (our own figure: the textbook draws none
+    for Section 7.4), with the natural rate u* as a dashed line.
+
+    Arguments
+        s : monthly job separation rate, s-bar
+        f : monthly job finding rate, f-bar
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the simulation (bathtub_simulation)
+    path, u_star = bathtub_simulation(s, f)
+    # Step 2: the path, and the natural rate as a dashed line
+    fig = px.line(
+        path,
+        x="month",
+        y="rate",
+        hover_name="month",
+        labels={
+            "month": "Months from the start",
+            "rate": "Unemployment rate (percent)",
+        },
+        title=(
+            f"s = {s:.3f}, f = {f:.2f}: unemployment settles at "
+            f"u* = s/(f+s) = {u_star:.1f}%"
+        ),
+    )
     fig.update_traces(line=dict(color=BLUE, width=3))
     fig.add_hline(y=u_star, line_dash="dash", line_color=GRAY)
-    fig.update_xaxes(tickvals=[12, 24, 36, 48, 60])     # one tick a year; no label in the bottom-left corner
+    # Step 3: one tick a year (no label in the bottom-left corner), and 0 to 25%
+    fig.update_xaxes(tickvals=[12, 24, 36, 48, 60])
     fig.update_yaxes(range=[0, 25])
     return fig
 ```
@@ -2054,16 +2540,29 @@ Choose a job separation rate and a job finding rate, then press **Run the bathtu
 
 ```{python}
 #| kind: widget
+# The bathtub model with sliders. `interact_manual` adds a button, so nothing
+# happens until you press it; `.options(manual_name=...)` sets the button's label
 run_bathtub = interact_manual.options(manual_name="Run the bathtub")
-run_bathtub(bathtub_path,
-            s=FloatSlider(value=0.01, min=0.005, max=0.03, step=0.005, description="job separation rate s", style=WIDE),
-            f=FloatSlider(value=0.2, min=0.1, max=0.5, step=0.05, description="job finding rate f", style=WIDE));
+run_bathtub(
+    bathtub_path,
+    s=FloatSlider(value=0.01, min=0.005, max=0.03, step=0.005,
+                  description="job separation rate s", style=WIDE),
+    f=FloatSlider(value=0.2, min=0.1, max=0.5, step=0.05,
+                  description="job finding rate f", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: the bathtub model with a precomputed slider for the job finding rate
-slider_figure(bathtub_path, "f", [0.1, 0.15, 0.2, 0.3, 0.4, 0.5], start=0.2, label="job finding rate f")
+# @title Website version: the bathtub model with a precomputed slider for the rate f
+# one picture per job finding rate
+slider_figure(
+    bathtub_path,
+    "f",
+    [0.1, 0.15, 0.2, 0.3, 0.4, 0.5],     # the values of f
+    start=0.2,
+    label="job finding rate f",
+)
 ```
 
 **Source.** Adapted from the bathtub model of unemployment (Section 7.4) in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -2076,6 +2575,8 @@ $0.01/0.21 \approx 4.8$ percent. Starting from 10 percent, unemployment is alrea
 year, because a fifth of the unemployed find a job every month.
 
 ```{python}
+# The natural rate, equation (7), for three pairs of rates: the textbook's, and
+# two with firing costs; `:<6` pads a number to 6 characters, so the columns line up
 for s, f in [[0.01, 0.20], [0.008, 0.20], [0.008, 0.15]]:
     print(f"s = {s:<6} f = {f:<5} natural rate u* = {100 * s / (f + s):.2f}%")
 ```
@@ -2114,41 +2615,98 @@ AMECO database, which starts in 1960. The textbook uses an OECD series instead, 
 about 1 point higher in the mid-1980s.
 
 ```{python}
+# Load the data of Fig. 7, and give the columns the economies' names
 unemp = pd.read_csv(DATA_URL + "fig7-7.csv")
-unemp = unemp.rename(columns={"unrate_us": "United States", "unrate_europe": "Europe", "unrate_japan": "Japan"})
+unemp = unemp.rename(
+    columns={
+        "unrate_us": "United States",
+        "unrate_europe": "Europe",
+        "unrate_japan": "Japan",
+    }
+)
 unemp.head(7)
 ```
 
 The empty cells (`NaN`, "not a number") are the years 1955–1959, before the European series starts.
 
-> **Python note.** `unemp[unemp.year == year]` keeps the rows where the condition is true, and
-> `.iloc[0]` takes the first of them. `add_vline` draws a vertical line at the chosen year.
+`rates_in` picks the three rates of one year, which the title of the figure reports.
 
 ```{python}
+def rates_in(year):
+    """The unemployment rates of the three economies in one year (Fig. 7).
+
+    Arguments
+        year : the year, 1955 to 2025
+    Returns
+        the row of unemp for that year (its columns are the three economies)
+    """
+    # `unemp[unemp.year == year]` keeps the rows where the condition is true, and
+    # `.iloc[0]` takes the first of them
+    return unemp[unemp.year == year].iloc[0]
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 7, unemployment in three economies
 def unemployment_in(year=2022):
-    """Fig. 7.7: unemployment in the U.S., Europe and Japan, with one year's rates in the title."""
-    row = unemp[unemp.year == year].iloc[0]
-    fig = px.line(unemp, x="year", y=["United States", "Europe", "Japan"],
-                  labels={"year": "Year", "value": "Unemployment rate (percent)", "variable": "Economy"})
+    """Unemployment in the U.S., Europe and Japan, with one year's rates in the title.
+
+    Draws Fig. 7 (inspired by Fig. 7.7 in Jones).
+
+    Arguments
+        year : the year marked by the dotted line and reported in the title
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the year's three rates (rates_in)
+    row = rates_in(year)
+    # Step 2: one line per economy
+    fig = px.line(
+        unemp,
+        x="year",
+        y=["United States", "Europe", "Japan"],
+        labels={
+            "year": "Year",
+            "value": "Unemployment rate (percent)",
+            "variable": "Economy",
+        },
+    )
+    # Step 3: `add_vline` draws a vertical line at the chosen year
     fig.add_vline(x=year, line_dash="dot", line_color=GRAY)
     fig.update_yaxes(range=[0, 14])
-    fig.update_layout(title=f"{year}: U.S. {row['United States']:.1f}%, Europe {row['Europe']:.1f}%, "
-                            f"Japan {row['Japan']:.1f}%", hovermode="x unified")
+    # Step 4: the title reports the three rates; one hover box for all three lines
+    fig.update_layout(
+        title=(
+            f"{year}: U.S. {row['United States']:.1f}%, Europe {row['Europe']:.1f}%, "
+            f"Japan {row['Japan']:.1f}%"
+        ),
+        hovermode="x unified",
+    )
     return fig
 ```
 
-> **Python note.** A `Dropdown` is a menu: the function receives the option you pick.
-
 ```{python}
 #| kind: widget
-interact(unemployment_in,
-         year=Dropdown(options=list(range(1960, 2026)), value=2022, description="year", style=WIDE));
+# Fig. 7 with a menu. A `Dropdown` is a menu: unemployment_in receives the year you
+# pick, 1960 to 2025
+interact(
+    unemployment_in,
+    year=Dropdown(options=list(range(1960, 2026)), value=2022, description="year",
+                  style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 7 with a precomputed slider for the year
-slider_figure(unemployment_in, "year", [1960, 1975, 1985, 1995, 2013, 2020, 2022, 2025], start=2022, label="year")
+# one picture of Fig. 7 per year
+slider_figure(
+    unemployment_in,
+    "year",
+    [1960, 1975, 1985, 1995, 2013, 2020, 2022, 2025],     # the years
+    start=2022,
+    label="year",
+)
 ```
 
 **Sources.** Data: [U.S. Bureau of Labor Statistics, Unemployment Rate (`UNRATE`), via FRED](https://fred.stlouisfed.org/series/UNRATE), annual average;
@@ -2174,12 +2732,27 @@ Chart: inspired by Fig. 7.7 in Jones (2024), [*Macroeconomics*, 6th ed.](https:/
 #### Key numbers: Europe before and after 1975
 
 ```{python}
+# The key numbers: average rates before 1975 and since 1985 (`&` means "and":
+# both conditions must be true)
 early = unemp[(unemp.year >= 1960) & (unemp.year <= 1975)]
 late = unemp[unemp.year >= 1985]
-print("Average 1960-1975:", early[["United States", "Europe", "Japan"]].mean().round(2).to_dict())
-print("Average 1985-2025:", late[["United States", "Europe", "Japan"]].mean().round(2).to_dict())
-print("First year with Europe above the U.S.:", unemp[unemp["Europe"] > unemp["United States"]].year.min())
-print("Japan above the U.S. in:", unemp[unemp["Japan"] > unemp["United States"]].year.tolist())
+print(
+    "Average 1960-1975:",
+    early[["United States", "Europe", "Japan"]].mean().round(2).to_dict(),
+)
+print(
+    "Average 1985-2025:",
+    late[["United States", "Europe", "Japan"]].mean().round(2).to_dict(),
+)
+# the years in which Europe, or Japan, had a higher rate than the U.S.
+print(
+    "First year with Europe above the U.S.:",
+    unemp[unemp["Europe"] > unemp["United States"]].year.min(),
+)
+print(
+    "Japan above the U.S. in:",
+    unemp[unemp["Japan"] > unemp["United States"]].year.tolist(),
+)
 ```
 
 Up to 1975, Europe averaged 2.6 percent (the textbook says about 2.5), half the U.S. average. Since
@@ -2198,6 +2771,8 @@ countries, and the United States, Japan, Canada, Australia, New Zealand and Sout
 of 12 countries, the "Europe" line above.
 
 ```{python}
+# Load the annual rates of 42 countries and the euro area, and look at Germany
+# around reunification (rows 29 to 32 of its series)
 ameco = pd.read_csv(DATA_URL + "unemployment_countries.csv")
 ameco[ameco.country == "Germany"].iloc[29:33]
 ```
@@ -2205,32 +2780,88 @@ ameco[ameco.country == "Germany"].iloc[29:33]
 The rows show a **splice**: up to 1990 "Germany" is West Germany, and from 1991 the reunified country. Many
 Central and Eastern European series start only in the 1990s or 2000s, after the end of communism.
 
-> **Python note.** `.loc[1985:2025]` keeps the rows from 1985 to 2025, and `.mean()` averages each column.
-> `.sort_values()` sorts the averages, so `.index[0]` and `.index[-1]` are the lowest and the highest.
+First the data: `long_run_averages` picks the chosen countries and computes each one's
+average rate since 1985, which the title reports.
 
 ```{python}
+# The economies of the picker, A to Z, and the textbook's three
 AMECO_COUNTRIES = sorted(ameco.country.unique())
 BOOK_ECONOMIES = ("Euro area (12 countries)", "Japan", "United States")
-AMECO_SHOWN = list(BOOK_ECONOMIES) + ["Spain", "South Korea"]       # the website's default view
-AMECO_COLORS = group_colors(AMECO_SHOWN + AMECO_COUNTRIES, [AMECO_SHOWN, AMECO_COUNTRIES], BOOK_COLORS)
+
+
+def long_run_averages(names):
+    """The rows of the chosen economies, and their average rates since 1985 (Fig. 7).
+
+    Arguments
+        names : the economies to show
+    Returns
+        chosen  : their rows of ameco
+        average : each economy's average rate 1985-2025, from the lowest to the highest
+    """
+    # Step 1: the rows of the chosen economies
+    chosen = ameco[ameco.country.isin(names)]
+    if len(chosen) == 0:
+        return chosen, None                    # nothing chosen: no averages
+    # Step 2: one column per economy; `.loc[1985:2025]` keeps the rows from 1985 to
+    # 2025, `.mean()` averages each column, and `.sort_values()` sorts the averages
+    wide = chosen.pivot(index="year", columns="country", values="unemployment_rate")
+    average = wide.loc[1985:2025].mean().sort_values()
+    return chosen, average
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 7 for any economies
+# the website's default view, and one fixed color per economy (group_colors)
+AMECO_SHOWN = list(BOOK_ECONOMIES) + ["Spain", "South Korea"]
+AMECO_COLORS = group_colors(
+    AMECO_SHOWN + AMECO_COUNTRIES,
+    [AMECO_SHOWN, AMECO_COUNTRIES],
+    BOOK_COLORS,
+)
 
 
 def unemployment_long_run(names=BOOK_ECONOMIES):
-    """Fig. 7.7 for any of 42 countries: annual unemployment, with the averages since 1985 in the title."""
-    chosen = ameco[ameco.country.isin(names)]
+    """Annual unemployment rates of any of 42 countries and the euro area.
+
+    Draws Fig. 7 for any economies (inspired by Fig. 7.7 in Jones), with the highest
+    and the lowest average since 1985 in the title.
+
+    Arguments
+        names : the economies to draw
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the data (long_run_averages); a message when nothing is picked
+    chosen, average = long_run_averages(names)
     if len(chosen) == 0:
         return go.Figure(layout=dict(title="Pick at least one country"))
-    wide = chosen.pivot(index="year", columns="country", values="unemployment_rate")
-    average = wide.loc[1985:2025].mean().sort_values()
+    # Step 2: the title; `.index[-1]` is the highest average, `.index[0]` the lowest
     title = f"Average 1985–2025: {average.index[-1]} {average.iloc[-1]:.1f}%"
     if len(average) > 1:
-        title = title + f" (highest), {average.index[0]} {average.iloc[0]:.1f}% (lowest)"
-    fig = px.line(chosen, x="year", y="unemployment_rate", color="country", hover_name="country",
-                  color_discrete_map=AMECO_COLORS, title=title,
-                  labels={"year": "Year", "unemployment_rate": "Unemployment rate (percent)", "country": "Economy"})
-    high = 14 if chosen.unemployment_rate.max() <= 14 else 40     # widen only for very high rates
+        title = title + (
+            f" (highest), {average.index[0]} {average.iloc[0]:.1f}% (lowest)"
+        )
+    # Step 3: one line per economy, in its fixed color
+    fig = px.line(
+        chosen,
+        x="year",
+        y="unemployment_rate",
+        color="country",
+        hover_name="country",
+        color_discrete_map=AMECO_COLORS,
+        title=title,
+        labels={
+            "year": "Year",
+            "unemployment_rate": "Unemployment rate (percent)",
+            "country": "Economy",
+        },
+    )
+    # Step 4: 0 to 14 percent, widened only for very high rates; no tick label in
+    # the bottom-left corner; one hover box for all lines
+    high = 14 if chosen.unemployment_rate.max() <= 14 else 40
     fig.update_yaxes(range=[0, high])
-    fig.update_xaxes(tickvals=[1970, 1980, 1990, 2000, 2010, 2020])      # no label at the bottom-left corner
+    fig.update_xaxes(tickvals=[1970, 1980, 1990, 2000, 2010, 2020])
     fig.update_layout(hovermode="x unified")
     return fig
 ```
@@ -2240,26 +2871,27 @@ shown; **click a country in the legend to add it**.
 
 ```{python}
 #| kind: widget
-interact(unemployment_long_run,
-         names=SelectMultiple(options=AMECO_COUNTRIES, value=BOOK_ECONOMIES, rows=10,
-                              description="economies", style=WIDE));
+# Fig. 7 with a picker of economies (hold Ctrl or Cmd to pick several)
+interact(
+    unemployment_long_run,
+    names=SelectMultiple(options=AMECO_COUNTRIES, value=BOOK_ECONOMIES, rows=10,
+                         description="economies", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: Fig. 7 for 43 economies (click a country in the legend to add it)
+# @title Website version: Fig. 7 for 43 economies (click a country in the legend)
+# every economy in one chart; the legend buttons come from legend_menu
 fig = unemployment_long_run(tuple(AMECO_COUNTRIES))
 legend_menu(fig, AMECO_SHOWN, label="Textbook view + Spain, South Korea")
-fig.update_layout(title="Since 1985 unemployment averaged 16.6% in Spain, 3.5% in Japan and South Korea",
-                  hovermode="closest")
-fig.update_yaxes(autorange=True)              # the axis adapts to the countries you add
+fig.update_layout(
+    title=("Since 1985 unemployment averaged 16.6% in Spain, "
+           "3.5% in Japan and South Korea"),
+    hovermode="closest",
+)
+fig.update_yaxes(autorange=True)    # the axis adapts to the countries you add
 fig
-```
-
-```{python}
-yearly_rates = ameco.pivot(index="year", columns="country", values="unemployment_rate")
-print(yearly_rates.loc[[1975, 1985, 1994, 2013, 2025], ["Spain", "Switzerland", "Norway"]])
-print(yearly_rates.loc[1985:2025].mean().sort_values().round(1).iloc[[0, 1, 2, 3, 4, -3, -2, -1]])
 ```
 
 **Sources.** Data: [European Commission, AMECO database](https://economy-finance.ec.europa.eu/economic-research-and-databases/economic-databases/ameco-database_en),
@@ -2269,6 +2901,22 @@ Prepared file: [`data/ch07/unemployment_countries.csv`](https://github.com/quarc
 Chart: inspired by Fig. 7.7 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
+
+The next cell checks the numbers of What to notice: Spain, Switzerland and Norway in
+five years, and the lowest and the highest averages since 1985.
+
+```{python}
+# The rates as a wide table: one row per year, one column per economy
+yearly_rates = ameco.pivot(index="year", columns="country", values="unemployment_rate")
+print(
+    yearly_rates.loc[[1975, 1985, 1994, 2013, 2025], ["Spain", "Switzerland", "Norway"]]
+)
+# the averages since 1985, sorted: the five lowest and the three highest
+print(
+    yearly_rates.loc[1985:2025].mean().sort_values().round(1)
+    .iloc[[0, 1, 2, 3, 4, -3, -2, -1]]
+)
+```
 
 **What to notice.**
 
@@ -2289,20 +2937,30 @@ many hours a week. A wider file holds this measure from the Penn World Table, as
 in 2019 = 100. Column `hours_pwt10` uses version 10.01, close to the textbook's version 10.0; column
 `hours_pwt11` uses the latest version, 11.0.
 
-> **Python note.** `.pivot(index="country", columns="year", values=...)` turns the long table into a
-> wide one, with one row per country and one column per year. `[[1960, 1990, 2019]]` keeps three columns.
-
 ```{python}
+# Table 7.2. Step 1: the file, and the textbook's seven countries
 hours = pd.read_csv(DATA_URL + "hours_per_person.csv")
-countries = ["United States", "Italy", "France", "Germany", "U.K.", "Japan", "South Korea"]
-pwt10 = hours.pivot(index="country", columns="year", values="hours_pwt10").loc[countries, [1960, 1990, 2019]]
-pwt11 = hours.pivot(index="country", columns="year", values="hours_pwt11").loc[countries, [1960, 1990, 2019, 2023]]
+countries = [
+    "United States", "Italy", "France", "Germany", "U.K.", "Japan", "South Korea",
+]
+# Step 2: `.pivot(index="country", columns="year", values=...)` gives one row per
+# country and one column per year; `.loc[countries, [1960, 1990, 2019]]` keeps
+# the seven countries and three years
+pwt10 = hours.pivot(index="country", columns="year", values="hours_pwt10")
+pwt10 = pwt10.loc[countries, [1960, 1990, 2019]]
+pwt11 = hours.pivot(index="country", columns="year", values="hours_pwt11")
+pwt11 = pwt11.loc[countries, [1960, 1990, 2019, 2023]]
+# Step 3: both versions, then the average of the four European countries in 2019
+# (`.loc['Italy':'U.K.', 2019]` takes the rows from Italy to the U.K.)
 print("PWT 10.01 (the textbook's table):")
 print(pwt10.round(0))
 print("\nPWT 11.0 (latest version):")
 print(pwt11.round(1))
-print(f"\nEurope (four countries) in 2019: PWT 10.01 {pwt10.loc['Italy':'U.K.', 2019].mean():.1f}, "
-      f"PWT 11.0 {pwt11.loc['Italy':'U.K.', 2019].mean():.1f}")
+print(
+    f"\nEurope (four countries) in 2019: PWT 10.01 "
+    f"{pwt10.loc['Italy':'U.K.', 2019].mean():.1f}, "
+    f"PWT 11.0 {pwt11.loc['Italy':'U.K.', 2019].mean():.1f}"
+)
 ```
 
 Version 10.01 reproduces every cell of the textbook's table. In 2019, Japan worked about 10 percent more
@@ -2345,6 +3003,7 @@ Economic Policy Institute (EPI), based on the Current Population Survey:
   different measure from the textbook's share of *hours*, which is about twice as high.
 
 ```{python}
+# Load the data of Fig. 8: the college premium and the college share, by year
 college = pd.read_csv(DATA_URL + "fig7-8.csv")
 college.tail()
 ```
@@ -2355,21 +3014,50 @@ the unit economists usually plot (and the textbook uses). For small gaps the two
 gaps the log version is smaller. Let us check that the two columns agree:
 
 ```{python}
+# The log version computed from the percent version: 100 ln(1 + gap)
 check = 100 * np.log(1 + college.college_premium_pct / 100)
-print(f"Largest difference between the two versions: {(check - college.college_premium_log_pct).abs().max():.2f} log points")
+# the largest gap between the two (`.abs()`: the absolute value)
+print(
+    "Largest difference between the two versions: "
+    f"{(check - college.college_premium_log_pct).abs().max():.2f} log points"
+)
 ```
 
 Before plotting, we give the columns readable names for the legend.
 
 ```{python}
-named = college.rename(columns={"college_premium_log_pct": "College wage premium (log points)",
-                                "college_share_employment_pct": "Share of employment with a college degree"})
-fig = px.line(named, x="year", y=["College wage premium (log points)", "Share of employment with a college degree"],
-              hover_name="year", color_discrete_sequence=[BLUE, TEAL],
-              labels={"year": "Year", "value": "Percent"},
-              title="College graduates became more numerous and better paid at the same time")
+# Readable column names for the legend: `.rename(columns={old: new})`
+named = college.rename(
+    columns={
+        "college_premium_log_pct": "College wage premium (log points)",
+        "college_share_employment_pct": "Share of employment with a college degree",
+    }
+)
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 8, the college premium and the college share
+# Step 1: one line per column, blue and teal
+fig = px.line(
+    named,
+    x="year",
+    y=[
+        "College wage premium (log points)",
+        "Share of employment with a college degree",
+    ],
+    hover_name="year",
+    color_discrete_sequence=[BLUE, TEAL],
+    labels={"year": "Year", "value": "Percent"},
+    title="College graduates became more numerous and better paid at the same time",
+)
+# Step 2: 0 to 60 percent, the legend below the chart, one hover box for both lines
 fig.update_yaxes(range=[0, 60])
-fig.update_layout(legend=dict(orientation="h", y=-0.2, yanchor="top"), legend_title_text="", hovermode="x unified")
+fig.update_layout(
+    legend=dict(orientation="h", y=-0.2, yanchor="top"),
+    legend_title_text="",
+    hovermode="x unified",
+)
 fig.show()
 ```
 
@@ -2396,9 +3084,18 @@ Chart: inspired by Fig. 7.8 in Jones (2024), [*Macroeconomics*, 6th ed.](https:/
 #### Key numbers: the premium and the share
 
 ```{python}
+# The key numbers of Fig. 8, with the years as row labels
 c = college.set_index("year")
-print(c.loc[[1979, 1990, 2000, 2020, 2025], ["college_premium_log_pct", "college_share_employment_pct"]].round(1))
-print(f"Highest premium: {c.college_premium_log_pct.max():.1f} log points in {c.college_premium_log_pct.idxmax()}")
+print(
+    c.loc[
+        [1979, 1990, 2000, 2020, 2025],
+        ["college_premium_log_pct", "college_share_employment_pct"],
+    ].round(1)
+)
+print(
+    f"Highest premium: {c.college_premium_log_pct.max():.1f} log points "
+    f"in {c.college_premium_log_pct.idxmax()}"
+)
 ```
 
 The premium is 48.1 log points in 2020, "nearly 50 percent" as the textbook says; it peaked at 49.2 in
@@ -2416,6 +3113,7 @@ relative to those with only upper secondary (high school) education, which count
 the share of adults with such a degree. A wider file holds both for 48 countries, mostly from 2013.
 
 ```{python}
+# Load the OECD file, and look at the last four U.S. rows
 oecd_college = pd.read_csv(DATA_URL + "college_premium_countries.csv")
 oecd_college[oecd_college.country == "United States"].tail(4)
 ```
@@ -2425,30 +3123,87 @@ the unit of the chart above. This measure is not adjusted for age, gender or reg
 it is about 14 log points above EPI's (61 against 46 in 2024). Compare countries with one measure at a time.
 One value was dropped when the file was built: Slovakia's 3.5 for 2013, a unit error in the source.
 
-> **Python note.** `.dropna(subset=[...])` drops the rows where that column is empty.
-> `.groupby("country").last()` keeps the last row of each country, its latest year. `pd.concat([...],
-> axis=1)` puts columns side by side, matching the rows by their label (here, the country).
+First the data: `latest_premiums` picks the chosen countries' rows with a premium, and
+each country's premium in its latest year, which the title reports.
 
 ```{python}
-PREMIUM_COUNTRIES = sorted(oecd_college.dropna(subset=["premium_log_points"]).country.unique())
-PREMIUM_COLORS = group_colors(PREMIUM_COUNTRIES, [PREMIUM_COUNTRIES], BOOK_COLORS)   # "All lines" view
+# The countries with earnings data, A to Z. `.dropna(subset=[...])` drops the rows
+# where that column is empty
+PREMIUM_COUNTRIES = sorted(
+    oecd_college.dropna(subset=["premium_log_points"]).country.unique()
+)
+
+
+def latest_premiums(names):
+    """The chosen countries' college premiums, and the latest one of each (Fig. 8).
+
+    Arguments
+        names : the countries to show
+    Returns
+        chosen : their rows of oecd_college that have a premium
+        latest : each country's premium in its latest year, from the lowest
+    """
+    # Step 1: the rows of the chosen countries that have a premium
+    chosen = oecd_college[oecd_college.country.isin(names)]
+    chosen = chosen.dropna(subset=["premium_log_points"])
+    if len(chosen) == 0:
+        return chosen, None                    # nothing chosen: no premiums
+    # Step 2: `.groupby("country").last()` keeps the last row of each country, its
+    # latest year; then sort the premiums from the lowest to the highest
+    latest = chosen.groupby("country").last().premium_log_points.sort_values()
+    return chosen, latest
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 8 for OECD countries
+# one fixed color per country; every line can be on at once ("All lines")
+PREMIUM_COLORS = group_colors(PREMIUM_COUNTRIES, [PREMIUM_COUNTRIES], BOOK_COLORS)
 
 
 def premium_countries(names=("United States",)):
-    """Fig. 7.8 for OECD countries: the college premium (log points, full-time workers 25-64)."""
-    chosen = oecd_college[oecd_college.country.isin(names)].dropna(subset=["premium_log_points"])
+    """The college premium of any countries (log points, full-time workers 25-64).
+
+    Draws Fig. 8 for any OECD countries (inspired by Fig. 7.8 in Jones), with the
+    highest and the lowest latest premium in the title.
+
+    Arguments
+        names : the countries to draw
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the data (latest_premiums); a message when no country is picked
+    chosen, latest = latest_premiums(names)
     if len(chosen) == 0:
         return go.Figure(layout=dict(title="Pick at least one country"))
-    latest = chosen.groupby("country").last().premium_log_points.sort_values()
-    title = f"College premium, latest year: {latest.index[-1]} {latest.iloc[-1]:.0f} log points"
+    # Step 2: the title, the highest premium first and the lowest second
+    title = (
+        f"College premium, latest year: {latest.index[-1]} "
+        f"{latest.iloc[-1]:.0f} log points"
+    )
     if len(latest) > 1:
         title = title + f", {latest.index[0]} {latest.iloc[0]:.0f}"
-    fig = px.line(chosen, x="year", y="premium_log_points", color="country", hover_name="country",
-                  markers=True, color_discrete_map=PREMIUM_COLORS, title=title,
-                  labels={"year": "Year", "premium_log_points": "College premium (log points)", "country": "Country"})
-    high = 70 if chosen.premium_log_points.max() <= 70 else 130     # widen only for very high premiums
+    # Step 3: one line per country, with a marker at each year of data
+    fig = px.line(
+        chosen,
+        x="year",
+        y="premium_log_points",
+        color="country",
+        hover_name="country",
+        markers=True,
+        color_discrete_map=PREMIUM_COLORS,
+        title=title,
+        labels={
+            "year": "Year",
+            "premium_log_points": "College premium (log points)",
+            "country": "Country",
+        },
+    )
+    # Step 4: 0 to 70, widened only for very high premiums; no tick label in the
+    # bottom-left corner
+    high = 70 if chosen.premium_log_points.max() <= 70 else 130
     fig.update_yaxes(range=[0, high])
-    fig.update_xaxes(range=[1999, 2026], tickvals=[2005, 2010, 2015, 2020, 2025])      # no label at the bottom-left corner
+    fig.update_xaxes(range=[1999, 2026], tickvals=[2005, 2010, 2015, 2020, 2025])
     return fig
 ```
 
@@ -2457,18 +3212,24 @@ Below, Colab shows a country picker. On the website, the chart holds all 38 coun
 
 ```{python}
 #| kind: widget
-interact(premium_countries,
-         names=SelectMultiple(options=PREMIUM_COUNTRIES, value=("United States",), rows=10,
-                              description="countries", style=WIDE));
+# Fig. 8 with a country picker (hold Ctrl or Cmd to pick several)
+interact(
+    premium_countries,
+    names=SelectMultiple(options=PREMIUM_COUNTRIES, value=("United States",), rows=10,
+                         description="countries", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: Fig. 8 for 38 countries (click a country in the legend to add it)
+# @title Website version: Fig. 8 for 38 countries (click a country in the legend)
+# every country in one chart; the legend buttons come from legend_menu
 fig = premium_countries(tuple(PREMIUM_COUNTRIES))
 legend_menu(fig, ["United States"], label="United States only")
-fig.update_layout(title="The U.S. college premium is among the highest of the rich countries")
-fig.update_yaxes(autorange=True)              # the axis adapts to the countries you add
+fig.update_layout(
+    title="The U.S. college premium is among the highest of the rich countries"
+)
+fig.update_yaxes(autorange=True)    # the axis adapts to the countries you add
 fig
 ```
 
@@ -2484,17 +3245,33 @@ Does a country with more graduates pay them less, as supply and demand suggest? 
 country: its latest premium against its latest share of adults with a degree.
 
 ```{python}
+# Step 1: each country's latest premium and latest share of adults with a degree
 premium = oecd_college.dropna(subset=["premium_log_points"]).groupby("country").last()
 share = oecd_college.dropna(subset=["bachelor_share"]).groupby("country").last()
-latest_both = pd.concat([premium.premium_log_points, share.bachelor_share], axis=1).dropna().reset_index()
-fig = px.scatter(latest_both, x="bachelor_share", y="premium_log_points", hover_name="country",
-                 color_discrete_sequence=[TEAL],
-                 labels={"bachelor_share": "Adults 25-64 with a bachelor's or higher degree (%)",
-                         "premium_log_points": "College premium (log points)"},
-                 title="Where graduates are scarce, they earn much more")
+# Step 2: `pd.concat([...], axis=1)` puts the two columns side by side, matching
+# the rows by their label (the country); `.reset_index()` makes the country a column
+latest_both = pd.concat([premium.premium_log_points, share.bachelor_share], axis=1)
+latest_both = latest_both.dropna().reset_index()
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 8, the premium against the share of graduates
+# one teal point per country
+fig = px.scatter(
+    latest_both,
+    x="bachelor_share",
+    y="premium_log_points",
+    hover_name="country",
+    color_discrete_sequence=[TEAL],
+    labels={
+        "bachelor_share": "Adults 25-64 with a bachelor's or higher degree (%)",
+        "premium_log_points": "College premium (log points)",
+    },
+    title="Where graduates are scarce, they earn much more",
+)
 fig.update_traces(marker=dict(size=10))
 fig.show()
-print(f"{len(latest_both)} countries; correlation: {latest_both.bachelor_share.corr(latest_both.premium_log_points):.2f}")
 ```
 
 **Sources.** Data: [OECD, Education at a Glance, via the OECD Data Explorer](https://data-explorer.oecd.org/), dataflows `DF_LSO_EARN_REL_UPPER` (relative earnings) and
@@ -2504,6 +3281,18 @@ Prepared file: [`data/ch07/college_premium_countries.csv`](https://github.com/qu
 Chart: inspired by Fig. 7.8 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
+
+The next cell counts the countries and measures how closely the premium and the share
+move together.
+
+```{python}
+# `.corr(...)` is the correlation of two columns: -1 to 1, negative when one tends
+# to be low where the other is high
+print(
+    f"{len(latest_both)} countries; correlation: "
+    f"{latest_both.bachelor_share.corr(latest_both.premium_log_points):.2f}"
+)
+```
 
 **What to notice.**
 
@@ -2531,23 +3320,31 @@ all the payments. The geometric-series formula gives the sum directly (equation 
 
 $$pdv = \text{payment} \times \frac{1 - \left(\frac{1}{1+R}\right)^n}{1 - \frac{1}{1+R}}$$
 
-> **Python note.** The loop in `pdv` adds one discounted payment per year, so we can check the formula.
-> `**` is a power: `(1 + R) ** t` is $(1+R)^t$. `100_000` is simply 100000; Python ignores the
-> underscore, which only makes large numbers easier to read. `:,.0f` prints a number with thousands
-> separators and no decimals.
-
 ```{python}
 def pdv(payment, R, years):
-    """Equation (10): present value of `payment` received every year for `years` years, starting today."""
+    """The present value of a payment received every year, starting today.
+
+    Equation (10), computed as a sum: payment / (1 + R)^t for t = 0, ..., years - 1
+
+    Arguments
+        payment : the yearly payment, in dollars
+        R       : the interest rate
+        years   : the number of yearly payments
+    Returns
+        the present discounted value of the stream, in dollars
+    """
+    # the loop adds one discounted payment per year, so we can check the formula;
+    # `**` is a power: `(1 + R) ** t` is (1 + R)^t
     total = 0.0
     for t in range(years):                       # t = 0 is today, t = 1 next year, ...
         total = total + payment / (1 + R) ** t
     return total
 
 
+# Four examples; `:,.0f` prints a number with thousands separators, no decimals
 print(f"$1,000 in 5 years at R = 10%:          ${1000 / 1.10 ** 5:,.0f}")
 print(f"$100 a year for 20 years at R = 10%:   ${pdv(100, 0.10, 20):,.0f}")
-a = 1 / 1.10
+a = 1 / 1.10                                     # the discount factor of equation (10)
 print(f"... and with the formula (10):         ${100 * (1 - a ** 20) / (1 - a):,.0f}")
 print(f"$100,000 a year for 45 years at 3%:   ${pdv(100_000, 0.03, 45):,.0f}")
 print(f"$30,000 a year for 45 years at 3%:    ${pdv(30_000, 0.03, 45):,.0f}")
@@ -2563,12 +3360,29 @@ The chart shows why: each bar is one year's \$100,000 wage valued today. Distant
 they still add up. (`np.arange(45)` gives the whole numbers 0, 1, ..., 44.)
 
 ```{python}
+# One bar per year: a wage of 100,000 dollars received t years from now is worth
+# 100,000 / 1.03^t today (equation 9). `np.arange(45)` gives 0, 1, ..., 44
 years = np.arange(45)
 today = pd.DataFrame({"year": years, "value": 100_000 / 1.03 ** years})
-fig = px.bar(today, x="year", y="value", hover_name="year", color_discrete_sequence=[TEAL],
-             labels={"year": "Years from today", "value": "Value today (dollars)"},
-             title=f"45 years of 100,000-dollar wages at R = 3% are worth {today.value.sum():,.0f} dollars today")
-fig.update_xaxes(tickvals=[10, 20, 30, 40])            # no label in the bottom-left corner
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: the value today of 45 years of wages
+# one teal bar per year; the title reports their sum, the value of the working life
+fig = px.bar(
+    today,
+    x="year",
+    y="value",
+    hover_name="year",
+    color_discrete_sequence=[TEAL],
+    labels={"year": "Years from today", "value": "Value today (dollars)"},
+    title=(
+        "45 years of 100,000-dollar wages at R = 3% are worth "
+        f"{today.value.sum():,.0f} dollars today"
+    ),
+)
+fig.update_xaxes(tickvals=[10, 20, 30, 40])       # no label in the bottom-left corner
 fig.show()
 ```
 
@@ -2609,50 +3423,135 @@ We draw the college market in a function of its own, because Fig. 13 uses it aga
 the shifts are dashed gray ($L^s$, $L^d$) and the curves after them solid ($L^{s\prime}$, $L^{d\prime}$). The
 equilibrium before the shifts is marked $*$ and the one after them $**$.
 
-> **Python note.** `a or b` is true when at least one of the two conditions is true.
+First the economics: `college_premium` solves the two markets of equation (3) and
+gives the college premium over high school before and after the shifts.
 
 ```{python}
+def college_premium(shift_d, shift_s):
+    """The college wage and the premium over high school, before and after the shifts.
+
+    Equation (3) for each market; the wage change follows equation (11). The high
+    school market is Islandia's; the college market has demand w = (90 + shift_d)
+    - 0.4 L and supply w = (30 - shift_s) + 0.6 L (Figs. 9 and 13).
+
+    Arguments
+        shift_d : how far college labor demand shifts out
+        shift_s : how far college labor supply shifts out
+    Returns
+        w_hs           : the high school wage
+        w_1, w_2       : the college wage before and after the shifts
+        premium_1, premium_2 : the college premium before and after (0.2 = 20%)
+    """
+    # Step 1: the high school wage, and the college wage before and after
+    w_hs = equilibrium()[1]
+    w_1 = equilibrium(a_d=90.0, b_d=0.4, a_s=30.0, b_s=0.6)[1]
+    w_2 = equilibrium(a_d=90.0 + shift_d, b_d=0.4, a_s=30.0 - shift_s, b_s=0.6)[1]
+    # Step 2: the premium: how much more college graduates earn, as a share
+    premium_1 = w_1 / w_hs - 1
+    premium_2 = w_2 / w_hs - 1
+    return w_hs, w_1, w_2, premium_1, premium_2
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Figs. 9 and 13, the college labor market
 def college_market(fig, shift_d, shift_s, row=None, col=None):
-    """Figs. 7.9b and 7.13: the college labor market before (*) and after (**) both curves shift."""
+    """The college labor market before (*) and after (**) both curves shift.
+
+    Draws panel (b) of Fig. 9 and Fig. 13 (adapted from Figs. 7.9b and 7.13 in
+    Jones): the curves before the shifts dashed gray, the curves after them solid.
+
+    Arguments
+        fig      : the figure to draw on
+        shift_d  : how far college labor demand shifts out
+        shift_s  : how far college labor supply shifts out
+        row, col : the panel to draw in (None: the only panel)
+    Returns
+        w_1, w_2 : the college wage before and after the shifts
+    """
+    # Step 1: the equilibrium before and after the shifts, equation (3)
     L_1, w_1 = equilibrium(a_d=90.0, b_d=0.4, a_s=30.0, b_s=0.6)
     L_2, w_2 = equilibrium(a_d=90.0 + shift_d, b_d=0.4, a_s=30.0 - shift_s, b_s=0.6)
-    supply = add_curve(fig, labor_supply(L_grid, 30.0 - shift_s, 0.6), "Lˢ′", TEAL, "solid", row, col)
-    demand = add_curve(fig, labor_demand(L_grid, 90.0 + shift_d, 0.4), "Lᵈ′", BLUE, "solid", row, col, start=True)
-    add_curve(fig, labor_supply(L_grid, 30.0, 0.6), "Lˢ", GRAY, "dash", row, col, avoid=supply)
-    add_curve(fig, labor_demand(L_grid, 90.0, 0.4), "Lᵈ", GRAY, "dash", row, col, start=True, avoid=demand)
+    # Step 2: the new curves solid, the old ones dashed gray
+    supply = add_curve(
+        fig, labor_supply(L_grid, 30.0 - shift_s, 0.6), "Lˢ′", TEAL, "solid", row, col
+    )
+    demand = add_curve(
+        fig, labor_demand(L_grid, 90.0 + shift_d, 0.4), "Lᵈ′", BLUE, "solid", row, col,
+        start=True,
+    )
+    add_curve(fig, labor_supply(L_grid, 30.0, 0.6), "Lˢ", GRAY, "dash", row, col,
+              avoid=supply)
+    add_curve(fig, labor_demand(L_grid, 90.0, 0.4), "Lᵈ", GRAY, "dash", row, col,
+              start=True, avoid=demand)
+    # Step 3: the two equilibria. `a or b` is true when at least one of the two is
+    # true; with no shifts, ** is the same point as *
     add_point(fig, L_1, w_1, "*", row, col)
-    if shift_d > 0 or shift_s > 0:                               # with no shifts, ** is the same point as *
+    if shift_d > 0 or shift_s > 0:
         add_point(fig, L_2, w_2, "**", row, col)
     return w_1, w_2
 ```
 
-> **Python note.** `make_subplots(rows=1, cols=2)` creates a figure with two panels side by side, and
-> `row=..., col=...` tells each drawing function which panel to use.
-
 ```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 9, understanding the rising return to education
 def rising_return(shift_d=15.0, shift_s=10.0):
-    """Fig. 7.9: (a) the high school market is unchanged; (b) college demand shifts out more than supply."""
-    L_hs, w_hs = equilibrium()
-    fig = make_subplots(rows=1, cols=2, subplot_titles=("(a) High school graduates", "(b) College graduates"))
+    """(a) The high school market is unchanged; (b) college demand shifts out more.
+
+    Draws Fig. 9 (adapted from Fig. 7.9 in Jones).
+
+    Arguments
+        shift_d : how far college labor demand shifts out
+        shift_s : how far college labor supply shifts out
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the numbers of the figure (college_premium), and the high school market
+    w_hs, w_1, w_2, premium_1, premium_2 = college_premium(shift_d, shift_s)
+    L_hs = equilibrium()[0]
+    # Step 2: `make_subplots(rows=1, cols=2)` makes two panels side by side; the
+    # last two arguments of each drawing tool (here 1, 1) say which panel to use
+    fig = make_subplots(
+        rows=1,
+        cols=2,
+        subplot_titles=("(a) High school graduates", "(b) College graduates"),
+    )
+    # Step 3: panel (a), the high school market
     add_curve(fig, labor_supply(L_grid), "Lˢ", TEAL, "solid", 1, 1)
     add_curve(fig, labor_demand(L_grid), "Lᵈ", BLUE, "solid", 1, 1, start=True)
     add_point(fig, L_hs, w_hs, "*", 1, 1)
-    w_1, w_2 = college_market(fig, shift_d, shift_s, 1, 2)
-    title = f"College wage {w_1:.1f} → {w_2:.1f}; premium over high school {w_1 / w_hs - 1:.0%} → {w_2 / w_hs - 1:.0%}"
+    # Step 4: panel (b), the college market (college_market)
+    college_market(fig, shift_d, shift_s, 1, 2)
+    title = (
+        f"College wage {w_1:.1f} → {w_2:.1f}; premium over high school "
+        f"{premium_1:.0%} → {premium_2:.0%}"
+    )
     return market_axes(fig, title, x_title="Employment", y_title="Wage")
 ```
 
 ```{python}
 #| kind: widget
-interact(rising_return,
-         shift_d=FloatSlider(value=15, min=0, max=20, step=2.5, description="college demand shifts out by", style=WIDE),
-         shift_s=FloatSlider(value=10, min=0, max=20, step=2.5, description="college supply shifts out by", style=WIDE));
+# Fig. 9 with sliders for the two shifts of the college market
+interact(
+    rising_return,
+    shift_d=FloatSlider(value=15, min=0, max=20, step=2.5,
+                        description="college demand shifts out by", style=WIDE),
+    shift_s=FloatSlider(value=10, min=0, max=20, step=2.5,
+                        description="college supply shifts out by", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: Fig. 9 with a precomputed slider for the shift in college labor demand
-slider_figure(rising_return, "shift_d", [0, 5, 10, 15, 20], start=15, label="college demand shifts out by")
+# @title Website version: Fig. 9 with a precomputed slider for the college demand shift
+# one picture of Fig. 9 per shift in college labor demand
+slider_figure(
+    rising_return,
+    "shift_d",
+    [0, 5, 10, 15, 20],     # the values of shift_d
+    start=15,
+    label="college demand shifts out by",
+)
 ```
 
 **Source.** Adapted from Fig. 7.9 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -2698,13 +3597,30 @@ The file holds monthly employment in manufacturing, in millions of workers, from
 Statistics payroll survey.
 
 ```{python}
+# Load the data of Fig. 10: monthly U.S. employment in manufacturing (millions)
 manuf = pd.read_csv(DATA_URL + "fig7-10.csv", parse_dates=["date"])
-fig = px.area(manuf, x="date", y="manufacturing_emp_millions", hover_name="date",
-              labels={"date": "Year", "manufacturing_emp_millions": "Manufacturing jobs (millions)"},
-              title="Manufacturing jobs peaked in 1979 and fell sharply after 2000")
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 10, U.S. employment in manufacturing
+# Step 1: employment as a filled area
+fig = px.area(
+    manuf,
+    x="date",
+    y="manufacturing_emp_millions",
+    hover_name="date",
+    labels={
+        "date": "Year",
+        "manufacturing_emp_millions": "Manufacturing jobs (millions)",
+    },
+    title="Manufacturing jobs peaked in 1979 and fell sharply after 2000",
+)
 fig.update_traces(line=dict(color=GREEN, width=2))
+# Step 2: the shaded bands: every recession since 1950
 shade_recessions(fig, "1950-01-01")
-fig.update_yaxes(range=[10, 20], tickvals=[12, 14, 16, 18, 20])      # no label in the bottom-left corner
+# Step 3: no tick label in the bottom-left corner, and the range slider below
+fig.update_yaxes(range=[10, 20], tickvals=[12, 14, 16, 18, 20])
 fig.update_xaxes(rangeslider_visible=True, range=["1950-01-01", "2030-01-01"])
 fig.show()
 ```
@@ -2730,12 +3646,21 @@ Chart: inspired by Fig. 7.10 in Jones (2024), [*Macroeconomics*, 6th ed.](https:
 #### Key numbers: the fall after 2000
 
 ```{python}
+# The key numbers of Fig. 10: the series with the months as row labels, and its
+# lowest point between 2000 and 2012
 m = manuf.set_index("date").manufacturing_emp_millions
 low = m.loc["2000":"2012"]
 fall = m.loc["2000-01-01"] - low.min()
 print(f"Peak: {m.max():.2f} million in {m.idxmax():%B %Y}")
-print(f"January 2000: {m.loc['2000-01-01']:.2f} million;  low: {low.min():.2f} million in {low.idxmin():%B %Y}")
-print(f"Fall: {fall:.2f} million ({fall / m.loc['2000-01-01']:.0%});  a quarter of it: {fall / 4:.2f} million jobs")
+print(
+    f"January 2000: {m.loc['2000-01-01']:.2f} million;  "
+    f"low: {low.min():.2f} million in {low.idxmin():%B %Y}"
+)
+# the fall after 2000, and the quarter of it linked to imports from China
+print(
+    f"Fall: {fall:.2f} million ({fall / m.loc['2000-01-01']:.0%});  "
+    f"a quarter of it: {fall / 4:.2f} million jobs"
+)
 print(f"Latest: {m.iloc[-1]:.2f} million in {m.index[-1]:%B %Y}")
 ```
 
@@ -2750,6 +3675,7 @@ The ILO estimates employment in manufacturing for almost every country since 199
 wider file holds the number of manufacturing workers (millions) and their share of all employed people.
 
 ```{python}
+# Load the ILO estimates, and look at the last three U.S. rows
 manuf_world = pd.read_csv(DATA_URL + "manufacturing_countries.csv")
 manuf_world[manuf_world.country == "United States"].tail(3)
 ```
@@ -2759,35 +3685,99 @@ count above, because household surveys also count the self-employed and people w
 elsewhere. Different sources, different levels: compare **shares** across countries, and compare levels
 only within one source. A few series end before 2025 (Ukraine in 2021, Sudan in 2022).
 
-> **Python note.** `MEASURES` is a dictionary of lists: for each choice of the `ToggleButtons`, the column
-> to plot, its axis title, the usual and the wider axis top, and the unit. `column, label, high, wider, unit
-> = MEASURES[measure]` unpacks the five items of one list into five variables in one line.
+First the data: `manufacturing_change` picks the chosen countries and computes each
+one's change since 1991, in the measure you choose, which the title reports.
 
 ```{python}
+# Step 1: the countries of the picker, A to Z, and each country's region
 MANUF_COUNTRIES = sorted(manuf_world.country.unique())
 MANUF_REGIONS = dict(zip(manuf_world.country, manuf_world.region))
-MANUF_SHOWN = ["United States", "Germany", "Vietnam"]       # the website's default view
-MANUF_COLORS = group_colors(MANUF_SHOWN + MANUF_COUNTRIES, region_groups(MANUF_REGIONS, MANUF_SHOWN), BOOK_COLORS)
-MEASURES = {"share of jobs": ["manufacturing_share", "Manufacturing, % of all jobs", 30, 40, "points"],
-            "millions of workers": ["manufacturing_millions", "Manufacturing workers (millions)", 25, 180, "million"]}
+# Step 2: `MEASURES` is a dictionary of lists: for each choice of the buttons, the
+# column to plot, its axis title, the usual and the wider axis top, and the unit
+MEASURES = {
+    "share of jobs": [
+        "manufacturing_share", "Manufacturing, % of all jobs", 30, 40, "points",
+    ],
+    "millions of workers": [
+        "manufacturing_millions", "Manufacturing workers (millions)",
+        25, 180, "million",
+    ],
+}
+
+
+def manufacturing_change(names, measure):
+    """The chosen countries' rows, and each one's change since 1991 (Fig. 10).
+
+    Arguments
+        names   : the countries to show
+        measure : "share of jobs" or "millions of workers"
+    Returns
+        chosen : their rows of manuf_world
+        change : each country's change from its first to its last year, sorted
+    """
+    # Step 1: the rows of the chosen countries, and the column of the measure
+    chosen = manuf_world[manuf_world.country.isin(names)]
+    column = MEASURES[measure][0]
+    if len(chosen) == 0:
+        return chosen, None                    # nothing chosen: no change
+    # Step 2: the last year minus the first year of each country
+    by_country = chosen.groupby("country")
+    change = (by_country.last()[column] - by_country.first()[column]).sort_values()
+    return chosen, change
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 10 for any countries
+# the website's default view, and one fixed color per country (group_colors)
+MANUF_SHOWN = ["United States", "Germany", "Vietnam"]
+MANUF_COLORS = group_colors(
+    MANUF_SHOWN + MANUF_COUNTRIES,
+    region_groups(MANUF_REGIONS, MANUF_SHOWN),
+    BOOK_COLORS,
+)
 
 
 def manufacturing_countries(names=("United States",), measure="share of jobs"):
-    """Fig. 7.10 for any countries: manufacturing employment (ILO), as a share of jobs or in millions."""
-    chosen = manuf_world[manuf_world.country.isin(names)]
+    """Manufacturing employment of any countries (ILO): a share of jobs, or millions.
+
+    Draws Fig. 10 for any countries (inspired by Fig. 7.10 in Jones), with the
+    largest fall and the largest rise since 1991 in the title.
+
+    Arguments
+        names   : the countries to draw
+        measure : "share of jobs" or "millions of workers"
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the data (manufacturing_change); a message when no country is picked
+    chosen, change = manufacturing_change(names, measure)
     if len(chosen) == 0:
         return go.Figure(layout=dict(title="Pick at least one country"))
+    # Step 2: `column, label, high, wider, unit = MEASURES[measure]` unpacks the
+    # five items of one list into five variables
     column, label, high, wider, unit = MEASURES[measure]
-    by_country = chosen.groupby("country")
-    change = (by_country.last()[column] - by_country.first()[column]).sort_values()
-    title = f"Change since 1991 ({unit}): {change.index[0]} {round(change.iloc[0], 1) + 0.0:+.1f}"
+    # Step 3: the title, the largest fall first; `round(...) + 0.0` avoids "-0.0"
+    title = (
+        f"Change since 1991 ({unit}): "
+        f"{change.index[0]} {round(change.iloc[0], 1) + 0.0:+.1f}"
+    )
     if len(change) > 1:
         title = title + f", {change.index[-1]} {round(change.iloc[-1], 1) + 0.0:+.1f}"
-    fig = px.line(chosen, x="year", y=column, color="country", hover_name="country",
-                  color_discrete_map=MANUF_COLORS, title=title,
-                  labels={"year": "Year", column: label, "country": "Country"})
+    # Step 4: one line per country, in its fixed color
+    fig = px.line(
+        chosen,
+        x="year",
+        y=column,
+        color="country",
+        hover_name="country",
+        color_discrete_map=MANUF_COLORS,
+        title=title,
+        labels={"year": "Year", column: label, "country": "Country"},
+    )
+    # Step 5: one wider range, only when a country needs it
     if chosen[column].max() > high:
-        high = wider                              # one wider range, only when a country needs it
+        high = wider
     fig.update_yaxes(range=[0, high])
     return fig
 ```
@@ -2797,27 +3787,27 @@ of jobs): **pick a region in the menu, then click a country in the legend to add
 
 ```{python}
 #| kind: widget
-interact(manufacturing_countries,
-         names=SelectMultiple(options=MANUF_COUNTRIES, value=("United States",), rows=10,
-                              description="countries", style=WIDE),
-         measure=ToggleButtons(options=["share of jobs", "millions of workers"], value="share of jobs",
-                               description="measure", style=WIDE));
+# Fig. 10 with a country picker and two buttons for the measure
+interact(
+    manufacturing_countries,
+    names=SelectMultiple(options=MANUF_COUNTRIES, value=("United States",), rows=10,
+                         description="countries", style=WIDE),
+    measure=ToggleButtons(options=["share of jobs", "millions of workers"],
+                          value="share of jobs", description="measure", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: Fig. 10 for every country (pick a region, then click a country in the legend)
+# @title Website version: Fig. 10 for every country (pick a region, then a country)
+# every country in one chart (shares of jobs), with a menu of regions (region_menu)
 fig = manufacturing_countries(tuple(MANUF_COUNTRIES), "share of jobs")
 region_menu(fig, MANUF_REGIONS, shown=MANUF_SHOWN, label="U.S., Germany, Vietnam")
-fig.update_layout(title="Manufacturing's share of jobs fell in rich countries and rose in Vietnam")
-fig.update_yaxes(autorange=True)              # the axis adapts to the countries you add
+fig.update_layout(
+    title="Manufacturing's share of jobs fell in rich countries and rose in Vietnam"
+)
+fig.update_yaxes(autorange=True)    # the axis adapts to the countries you add
 fig
-```
-
-```{python}
-shares = manuf_world.pivot(index="year", columns="country", values="manufacturing_share")
-print(shares.loc[[1991, 2000, 2025], ["United States", "Germany", "Japan", "United Kingdom", "China", "Vietnam"]])
-print(manuf_world[manuf_world.year == 2025].sort_values("manufacturing_millions").tail(3)[["country", "manufacturing_millions"]])
 ```
 
 **Sources.** Data: [International Labour Organization, ILOSTAT](https://ilostat.ilo.org/data/), modelled estimates of employment
@@ -2827,6 +3817,28 @@ Prepared file: [`data/ch07/manufacturing_countries.csv`](https://github.com/quar
 Chart: inspired by Fig. 7.10 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
+
+The next cell checks the numbers of What to notice: the share of jobs in six countries,
+and the three largest manufacturing workforces of 2025.
+
+```{python}
+# The shares as a wide table: one row per year, one column per country
+shares = manuf_world.pivot(
+    index="year", columns="country", values="manufacturing_share"
+)
+print(
+    shares.loc[
+        [1991, 2000, 2025],
+        ["United States", "Germany", "Japan", "United Kingdom", "China", "Vietnam"],
+    ]
+)
+# the three countries with the most manufacturing workers in 2025
+print(
+    manuf_world[manuf_world.year == 2025]
+    .sort_values("manufacturing_millions")
+    .tail(3)[["country", "manufacturing_millions"]]
+)
+```
 
 **What to notice.**
 
@@ -2860,8 +3872,11 @@ percent of adults, the top 1 in 1,000, from the World Inequality Database. These
 which show the very top of the distribution well.
 
 ```{python}
+# Load the data of Fig. 11, and give the columns the countries' names
 top = pd.read_csv(DATA_URL + "fig7-11.csv")
-top = top.rename(columns={"top01_share_us": "United States", "top01_share_france": "France"})
+top = top.rename(
+    columns={"top01_share_us": "United States", "top01_share_france": "France"}
+)
 top.tail()
 ```
 
@@ -2870,9 +3885,25 @@ identical values in a row are unusual for an economic series: the database seems
 until new tax data arrive. We keep the rows but treat 2023–2024 with care.
 
 ```{python}
-fig = px.line(top, x="year", y=["United States", "France"], hover_name="year",
-              labels={"year": "Year", "value": "Income share of the top 0.1% (percent)", "variable": "Country"},
-              title="Top incomes fell after 1929 in both countries, but rose again only in the U.S.")
+#| kind: drawing
+# @title Drawing code: Fig. 11, top incomes in the United States and France
+# Step 1: one line per country
+fig = px.line(
+    top,
+    x="year",
+    y=["United States", "France"],
+    hover_name="year",
+    labels={
+        "year": "Year",
+        "value": "Income share of the top 0.1% (percent)",
+        "variable": "Country",
+    },
+    title=(
+        "Top incomes fell after 1929 in both countries, "
+        "but rose again only in the U.S."
+    ),
+)
+# Step 2: 0 to 12 percent, and one hover box for both lines
 fig.update_yaxes(range=[0, 12])
 fig.update_layout(hovermode="x unified")
 fig.show()
@@ -2899,9 +3930,13 @@ Chart: inspired by Fig. 7.11 in Jones (2024), [*Macroeconomics*, 6th ed.](https:
 #### Key numbers: three eras
 
 ```{python}
+# The average share of each era, in both countries
 for start, end in [[1913, 1929], [1950, 1959], [1960, 1979], [2015, 2022]]:
     era = top[(top.year >= start) & (top.year <= end)]
-    print(f"{start}-{end}: U.S. {era['United States'].mean():.1f}%, France {era['France'].mean():.1f}%")
+    print(
+        f"{start}-{end}: U.S. {era['United States'].mean():.1f}%, "
+        f"France {era['France'].mean():.1f}%"
+    )
 ```
 
 The 1950s average is 5.0 percent in the United States and 3.7 in France; the textbook's "around 4
@@ -2918,6 +3953,7 @@ holds the share of the top 0.1 percent for 58 countries: the 38 OECD members and
 economies.
 
 ```{python}
+# Load the WID file, and look at Brazil's first twelve rows
 top_world = pd.read_csv(DATA_URL + "top01_share_countries.csv")
 top_world[top_world.country == "Brazil"].head(12)
 ```
@@ -2928,30 +3964,92 @@ only a few *benchmark* years from WID's historical estimates (1820, 1850, 1880, 
 line chart joins them with straight segments that hide everything in between. In the latest year, WID
 repeats its previous estimate for 56 of the 58 countries. The chart starts in 1900 and marks each data point.
 
+First the data: `top_share_latest` picks the chosen countries since 1900 and each one's
+share in the latest year, which the title reports.
+
 ```{python}
+# The countries of the picker, A to Z, each country's region, and the textbook's two
 TOP_COUNTRIES = sorted(top_world.country.unique())
 TOP_REGIONS = dict(zip(top_world.country, top_world.region))
 BOOK_PAIR = ("France", "United States")
-TOP_COLORS = group_colors(TOP_COUNTRIES, region_groups(TOP_REGIONS, BOOK_PAIR), BOOK_COLORS)
+
+
+def top_share_latest(names):
+    """The chosen countries' top 0.1% shares since 1900, and the latest ones (Fig. 11).
+
+    Arguments
+        names : the countries to show
+    Returns
+        chosen : their rows of top_world from 1900 on
+        last   : the latest year of those rows
+        latest : each country's share in that year, from the lowest to the highest
+    """
+    # Step 1: the rows of the chosen countries from 1900 on (`&`: both must be true)
+    chosen = top_world[top_world.country.isin(names) & (top_world.year >= 1900)]
+    # Step 2: the latest year, and each country's share in it, sorted
+    last = chosen.year.max()
+    latest = chosen[chosen.year == last].set_index("country").top01_share.sort_values()
+    return chosen, last, latest
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 11 for any countries
+# one fixed color per country (group_colors)
+TOP_COLORS = group_colors(
+    TOP_COUNTRIES,
+    region_groups(TOP_REGIONS, BOOK_PAIR),
+    BOOK_COLORS,
+)
 
 
 def top_share_countries(names=BOOK_PAIR):
-    """Fig. 7.11 for any of 58 countries: income share of the top 0.1% since 1900 (WID)."""
-    chosen = top_world[top_world.country.isin(names) & (top_world.year >= 1900)]
+    """The income share of the top 0.1% of any countries since 1900 (WID).
+
+    Draws Fig. 11 for any countries (inspired by Fig. 7.11 in Jones), with the
+    highest and the lowest share of the latest year in the title.
+
+    Arguments
+        names : the countries to draw
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the data (top_share_latest); a message when no country is picked
+    chosen, last, latest = top_share_latest(names)
     if len(chosen) == 0:
         return go.Figure(layout=dict(title="Pick at least one country"))
-    last = chosen.year.max()
-    latest = chosen[chosen.year == last].set_index("country").top01_share.sort_values()
-    title = f"Top 0.1% income share in {last}: {latest.index[-1]} {latest.iloc[-1]:.1f}%"
+    # Step 2: the title, the highest share first and the lowest second
+    title = (
+        f"Top 0.1% income share in {last}: "
+        f"{latest.index[-1]} {latest.iloc[-1]:.1f}%"
+    )
     if len(latest) > 1:
         title = title + f" (highest), {latest.index[0]} {latest.iloc[0]:.1f}% (lowest)"
-    fig = px.line(chosen, x="year", y="top01_share", color="country", hover_name="country", markers=True,
-                  color_discrete_map=TOP_COLORS, title=title,
-                  labels={"year": "Year", "top01_share": "Income share of the top 0.1% (percent)", "country": "Country"})
+    # Step 3: one line per country, with a small marker at each data point
+    fig = px.line(
+        chosen,
+        x="year",
+        y="top01_share",
+        color="country",
+        hover_name="country",
+        markers=True,
+        color_discrete_map=TOP_COLORS,
+        title=title,
+        labels={
+            "year": "Year",
+            "top01_share": "Income share of the top 0.1% (percent)",
+            "country": "Country",
+        },
+    )
     fig.update_traces(marker=dict(size=4))
-    high = 16 if chosen.top01_share.max() <= 16 else 25           # widen only for very high shares
+    # Step 4: 0 to 16 percent, widened only for very high shares; no tick label in
+    # the bottom-left corner
+    high = 16 if chosen.top01_share.max() <= 16 else 25
     fig.update_yaxes(range=[0, high])
-    fig.update_xaxes(range=[1898, 2026], tickvals=[1920, 1940, 1960, 1980, 2000, 2020])      # no label at the bottom-left corner
+    fig.update_xaxes(
+        range=[1898, 2026],
+        tickvals=[1920, 1940, 1960, 1980, 2000, 2020],
+    )
     return fig
 ```
 
@@ -2960,23 +4058,26 @@ menu, then click a country in the legend to add it.**
 
 ```{python}
 #| kind: widget
-interact(top_share_countries,
-         names=SelectMultiple(options=TOP_COUNTRIES, value=BOOK_PAIR, rows=10, description="countries", style=WIDE));
+# Fig. 11 with a country picker (hold Ctrl or Cmd to pick several)
+interact(
+    top_share_countries,
+    names=SelectMultiple(options=TOP_COUNTRIES, value=BOOK_PAIR, rows=10,
+                         description="countries", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: Fig. 11 for 58 countries (pick a region, then click a country in the legend)
+# @title Website version: Fig. 11 for 58 countries (pick a region, then a country)
+# every country in one chart, with a menu of regions (region_menu)
 fig = top_share_countries(tuple(TOP_COUNTRIES))
 region_menu(fig, TOP_REGIONS, shown=list(BOOK_PAIR))
-fig.update_layout(title="Top 0.1% shares fell in most countries until 1980, and rose in 40 of 58 since")
-fig.update_yaxes(autorange=True)              # the axis adapts to the countries you add
+fig.update_layout(
+    title=("Top 0.1% shares fell in most countries until 1980, "
+           "and rose in 40 of 58 since")
+)
+fig.update_yaxes(autorange=True)    # the axis adapts to the countries you add
 fig
-```
-
-```{python}
-top_wide = top_world.pivot(index="year", columns="country", values="top01_share")
-print(top_wide.loc[[1913, 1950, 1980, 2023], ["United Kingdom", "Japan", "China", "India", "Russia"]])
 ```
 
 **Sources.** Data: [World Inequality Database (WID)](https://wid.world/data/), bulk download, variable `sptincj992`
@@ -2986,6 +4087,19 @@ Prepared file: [`data/ch07/top01_share_countries.csv`](https://github.com/quarcs
 Chart: inspired by Fig. 7.11 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
+
+The next cell checks the numbers of What to notice: five countries in four years.
+
+```{python}
+# The shares as a wide table: one row per year, one column per country
+top_wide = top_world.pivot(index="year", columns="country", values="top01_share")
+print(
+    top_wide.loc[
+        [1913, 1950, 1980, 2023],
+        ["United Kingdom", "Japan", "China", "India", "Russia"],
+    ]
+)
+```
 
 **What to notice.**
 
@@ -3020,6 +4134,7 @@ benefits, from the Distributional National Accounts of Piketty, Saez and Zucman.
 the file zooms in: 99.1, 99.2, ..., 99.99, 99.991, ..., 99.999.
 
 ```{python}
+# Load the data of Fig. 12: growth by percentile, and growth of group averages
 growth = pd.read_csv(DATA_URL + "fig7-12.csv")
 growth.head()
 ```
@@ -3029,22 +4144,56 @@ growth of group averages (bottom 50 percent, middle 40 percent, top 10 percent, 
 2022 update, which also covers 1985–2019. As in the textbook, we start at the 5th percentile and stop the
 1946–1980 curve at the 99th, because above it the curve jumps up and down between 1 and 3.6 percent.
 
-> **Python note.** `|` means "or". `.map({...})` replaces each end year with a readable label, and
-> `fig.add_traces(...)` adds the traces of a second chart to the first one.
+```{python}
+# Step 1: the textbook's two curves, from the 5th percentile. `|` means "or": keep
+# 1980-2014 everywhere, and 1946-1980 only up to the 99th percentile
+curves = growth[
+    (growth.series == "g-percentile (PSZ 2018)") & (growth.percentile >= 5)
+].copy()
+curves = curves[(curves.year == 2014) | (curves.percentile <= 99)]
+# `.map({...})` replaces each end year with a readable label for the legend
+curves["period"] = curves.year.map(
+    {1980: "1946–1980 (“In 1980”)", 2014: "1980–2014 (“In 2014”)"}
+)
+# Step 2: the group averages, with their period as a label
+groups = growth[growth.series == "group average (PSZ 2022)"].copy()
+groups["period"] = (
+    groups.start_year.astype(str) + "–" + groups.year.astype(str) + ", group averages"
+)
+```
 
 ```{python}
-curves = growth[(growth.series == "g-percentile (PSZ 2018)") & (growth.percentile >= 5)].copy()
-curves = curves[(curves.year == 2014) | (curves.percentile <= 99)]
-curves["period"] = curves.year.map({1980: "1946–1980 (“In 1980”)", 2014: "1980–2014 (“In 2014”)"})
-groups = growth[growth.series == "group average (PSZ 2022)"].copy()
-groups["period"] = groups.start_year.astype(str) + "–" + groups.year.astype(str) + ", group averages"
-fig = px.line(curves, x="percentile", y="growth_pct", color="period", markers=True, hover_name="period",
-              color_discrete_sequence=["#e0a33b", BLUE],
-              labels={"percentile": "Income percentile", "growth_pct": "Average annual growth (percent)", "period": "Period"},
-              title="Since 1980, the richest have seen the fastest income growth")
-dots = px.scatter(groups, x="percentile", y="growth_pct", color="period", hover_name="group",
-                  color_discrete_sequence=["#5aa0d8", TEAL, GREEN], symbol_sequence=["diamond"])
+#| kind: drawing
+# @title Drawing code: Fig. 12, growth by income percentile
+# Step 1: the two curves, orange and blue, with a marker at each percentile
+fig = px.line(
+    curves,
+    x="percentile",
+    y="growth_pct",
+    color="period",
+    markers=True,
+    hover_name="period",
+    color_discrete_sequence=["#e0a33b", BLUE],
+    labels={
+        "percentile": "Income percentile",
+        "growth_pct": "Average annual growth (percent)",
+        "period": "Period",
+    },
+    title="Since 1980, the richest have seen the fastest income growth",
+)
+# Step 2: the group averages as diamonds; `fig.add_traces(...)` adds the traces of
+# this second chart to the first one
+dots = px.scatter(
+    groups,
+    x="percentile",
+    y="growth_pct",
+    color="period",
+    hover_name="group",
+    color_discrete_sequence=["#5aa0d8", TEAL, GREEN],
+    symbol_sequence=["diamond"],
+)
 fig.add_traces(dots.data)
+# Step 3: the marker size, the vertical axis, and the legend below the chart
 fig.update_traces(marker=dict(size=6))
 fig.update_yaxes(range=[-0.5, 7])
 fig.update_layout(legend=dict(orientation="h", y=-0.2, yanchor="top"))
@@ -3074,13 +4223,26 @@ Chart: inspired by Fig. 7.12 in Jones (2024), [*Macroeconomics*, 6th ed.](https:
 #### Key numbers: who grew how fast
 
 ```{python}
+# The key numbers: growth at each percentile, with the percentiles as row labels
 p1980 = curves[curves.year == 1980].set_index("percentile").growth_pct
-p2014 = growth[(growth.series == "g-percentile (PSZ 2018)") & (growth.year == 2014)].set_index("percentile").growth_pct
-print(f"Median (50th percentile): {p1980[50]:.2f}% a year in 1946-1980, {p2014[50]:.2f}% in 1980-2014")
+p2014 = growth[
+    (growth.series == "g-percentile (PSZ 2018)") & (growth.year == 2014)
+].set_index("percentile").growth_pct
+print(
+    f"Median (50th percentile): {p1980[50]:.2f}% a year in 1946-1980, "
+    f"{p2014[50]:.2f}% in 1980-2014"
+)
 print("Percentiles with falling income, 1980-2014:", p2014[p2014 < 0].index.tolist())
+# True where 1980-2014 growth beats 1946-1980, at the 5th to 99th percentiles
 faster = p2014[(p2014.index >= 5) & (p2014.index <= 99)] > p1980
-print(f"First percentile where 1980-2014 growth beats 1946-1980: {faster[faster].index.min():.0f}")
-print(f"Top of the distribution, 1980-2014: 99.9th {p2014[99.9]:.2f}%, 99.99th {p2014[99.99]:.2f}%, 99.999th {p2014[99.999]:.2f}%")
+print(
+    "First percentile where 1980-2014 growth beats 1946-1980: "
+    f"{faster[faster].index.min():.0f}"
+)
+print(
+    f"Top of the distribution, 1980-2014: 99.9th {p2014[99.9]:.2f}%, "
+    f"99.99th {p2014[99.99]:.2f}%, 99.999th {p2014[99.999]:.2f}%"
+)
 ```
 
 The textbook says that average growth was about 2 percent a year before 1980 and 1.4 percent after. Our file
@@ -3098,6 +4260,7 @@ percentile" curve elsewhere. A wider file holds it for the 58 countries of Fig. 
 34-year window, 1980–2014, and for the latest 34 years, 1990–2024.
 
 ```{python}
+# Load the WID curves of 58 countries, for 1980-2014 and 1990-2024
 pct_world = pd.read_csv(DATA_URL + "percentile_growth_countries.csv")
 pct_world.head()
 ```
@@ -3113,36 +4276,96 @@ between countries with care.
 and fills the next few percentiles with a smooth model, so their "growth rates" are growth rates of tiny
 numbers. The chart therefore starts at the 10th percentile (the textbook's starts at the 5th).
 
-> **Python note.** `.isin(names) & (pct_world.period == period)` combines two conditions: both must be true.
-> The `for` loop tries the three axis ranges in turn and stops (`break`) at the first one that holds every
-> point.
+First the data: `percentile_growth` picks the chosen countries' curves for one period,
+from the 10th percentile, and each one's median growth, which the title reports.
 
 ```{python}
+# The countries of the picker, A to Z, and each country's region
 PCT_COUNTRIES = sorted(pct_world.country.unique())
 PCT_REGIONS = dict(zip(pct_world.country, pct_world.region))
-PCT_SHOWN = ["United States", "China"]                      # the website's default view
-PCT_COLORS = group_colors(PCT_SHOWN + PCT_COUNTRIES, region_groups(PCT_REGIONS, PCT_SHOWN), BOOK_COLORS)
+
+
+def percentile_growth(names, period):
+    """The chosen countries' growth by percentile, and their median growth (Fig. 12).
+
+    Arguments
+        names  : the countries to show
+        period : "1980–2014" or "1990–2024"
+    Returns
+        chosen : their rows of pct_world for that period, from the 10th percentile
+        median : each country's growth at the 50th percentile, from the lowest
+    """
+    # Step 1: three conditions joined with `&`: all three must be true
+    chosen = pct_world[
+        pct_world.country.isin(names)
+        & (pct_world.period == period)
+        & (pct_world.percentile >= 10)
+    ]
+    # Step 2: growth at the median, the 50th percentile, sorted
+    median = chosen[chosen.percentile == 50].set_index("country").growth_pct
+    return chosen, median.sort_values()
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 12 for any countries
+# the website's default view, and one fixed color per country (group_colors)
+PCT_SHOWN = ["United States", "China"]
+PCT_COLORS = group_colors(
+    PCT_SHOWN + PCT_COUNTRIES,
+    region_groups(PCT_REGIONS, PCT_SHOWN),
+    BOOK_COLORS,
+)
 
 
 def growth_by_percentile(names=("United States",), period="1980–2014"):
-    """Fig. 7.12 for any of 58 countries: growth of pre-tax income per adult at each percentile (WID)."""
-    chosen = pct_world[pct_world.country.isin(names) & (pct_world.period == period) & (pct_world.percentile >= 10)]
+    """The growth of pre-tax income per adult at each percentile, any countries (WID).
+
+    Draws Fig. 12 for any countries (inspired by Fig. 7.12 in Jones), with the
+    highest and the lowest median growth in the title.
+
+    Arguments
+        names  : the countries to draw
+        period : "1980–2014" or "1990–2024"
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the data (percentile_growth); a message when no country is picked
+    chosen, median = percentile_growth(names, period)
     if len(chosen) == 0:
         return go.Figure(layout=dict(title="Pick at least one country"))
-    median = chosen[chosen.percentile == 50].set_index("country").growth_pct.sort_values()
-    title = f"Growth of median income, {period}: {median.index[-1]} {round(median.iloc[-1], 1) + 0.0:.1f}% a year"
+    # Step 2: the title, the fastest median first; `round(...) + 0.0` avoids "-0.0"
+    title = (
+        f"Growth of median income, {period}: "
+        f"{median.index[-1]} {round(median.iloc[-1], 1) + 0.0:.1f}% a year"
+    )
     if len(median) > 1:
         title = title + f", {median.index[0]} {round(median.iloc[0], 1) + 0.0:.1f}%"
-    fig = px.line(chosen, x="percentile", y="growth_pct", color="country", hover_name="country", markers=True,
-                  color_discrete_map=PCT_COLORS, title=title,
-                  labels={"percentile": "Income percentile", "growth_pct": "Average annual growth (percent)",
-                          "country": "Country"})
+    # Step 3: one line per country, with a small marker at each percentile
+    fig = px.line(
+        chosen,
+        x="percentile",
+        y="growth_pct",
+        color="country",
+        hover_name="country",
+        markers=True,
+        color_discrete_map=PCT_COLORS,
+        title=title,
+        labels={
+            "percentile": "Income percentile",
+            "growth_pct": "Average annual growth (percent)",
+            "country": "Country",
+        },
+    )
     fig.update_traces(marker=dict(size=4))
-    for low, high in [(-2, 7), (-6, 12), (-14, 18)]:            # widen only when needed
+    # Step 4: the loop tries the three ranges in turn, and stops (`break`) at the
+    # first one that holds every point
+    for low, high in [(-2, 7), (-6, 12), (-14, 18)]:
         if chosen.growth_pct.min() >= low and chosen.growth_pct.max() <= high:
             break
     fig.update_layout(yaxis_range=[low, high], xaxis_range=[0, 101])
-    fig.update_xaxes(tickvals=[10, 20, 30, 40, 50, 60, 70, 80, 90, 100])      # no label at the bottom-left corner
+    # no tick label in the bottom-left corner
+    fig.update_xaxes(tickvals=[10, 20, 30, 40, 50, 60, 70, 80, 90, 100])
     return fig
 ```
 
@@ -3152,28 +4375,25 @@ legend to add it.**
 
 ```{python}
 #| kind: widget
-interact(growth_by_percentile,
-         names=SelectMultiple(options=PCT_COUNTRIES, value=("United States",), rows=10,
-                              description="countries", style=WIDE),
-         period=ToggleButtons(options=["1980–2014", "1990–2024"], value="1980–2014", description="period", style=WIDE));
+# Fig. 12 with a country picker and two buttons for the period
+interact(
+    growth_by_percentile,
+    names=SelectMultiple(options=PCT_COUNTRIES, value=("United States",), rows=10,
+                         description="countries", style=WIDE),
+    period=ToggleButtons(options=["1980–2014", "1990–2024"], value="1980–2014",
+                         description="period", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: Fig. 12 for 58 countries, 1980-2014 (pick a region, then click a country)
+# @title Website version: Fig. 12 for 58 countries, 1980-2014 (pick a region)
+# every country in one chart for 1980-2014, with a menu of regions (region_menu)
 fig = growth_by_percentile(tuple(PCT_COUNTRIES), "1980–2014")
 region_menu(fig, PCT_REGIONS, shown=PCT_SHOWN, label="U.S. and China")
 fig.update_layout(title="1980–2014: in China every percentile grew at least 3% a year")
-fig.update_yaxes(autorange=True)              # the axis adapts to the countries you add
+fig.update_yaxes(autorange=True)    # the axis adapts to the countries you add
 fig
-```
-
-```{python}
-period_1980 = pct_world[pct_world.period == "1980–2014"].pivot(index="country", columns="percentile", values="growth_pct")
-period_1990 = pct_world[pct_world.period == "1990–2024"].pivot(index="country", columns="percentile", values="growth_pct")
-print(period_1980.loc[["United States", "France", "China", "India"], [10, 50, 90, 99, 99.99]])
-print(period_1990.loc[["United States", "Brazil"], [10, 13, 50, 99.99]])
-print("Colombia, 18th percentile, 1980-2014:", period_1980.loc["Colombia", 18])
 ```
 
 **Sources.** Data: [World Inequality Database (WID)](https://wid.world/data/), bulk download, variable `aptincj992`
@@ -3183,6 +4403,28 @@ Prepared file: [`data/ch07/percentile_growth_countries.csv`](https://github.com/
 Chart: inspired by Fig. 7.12 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
+
+The next cell checks the numbers of What to notice: five percentiles in four countries,
+and the jumps near the bottom in Brazil and Colombia.
+
+```{python}
+# The curves as wide tables, one per period: one row per country, one column per
+# percentile
+period_1980 = pct_world[pct_world.period == "1980–2014"].pivot(
+    index="country", columns="percentile", values="growth_pct"
+)
+period_1990 = pct_world[pct_world.period == "1990–2024"].pivot(
+    index="country", columns="percentile", values="growth_pct"
+)
+print(
+    period_1980.loc[
+        ["United States", "France", "China", "India"], [10, 50, 90, 99, 99.99]
+    ]
+)
+print(period_1990.loc[["United States", "Brazil"], [10, 13, 50, 99.99]])
+# a jump near the bottom: Colombia's 18th percentile
+print("Colombia, 18th percentile, 1980-2014:", period_1980.loc["Colombia", 18])
+```
 
 **What to notice.**
 
@@ -3226,28 +4468,61 @@ the demand for college graduates. The answer: in that decade supply shifted out 
 baby boom generation reached college age, and the Vietnam War drew many young men to college. We reuse
 `college_market`, now with a large supply shift.
 
+The function below draws the college market of Fig. 9 alone, with a large supply
+shift. It needs only `college_market` and `equilibrium`, so all of its code is
+drawing code.
+
 ```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 13, the declining college premium of the 1970s
 def premium_1970s(shift_d=10.0, shift_s=25.0):
-    """Fig. 7.13: college labor supply shifts out by more than demand, so the college wage falls."""
+    """College labor supply shifts out by more than demand, so the college wage falls.
+
+    Draws Fig. 13 (adapted from Fig. 7.13 in Jones).
+
+    Arguments
+        shift_d : how far college labor demand shifts out
+        shift_s : how far college labor supply shifts out
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the college market before and after the shifts (college_market)
     fig = go.Figure()
     w_1, w_2 = college_market(fig, shift_d, shift_s)
+    # Step 2: college employment before and after, equation (3); `[0]` is L*
     L_1 = equilibrium(a_d=90.0, b_d=0.4, a_s=30.0, b_s=0.6)[0]
     L_2 = equilibrium(a_d=90.0 + shift_d, b_d=0.4, a_s=30.0 - shift_s, b_s=0.6)[0]
-    return market_axes(fig, f"College employment {L_1:.1f} → {L_2:.1f}, college wage {w_1:.1f} → {w_2:.1f}",
-                       x_title="Employment of college graduates", y_title="Wage of college graduates")
+    return market_axes(
+        fig,
+        f"College employment {L_1:.1f} → {L_2:.1f}, college wage {w_1:.1f} → {w_2:.1f}",
+        x_title="Employment of college graduates",
+        y_title="Wage of college graduates",
+    )
 ```
 
 ```{python}
 #| kind: widget
-interact(premium_1970s,
-         shift_d=FloatSlider(value=10, min=0, max=20, step=2.5, description="college demand shifts out by", style=WIDE),
-         shift_s=FloatSlider(value=25, min=0, max=30, step=2.5, description="college supply shifts out by", style=WIDE));
+# Fig. 13 with sliders for the two shifts of the college market
+interact(
+    premium_1970s,
+    shift_d=FloatSlider(value=10, min=0, max=20, step=2.5,
+                        description="college demand shifts out by", style=WIDE),
+    shift_s=FloatSlider(value=25, min=0, max=30, step=2.5,
+                        description="college supply shifts out by", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: Fig. 13 with a precomputed slider for the shift in college labor supply
-slider_figure(premium_1970s, "shift_s", [0, 5, 10, 15, 20, 25, 30], start=25, label="college supply shifts out by")
+# @title Website version: Fig. 13 with a precomputed slider for the college supply shift
+# one picture of Fig. 13 per shift in college labor supply
+slider_figure(
+    premium_1970s,
+    "shift_s",
+    [0, 5, 10, 15, 20, 25, 30],     # the values of shift_s
+    start=25,
+    label="college supply shifts out by",
+)
 ```
 
 **Source.** Adapted from Fig. 7.13 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)

@@ -1414,42 +1414,81 @@ The dot marks the point where inflation equals the target. There the interest-ra
 $\tilde{Y} = \bar{a}$: with no demand shock, potential output. When you change a parameter, the baseline curve
 stays behind as a dashed gray line.
 
-> **Python note.** `if ... :` runs the indented lines only when the condition is true. `!=` means "is not
-> equal to", and comparing two groups of numbers in parentheses checks them all at once. `x > 2.4 and y < 4.3`
-> is true only when both conditions hold. We use it to leave out the baseline label when the new curve, or its
-> own label, would run into it.
+The function below draws the figure. It needs only `ad_output` from Model in code, so all of its code is
+drawing code: open it to see how the curves, the dot and the title are placed.
 
 ```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 1, the AD curve
 def ad_curve(pi_bar=PI_BAR, m=M_BAR, b=B_BAR, a=0.0):
-    """Fig. 13.1: the AD curve, with the point where inflation equals the target."""
+    """The AD curve, with the point where inflation equals the target.
+
+    Draws Fig. 1 (adapted from Fig. 13.1 in Jones). When a parameter differs from the
+    baseline, the baseline AD curve stays behind as a dashed gray line.
+
+    Arguments
+        pi_bar : the inflation target, pi-bar
+        m      : the policy response, m-bar
+        b      : the interest sensitivity of spending, b-bar
+        a      : the aggregate demand shock, a-bar
+    Returns
+        a Plotly figure
+    """
     fig = asad_figure()
+    # Step 1: the baseline curve, dashed gray, only when a parameter has changed.
+    # `!=` means "is not equal to", and comparing two groups of numbers in
+    # parentheses checks them all at once
     if (pi_bar, m, b, a) != (PI_BAR, M_BAR, B_BAR, 0.0):
         label = "AD (baseline)"
-        if ad_output(-1.0, pi_bar, m, a, b) > 2.4 and ad_output(-0.3, pi_bar, m, a, b) < 4.3:   # new AD too close
+        # no baseline label when the new AD, or its own label, would run into it:
+        # `x > 2.4 and y < 4.3` is true only when both conditions hold
+        if (
+            ad_output(-1.0, pi_bar, m, a, b) > 2.4
+            and ad_output(-0.3, pi_bar, m, a, b) < 4.3
+        ):
             label = ""
         add_ad(fig, label, GRAY, dash="dash")
+    # Step 2: the new AD curve, and the dot where inflation equals the target
     add_ad(fig, "AD", BLUE, a, pi_bar, m, b)
     add_point(fig, a, pi_bar, "π = π̄")
-    asad_axes(fig, f"AD: Ỹ = {a:.1f} − {b * m:.2f} × (π − {pi_bar:.1f});   at π = π̄ = {pi_bar:.1f}%, Ỹ = {a:.1f}%")
+    # Step 3: the title reports the AD equation and output at the target
+    asad_axes(
+        fig,
+        f"AD: Ỹ = {a:.1f} − {b * m:.2f} × (π − {pi_bar:.1f});   "
+        f"at π = π̄ = {pi_bar:.1f}%, Ỹ = {a:.1f}%",
+    )
     return fig
 ```
 
-> **Python note.** `interact` turns each argument of a function into a slider and calls the function again
-> every time you move one. The `;` at the end only hides an extra line of text.
-
 ```{python}
 #| kind: widget
-interact(ad_curve,
-         pi_bar=FloatSlider(value=2.0, min=0.0, max=5.0, step=0.5, description="inflation target π̄ (%)", style=WIDE),
-         m=FloatSlider(value=0.5, min=0.25, max=2.0, step=0.25, description="policy response m̄", style=WIDE),
-         b=FloatSlider(value=2.0, min=0.5, max=4.0, step=0.5, description="interest sensitivity b̄", style=WIDE),
-         a=FloatSlider(value=0.0, min=-3.0, max=3.0, step=0.5, description="demand shock ā", style=WIDE));
+# Fig. 1 with sliders. `interact` turns each argument of ad_curve into a slider,
+# and draws the figure again every time you move one. The `;` at the end only
+# hides an extra line of text.
+interact(
+    ad_curve,
+    pi_bar=FloatSlider(value=2.0, min=0.0, max=5.0, step=0.5,
+                       description="inflation target π̄ (%)", style=WIDE),
+    m=FloatSlider(value=0.5, min=0.25, max=2.0, step=0.25,
+                  description="policy response m̄", style=WIDE),
+    b=FloatSlider(value=2.0, min=0.5, max=4.0, step=0.5,
+                  description="interest sensitivity b̄", style=WIDE),
+    a=FloatSlider(value=0.0, min=-3.0, max=3.0, step=0.5,
+                  description="demand shock ā", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 1 with a precomputed slider for the demand shock
-slider_figure(ad_curve, "a", [-2.0, -1.0, 0.0, 1.0, 2.0], start=0.0, label="demand shock ā")
+# one picture of Fig. 1 per value of a-bar; the slider shows one at a time
+slider_figure(
+    ad_curve,
+    "a",
+    [-2.0, -1.0, 0.0, 1.0, 2.0],     # the values of a-bar
+    start=0.0,
+    label="demand shock ā",
+)
 ```
 
 **Source.** Adapted from Fig. 13.1 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -1488,39 +1527,96 @@ inflation jumps to $\pi' = 3$ percent. The policy rule raises the real interest 
 $\bar{m}(\pi' - \bar{\pi}) = 0.5$ points, investment falls, and output falls to point $B$. The readout in the title
 follows the chain: inflation, then the interest rate, then output. Figs. 2 and 3 share one function.
 
+First we compute the two numbers of the readout. `move_along_ad` applies the policy rule, equation (1), and
+then the AD curve, equation (2): the rise in the real interest rate, and output at $B$.
+
 ```{python}
-def inflation_rises(pi_new=3.0, m=M_BAR):
-    """Figs. 13.2-13.3: inflation rises from the target to pi_new; the economy moves along AD from A to B."""
+def move_along_ad(pi_new, m):
+    """The policy response and output when inflation moves from the target to pi_new.
+
+    Equation (1):  R - r-bar = m-bar (pi' - pi-bar); then equation (2), the AD curve,
+    gives output at point B
+
+    Arguments
+        pi_new : the new inflation rate, pi', in percent
+        m      : the policy response, m-bar
+    Returns
+        rate : the rise in the real interest rate, R - r-bar, in points
+        Y_B  : output at point B, Y~, in percent
+    """
+    # the policy rule: the real interest rate rises by m-bar per point of inflation
+    rate = m * (pi_new - PI_BAR)
+    # the AD curve: output at the new inflation rate
     Y_B = ad_output(pi_new, m=m)
+    return rate, Y_B
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Figs. 2 and 3, a movement along the AD curve
+def inflation_rises(pi_new=3.0, m=M_BAR):
+    """The AD curve when inflation rises from the target to pi_new: a move from A to B.
+
+    Draws Figs. 2 and 3 (adapted from Figs. 13.2 and 13.3 in Jones). When m is not
+    the baseline value, the baseline AD curve stays behind as a dashed gray line.
+
+    Arguments
+        pi_new : the new inflation rate, pi', in percent
+        m      : the policy response, m-bar
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the numbers of the figure (move_along_ad)
+    rate, Y_B = move_along_ad(pi_new, m)
     fig = asad_figure()
+    # Step 2: the baseline AD curve, dashed gray, only when m-bar has changed
     if m != M_BAR:
         label = "AD (m̄ = 0.5)"
-        if ad_output(-1.0, m=m) > 2.4 and ad_output(-0.3, m=m) < 4.3:   # the new AD would run into this label
+        # no label when the new AD would run into it
+        if ad_output(-1.0, m=m) > 2.4 and ad_output(-0.3, m=m) < 4.3:
             label = ""
         add_ad(fig, label, GRAY, dash="dash")
+    # Step 3: the AD curve, point A, and point B (no second letter on top of A)
     add_ad(fig, "AD", BLUE, m=m)
     add_point(fig, 0.0, PI_BAR, "A")
-    if pi_new != PI_BAR:                                 # no second letter on top of A
+    if pi_new != PI_BAR:
         add_point(fig, Y_B, pi_new, "B")
-    add_arrow(fig, -3.7, PI_BAR, -3.7, pi_new)      # inflation rises ...
-    add_arrow(fig, 0.0, -0.6, Y_B, -0.6)            # ... so output falls
-    rate = m * (pi_new - PI_BAR)
-    asad_axes(fig, f"π: {PI_BAR:.1f} → {pi_new:.1f}%   ⇒   R − r̄ = {rate:.2f}   ⇒   Ỹ: 0.00 → {Y_B:.2f}%")
+    # Step 4: two arrows: inflation rises (on the left) ...
+    add_arrow(fig, -3.7, PI_BAR, -3.7, pi_new)
+    # ... so output falls (at the bottom)
+    add_arrow(fig, 0.0, -0.6, Y_B, -0.6)
+    # Step 5: the title follows the chain: inflation, interest rate, output
+    asad_axes(
+        fig,
+        f"π: {PI_BAR:.1f} → {pi_new:.1f}%   ⇒   R − r̄ = {rate:.2f}   ⇒   "
+        f"Ỹ: 0.00 → {Y_B:.2f}%",
+    )
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(inflation_rises,
-         pi_new=FloatSlider(value=3.0, min=0.0, max=6.0, step=0.5, description="new inflation rate π′ (%)", style=WIDE),
-         m=FloatSlider(value=0.5, min=0.25, max=2.0, step=0.25, description="policy response m̄", style=WIDE));
+# Fig. 2 with sliders for the new inflation rate and the policy response
+interact(
+    inflation_rises,
+    pi_new=FloatSlider(value=3.0, min=0.0, max=6.0, step=0.5,
+                       description="new inflation rate π′ (%)", style=WIDE),
+    m=FloatSlider(value=0.5, min=0.25, max=2.0, step=0.25,
+                  description="policy response m̄", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 2 with a precomputed slider for the new inflation rate
-slider_figure(inflation_rises, "pi_new", [1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 5.0], start=3.0,
-              label="new inflation rate π′ (%)")
+# one picture of Fig. 2 per value of the new inflation rate
+slider_figure(
+    inflation_rises,
+    "pi_new",
+    [1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 5.0],     # the values of pi'
+    start=3.0,
+    label="new inflation rate π′ (%)",
+)
 ```
 
 **Source.** Adapted from Fig. 13.2 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -1541,8 +1637,14 @@ The textbook's example: with $\bar{m} = 1/2$, inflation 2 points above target ra
 1 point. Through the AD curve, that costs $\bar{b} \times 1 = 2$ points of output.
 
 ```{python}
-m, pi = 0.5, 4.0                                 # inflation 2 points above the 2% target
-print(f"Rise in the real interest rate, m (pi - pi_bar) = {m * (pi - PI_BAR):.1f} point")
+# The textbook's example: inflation of 4%, 2 points above the 2% target
+m, pi = 0.5, 4.0
+# equation (1): the rise in the real interest rate
+print(
+    "Rise in the real interest rate, m (pi - pi_bar) = "
+    f"{m * (pi - PI_BAR):.1f} point"
+)
+# equation (2): output on the AD curve
 print(f"Output on the AD curve at pi = 4%:  Y~ = {ad_output(pi):.1f}%")
 ```
 
@@ -1571,15 +1673,27 @@ same rise in inflation as in Fig. 2, so you can compare the two recessions.
 
 ```{python}
 #| kind: widget
-interact(inflation_rises,
-         pi_new=FloatSlider(value=3.0, min=0.0, max=6.0, step=0.5, description="new inflation rate π′ (%)", style=WIDE),
-         m=FloatSlider(value=1.0, min=0.25, max=2.0, step=0.25, description="policy response m̄", style=WIDE));
+# Fig. 3: the same function as Fig. 2, now starting with m-bar = 1
+interact(
+    inflation_rises,
+    pi_new=FloatSlider(value=3.0, min=0.0, max=6.0, step=0.5,
+                       description="new inflation rate π′ (%)", style=WIDE),
+    m=FloatSlider(value=1.0, min=0.25, max=2.0, step=0.25,
+                  description="policy response m̄", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 3 with a precomputed slider for the policy response
-slider_figure(inflation_rises, "m", [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75], start=1.0, label="policy response m̄")
+# one picture of Fig. 3 per value of m-bar
+slider_figure(
+    inflation_rises,
+    "m",
+    [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75],     # the values of m-bar
+    start=1.0,
+    label="policy response m̄",
+)
 ```
 
 **Source.** Adapted from Fig. 13.3 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -1624,35 +1738,72 @@ between this year's inflation and output. When output is above potential, firms 
 and they raise their prices by more than usual to cover the extra costs: inflation rises. The curve crosses
 $\tilde{Y} = 0$ at $\pi_{t-1}$ (plus any inflation shock $\bar{o}$), so it **shifts** whenever inflation changes.
 
+The function below draws the AS curve with `add_as`. It needs only `as_inflation` from Model in code, so all of
+its code is drawing code.
+
 ```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 4, the AS curve
 def as_curve(pi_prev=PI_BAR, nu=NU_BAR, o=0.0):
-    """Fig. 13.4: the AS curve, which crosses Y~ = 0 at last year's inflation plus the shock."""
+    """The AS curve, which crosses Y~ = 0 at last year's inflation plus the shock.
+
+    Draws Fig. 4 (adapted from Fig. 13.4 in Jones). When a parameter differs from the
+    baseline, the baseline AS curve stays behind as a dashed gray line.
+
+    Arguments
+        pi_prev : last year's inflation, pi_{t-1}, in percent
+        nu      : the slope of the AS curve, nu-bar
+        o       : the inflation shock, o-bar
+    Returns
+        a Plotly figure
+    """
     fig = asad_figure()
+    # Step 1: the baseline curve, dashed gray, only when a parameter has changed
     if (pi_prev, nu, o) != (PI_BAR, NU_BAR, 0.0):
         label = "AS (baseline)"
-        if abs(as_inflation(4.0, pi_prev, nu, o) - 6.0) < 0.6:   # the two labels at the right edge would overlap
+        # no label when the two labels at the right edge would overlap
+        if abs(as_inflation(4.0, pi_prev, nu, o) - 6.0) < 0.6:
             label = ""
         add_as(fig, label, GRAY, dash="dash")
+    # Step 2: the new AS curve, and the dot where it crosses Y~ = 0
     add_as(fig, "AS", TEAL, pi_prev, nu, o)
     add_point(fig, 0.0, pi_prev + o, "")
-    asad_axes(fig, f"AS: π = {pi_prev:.1f} + {nu:.2f} × Ỹ + {o:.1f};   at Ỹ = 0, π = {pi_prev + o:.1f}%")
-    fig.update_layout(margin=dict(r=120))               # room for the label "AS (baseline)" at the right edge
+    # Step 3: the title reports the AS equation and inflation at Y~ = 0
+    asad_axes(
+        fig,
+        f"AS: π = {pi_prev:.1f} + {nu:.2f} × Ỹ + {o:.1f};   "
+        f"at Ỹ = 0, π = {pi_prev + o:.1f}%",
+    )
+    # room for the label "AS (baseline)" at the right edge
+    fig.update_layout(margin=dict(r=120))
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(as_curve,
-         pi_prev=FloatSlider(value=2.0, min=0.0, max=6.0, step=0.5, description="last year's inflation π_{t−1} (%)",
-                             style=WIDE),
-         nu=FloatSlider(value=1.0, min=0.25, max=2.0, step=0.25, description="slope ν̄", style=WIDE),
-         o=FloatSlider(value=0.0, min=-2.0, max=3.0, step=0.5, description="inflation shock ō", style=WIDE));
+# Fig. 4 with sliders for last year's inflation, the slope and the shock
+interact(
+    as_curve,
+    pi_prev=FloatSlider(value=2.0, min=0.0, max=6.0, step=0.5,
+                        description="last year's inflation π_{t−1} (%)", style=WIDE),
+    nu=FloatSlider(value=1.0, min=0.25, max=2.0, step=0.25,
+                   description="slope ν̄", style=WIDE),
+    o=FloatSlider(value=0.0, min=-2.0, max=3.0, step=0.5,
+                  description="inflation shock ō", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 4 with a precomputed slider for last year's inflation
-slider_figure(as_curve, "pi_prev", [1.0, 2.0, 3.0, 4.0, 5.0], start=2.0, label="last year's inflation (%)")
+# one picture of Fig. 4 per value of last year's inflation
+slider_figure(
+    as_curve,
+    "pi_prev",
+    [1.0, 2.0, 3.0, 4.0, 5.0],     # the values of pi_{t-1}
+    start=2.0,
+    label="last year's inflation (%)",
+)
 ```
 
 **Source.** Adapted from Fig. 13.4 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -1690,35 +1841,89 @@ change, so $\pi_t = \pi_{t-1}$. The AS curve then requires $\tilde{Y}^* = 0$, an
 $\pi^* = \bar{\pi}$: inflation on target and output at potential. The readout tells you whether the crossing point
 is a steady state.
 
+First the economics. `short_run_point` solves the model for one period, equations (5) and (6), and checks
+whether the crossing point is a steady state, equation (4).
+
 ```{python}
-def asad_diagram(pi_e=PI_BAR, pi_bar=PI_BAR, m=M_BAR, nu=NU_BAR):
-    """Fig. 13.5: the AS and AD curves and the short-run equilibrium where they cross."""
+def short_run_point(pi_e, pi_bar, m, nu):
+    """The short-run equilibrium, and whether it is a steady state (Fig. 5).
+
+    Equations (5) and (6) give the point where AS and AD cross; by equation (4), it
+    is the steady state only when expected inflation equals the target
+
+    Arguments
+        pi_e   : expected inflation, pi_{t-1}, in percent
+        pi_bar : the inflation target, pi-bar
+        m      : the policy response, m-bar
+        nu     : the slope of the AS curve, nu-bar
+    Returns
+        Y, pi : output Y~ and inflation pi where the curves cross, in percent
+        state : "the steady state" or "not a steady state"
+    """
+    # where the AS and AD curves cross (solve_asad)
     Y, pi = solve_asad(pi_e, pi_bar=pi_bar, m=m, nu=nu)
+    # a steady state needs pi_t = pi_{t-1}, so expected inflation must equal the target
+    state = "the steady state"
+    if pi_e != pi_bar:
+        state = "not a steady state"
+    return Y, pi, state
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 5, the AS/AD diagram
+def asad_diagram(pi_e=PI_BAR, pi_bar=PI_BAR, m=M_BAR, nu=NU_BAR):
+    """The AS and AD curves and the short-run equilibrium where they cross.
+
+    Draws Fig. 5 (adapted from Fig. 13.5 in Jones).
+
+    Arguments
+        pi_e   : expected inflation, pi_{t-1}, in percent
+        pi_bar : the inflation target, pi-bar
+        m      : the policy response, m-bar
+        nu     : the slope of the AS curve, nu-bar
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the numbers of the figure (short_run_point)
+    Y, pi, state = short_run_point(pi_e, pi_bar, m, nu)
+    # Step 2: the two curves, and the dot where they cross
     fig = asad_figure()
     add_as(fig, "AS", TEAL, pi_e, nu)
     add_ad(fig, "AD", BLUE, pi_bar=pi_bar, m=m)
     add_point(fig, Y, pi, "")
-    state = "the steady state"
-    if pi_e != pi_bar:
-        state = "not a steady state"
+    # Step 3: the title says whether the crossing point is a steady state
     asad_axes(fig, f"AS and AD cross at Ỹ = {Y:.2f}%, π = {pi:.2f}%: {state}")
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(asad_diagram,
-         pi_e=FloatSlider(value=2.0, min=0.0, max=6.0, step=0.5, description="expected inflation π_{t−1} (%)",
-                          style=WIDE),
-         pi_bar=FloatSlider(value=2.0, min=0.0, max=5.0, step=0.5, description="inflation target π̄ (%)", style=WIDE),
-         m=FloatSlider(value=0.5, min=0.25, max=2.0, step=0.25, description="policy response m̄", style=WIDE),
-         nu=FloatSlider(value=1.0, min=0.25, max=2.0, step=0.25, description="AS slope ν̄", style=WIDE));
+# Fig. 5 with sliders for expected inflation and the three parameters
+interact(
+    asad_diagram,
+    pi_e=FloatSlider(value=2.0, min=0.0, max=6.0, step=0.5,
+                     description="expected inflation π_{t−1} (%)", style=WIDE),
+    pi_bar=FloatSlider(value=2.0, min=0.0, max=5.0, step=0.5,
+                       description="inflation target π̄ (%)", style=WIDE),
+    m=FloatSlider(value=0.5, min=0.25, max=2.0, step=0.25,
+                  description="policy response m̄", style=WIDE),
+    nu=FloatSlider(value=1.0, min=0.25, max=2.0, step=0.25,
+                   description="AS slope ν̄", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 5 with a precomputed slider for expected inflation
-slider_figure(asad_diagram, "pi_e", [1.0, 2.0, 3.0, 4.0, 5.0], start=2.0, label="expected inflation (%)")
+# one picture of Fig. 5 per value of expected inflation
+slider_figure(
+    asad_diagram,
+    "pi_e",
+    [1.0, 2.0, 3.0, 4.0, 5.0],     # the values of expected inflation
+    start=2.0,
+    label="expected inflation (%)",
+)
 ```
 
 **Source.** Adapted from Fig. 13.5 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -1767,81 +1972,163 @@ Figs. 6 to 9 show the same event at different periods, so we write one function.
 `simulate` and draws period `t`: the AS curves of the earlier periods in light teal, the current one in full
 color, and the path so far, with the textbook's letters ($B$, $C$, $D$ for periods 1, 2, 3).
 
-> **Python note.** `path.loc[t]` is the row of period `t`, and `now.pi` is its value in the column `pi`.
-> `path.pi_e[s]` is the value of column `pi_e` in the row of period `s`. `x in some_list` is true when `x` is one
-> of the elements, and `"AD" if s == 0 else "AD₁"` picks the first value when the condition holds, the second
-> otherwise. `round(x, 2) + 0.0` rounds to two decimals; adding `0.0` turns a rounded −0.0 into 0.0, so a title
-> never shows "−0.00".
+The three cells below hold that function and its two helpers, `add_event_curves` and `add_event_path`, which
+the later events reuse. They only call `simulate` and the drawing tools, so all of their code is drawing code.
 
 ```{python}
+#| kind: drawing
+# @title Drawing code: Figs. 6 to 15, the AS and AD curves of an event
 def add_event_curves(fig, path, t, as_periods, m=M_BAR, nu=NU_BAR, col=1):
-    """Curves of a simulated event at period t: the old AS, the AS of as_periods (the last one solid), every AD."""
+    """The curves of a simulated event at period t.
+
+    The original AS curve, the AS curves of as_periods (the last one solid, the
+    earlier ones light teal), and every AD curve up to period t (today's in blue,
+    the older ones dashed gray). Used by Figs. 6 to 15.
+
+    Arguments
+        fig        : the figure to draw on
+        path       : the simulated event, a table from simulate
+        t          : the period shown
+        as_periods : the periods whose AS curves are drawn
+        m          : the policy response, m-bar
+        nu         : the slope of the AS curve, nu-bar
+        col        : the panel, 1 or 2
+    """
+    # Step 1: the original AS and today's. `path.pi_e[s]` is the value of the column
+    # pi_e in the row of period s; today's AS crosses Y~ = 0 at pi_e + o
     first, last = path.pi_e[0], as_periods[-1]
-    today = path.pi_e[last] + path.o[last]                   # where today's AS crosses Y~ = 0
-    near = 0.6 * max(1, nu)          # two AS labels closer than this would overlap (a steep AS exits at the top)
+    today = path.pi_e[last] + path.o[last]
+    # two AS labels closer than this would overlap (a steep AS exits at the top)
+    near = 0.6 * max(1, nu)
     same = today == first
-    old_label = "AS" if same or abs(today - first) > near else ""     # no label on top of today's label
-    add_as(fig, old_label, TEAL if same else GRAY, first, nu, dash="solid" if same else "dash", col=col)
+    # Step 2: the original AS: solid teal if it is today's, dashed gray otherwise,
+    # with no label on top of today's label. `"AS" if c else ""` picks the first
+    # value when the condition c holds, the second otherwise
+    old_label = "AS" if same or abs(today - first) > near else ""
+    color, dash = (TEAL, "solid") if same else (GRAY, "dash")
+    add_as(fig, old_label, color, first, nu, dash=dash, col=col)
+    # Step 3: the AS curves of as_periods, except those equal to the original AS
     for s in as_periods:
         start = path.pi_e[s] + path.o[s]
-        if start != first:                                   # skip curves that equal the original AS
-            label = f"AS<sub>{s}</sub>" if s == last or (s == as_periods[0] and abs(start - today) > near) else ""
-            add_as(fig, label, TEAL if s == last else FADED, path.pi_e[s], nu, path.o[s], col=col)
-    drawn = []                                               # the AD curves already drawn: (a, target)
+        if start != first:
+            # a label on the last one, and on the first one if it is far enough away
+            named = s == last or (s == as_periods[0] and abs(start - today) > near)
+            label = f"AS<sub>{s}</sub>" if named else ""
+            color = TEAL if s == last else FADED     # the earlier ones light teal
+            add_as(fig, label, color, path.pi_e[s], nu, path.o[s], col=col)
+    # Step 4: every AD curve up to period t, each one once. `drawn` lists the pairs
+    # (a, target) already drawn; `x in some_list` is true when x is one of them
+    drawn = []
     for s in range(t + 1):
         pair = (path.a[s], path.target[s])
         if pair not in drawn:
             drawn.append(pair)
             name = "AD" if s == 0 else f"AD<sub>{s}</sub>"
-            shift = abs(pair[0] - path.a[t] + B_BAR * m * (pair[1] - path.target[t]))   # 0 for today's AD
-            if 0 < shift * min(1, 1 / (B_BAR * m)) < 0.6:          # an old label would sit on today's label
+            # how far this AD lies from today's: 0 for today's AD
+            shift = abs(pair[0] - path.a[t] + B_BAR * m * (pair[1] - path.target[t]))
+            # no label when an old label would sit on today's label
+            if 0 < shift * min(1, 1 / (B_BAR * m)) < 0.6:
                 name = ""
-            add_ad(fig, name, BLUE if shift == 0 else GRAY, pair[0], pair[1], m,      # today's AD in blue
-                   dash="solid" if shift == 0 else "dash", col=col)
+            # today's AD in blue, the older ones dashed gray
+            color, dash = (BLUE, "solid") if shift == 0 else (GRAY, "dash")
+            add_ad(fig, name, color, pair[0], pair[1], m, dash=dash, col=col)
 ```
 
 ```{python}
+#| kind: drawing
+# @title Drawing code: Figs. 6 to 15, the path of an event
 def add_event_path(fig, path, t, letters, col=1):
-    """The economy's path from A (period 0) to period t: dots, arrows, and the textbook's letters."""
+    """The economy's path from A (period 0) to period t.
+
+    Dots, an arrow from each period to the next, and the textbook's letters.
+    Used by Figs. 6 to 15.
+
+    Arguments
+        fig     : the figure to draw on
+        path    : the simulated event, a table from simulate
+        t       : the last period drawn
+        letters : {period: letter}, the textbook's letters, e.g. {1: "B"}
+        col     : the panel, 1 or 2
+    """
+    # Step 1: point A, the old steady state of period 0
     add_point(fig, path.Y[0], path.pi[0], "A", col)
+    # Step 2: one arrow and one dot per period
     for s in range(1, t + 1):
         add_arrow(fig, path.Y[s - 1], path.pi[s - 1], path.Y[s], path.pi[s], col)
-        moved = (path.Y[s], path.pi[s]) != (path.Y[0], path.pi[0])   # with no shock, no letter on top of A
+        # with no shock, no letter on top of A
+        moved = (path.Y[s], path.pi[s]) != (path.Y[0], path.pi[0])
         if s in letters and moved:
             add_point(fig, path.Y[s], path.pi[s], letters[s], col)
         else:
             add_point(fig, path.Y[s], path.pi[s], "", col, guides=False)
+```
 
-
-SHOCK_LETTERS = {1: "B", 2: "C", 3: "D"}                     # the textbook's letters for periods 1-3
+```{python}
+#| kind: drawing
+# @title Drawing code: Figs. 6 and 8, the economy t periods after an inflation shock
+# the textbook's letters for periods 1-3
+SHOCK_LETTERS = {1: "B", 2: "C", 3: "D"}
 
 
 def inflation_shock(o=2.0, t=1, m=M_BAR, nu=NU_BAR):
-    """Figs. 13.6 and 13.8: the economy t periods after a one-period inflation shock o."""
+    """The AS/AD diagram t periods after a one-period inflation shock o.
+
+    Draws Figs. 6 and 8 (adapted from Figs. 13.6 and 13.8 in Jones).
+
+    Arguments
+        o  : the inflation shock in period 1, o-bar
+        t  : the period shown
+        m  : the policy response, m-bar
+        nu : the slope of the AS curve, nu-bar
+    Returns
+        a Plotly figure
+    """
+    # Step 1: simulate the event: the shock o hits in period 1 only
     path = simulate(NO_SHOCK, shock_list(o, 1), m=m, nu=nu)
+    # Step 2: the curves of periods 1 to t, and the path so far
     fig = asad_figure()
     add_event_curves(fig, path, t, list(range(1, t + 1)), m, nu)
     add_event_path(fig, path, t, SHOCK_LETTERS)
+    # Step 3: the title reports period t. `path.loc[t]` is the row of period t, and
+    # `now.pi` its value in the column pi. `round(x, 2) + 0.0` rounds to two
+    # decimals; adding 0.0 turns a rounded -0.0 into 0.0, so no title shows "-0.00"
     now = path.loc[t]
-    asad_axes(fig, f"Period {t}: π = {now.pi:.2f}%, Ỹ = {round(now.Y, 2) + 0.0:.2f}%   (shock ō = {o:.1f} in period 1 only)")
+    Y_now = round(now.Y, 2) + 0.0
+    asad_axes(
+        fig,
+        f"Period {t}: π = {now.pi:.2f}%, Ỹ = {Y_now:.2f}%   "
+        f"(shock ō = {o:.1f} in period 1 only)",
+    )
     return fig
 ```
 
-> **Python note.** `IntSlider` is a slider for whole numbers, here the period `t`.
-
 ```{python}
 #| kind: widget
-interact(inflation_shock,
-         o=FloatSlider(value=2.0, min=-2.0, max=4.0, step=0.5, description="inflation shock ō", style=WIDE),
-         t=IntSlider(value=1, min=1, max=12, step=1, description="period t", style=WIDE),
-         m=FloatSlider(value=0.5, min=0.25, max=2.0, step=0.25, description="policy response m̄", style=WIDE),
-         nu=FloatSlider(value=1.0, min=0.25, max=2.0, step=0.25, description="AS slope ν̄", style=WIDE));
+# Fig. 6 with sliders. `IntSlider` is a slider for whole numbers, here the period t
+interact(
+    inflation_shock,
+    o=FloatSlider(value=2.0, min=-2.0, max=4.0, step=0.5,
+                  description="inflation shock ō", style=WIDE),
+    t=IntSlider(value=1, min=1, max=12, step=1,
+                description="period t", style=WIDE),
+    m=FloatSlider(value=0.5, min=0.25, max=2.0, step=0.25,
+                  description="policy response m̄", style=WIDE),
+    nu=FloatSlider(value=1.0, min=0.25, max=2.0, step=0.25,
+                   description="AS slope ν̄", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 6 with a precomputed slider for the size of the shock
-slider_figure(inflation_shock, "o", [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0], start=2.0, label="inflation shock ō")
+# one picture of Fig. 6 per size of the shock o-bar
+slider_figure(
+    inflation_shock,
+    "o",
+    [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0],     # the values of o-bar
+    start=2.0,
+    label="inflation shock ō",
+)
 ```
 
 **Source.** Adapted from Fig. 13.6 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -1878,36 +2165,77 @@ the new curve AS₂ crosses $\tilde{Y} = 0$ at $\pi_1$, above the original AS (p
 inflation, and expectations adjust only slowly: inflation is **sticky**. In panel (b) the economy moves from $B$ to
 $C$: inflation falls a little, and the central bank lets output recover a little, though it stays below potential.
 
-> **Python note.** `for col in [1, 2]:` draws the same curves in both panels.
+The function below draws the two panels. It simulates the event with `simulate`, as in Fig. 6, so all of its
+code is drawing code.
 
 ```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 7, two periods after an inflation shock
 def two_periods(o=2.0, m=M_BAR, nu=NU_BAR):
-    """Fig. 13.7: (a) the AS curve of period 2 and (b) the move from B to C."""
+    """The AS curve of period 2 (a) and the move from B to C (b).
+
+    Draws Fig. 7 (adapted from Fig. 13.7 in Jones).
+
+    Arguments
+        o  : the inflation shock in period 1, o-bar
+        m  : the policy response, m-bar
+        nu : the slope of the AS curve, nu-bar
+    Returns
+        a Plotly figure
+    """
+    # Step 1: simulate the event: the shock o hits in period 1 only
     path = simulate(NO_SHOCK, shock_list(o, 1), m=m, nu=nu)
-    fig = asad_figure(2, ("(a) Period 2: the AS curve moves to AS<sub>2</sub>", "(b) Period 2: the Fed steers the economy to C"))
+    # Step 2: two panels; `for col in [1, 2]:` draws the same curves in both
+    fig = asad_figure(
+        2,
+        (
+            "(a) Period 2: the AS curve moves to AS<sub>2</sub>",
+            "(b) Period 2: the Fed steers the economy to C",
+        ),
+    )
     for col in [1, 2]:
         add_event_curves(fig, path, 2, [1, 2], m, nu, col)
+    # Step 3: panel (a): the path to B, and a dot where AS2 crosses Y~ = 0, at pi_1
     add_event_path(fig, path, 1, SHOCK_LETTERS, col=1)
-    add_point(fig, 0.0, path.pi[1], "", col=1)               # AS2 crosses Y~ = 0 at pi_1
+    add_point(fig, 0.0, path.pi[1], "", col=1)
+    # panel (b): the path on to C
     add_event_path(fig, path, 2, SHOCK_LETTERS, col=2)
+    # Step 4: the title reports where AS2 starts, and point C
     now = path.loc[2]
-    asad_axes(fig, f"Period 2: AS₂ starts from π₁ = {path.pi[1]:.2f}%; C: π = {now.pi:.2f}%, Ỹ = {now.Y:.2f}%",
-              panels=2)
+    asad_axes(
+        fig,
+        f"Period 2: AS₂ starts from π₁ = {path.pi[1]:.2f}%; "
+        f"C: π = {now.pi:.2f}%, Ỹ = {now.Y:.2f}%",
+        panels=2,
+    )
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(two_periods,
-         o=FloatSlider(value=2.0, min=-2.0, max=4.0, step=0.5, description="inflation shock ō", style=WIDE),
-         m=FloatSlider(value=0.5, min=0.25, max=2.0, step=0.25, description="policy response m̄", style=WIDE),
-         nu=FloatSlider(value=1.0, min=0.25, max=2.0, step=0.25, description="AS slope ν̄", style=WIDE));
+# Fig. 7 with sliders for the shock and the two parameters
+interact(
+    two_periods,
+    o=FloatSlider(value=2.0, min=-2.0, max=4.0, step=0.5,
+                  description="inflation shock ō", style=WIDE),
+    m=FloatSlider(value=0.5, min=0.25, max=2.0, step=0.25,
+                  description="policy response m̄", style=WIDE),
+    nu=FloatSlider(value=1.0, min=0.25, max=2.0, step=0.25,
+                   description="AS slope ν̄", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 7 with a precomputed slider for the policy response
-slider_figure(two_periods, "m", [0.25, 0.5, 1.0, 1.5, 2.0], start=0.5, label="policy response m̄")
+# one picture of Fig. 7 per value of m-bar
+slider_figure(
+    two_periods,
+    "m",
+    [0.25, 0.5, 1.0, 1.5, 2.0],     # the values of m-bar
+    start=0.5,
+    label="policy response m̄",
+)
 ```
 
 **Source.** Adapted from Fig. 13.7 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -1945,17 +2273,31 @@ slider to watch the AS curve creep back toward its original position.
 
 ```{python}
 #| kind: widget
-interact(inflation_shock,
-         o=FloatSlider(value=2.0, min=-2.0, max=4.0, step=0.5, description="inflation shock ō", style=WIDE),
-         t=IntSlider(value=3, min=1, max=12, step=1, description="period t", style=WIDE),
-         m=FloatSlider(value=0.5, min=0.25, max=2.0, step=0.25, description="policy response m̄", style=WIDE),
-         nu=FloatSlider(value=1.0, min=0.25, max=2.0, step=0.25, description="AS slope ν̄", style=WIDE));
+# Fig. 8: the same function as Fig. 6, now starting at period t = 3
+interact(
+    inflation_shock,
+    o=FloatSlider(value=2.0, min=-2.0, max=4.0, step=0.5,
+                  description="inflation shock ō", style=WIDE),
+    t=IntSlider(value=3, min=1, max=12, step=1,
+                description="period t", style=WIDE),
+    m=FloatSlider(value=0.5, min=0.25, max=2.0, step=0.25,
+                  description="policy response m̄", style=WIDE),
+    nu=FloatSlider(value=1.0, min=0.25, max=2.0, step=0.25,
+                   description="AS slope ν̄", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 8 with a precomputed slider for the period
-slider_figure(inflation_shock, "t", [1, 2, 3, 4, 5, 6, 8], start=3, label="period t")
+# one picture of Fig. 8 per period t
+slider_figure(
+    inflation_shock,
+    "t",
+    [1, 2, 3, 4, 5, 6, 8],     # the periods shown
+    start=3,
+    label="period t",
+)
 ```
 
 **Source.** Adapted from Fig. 13.8 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -1992,24 +2334,112 @@ Panel (a) is the textbook's summary: the jump from $A$ to $B$, then the slow ret
 Panel (b) adds the same path as two time series, so you can read how long the stagflation lasts. One function draws
 the summaries of all three events (Figs. 9, 11 and 15).
 
+Two numbers sum up the event: the peak of inflation, and the sum of output over all periods, the total
+recession of equation (8). `inflation_shock_episode` simulates the event and computes both.
+
 ```{python}
+def inflation_shock_episode(o, m, nu):
+    """The whole inflation-shock episode, and its two key numbers (Fig. 9).
+
+    Equations (5) and (6) period by period (simulate); the sum of output is the
+    total recession of equation (8), -o-bar / nu-bar
+
+    Arguments
+        o  : the inflation shock in period 1, o-bar
+        m  : the policy response, m-bar
+        nu : the slope of the AS curve, nu-bar
+    Returns
+        path  : the simulated event, one row per period
+        peak  : the highest inflation rate, in percent
+        total : the sum of output Y~ over all periods
+    """
+    # the shock o hits in period 1 only
+    path = simulate(NO_SHOCK, shock_list(o, 1), m=m, nu=nu)
+    # the peak of inflation, and the total recession (equation 8)
+    peak = path.pi.max()
+    total = path.Y.sum()
+    return path, peak, total
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Figs. 9, 11 and 15, inflation and output over time
 def add_time_paths(fig, path, col=2):
-    """Inflation and output over time, with the inflation target, in panel col."""
-    fig.add_trace(go.Scatter(x=path.period, y=path.pi, name="Inflation π", mode="lines+markers",
-                             line=dict(color=BLUE, width=3)), row=1, col=col)
-    fig.add_trace(go.Scatter(x=path.period, y=path.Y, name="Output Ỹ", mode="lines+markers",
-                             line=dict(color=GREEN, width=3)), row=1, col=col)
-    fig.add_trace(go.Scatter(x=[0, T_MAX], y=[path.target[1], path.target[1]], name="Target π̄", mode="lines",
-                             line=dict(color=GRAY, width=2, dash="dot")), row=1, col=col)
-    fig.update_xaxes(title_text="Period", range=[-0.5, T_MAX + 0.5], tickvals=[0, 5, 10, 15, 20], row=1, col=col)
-    low = min(-3, path.Y.min() - 0.5, path.pi.min() - 0.5)     # wider than -3 to 7 only if a path would leave it
+    """Inflation and output over time, with the inflation target, in panel col.
+
+    Panel (b) of Figs. 9, 11 and 15.
+
+    Arguments
+        fig  : the two-panel figure
+        path : the simulated event, a table from simulate
+        col  : the panel to draw in
+    """
+    # Step 1: inflation and output, one dot per period
+    inflation = go.Scatter(
+        x=path.period,
+        y=path.pi,
+        name="Inflation π",
+        mode="lines+markers",
+        line=dict(color=BLUE, width=3),
+    )
+    fig.add_trace(inflation, row=1, col=col)
+    output = go.Scatter(
+        x=path.period,
+        y=path.Y,
+        name="Output Ỹ",
+        mode="lines+markers",
+        line=dict(color=GREEN, width=3),
+    )
+    fig.add_trace(output, row=1, col=col)
+    # Step 2: the target, a dotted gray line
+    target = go.Scatter(
+        x=[0, T_MAX],
+        y=[path.target[1], path.target[1]],
+        name="Target π̄",
+        mode="lines",
+        line=dict(color=GRAY, width=2, dash="dot"),
+    )
+    fig.add_trace(target, row=1, col=col)
+    # Step 3: the axes; the vertical one wider than -3 to 7 only if a path leaves it
+    fig.update_xaxes(
+        title_text="Period",
+        range=[-0.5, T_MAX + 0.5],
+        tickvals=[0, 5, 10, 15, 20],
+        row=1,
+        col=col,
+    )
+    low = min(-3, path.Y.min() - 0.5, path.pi.min() - 0.5)
     high = max(7, path.pi.max() + 0.5)
-    fig.update_yaxes(title_text="Percent", range=[low, high], tickvals=list(range(-12, 14, 2)), row=1, col=col)
+    fig.update_yaxes(
+        title_text="Percent",
+        range=[low, high],
+        tickvals=list(range(-12, 14, 2)),
+        row=1,
+        col=col,
+    )
+```
 
-
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 9, the summary of an event and of the inflation shock
 def event_summary(path, letters, as_periods, m=M_BAR, nu=NU_BAR):
-    """Figs. 13.9, 13.11, 13.15: (a) the whole path in the AS/AD diagram, (b) the same path over time."""
-    fig = asad_figure(2, ("(a) The AS/AD diagram", "(b) Inflation and output over time"))
+    """The whole path in the AS/AD diagram (a) and the same path over time (b).
+
+    Draws Figs. 9, 11 and 15 (adapted from Figs. 13.9, 13.11 and 13.15 in Jones),
+    without their titles.
+
+    Arguments
+        path       : the simulated event, a table from simulate
+        letters    : {period: letter}, the textbook's letters
+        as_periods : the periods whose AS curves are drawn
+        m          : the policy response, m-bar
+        nu         : the slope of the AS curve, nu-bar
+    Returns
+        a Plotly figure
+    """
+    # panel (a): the AS/AD diagram with the whole path; panel (b): the time paths
+    titles = ("(a) The AS/AD diagram", "(b) Inflation and output over time")
+    fig = asad_figure(2, titles)
     add_event_curves(fig, path, T_MAX, as_periods, m, nu)
     add_event_path(fig, path, T_MAX, letters)
     add_time_paths(fig, path)
@@ -2017,25 +2447,55 @@ def event_summary(path, letters, as_periods, m=M_BAR, nu=NU_BAR):
 
 
 def inflation_shock_summary(o=2.0, m=M_BAR, nu=NU_BAR):
-    """Fig. 13.9: a one-period inflation shock o, from the jump to B back to the steady state A."""
-    path = simulate(NO_SHOCK, shock_list(o, 1), m=m, nu=nu)
+    """A one-period inflation shock o, from the jump to B back to the steady state A.
+
+    Draws Fig. 9 (adapted from Fig. 13.9 in Jones).
+
+    Arguments
+        o  : the inflation shock in period 1, o-bar
+        m  : the policy response, m-bar
+        nu : the slope of the AS curve, nu-bar
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the episode and its numbers (inflation_shock_episode)
+    path, peak, total = inflation_shock_episode(o, m, nu)
+    # Step 2: both panels, with the letter B and the AS curve of period 1
     fig = event_summary(path, {1: "B"}, [1], m, nu)
-    asad_axes(fig, f"Shock ō = {o:.1f}: inflation peaks at {path.pi.max():.2f}%; sum of Ỹ = {round(path.Y.sum(), 2) + 0.0:.2f}")
+    # Step 3: the title reports the peak and the total recession
+    total = round(total, 2) + 0.0                    # + 0.0 avoids "-0.00"
+    asad_axes(
+        fig,
+        f"Shock ō = {o:.1f}: inflation peaks at {peak:.2f}%; sum of Ỹ = {total:.2f}",
+    )
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(inflation_shock_summary,
-         o=FloatSlider(value=2.0, min=-2.0, max=4.0, step=0.5, description="inflation shock ō", style=WIDE),
-         m=FloatSlider(value=0.5, min=0.25, max=2.0, step=0.25, description="policy response m̄", style=WIDE),
-         nu=FloatSlider(value=1.0, min=0.25, max=2.0, step=0.25, description="AS slope ν̄", style=WIDE));
+# Fig. 9 with sliders for the shock and the two parameters
+interact(
+    inflation_shock_summary,
+    o=FloatSlider(value=2.0, min=-2.0, max=4.0, step=0.5,
+                  description="inflation shock ō", style=WIDE),
+    m=FloatSlider(value=0.5, min=0.25, max=2.0, step=0.25,
+                  description="policy response m̄", style=WIDE),
+    nu=FloatSlider(value=1.0, min=0.25, max=2.0, step=0.25,
+                   description="AS slope ν̄", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 9 with a precomputed slider for the slope of the AS curve
-slider_figure(inflation_shock_summary, "nu", [0.25, 0.5, 1.0, 1.5, 2.0], start=1.0, label="AS slope ν̄")
+# one picture of Fig. 9 per value of nu-bar
+slider_figure(
+    inflation_shock_summary,
+    "nu",
+    [0.25, 0.5, 1.0, 1.5, 2.0],     # the values of nu-bar
+    start=1.0,
+    label="AS slope ν̄",
+)
 ```
 
 **Source.** Adapted from Fig. 13.9 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612) Panel (b), the time paths of inflation and output, is our addition.
@@ -2058,14 +2518,15 @@ With $\bar{b}\bar{m}\bar{\nu} = 1$, the AS/AD solution makes the gap between inf
 factor $1/(1 + \bar{b}\bar{m}\bar{\nu}) = 1/2$ each period (equation 7).
 
 ```{python}
+# The inflation shock, period by period, with the gap to the target
 path = simulate(NO_SHOCK, shock_list(2.0, 1))
 path["gap"] = path.pi - PI_BAR                   # inflation minus the target
-path["gap ratio"] = path.gap / path.gap.shift(1)  # this period's gap divided by last period's
+# this period's gap divided by last period's: `path.gap.shift(1)` moves the
+# column down by one row, so each row sees last period's gap
+path["gap ratio"] = path.gap / path.gap.shift(1)
+# `path.loc[0:6, [...]]` keeps rows 0 to 6 and the listed columns
 path.loc[0:6, ["period", "Y", "pi", "gap", "gap ratio"]].round(3)
 ```
-
-> **Python note.** `path.gap.shift(1)` moves the column down by one row, so each row sees last period's gap.
-> `path.loc[0:6, [...]]` keeps rows 0 to 6 and the listed columns.
 
 From period 2 on the ratio is exactly 0.5. (Period 0 has no gap, so the ratio of period 1 divides by zero and
 pandas shows `inf`.) Inflation is 3, 2.5, 2.25, ... and output −1, −0.5, −0.25, ...
@@ -2101,33 +2562,71 @@ at any inflation rate the new rule wants lower output. Inflation of 4 percent is
 rate rises, and the economy moves from $A$ to $B$. The function reuses `add_event_curves` and `add_event_path`:
 only the event changes.
 
+It simulates the event with `simulate`, so all of its code is drawing code.
+
 ```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 10, the economy t periods after the target is cut
 def disinflation(pi_new=2.0, t=1, m=M_BAR, nu=NU_BAR):
-    """Figs. 13.10-13.11: t periods after the inflation target is cut from PI_OLD to pi_new."""
+    """The AS/AD diagram t periods after the target is cut from PI_OLD to pi_new.
+
+    Draws Fig. 10 (adapted from Figs. 13.10 and 13.11 in Jones); from period 2 on,
+    it also marks the new steady state C.
+
+    Arguments
+        pi_new : the new inflation target, pi-bar'
+        t      : the period shown
+        m      : the policy response, m-bar
+        nu     : the slope of the AS curve, nu-bar
+    Returns
+        a Plotly figure
+    """
+    # Step 1: simulate the event: inflation starts at PI_OLD, the target is pi_new
     path = simulate(NO_SHOCK, NO_SHOCK, PI_OLD, pi_new, m, nu)
+    # Step 2: the curves of periods 1 to t, the path so far, and C after period 1
     fig = asad_figure()
     add_event_curves(fig, path, t, list(range(1, t + 1)), m, nu)
     add_event_path(fig, path, t, {1: "B"})
     if t > 1:
-        add_point(fig, 0.0, pi_new, "C")                     # the new steady state
+        add_point(fig, 0.0, pi_new, "C")             # the new steady state
+    # Step 3: the title reports period t (+ 0.0 avoids "-0.00")
     now = path.loc[t]
-    asad_axes(fig, f"Target {PI_OLD:.1f} → {pi_new:.1f}%.  Period {t}: π = {now.pi:.2f}%, Ỹ = {round(now.Y, 2) + 0.0:.2f}%")
+    Y_now = round(now.Y, 2) + 0.0
+    asad_axes(
+        fig,
+        f"Target {PI_OLD:.1f} → {pi_new:.1f}%.  "
+        f"Period {t}: π = {now.pi:.2f}%, Ỹ = {Y_now:.2f}%",
+    )
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(disinflation,
-         pi_new=FloatSlider(value=2.0, min=0.0, max=4.0, step=0.5, description="new target π̄′ (%)", style=WIDE),
-         t=IntSlider(value=1, min=1, max=12, step=1, description="period t", style=WIDE),
-         m=FloatSlider(value=0.5, min=0.25, max=2.0, step=0.25, description="policy response m̄", style=WIDE),
-         nu=FloatSlider(value=1.0, min=0.25, max=2.0, step=0.25, description="AS slope ν̄", style=WIDE));
+# Fig. 10 with sliders for the new target, the period and the two parameters
+interact(
+    disinflation,
+    pi_new=FloatSlider(value=2.0, min=0.0, max=4.0, step=0.5,
+                       description="new target π̄′ (%)", style=WIDE),
+    t=IntSlider(value=1, min=1, max=12, step=1,
+                description="period t", style=WIDE),
+    m=FloatSlider(value=0.5, min=0.25, max=2.0, step=0.25,
+                  description="policy response m̄", style=WIDE),
+    nu=FloatSlider(value=1.0, min=0.25, max=2.0, step=0.25,
+                   description="AS slope ν̄", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 10 with a precomputed slider for the new target
-slider_figure(disinflation, "pi_new", [0.0, 1.0, 2.0, 3.0, 4.0], start=2.0, label="new target π̄′ (%)")
+# one picture of Fig. 10 per value of the new target
+slider_figure(
+    disinflation,
+    "pi_new",
+    [0.0, 1.0, 2.0, 3.0, 4.0],     # the values of pi-bar'
+    start=2.0,
+    label="new target π̄′ (%)",
+)
 ```
 
 **Source.** Adapted from Fig. 13.10 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -2163,28 +2662,86 @@ After period 1, firms expect lower inflation, so the AS curve shifts down period
 inflation shock. The economy slides down AD₁ from $B$ to the new steady state $C$, where inflation equals the new
 target and output is back at potential. The summary function of Fig. 9 draws it; we add the point $C$.
 
+The key number is the output lost on the way, the cost of the disinflation (equation 8).
+`disinflation_episode` simulates the event and computes it.
+
 ```{python}
-def disinflation_summary(pi_new=2.0, m=M_BAR, nu=NU_BAR):
-    """Fig. 13.11: from A through B to the new steady state C, in the diagram and over time."""
+def disinflation_episode(pi_new, m, nu):
+    """The whole disinflation, and the output it costs (Fig. 11).
+
+    Equations (5) and (6) period by period (simulate); by equation (8), the output
+    lost is close to (pi-bar - pi-bar') / nu-bar
+
+    Arguments
+        pi_new : the new inflation target, pi-bar'
+        m      : the policy response, m-bar
+        nu     : the slope of the AS curve, nu-bar
+    Returns
+        path : the simulated event, one row per period
+        loss : the output lost over all periods, in percent of potential output
+    """
+    # inflation starts at the old target PI_OLD; the new target is pi_new
     path = simulate(NO_SHOCK, NO_SHOCK, PI_OLD, pi_new, m, nu)
+    # the output lost: minus the sum of output over all periods
+    loss = -path.Y.sum()
+    return path, loss
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 11, the dynamics of disinflation
+def disinflation_summary(pi_new=2.0, m=M_BAR, nu=NU_BAR):
+    """From A through B to the new steady state C, in the diagram and over time.
+
+    Draws Fig. 11 (adapted from Fig. 13.11 in Jones).
+
+    Arguments
+        pi_new : the new inflation target, pi-bar'
+        m      : the policy response, m-bar
+        nu     : the slope of the AS curve, nu-bar
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the episode and its cost (disinflation_episode)
+    path, loss = disinflation_episode(pi_new, m, nu)
+    # Step 2: both panels, with the letter B, the last AS curve and the point C
     fig = event_summary(path, {1: "B"}, [T_MAX], m, nu)
     add_point(fig, 0.0, pi_new, "C")
-    asad_axes(fig, f"Target {PI_OLD:.1f} → {pi_new:.1f}%: output lost over {T_MAX} periods = {round(-path.Y.sum(), 2) + 0.0:.2f}%")
+    # Step 3: the title reports the output lost
+    loss = round(loss, 2) + 0.0                      # + 0.0 avoids "-0.00"
+    asad_axes(
+        fig,
+        f"Target {PI_OLD:.1f} → {pi_new:.1f}%: "
+        f"output lost over {T_MAX} periods = {loss:.2f}%",
+    )
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(disinflation_summary,
-         pi_new=FloatSlider(value=2.0, min=0.0, max=4.0, step=0.5, description="new target π̄′ (%)", style=WIDE),
-         m=FloatSlider(value=0.5, min=0.25, max=2.0, step=0.25, description="policy response m̄", style=WIDE),
-         nu=FloatSlider(value=1.0, min=0.25, max=2.0, step=0.25, description="AS slope ν̄", style=WIDE));
+# Fig. 11 with sliders for the new target and the two parameters
+interact(
+    disinflation_summary,
+    pi_new=FloatSlider(value=2.0, min=0.0, max=4.0, step=0.5,
+                       description="new target π̄′ (%)", style=WIDE),
+    m=FloatSlider(value=0.5, min=0.25, max=2.0, step=0.25,
+                  description="policy response m̄", style=WIDE),
+    nu=FloatSlider(value=1.0, min=0.25, max=2.0, step=0.25,
+                   description="AS slope ν̄", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 11 with a precomputed slider for the policy response
-slider_figure(disinflation_summary, "m", [0.25, 0.5, 1.0, 1.5, 2.0], start=0.5, label="policy response m̄")
+# one picture of Fig. 11 per value of m-bar
+slider_figure(
+    disinflation_summary,
+    "m",
+    [0.25, 0.5, 1.0, 1.5, 2.0],     # the values of m-bar
+    start=0.5,
+    label="policy response m̄",
+)
 ```
 
 **Source.** Adapted from Fig. 13.11 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -2231,34 +2788,73 @@ demand and raise their prices, so the economy moves up the AS curve from $A$ to 
 output, part as more inflation. In our baseline the shock $\bar{a} = 2$ lasts nine periods. One function draws
 Figs. 12 to 14, with the textbook's letters $B$, $C$ and $D$ at periods 1, 8 and 10.
 
+The function below simulates the event with `simulate` and draws period $t$, so all of its code is drawing
+code.
+
 ```{python}
+#| kind: drawing
+# @title Drawing code: Figs. 12 to 14, the economy t periods after a demand shock
+# the textbook's letters for periods 1, 8 and 10
 DEMAND_LETTERS = {1: "B", 8: "C", 10: "D"}
 
 
 def demand_shock(a=2.0, t=1, m=M_BAR, nu=NU_BAR):
-    """Figs. 13.12-13.14: t periods after a demand shock a that lasts from period 1 to A_LAST."""
+    """The AS/AD diagram t periods after a demand shock a that lasts to period A_LAST.
+
+    Draws Figs. 12 to 14 (adapted from Figs. 13.12 to 13.14 in Jones).
+
+    Arguments
+        a  : the demand shock in periods 1 to A_LAST, a-bar
+        t  : the period shown
+        m  : the policy response, m-bar
+        nu : the slope of the AS curve, nu-bar
+    Returns
+        a Plotly figure
+    """
+    # Step 1: simulate the event: the shock a lasts from period 1 to A_LAST
     path = simulate(shock_list(a, A_LAST), NO_SHOCK, m=m, nu=nu)
+    # Step 2: the curves of periods 1 to t, and the path so far
     fig = asad_figure()
     add_event_curves(fig, path, t, list(range(1, t + 1)), m, nu)
     add_event_path(fig, path, t, DEMAND_LETTERS)
+    # Step 3: the title reports period t (+ 0.0 avoids "-0.00")
     now = path.loc[t]
-    asad_axes(fig, f"Period {t}: π = {now.pi:.2f}%, Ỹ = {round(now.Y, 2) + 0.0:.2f}%   (ā = {a:.1f} in periods 1–{A_LAST})")
+    Y_now = round(now.Y, 2) + 0.0
+    asad_axes(
+        fig,
+        f"Period {t}: π = {now.pi:.2f}%, Ỹ = {Y_now:.2f}%   "
+        f"(ā = {a:.1f} in periods 1–{A_LAST})",
+    )
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(demand_shock,
-         a=FloatSlider(value=2.0, min=-3.0, max=4.0, step=0.5, description="demand shock ā", style=WIDE),
-         t=IntSlider(value=1, min=1, max=20, step=1, description="period t", style=WIDE),
-         m=FloatSlider(value=0.5, min=0.25, max=2.0, step=0.25, description="policy response m̄", style=WIDE),
-         nu=FloatSlider(value=1.0, min=0.25, max=2.0, step=0.25, description="AS slope ν̄", style=WIDE));
+# Fig. 12 with sliders; the period goes up to 20, past the end of the shock
+interact(
+    demand_shock,
+    a=FloatSlider(value=2.0, min=-3.0, max=4.0, step=0.5,
+                  description="demand shock ā", style=WIDE),
+    t=IntSlider(value=1, min=1, max=20, step=1,
+                description="period t", style=WIDE),
+    m=FloatSlider(value=0.5, min=0.25, max=2.0, step=0.25,
+                  description="policy response m̄", style=WIDE),
+    nu=FloatSlider(value=1.0, min=0.25, max=2.0, step=0.25,
+                   description="AS slope ν̄", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 12 with a precomputed slider for the demand shock
-slider_figure(demand_shock, "a", [-2.0, -1.0, 0.0, 1.0, 2.0, 3.0, 4.0], start=2.0, label="demand shock ā")
+# one picture of Fig. 12 per value of a-bar
+slider_figure(
+    demand_shock,
+    "a",
+    [-2.0, -1.0, 0.0, 1.0, 2.0, 3.0, 4.0],     # the values of a-bar
+    start=2.0,
+    label="demand shock ā",
+)
 ```
 
 **Source.** Adapted from Fig. 13.12 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -2300,17 +2896,31 @@ It is the same `demand_shock` function, now at $t = 8$.
 
 ```{python}
 #| kind: widget
-interact(demand_shock,
-         a=FloatSlider(value=2.0, min=-3.0, max=4.0, step=0.5, description="demand shock ā", style=WIDE),
-         t=IntSlider(value=8, min=1, max=20, step=1, description="period t", style=WIDE),
-         m=FloatSlider(value=0.5, min=0.25, max=2.0, step=0.25, description="policy response m̄", style=WIDE),
-         nu=FloatSlider(value=1.0, min=0.25, max=2.0, step=0.25, description="AS slope ν̄", style=WIDE));
+# Fig. 13: the same function as Fig. 12, now starting at period t = 8
+interact(
+    demand_shock,
+    a=FloatSlider(value=2.0, min=-3.0, max=4.0, step=0.5,
+                  description="demand shock ā", style=WIDE),
+    t=IntSlider(value=8, min=1, max=20, step=1,
+                description="period t", style=WIDE),
+    m=FloatSlider(value=0.5, min=0.25, max=2.0, step=0.25,
+                  description="policy response m̄", style=WIDE),
+    nu=FloatSlider(value=1.0, min=0.25, max=2.0, step=0.25,
+                   description="AS slope ν̄", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 13 with a precomputed slider for the period
-slider_figure(demand_shock, "t", [1, 2, 3, 4, 6, 8, 9], start=8, label="period t")
+# one picture of Fig. 13 per period t, while the shock lasts
+slider_figure(
+    demand_shock,
+    "t",
+    [1, 2, 3, 4, 6, 8, 9],     # the periods shown
+    start=8,
+    label="period t",
+)
 ```
 
 **Source.** Adapted from Fig. 13.13 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -2329,6 +2939,7 @@ slider_figure(demand_shock, "t", [1, 2, 3, 4, 6, 8, 9], start=8, label="period t
 #### Key numbers: inflation at point C
 
 ```{python}
+# Inflation at point C: equation (9), against the simulation after eight periods
 a, path = 2.0, simulate(shock_list(2.0, A_LAST), NO_SHOCK)
 print(f"pi_c = pi_bar + a / (b m) = {PI_BAR + a / (B_BAR * M_BAR):.3f}%")
 print(f"Simulated inflation in period 8 (the textbook's pi_8): {path.pi[8]:.3f}%")
@@ -2364,17 +2975,31 @@ curve back to $A$. Again the same function, now at $t = 10$.
 
 ```{python}
 #| kind: widget
-interact(demand_shock,
-         a=FloatSlider(value=2.0, min=-3.0, max=4.0, step=0.5, description="demand shock ā", style=WIDE),
-         t=IntSlider(value=10, min=1, max=20, step=1, description="period t", style=WIDE),
-         m=FloatSlider(value=0.5, min=0.25, max=2.0, step=0.25, description="policy response m̄", style=WIDE),
-         nu=FloatSlider(value=1.0, min=0.25, max=2.0, step=0.25, description="AS slope ν̄", style=WIDE));
+# Fig. 14: the same function as Fig. 12, now starting at period t = 10
+interact(
+    demand_shock,
+    a=FloatSlider(value=2.0, min=-3.0, max=4.0, step=0.5,
+                  description="demand shock ā", style=WIDE),
+    t=IntSlider(value=10, min=1, max=20, step=1,
+                description="period t", style=WIDE),
+    m=FloatSlider(value=0.5, min=0.25, max=2.0, step=0.25,
+                  description="policy response m̄", style=WIDE),
+    nu=FloatSlider(value=1.0, min=0.25, max=2.0, step=0.25,
+                   description="AS slope ν̄", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 14 with a precomputed slider for the period
-slider_figure(demand_shock, "t", [9, 10, 11, 12, 14, 16, 20], start=10, label="period t")
+# one picture of Fig. 14 per period t, after the shock ends
+slider_figure(
+    demand_shock,
+    "t",
+    [9, 10, 11, 12, 14, 16, 20],     # the periods shown
+    start=10,
+    label="period t",
+)
 ```
 
 **Source.** Adapted from Fig. 13.14 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -2411,28 +3036,92 @@ The economy jumps from $A$ to $B$, drifts to $C$, jumps to $D$ when the shock en
 **counterclockwise loop**. The textbook lets the economy reach $C$ before the boom ends, but the boom could end sooner.
 The slider sets the last period of the shock; the letters $C$ and $D$ mark that period and the next one.
 
+Two numbers sum up the cycle: the peak of inflation, and the sum of output over all periods.
+`demand_shock_episode` simulates the event and computes both.
+
 ```{python}
-def demand_shock_summary(a=2.0, last=A_LAST, m=M_BAR, nu=NU_BAR):
-    """Fig. 13.15: a demand shock a in periods 1 to last, in the AS/AD diagram and over time."""
+def demand_shock_episode(a, last, m, nu):
+    """The boom-and-bust cycle of a demand shock, and its two key numbers (Fig. 15).
+
+    Equations (5) and (6) period by period (simulate), with the shock a in periods 1
+    to last
+
+    Arguments
+        a    : the demand shock, a-bar
+        last : the last period of the shock
+        m    : the policy response, m-bar
+        nu   : the slope of the AS curve, nu-bar
+    Returns
+        path  : the simulated event, one row per period
+        peak  : the highest inflation rate, in percent
+        total : the sum of output Y~ over all periods (the boom minus the recession)
+    """
+    # the shock a lasts from period 1 to last
     path = simulate(shock_list(a, last), NO_SHOCK, m=m, nu=nu)
-    fig = event_summary(path, {1: "B", last: "C", last + 1: "D"}, [last], m, nu)
-    asad_axes(fig, f"ā = {a:.1f} in periods 1–{last}: π peaks at {path.pi.max():.2f}%; sum of Ỹ = {round(path.Y.sum(), 2) + 0.0:.2f}")
+    # the peak of inflation, and the sum of output over the whole cycle
+    peak = path.pi.max()
+    total = path.Y.sum()
+    return path, peak, total
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 15, the summary of a demand shock
+def demand_shock_summary(a=2.0, last=A_LAST, m=M_BAR, nu=NU_BAR):
+    """A demand shock a in periods 1 to last, in the AS/AD diagram and over time.
+
+    Draws Fig. 15 (adapted from Fig. 13.15 in Jones).
+
+    Arguments
+        a    : the demand shock, a-bar
+        last : the last period of the shock
+        m    : the policy response, m-bar
+        nu   : the slope of the AS curve, nu-bar
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the episode and its numbers (demand_shock_episode)
+    path, peak, total = demand_shock_episode(a, last, m, nu)
+    # Step 2: both panels; C and D mark the last period of the shock and the next
+    letters = {1: "B", last: "C", last + 1: "D"}
+    fig = event_summary(path, letters, [last], m, nu)
+    # Step 3: the title reports the peak and the sum of output
+    total = round(total, 2) + 0.0                    # + 0.0 avoids "-0.00"
+    asad_axes(
+        fig,
+        f"ā = {a:.1f} in periods 1–{last}: π peaks at {peak:.2f}%; "
+        f"sum of Ỹ = {total:.2f}",
+    )
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(demand_shock_summary,
-         a=FloatSlider(value=2.0, min=-3.0, max=4.0, step=0.5, description="demand shock ā", style=WIDE),
-         last=IntSlider(value=9, min=2, max=15, step=1, description="last period of the shock", style=WIDE),
-         m=FloatSlider(value=0.5, min=0.25, max=2.0, step=0.25, description="policy response m̄", style=WIDE),
-         nu=FloatSlider(value=1.0, min=0.25, max=2.0, step=0.25, description="AS slope ν̄", style=WIDE));
+# Fig. 15 with sliders for the shock, its last period and the two parameters
+interact(
+    demand_shock_summary,
+    a=FloatSlider(value=2.0, min=-3.0, max=4.0, step=0.5,
+                  description="demand shock ā", style=WIDE),
+    last=IntSlider(value=9, min=2, max=15, step=1,
+                   description="last period of the shock", style=WIDE),
+    m=FloatSlider(value=0.5, min=0.25, max=2.0, step=0.25,
+                  description="policy response m̄", style=WIDE),
+    nu=FloatSlider(value=1.0, min=0.25, max=2.0, step=0.25,
+                   description="AS slope ν̄", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: Fig. 15 with a precomputed slider for the last period of the shock
-slider_figure(demand_shock_summary, "last", [2, 3, 5, 7, 9, 12], start=9, label="last period of the shock")
+# @title Website version: Fig. 15 with a precomputed slider for the shock's last period
+# one picture of Fig. 15 per last period of the shock
+slider_figure(
+    demand_shock_summary,
+    "last",
+    [2, 3, 5, 7, 9, 12],     # the values of the last period
+    start=9,
+    label="last period of the shock",
+)
 ```
 
 **Source.** Adapted from Fig. 13.15 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -2481,10 +3170,10 @@ $i_t = 1 + 1.5\,\pi_t$: when inflation rises by 1 point, the nominal rate rises 
 too. For inflation we use core PCE inflation (prices of consumer spending without food and energy), the measure that
 reproduces the textbook's line.
 
-> **Python note.** `pd.read_csv` reads a data file into a *DataFrame*, a table with named columns, and
-> `parse_dates=["date"]` turns text such as `"1960-01-01"` into real dates. `.tail()` shows the last five rows.
-
 ```{python}
+# Load the data of Fig. 16. `pd.read_csv` reads a data file into a DataFrame, a
+# table with named columns; `parse_dates=["date"]` turns text such as
+# "1960-01-01" into real dates, and `.tail()` shows the last five rows
 taylor = pd.read_csv(DATA_URL + "taylor_rule.csv", parse_dates=["date"])
 taylor.tail()
 ```
@@ -2498,8 +3187,12 @@ average of the central bank's policy rate (from the Bank for International Settl
 consumer price index without food and energy (from the OECD). For the United States it repeats the table above.
 
 ```{python}
+# Load the policy rates and core inflation of 33 economies
 rules = pd.read_csv(DATA_URL + "taylor_rule_countries.csv", parse_dates=["date"])
-rules.dropna().groupby("country").date.agg(["min", "max"]).head(8)      # quarters with both series
+# the first and the last quarter with both series, for the first eight economies:
+# `.groupby("country")` splits the table by country, and `.agg(["min", "max"])`
+# gives the earliest and the latest date of each
+rules.dropna().groupby("country").date.agg(["min", "max"]).head(8)
 ```
 
 **Look at your data.** The coverage differs a lot. Germany, France, Italy and the other early euro members have their
@@ -2507,60 +3200,154 @@ own policy rate only until 1998, and the euro area from 1999; core inflation sta
 countries, and for Japan it stops in mid-2021. Israel and Mexico in the 1980s and Türkiye in the 1990s and 2020s had
 very high inflation, so the rule asks for rates far off the chart.
 
-> **Python note.** `px.line` with a list `y=[...]` draws one line per column. `selector=dict(name=...)` changes only the
-> trace with that name. `round(gap, 2) + 0.0` turns a rounded −0.00 into 0.00, and `np.isnan(gap)` is true when there
-> were no quarters to average.
+The policy rule of equation (10) becomes a short function, `policy_rule`, that works on one inflation rate
+or on a whole column of them.
 
 ```{python}
 def policy_rule(pi, r_bar=2.0, m=M_BAR, pi_bar=PI_BAR):
-    """Equation 10: the nominal interest rate i = r_bar + pi + m (pi - pi_bar)."""
+    """The nominal interest rate that the policy rule sets.
+
+    Equation (10):  i = r-bar + pi + m-bar (pi - pi-bar)
+
+    Arguments
+        pi     : inflation, in percent (one number or a whole column)
+        r_bar  : the real interest rate in the long run, r-bar
+        m      : the policy response, m-bar
+        pi_bar : the inflation target, pi-bar
+    Returns
+        the nominal interest rate i, in percent
+    """
+    # the Fisher equation, i = R + pi, turns the rule for R into a rule for i
     return r_bar + pi + m * (pi - pi_bar)
 ```
 
+`fed_funds_data` prepares the chart for one economy: its actual rate, the rate the rule predicts, and the
+average gap between the two since 2009.
+
 ```{python}
-def fed_funds_chart(r_bar=2.0, m=M_BAR, country="United States"):
-    """Fig. 13.16: the actual policy rate of one country and the rate predicted by the policy rule."""
+def fed_funds_data(r_bar, m, country):
+    """The actual policy rate of one economy, the rule's rate, and their gap (Fig. 16).
+
+    Equation (10), computed by policy_rule, with the economy's core inflation
+
+    Arguments
+        r_bar   : r-bar in the rule
+        m       : m-bar in the rule
+        country : the economy, e.g. "United States"
+    Returns
+        chart  : a table with the date, the actual rate and the rule's rate
+        actual : the name of the actual rate's column
+        gap    : actual minus rule, average since 2009, in points (NaN: no data)
+    """
+    # Step 1: the rows of the economy; for the U.S. the rate is the fed funds rate
     part = rules[rules.country == country]
-    actual = "Actual fed funds rate" if country == "United States" else "Actual policy rate"
-    chart = pd.DataFrame({"date": part.date, actual: part.policy_rate,
-                          "Policy rule": policy_rule(part.core_inflation, r_bar, m)})
-    gap = round((chart[actual] - chart["Policy rule"])[chart.date >= "2009-01-01"].mean(), 2) + 0.0
+    actual = "Actual policy rate"
+    if country == "United States":
+        actual = "Actual fed funds rate"
+    # Step 2: one table with both rates
+    chart = pd.DataFrame(
+        {
+            "date": part.date,
+            actual: part.policy_rate,
+            "Policy rule": policy_rule(part.core_inflation, r_bar, m),
+        }
+    )
+    # Step 3: the average gap since 2009; + 0.0 turns a rounded -0.00 into 0.00
+    since_2009 = (chart[actual] - chart["Policy rule"])[chart.date >= "2009-01-01"]
+    gap = round(since_2009.mean(), 2) + 0.0
+    return chart, actual, gap
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 16, the actual policy rate and the rule
+def fed_funds_chart(r_bar=2.0, m=M_BAR, country="United States"):
+    """The actual policy rate of one economy and the rate predicted by the policy rule.
+
+    Draws Fig. 16 (inspired by Fig. 13.16 in Jones).
+
+    Arguments
+        r_bar   : r-bar in the rule
+        m       : m-bar in the rule
+        country : the economy, e.g. "United States"
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the data of the chart (fed_funds_data)
+    chart, actual, gap = fed_funds_data(r_bar, m, country)
     lines = chart[[actual, "Policy rule"]]
+    # Step 2: the vertical axis: -1 to 22, wider only when an economy needs it
     low, high, ticks = -1, 22, [0, 4, 8, 12, 16, 20]
-    for wider_low, wider_high, wider_ticks in [(-5, 45, None), (-10, 110, None)]:   # only when a country needs it
+    for wider_low, wider_high, wider_ticks in [(-5, 45, None), (-10, 110, None)]:
         if lines.min().min() < low or lines.max().max() > high:
             low, high, ticks = wider_low, wider_high, wider_ticks
-    title = f"Rule with r̄ = {r_bar:.1f}, m̄ = {m:.2f}: actual minus rule since 2009 = {gap:.2f} points"
+    # Step 3: the title reports the gap; `np.isnan(gap)` is true when there were
+    # no quarters to average
+    title = (
+        f"Rule with r̄ = {r_bar:.1f}, m̄ = {m:.2f}: "
+        f"actual minus rule since 2009 = {gap:.2f} points"
+    )
     if np.isnan(gap):
         title = f"Rule with r̄ = {r_bar:.1f}, m̄ = {m:.2f} (no data since 2009)"
-    legend = country + (" (off the chart)" if lines.min().min() < low or lines.max().max() > high else "")
-    fig = px.line(chart, x="date", y=[actual, "Policy rule"], color_discrete_sequence=[BLUE, GREEN], title=title,
-                  labels={"date": "Year", "value": "Percent", "variable": "Series"})
+    # the legend's title: the economy, with a note when a line leaves the chart
+    off = lines.min().min() < low or lines.max().max() > high
+    legend = country + (" (off the chart)" if off else "")
+    # Step 4: `px.line` with a list `y=[...]` draws one line per column
+    fig = px.line(
+        chart,
+        x="date",
+        y=[actual, "Policy rule"],
+        color_discrete_sequence=[BLUE, GREEN],
+        title=title,
+        labels={"date": "Year", "value": "Percent", "variable": "Series"},
+    )
     fig.update_traces(line_width=2.5)
+    # the rule dashed: `selector=dict(name=...)` changes only the trace of that name
     fig.update_traces(line_dash="dash", selector=dict(name="Policy rule"))
-    fig.update_layout(xaxis_range=["1958-01-01", "2027-12-31"], yaxis=dict(range=[low, high], tickvals=ticks),
-                      legend=dict(x=0.99, y=0.99, xanchor="right", yanchor="top"), legend_title_text=legend)
+    # Step 5: the axes and the legend
+    fig.update_layout(
+        xaxis_range=["1958-01-01", "2027-12-31"],
+        yaxis=dict(range=[low, high], tickvals=ticks),
+        legend=dict(x=0.99, y=0.99, xanchor="right", yanchor="top"),
+        legend_title_text=legend,
+    )
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(fed_funds_chart,
-         r_bar=FloatSlider(value=2.0, min=0.0, max=3.0, step=0.5, description="r̄ in the rule (%)", style=WIDE),
-         m=FloatSlider(value=0.5, min=0.0, max=1.0, step=0.25, description="m̄ in the rule", style=WIDE),
-         country=Dropdown(options=sorted(rules.country.unique()), value="United States", description="country",
-                          style=WIDE));
+# Fig. 16 with sliders for the rule and a menu for the economy: `Dropdown` shows
+# its options as a menu
+interact(
+    fed_funds_chart,
+    r_bar=FloatSlider(value=2.0, min=0.0, max=3.0, step=0.5,
+                      description="r̄ in the rule (%)", style=WIDE),
+    m=FloatSlider(value=0.5, min=0.0, max=1.0, step=0.25,
+                  description="m̄ in the rule", style=WIDE),
+    country=Dropdown(options=sorted(rules.country.unique()), value="United States",
+                     description="country", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 16 with a precomputed slider for r̄
-compact(slider_figure(fed_funds_chart, "r_bar", [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0], start=2.0, label="r̄ in the rule (%)"))
+# one picture of Fig. 16 per value of r-bar; `compact` keeps the saved page small
+compact(
+    slider_figure(
+        fed_funds_chart,
+        "r_bar",
+        [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0],     # the values of r-bar
+        start=2.0,
+        label="r̄ in the rule (%)",
+    )
+)
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 16 with a menu for the country
+# one picture of Fig. 16 per economy, with Taylor's numbers r-bar = 2, m-bar = 1/2
 menu_figure(fed_funds_chart, "country", sorted(rules.country.unique()), "United States")
 ```
 
@@ -2594,20 +3381,41 @@ On the website, the second chart offers the 33 economies, with Taylor's numbers 
 
 #### Key numbers: how closely does the Fed follow the rule?
 
-> **Python note.** `taylor[(taylor.date >= start) & (taylor.date <= end)]` keeps the quarters between two dates.
-> `.corr()` gives the correlation between two columns: 1 means they move perfectly together. `idxmax()` gives the
-> row number of the largest value, and `:%Y-%m` in an f-string writes a date as year-month.
+We average the gap between the actual rate and the rule over five episodes, and measure how closely the two
+rates move together.
 
 ```{python}
+# Step 1: the rule's rate in every quarter, and the actual rate minus the rule
 taylor["rule"] = policy_rule(taylor.core_inflation)
 taylor["gap"] = taylor.fed_funds - taylor.rule
-for start, end in [("1967", "1980-12-31"), ("1990", "1993-12-31"), ("2001", "2004-12-31"),
-                   ("2009", "2020-12-31"), ("2021", "2022-12-31")]:
+# Step 2: the average gap in five episodes;
+# `taylor[(taylor.date >= start) & (taylor.date <= end)]` keeps the quarters
+# between two dates
+for start, end in [
+    ("1967", "1980-12-31"),
+    ("1990", "1993-12-31"),
+    ("2001", "2004-12-31"),
+    ("2009", "2020-12-31"),
+    ("2021", "2022-12-31"),
+]:
     part = taylor[(taylor.date >= start) & (taylor.date <= end)]
-    print(f"{start}-{end[:4]}: actual minus rule = {part.gap.mean():+.2f} points on average")
+    print(
+        f"{start}-{end[:4]}: actual minus rule = "
+        f"{part.gap.mean():+.2f} points on average"
+    )
+# Step 3: the correlation over the textbook's years. `.corr()` gives the
+# correlation between two columns: 1 means they move perfectly together
 book_span = taylor[taylor.date <= "2023-01-01"]
-print(f"Correlation of the actual rate with the rule, 1960Q1-2023Q1: {book_span.fed_funds.corr(book_span.rule):.2f}")
-print(f"Highest rule rate: {taylor.rule.max():.2f}% in {taylor.date[taylor.rule.idxmax()]:%Y-%m}")
+print(
+    "Correlation of the actual rate with the rule, 1960Q1-2023Q1: "
+    f"{book_span.fed_funds.corr(book_span.rule):.2f}"
+)
+# Step 4: the highest rate the rule asked for. `idxmax()` gives the row number of
+# the largest value, and `:%Y-%m` in an f-string writes a date as year-month
+print(
+    f"Highest rule rate: {taylor.rule.max():.2f}% "
+    f"in {taylor.date[taylor.rule.idxmax()]:%Y-%m}"
+)
 ```
 
 The actual rate was below the rule by 2.3 points on average from 1967 to 1980, by 2.7 points from 2009 to 2020, and by
@@ -2639,6 +3447,8 @@ cause a recession, and the recession brings inflation down. Each point below is 
 $\tilde{Y}$ (actual GDP relative to the Congressional Budget Office's estimate of potential GDP) and CPI inflation.
 
 ```{python}
+# Load the data of Fig. 17, and show four years: `.isin([...])` is true for the
+# rows whose value is in the list
 loops = pd.read_csv(DATA_URL + "loops_vintages.csv")
 loops[loops.year.isin([2009, 2021, 2022, 2025])]
 ```
@@ -2649,55 +3459,123 @@ estimate of potential output for 2021 is lower, so the same year now looks like 
 a slump (−1.3 percent). The textbook's data stop in 2022, so `output_gap_2023` is empty (`NaN`) after that. Always
 check which **vintage** of the data a claim is based on.
 
-> **Python note.** `.isin([...])` is true for the rows whose value is in the list. A dictionary such as `WINDOWS` maps a
-> name to its settings, and `WINDOWS[years]` looks them up. `.where(condition, "")` keeps a value where the condition is
-> true and puts an empty text elsewhere: we label only a few key years and let hover show the rest.
-> `.astype(str)` turns the years into text. `part.assign(label=...)` returns a copy of the table with the new
-> column `label`. `MOVED.get(year, "top center")` looks up `year` in the dictionary `MOVED` and gives
-> `"top center"` when the year is not in it.
+```{python}
+# Step 1: the settings of the two periods: the first and the last year, the
+# ranges of the two axes, and the ticks of the vertical axis. A dictionary such
+# as WINDOWS maps a name to its settings, and `WINDOWS[years]` looks them up
+WINDOWS = {
+    "1960–1985": (1960, 1985, [-8, 7], [0, 15], [2, 4, 6, 8, 10, 12, 14]),
+    "1985–2025": (1985, 2025, [-6, 3], [-1.5, 9], [0, 2, 4, 6, 8]),
+}
+# Step 2: the two vintages; the textbook used the March 2023 vintage
+VINTAGES = {"Current data": "output_gap", "Textbook data": "output_gap_2023"}
+
+
+def loops_data(years, vintage):
+    """The years of one period that have an output gap in the chosen vintage (Fig. 17).
+
+    Arguments
+        years   : the period, a key of WINDOWS, e.g. "1960–1985"
+        vintage : the data vintage, a key of VINTAGES
+    Returns
+        part   : the rows of those years, without missing output gaps
+        column : the name of the output-gap column of that vintage
+    """
+    # Step 3: the first and the last year, and the column of the vintage
+    first, last = WINDOWS[years][0], WINDOWS[years][1]
+    column = VINTAGES[vintage]
+    # Step 4: the rows of those years; `dropna` drops the years without a gap
+    part = loops[(loops.year >= first) & (loops.year <= last)].dropna(subset=[column])
+    return part, column
+```
 
 ```{python}
-WINDOWS = {"1960–1985": (1960, 1985, [-8, 7], [0, 15], [2, 4, 6, 8, 10, 12, 14]),
-           "1985–2025": (1985, 2025, [-6, 3], [-1.5, 9], [0, 2, 4, 6, 8])}
-VINTAGES = {"Current data": "output_gap", "Textbook data": "output_gap_2023"}   # the textbook used the March 2023 vintage
-KEY_YEARS = [1960, 1966, 1969, 1974, 1975, 1979, 1980, 1982, 1985, 1989, 1991, 2000, 2009, 2011, 2015,
-             2019, 2020, 2021, 2022, 2025]
-MOVED = {2020: "bottom center", 2021: "middle right", 2025: "bottom center"}   # labels moved off nearby points
+#| kind: drawing
+# @title Drawing code: Fig. 17, inflation-output loops in the U.S.
+# the years with a label (hover shows the others)
+KEY_YEARS = [
+    1960, 1966, 1969, 1974, 1975, 1979, 1980, 1982, 1985, 1989,
+    1991, 2000, 2009, 2011, 2015, 2019, 2020, 2021, 2022, 2025,
+]
+# labels moved off nearby points
+MOVED = {2020: "bottom center", 2021: "middle right", 2025: "bottom center"}
 
 
 def loops_chart(years="1960–1985", vintage="Current data"):
-    """Fig. 13.17: annual (output gap, inflation) points connected in time order."""
+    """Annual (output gap, inflation) points connected in time order.
+
+    Draws Fig. 17 (inspired by Fig. 13.17 in Jones).
+
+    Arguments
+        years   : the period, a key of WINDOWS
+        vintage : the data vintage, a key of VINTAGES
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the data (loops_data), and the axes of the period
+    part, column = loops_data(years, vintage)
     first, last, x_range, y_range, y_ticks = WINDOWS[years]
-    column = VINTAGES[vintage]
-    part = loops[(loops.year >= first) & (loops.year <= last)].dropna(subset=[column])
-    part = part.assign(label=part.year.astype(str).where(part.year.isin(KEY_YEARS), ""))
-    fig = px.line(part, x=column, y="inflation", text="label", markers=True, hover_name="year",
-                  labels={column: "Output gap, Ỹ (percent)", "inflation": "CPI inflation (percent)"},
-                  title=f"Counterclockwise loops, {first}–{part.year.max()} ({vintage.lower()})")
+    # Step 2: a label for the key years only. `.where(key, "")` keeps a value where
+    # key is true and puts an empty text elsewhere; `.astype(str)` turns the years
+    # into text, and `part.assign(label=...)` returns a copy with the new column
+    key = part.year.isin(KEY_YEARS)
+    part = part.assign(label=part.year.astype(str).where(key, ""))
+    # Step 3: the points, connected in time order
+    fig = px.line(
+        part,
+        x=column,
+        y="inflation",
+        text="label",
+        markers=True,
+        hover_name="year",
+        labels={
+            column: "Output gap, Ỹ (percent)",
+            "inflation": "CPI inflation (percent)",
+        },
+        title=f"Counterclockwise loops, {first}–{part.year.max()} ({vintage.lower()})",
+    )
+    # Step 4: a label position for every year: `MOVED.get(year, "top center")`
+    # looks up year in MOVED and gives "top center" when it is not there
     positions = []
     for year in part.year:
         positions.append(MOVED.get(year, "top center"))
-    fig.update_traces(line=dict(color=BLUE, width=2), marker=dict(color=TEAL, size=7), textposition=positions)
-    fig.update_layout(xaxis=dict(range=x_range, zeroline=True), yaxis=dict(range=y_range, tickvals=y_ticks))
+    fig.update_traces(
+        line=dict(color=BLUE, width=2),
+        marker=dict(color=TEAL, size=7),
+        textposition=positions,
+    )
+    fig.update_layout(
+        xaxis=dict(range=x_range, zeroline=True),
+        yaxis=dict(range=y_range, tickvals=y_ticks),
+    )
     return fig
 ```
 
-> **Python note.** `ToggleButtons` shows one button per option, and the function receives the text of the chosen
-> button.
-
 ```{python}
 #| kind: widget
-interact(loops_chart,
-         years=ToggleButtons(options=list(WINDOWS), value="1960–1985", description="years"),
-         vintage=ToggleButtons(options=list(VINTAGES), value="Current data", description="data"));
+# Fig. 17 with buttons. `ToggleButtons` shows one button per option, and the
+# function receives the text of the chosen button
+interact(
+    loops_chart,
+    years=ToggleButtons(options=list(WINDOWS), value="1960–1985",
+                        description="years"),
+    vintage=ToggleButtons(options=list(VINTAGES), value="Current data",
+                          description="data"),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: Fig. 17 with buttons for the two periods and the two data vintages
-choices = [("1960–1985", "Current data"), ("1985–2025", "Current data"), ("1985–2025", "Textbook data")]
+# @title Website version: Fig. 17 with buttons for the periods and the data vintages
+# Step 1: three pictures: the two periods, and 1985-2022 with the textbook data
+choices = [
+    ("1960–1985", "Current data"),
+    ("1985–2025", "Current data"),
+    ("1985–2025", "Textbook data"),
+]
 names = ["1960–1985", "1985–2025", "1985–2022, textbook data"]
 figures = [loops_chart(years, vintage) for years, vintage in choices]
+# Step 2: copy every trace into one figure; only the first picture's are visible
 fig = go.Figure(layout=figures[0].layout)
 owner = []
 for i, f in enumerate(figures):
@@ -2705,16 +3583,23 @@ for i, f in enumerate(figures):
         trace.visible = (i == 0)
         fig.add_trace(trace)
         owner.append(i)
+# Step 3: one button per picture: its traces, its title and its axes
 buttons = []
 for i, (years, vintage) in enumerate(choices):
     first, last, x_range, y_range, y_ticks = WINDOWS[years]
-    buttons.append(dict(label=names[i], method="update",
-                        args=[{"visible": [o == i for o in owner]},
-                              {"title.text": figures[i].layout.title.text, "xaxis.range": x_range,
-                               "yaxis.range": y_range, "yaxis.tickvals": y_ticks}]))
-fig.update_layout(margin=dict(t=120),                     # room for the buttons between the title and the plot
-                  updatemenus=[dict(type="buttons", direction="right", x=0, y=1.02, xanchor="left", yanchor="bottom",
-                                    buttons=buttons)])
+    buttons.append(dict(
+        label=names[i],
+        method="update",
+        args=[{"visible": [o == i for o in owner]},
+              {"title.text": figures[i].layout.title.text, "xaxis.range": x_range,
+               "yaxis.range": y_range, "yaxis.tickvals": y_ticks}],
+    ))
+# Step 4: the buttons, between the title and the plot
+fig.update_layout(
+    margin=dict(t=120),                     # room for the buttons
+    updatemenus=[dict(type="buttons", direction="right", x=0, y=1.02,
+                      xanchor="left", yanchor="bottom", buttons=buttons)],
+)
 fig
 ```
 
@@ -2745,15 +3630,25 @@ Chart: inspired by Fig. 13.17 in Jones (2024), [*Macroeconomics*, 6th ed.](https
 The textbook says that in 2009 "output was more than 5 percent below potential", and that inflation rose from 2009 to
 2011 despite the slump.
 
-> **Python note.** `.set_index("year")` labels the rows by year, so `by_year.loc[2009, "inflation"]` picks one value.
-
 ```{python}
+# The 2009 output gap in the two vintages, and inflation from 2009 to 2011.
+# `.set_index("year")` labels the rows by year, so `by_year.loc[2009, "inflation"]`
+# picks one value
 by_year = loops.set_index("year")
-print(f"2009 output gap: {by_year.loc[2009, 'output_gap_2023']:.2f}% (textbook data), "
-      f"{by_year.loc[2009, 'output_gap']:.2f}% (current data)")
-print(f"Inflation 2009 -> 2011: {by_year.loc[2009, 'inflation']:.2f}% -> {by_year.loc[2011, 'inflation']:.2f}%")
+print(
+    f"2009 output gap: {by_year.loc[2009, 'output_gap_2023']:.2f}% (textbook data), "
+    f"{by_year.loc[2009, 'output_gap']:.2f}% (current data)"
+)
+print(
+    f"Inflation 2009 -> 2011: {by_year.loc[2009, 'inflation']:.2f}% -> "
+    f"{by_year.loc[2011, 'inflation']:.2f}%"
+)
+# the revision since 1985: the current gap minus the textbook's
 revision = (loops.output_gap - loops.output_gap_2023)[loops.year >= 1985]
-print(f"Current minus textbook output gap, 1985-2022: {revision.mean():.2f} points on average, {revision.max():.2f} at most")
+print(
+    f"Current minus textbook output gap, 1985-2022: {revision.mean():.2f} points "
+    f"on average, {revision.max():.2f} at most"
+)
 ```
 
 With the textbook's data the 2009 gap is −5.20 percent; with today's data it is −4.66 percent, so "more than 5 percent"
@@ -2769,41 +3664,91 @@ World Bank's numbers, and for the four economies of Fig. 19 the numbers of that 
 year. For the United States the OECD's gap differs from the CBO's: it is 0.2 points higher on average since 1985, and
 −3.98 percent in 2009 instead of −4.66. Potential output cannot be observed, so every estimate of the gap is a model.
 
-> **Python note.** `merge` joins two tables on the columns they share, here `iso3`, `country` and `year`, and keeps
-> the rows found in both. `part.year % 5 == 0` is true for years that end in 0 or 5: we label those and the last year.
-
 ```{python}
+# Load the OECD output gaps and the inflation rates, and join them. `merge` joins
+# two tables on the columns they share, here `iso3` (a three-letter country
+# code), `country` and `year`, and keeps the rows found in both
 gaps = pd.read_csv(DATA_URL + "output_gaps_oecd.csv")
 prices = pd.read_csv(DATA_URL + "inflation_annual.csv")
 eo_loops = gaps.merge(prices, on=["iso3", "country", "year"])
 eo_loops[eo_loops.country == "United Kingdom"].head(3)
 ```
 
+The function below draws the loops of one economy, as in Fig. 17, with axes that fit its data. It only picks
+the economy's rows, so all of its code is drawing code.
+
 ```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 17, the loops of one economy, with OECD output gaps
 def oecd_loops_chart(country="United States"):
-    """Fig. 13.17, extended: annual (output gap, inflation) points of one country, OECD estimates of the gap."""
+    """Annual (output gap, inflation) points of one economy, with OECD output gaps.
+
+    Draws Fig. 17, extended to other economies (inspired by Fig. 13.17 in Jones).
+
+    Arguments
+        country : the economy, e.g. "United States"
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the rows of the economy, with a label every five years and in the last
+    # year: `part.year % 5 == 0` is true for years that end in 0 or 5
     part = eo_loops[eo_loops.country == country]
-    label = part.year.astype(str).where((part.year % 5 == 0) | (part.year == part.year.max()), "")
+    labeled = (part.year % 5 == 0) | (part.year == part.year.max())
+    label = part.year.astype(str).where(labeled, "")
+    # Step 2: axes that fit the data, with one point to spare on each side;
+    # `np.floor` rounds down and `np.ceil` rounds up
     x_range = [np.floor(part.output_gap.min()) - 1, np.ceil(part.output_gap.max()) + 1]
-    y_range = [np.floor(min(part.inflation.min(), 0)) - 1, np.ceil(part.inflation.max()) + 1]
-    fig = px.line(part.assign(label=label), x="output_gap", y="inflation", text="label", markers=True,
-                  hover_name="year", title=f"{country}: inflation and the output gap, {part.year.min()}–{part.year.max()}",
-                  labels={"output_gap": "Output gap, Ỹ (percent, OECD)", "inflation": "CPI inflation (percent)"})
-    fig.update_traces(line=dict(color=BLUE, width=2), marker=dict(color=TEAL, size=7), textposition="top center")
-    fig.update_layout(xaxis=dict(range=x_range, zeroline=True), yaxis=dict(range=y_range))
+    y_low = np.floor(min(part.inflation.min(), 0)) - 1
+    y_range = [y_low, np.ceil(part.inflation.max()) + 1]
+    # Step 3: the points, connected in time order
+    fig = px.line(
+        part.assign(label=label),
+        x="output_gap",
+        y="inflation",
+        text="label",
+        markers=True,
+        hover_name="year",
+        title=(
+            f"{country}: inflation and the output gap, "
+            f"{part.year.min()}–{part.year.max()}"
+        ),
+        labels={
+            "output_gap": "Output gap, Ỹ (percent, OECD)",
+            "inflation": "CPI inflation (percent)",
+        },
+    )
+    fig.update_traces(
+        line=dict(color=BLUE, width=2),
+        marker=dict(color=TEAL, size=7),
+        textposition="top center",
+    )
+    fig.update_layout(
+        xaxis=dict(range=x_range, zeroline=True),
+        yaxis=dict(range=y_range),
+    )
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(oecd_loops_chart, country=Dropdown(options=sorted(eo_loops.country.unique()), value="United States",
-                                            description="country", style=WIDE));
+# The loops of one economy, with a menu for the country
+interact(
+    oecd_loops_chart,
+    country=Dropdown(options=sorted(eo_loops.country.unique()), value="United States",
+                     description="country", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: inflation-output loops in 40 economies, with a menu for the country
-menu_figure(oecd_loops_chart, "country", sorted(eo_loops.country.unique()), "United States")
+# @title Website version: inflation-output loops in 40 economies, with a country menu
+# one picture per economy; the menu shows one at a time
+menu_figure(
+    oecd_loops_chart,
+    "country",
+    sorted(eo_loops.country.unique()),
+    "United States",
+)
 ```
 
 **Sources.** Data: [OECD, *Economic Outlook* No. 119, output gap (measure `GAP`, dataflow `DSD_EO@DF_EO`), via the OECD Data Explorer](https://data-explorer.oecd.org/);
@@ -2846,6 +3791,7 @@ Bank asks about growth, inflation and unemployment rates, not about the number o
 The economists James Stock and Mark Watson called this figure "the mother of all forecast errors".
 
 ```{python}
+# Load the data of Fig. 18 (`parse_dates` turns the dates into real dates)
 spf = pd.read_csv(DATA_URL + "fig13-18.csv", parse_dates=["date"])
 spf.head(3)
 ```
@@ -2854,25 +3800,61 @@ spf.head(3)
 in one quarter (from 2007Q4 to 2009Q4) for that quarter and the next four; it is empty (`NaN`) elsewhere. For a chart
 with one line per series, we first reshape the table to *long* form: one row per date and series.
 
-> **Python note.** `melt` stacks columns into rows: `id_vars="date"` stays a column, and the names of the other columns
-> go into a new column `series`. `.map(NAMES)` replaces each column name by its readable name from the dictionary.
-> `spf.columns[2:]` is the list of column names from the third one on (the forecasts). `column[4:8]` takes
-> characters 4 to 7 of a text, here the year, and `column[-1]` its last character, here the quarter.
-
 ```{python}
+# Step 1: a readable name for every column. `spf.columns[2:]` is the list of
+# column names from the third one on (the forecasts); `column[4:8]` takes the
+# characters 4 to 7 of a text, here the year, and `column[-1]` its last
+# character, here the quarter
 NAMES = {"employment_actual": "Actual employment"}
 for column in spf.columns[2:]:
     NAMES[column] = "Forecast made in " + column[4:8] + "Q" + column[-1]
+# Step 2: the long form. `melt` stacks columns into rows: `id_vars="date"` stays
+# a column, and the names of the other columns go into a new column `series`;
+# `.dropna()` drops the quarters without a value
 long = spf.melt(id_vars="date", var_name="series", value_name="employment").dropna()
+# `.map(NAMES)` replaces each column name by its readable name from the dictionary
 long["series"] = long.series.map(NAMES)
-SHADES = ["black", "#c6dbef", "#9ecae1", "#6baed6", "#4292c6", "#2171b5", "#08519c", "#74c476", "#31a354", "#006d2c"]
-fig = px.line(long, x="date", y="employment", color="series", hover_name="series", markers=True,
-              color_discrete_sequence=SHADES, labels={"date": "Quarter", "employment": "Nonfarm employment (millions)",
-                                                      "series": "Series"},
-              title="Forecasters kept expecting a mild slowdown while jobs collapsed, 2008–2009")
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 18, the forecasts and actual employment
+# Step 1: black for actual employment, then blues and greens for the forecasts
+SHADES = [
+    "black",
+    "#c6dbef",
+    "#9ecae1",
+    "#6baed6",
+    "#4292c6",
+    "#2171b5",
+    "#08519c",
+    "#74c476",
+    "#31a354",
+    "#006d2c",
+]
+# Step 2: one line per series, with a dot per quarter
+fig = px.line(
+    long,
+    x="date",
+    y="employment",
+    color="series",
+    hover_name="series",
+    markers=True,
+    color_discrete_sequence=SHADES,
+    labels={
+        "date": "Quarter",
+        "employment": "Nonfarm employment (millions)",
+        "series": "Series",
+    },
+    title="Forecasters kept expecting a mild slowdown while jobs collapsed, 2008–2009",
+)
+# Step 3: thin lines for the forecasts, a thick one for actual employment
 fig.update_traces(line_width=2)
 fig.update_traces(line_width=5, selector=dict(name="Actual employment"))
-fig.update_layout(yaxis=dict(range=[128.5, 140.5], tickvals=[130, 132, 134, 136, 138, 140]), legend_title_text="")
+fig.update_layout(
+    yaxis=dict(range=[128.5, 140.5], tickvals=[130, 132, 134, 136, 138, 140]),
+    legend_title_text="",
+)
 fig.show()
 ```
 
@@ -2901,11 +3883,16 @@ Chart: inspired by Fig. 13.18 in Jones (2024), [*Macroeconomics*, 6th ed.](https
 For each survey, we compare the last point of its forecast path (four quarters ahead) with what actually happened.
 
 ```{python}
+# For each survey: the last point of its forecast path against what happened
 for column in spf.columns[2:]:
     rows = spf.dropna(subset=[column])
-    end = rows.iloc[-1]                                  # the last quarter of this forecast path
+    # the last quarter of this forecast path: `.iloc[-1]` is the last row
+    end = rows.iloc[-1]
     error = end[column] - end.employment_actual
-    print(f"{NAMES[column]}: forecast for {end.date.year}Q{end.date.quarter} too high by {error:.2f} million jobs")
+    print(
+        f"{NAMES[column]}: forecast for {end.date.year}Q{end.date.quarter} "
+        f"too high by {error:.2f} million jobs"
+    )
 ```
 
 Every forecast was too high, by up to 7.2 million jobs (the survey of 2008Q3). The errors shrank to about 1 million only
@@ -2938,9 +3925,16 @@ The U.S. Fed under Volcker, Greenspan, Bernanke and Yellen gets much credit for 
 as much in other rich countries. Was it better policy, or good luck, such as no repeat of the 1970s oil shocks?
 
 ```{python}
+# Load the data of Fig. 19, and give the columns the names of the economies
 oecd = pd.read_csv(DATA_URL + "fig13-19.csv")
-oecd = oecd.rename(columns={"inflation_us": "United States", "inflation_uk": "United Kingdom",
-                            "inflation_euro_area": "Euro area", "inflation_japan": "Japan"})
+oecd = oecd.rename(
+    columns={
+        "inflation_us": "United States",
+        "inflation_uk": "United Kingdom",
+        "inflation_euro_area": "Euro area",
+        "inflation_japan": "Japan",
+    }
+)
 oecd.tail(4)
 ```
 
@@ -2951,47 +3945,95 @@ used an early partial-year number.
 The table `prices` of Fig. 17 has the same inflation rates for 194 economies (for these four it repeats this file),
 so the chart can show any set of countries. Pick them from the list; the four textbook economies come first.
 
-> **Python note.** `set(countries) != set(BOOK_FOUR)` compares the two groups of names without caring about their
-> order. `category_orders` fixes the order of the lines in the legend.
+The function below draws the chart. It only picks the chosen economies' rows of `prices`, so all of its
+code is drawing code.
 
 ```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 19, inflation in the chosen economies
+# the four economies of the textbook's figure
 BOOK_FOUR = ("United States", "United Kingdom", "Euro area", "Japan")
 
 
 def oecd_chart(countries=BOOK_FOUR):
-    """Fig. 13.19: annual CPI inflation in the chosen economies since 1960."""
+    """Annual CPI inflation in the chosen economies since 1960.
+
+    Draws Fig. 19 (inspired by Fig. 13.19 in Jones).
+
+    Arguments
+        countries : the economies to show (a list or a tuple of names)
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the rows of the chosen economies
     part = prices[prices.country.isin(countries)]
+    # Step 2: the vertical axis: -3 to 26, wider only when a chosen economy needs it
     low, high, ticks = -3, 26, [0, 5, 10, 15, 20, 25]
-    for wider_low, wider_high in [(-10, 60), (-20, 120)]:     # a wider axis only when a chosen country needs it
+    for wider_low, wider_high in [(-10, 60), (-20, 120)]:
         if part.inflation.min() < low or part.inflation.max() > high:
             low, high, ticks = wider_low, wider_high, None
+    # Step 3: the textbook's title for its four economies, else a note on those
+    # without data or off the chart. `set(countries) != set(BOOK_FOUR)` compares
+    # the two groups of names without caring about their order
     title = "Inflation was high everywhere in the 1970s and low after the 1980s"
     if set(countries) != set(BOOK_FOUR):
-        title = "CPI inflation, percent a year" + missing_or_off(part, "inflation", countries, low, high)
-    fig = px.line(part, x="year", y="inflation", color="country", hover_name="country",
-                  color_discrete_map=INFLATION_COLORS, category_orders={"country": list(countries)}, title=title,
-                  labels={"year": "Year", "inflation": "Inflation (percent)", "country": "Economy"})
+        note = missing_or_off(part, "inflation", countries, low, high)
+        title = "CPI inflation, percent a year" + note
+    # Step 4: one line per economy; `category_orders` fixes the order of the lines
+    # in the legend
+    fig = px.line(
+        part,
+        x="year",
+        y="inflation",
+        color="country",
+        hover_name="country",
+        color_discrete_map=INFLATION_COLORS,     # each economy keeps its color
+        category_orders={"country": list(countries)},
+        title=title,
+        labels={
+            "year": "Year",
+            "inflation": "Inflation (percent)",
+            "country": "Economy",
+        },
+    )
     fig.update_traces(line_width=2.5)
-    fig.update_layout(xaxis=dict(range=[1958, 2027], tickvals=[1970, 1980, 1990, 2000, 2010, 2020]),  # no 1960 next to 0
-                      yaxis=dict(range=[low, high], tickvals=ticks),
-                      legend=dict(x=0.99, y=0.99, xanchor="right", yanchor="top"), legend_title_text="")
+    # Step 5: the axes (no tick at 1960, next to 0) and the legend
+    fig.update_layout(
+        xaxis=dict(range=[1958, 2027], tickvals=[1970, 1980, 1990, 2000, 2010, 2020]),
+        yaxis=dict(range=[low, high], tickvals=ticks),
+        legend=dict(x=0.99, y=0.99, xanchor="right", yanchor="top"),
+        legend_title_text="",
+    )
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(oecd_chart, countries=SelectMultiple(options=list(BOOK_FOUR) + sorted(set(prices.country) - set(BOOK_FOUR)),
-                                              value=list(BOOK_FOUR), rows=8, description="countries", style=WIDE));
+# Fig. 19 with a list of economies, the textbook's four first. `SelectMultiple`
+# is a list in which you can choose several entries (hold Ctrl or Cmd)
+interact(
+    oecd_chart,
+    countries=SelectMultiple(
+        options=list(BOOK_FOUR) + sorted(set(prices.country) - set(BOOK_FOUR)),
+        value=list(BOOK_FOUR), rows=8, description="countries", style=WIDE,
+    ),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 19 with buttons for groups of countries
-shown = OECD_PLUS                                          # the OECD and eight large emerging economies
+# Step 1: the OECD and eight large emerging economies, with the textbook's title
+shown = OECD_PLUS
 fig = oecd_chart(countries=shown)
-fig.update_layout(title=oecd_chart().layout.title.text, yaxis=dict(range=None, autorange=True, tickvals=None),
-                  legend=dict(x=1.02, xanchor="left"))
-group_menu(fig, BOOK_FOUR)                                 # the y-axis adapts to the countries shown
+# the vertical axis adapts to the countries shown
+fig.update_layout(
+    title=oecd_chart().layout.title.text,
+    yaxis=dict(range=None, autorange=True, tickvals=None),
+    legend=dict(x=1.02, xanchor="left"),
+)
+# Step 2: the buttons that list one group of countries in the legend
+group_menu(fig, BOOK_FOUR)
 ```
 
 **Sources.** Data: [OECD, Consumer price indices, CPI all items (`DSD_PRICES@DF_PRICES_ALL`), via the OECD Data Explorer](https://data-explorer.oecd.org/)
@@ -3019,13 +4061,15 @@ list a group of countries in the legend, and a click on a country adds it.
 
 #### Key numbers: inflation by decade
 
-> **Python note.** `oecd.year // 10 * 10` turns each year into its decade (1974 becomes 1970). `groupby` puts the years
-> of each decade in one group, and `.mean()` averages each group.
-
 ```{python}
+# Step 1: the highest inflation rate of each economy in the 1970s.
+# `.set_index("year")` labels the rows by year, so `.loc[1970:1979]` keeps the 1970s
 by_country = oecd.set_index("year")
 print("Peak inflation 1970-1979:")
 print(by_country.loc[1970:1979].max().round(2))
+# Step 2: the average of each decade. `oecd.year // 10 * 10` turns each year into
+# its decade (1974 becomes 1970); `groupby` puts the years of each decade in one
+# group, and `.mean()` averages each group
 oecd.drop(columns="year").groupby(oecd.year // 10 * 10).mean().round(2)
 ```
 
@@ -3061,44 +4105,103 @@ middle ground, the slider sets the **credibility** of the announcement: the shar
 their expectations, $\pi^e = \text{credibility} \times \bar{\pi}' + (1 - \text{credibility}) \times 4$. Credibility 0 is
 the adaptive case of Fig. 10.
 
+First we compute the economics. `credible_point` sets expected inflation from the credibility of the new
+target, equation (11), and solves for output and inflation in period 1.
+
 ```{python}
-def credible_disinflation(credibility=1.0, pi_new=2.0, m=M_BAR, nu=NU_BAR):
-    """Fig. 13.20: the target falls from PI_OLD to pi_new; expectations follow it in proportion to credibility."""
+def credible_point(credibility, pi_new, m, nu):
+    """Expected inflation after the announcement, and the economy in period 1 (Fig. 20).
+
+    Equation (11): firms expect pi_e = c pi-bar' + (1 - c) 4, with credibility c;
+    equations (5) and (6) then give output and inflation (solve_asad)
+
+    Arguments
+        credibility : the share of the cut that firms believe, from 0 to 1
+        pi_new      : the new inflation target, pi-bar'
+        m           : the policy response, m-bar
+        nu          : the slope of the AS curve, nu-bar
+    Returns
+        pi_e  : expected inflation, in percent
+        Y, pi : output Y~ and inflation pi in period 1, in percent
+    """
+    # expected inflation: a weighted average of the new and the old target
     pi_e = credibility * pi_new + (1 - credibility) * PI_OLD
+    # where the new AS and AD curves cross
     Y, pi = solve_asad(pi_e, pi_bar=pi_new, m=m, nu=nu)
+    return pi_e, Y, pi
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 20, costless disinflation by coordinating expectations
+def credible_disinflation(credibility=1.0, pi_new=2.0, m=M_BAR, nu=NU_BAR):
+    """The target falls from PI_OLD to pi_new; expectations follow with credibility.
+
+    Draws Fig. 20 (adapted from Fig. 13.20 in Jones).
+
+    Arguments
+        credibility : the share of the cut that firms believe, from 0 to 1
+        pi_new      : the new inflation target, pi-bar'
+        m           : the policy response, m-bar
+        nu          : the slope of the AS curve, nu-bar
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the numbers of the figure (credible_point)
+    pi_e, Y, pi = credible_point(credibility, pi_new, m, nu)
     fig = asad_figure()
+    # Step 2: the old curves, dashed gray; no label when it would sit on the label
+    # of AS' or of AD'
     old_as, old_ad = "AS", "AD"
-    if abs(pi_e - PI_OLD) < 0.6 * max(1, nu):          # no label when it would sit on the label of AS′
+    if abs(pi_e - PI_OLD) < 0.6 * max(1, nu):
         old_as = ""
-    if abs(pi_new - PI_OLD) * min(1, B_BAR * m) < 0.6:  # ... or on the label of AD′
+    if abs(pi_new - PI_OLD) * min(1, B_BAR * m) < 0.6:
         old_ad = ""
     if pi_e != PI_OLD:
         add_as(fig, old_as, GRAY, PI_OLD, nu, dash="dash")
     add_ad(fig, old_ad, GRAY, pi_bar=PI_OLD, m=m, dash="dash")
+    # Step 3: the new curves, and the move from A to B
     add_as(fig, "AS′", TEAL, pi_e, nu)
     add_ad(fig, "AD′", BLUE, pi_bar=pi_new, m=m)
     add_point(fig, 0.0, PI_OLD, "A")
     add_point(fig, Y, pi, "B")
     add_arrow(fig, 0.0, PI_OLD, Y, pi)
-    asad_axes(fig, f"Credibility {credibility:.2f}: expected π = {pi_e:.2f}% → π = {pi:.2f}%, Ỹ = {Y:.2f}%")
+    # Step 4: the title reports expected inflation, and the economy at B
+    asad_axes(
+        fig,
+        f"Credibility {credibility:.2f}: expected π = {pi_e:.2f}% → "
+        f"π = {pi:.2f}%, Ỹ = {Y:.2f}%",
+    )
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(credible_disinflation,
-         credibility=FloatSlider(value=1.0, min=0.0, max=1.0, step=0.25, description="credibility of the new target",
-                                 style=WIDE),
-         pi_new=FloatSlider(value=2.0, min=0.0, max=4.0, step=0.5, description="new target π̄′ (%)", style=WIDE),
-         m=FloatSlider(value=0.5, min=0.25, max=2.0, step=0.25, description="policy response m̄", style=WIDE),
-         nu=FloatSlider(value=1.0, min=0.25, max=2.0, step=0.25, description="AS slope ν̄", style=WIDE));
+# Fig. 20 with sliders; credibility 0 is the adaptive case of Fig. 10
+interact(
+    credible_disinflation,
+    credibility=FloatSlider(value=1.0, min=0.0, max=1.0, step=0.25,
+                            description="credibility of the new target", style=WIDE),
+    pi_new=FloatSlider(value=2.0, min=0.0, max=4.0, step=0.5,
+                       description="new target π̄′ (%)", style=WIDE),
+    m=FloatSlider(value=0.5, min=0.25, max=2.0, step=0.25,
+                  description="policy response m̄", style=WIDE),
+    nu=FloatSlider(value=1.0, min=0.25, max=2.0, step=0.25,
+                   description="AS slope ν̄", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 20 with a precomputed slider for credibility
-slider_figure(credible_disinflation, "credibility", [0.0, 0.25, 0.5, 0.75, 1.0], start=1.0,
-              label="credibility of the new target")
+# one picture of Fig. 20 per value of credibility
+slider_figure(
+    credible_disinflation,
+    "credibility",
+    [0.0, 0.25, 0.5, 0.75, 1.0],     # from adaptive (0) to fully credible (1)
+    start=1.0,
+    label="credibility of the new target",
+)
 ```
 
 **Source.** Adapted from Fig. 13.20 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612) The credibility slider, which spans the cases between adaptive and fully credible expectations, is our addition.
@@ -3122,10 +4225,18 @@ We compare the total output lost while inflation falls from 4 to 2 percent, unde
 of Fig. 11) and with a fully credible announcement.
 
 ```{python}
+# The output lost: adaptive expectations (the whole path of Fig. 11) against a
+# fully credible target (period 1 of Fig. 20)
 adaptive = simulate(NO_SHOCK, NO_SHOCK, PI_OLD, 2.0)
 Y_credible, pi_credible = solve_asad(2.0, pi_bar=2.0)
-print(f"Adaptive expectations: output lost over {T_MAX} periods = {-adaptive.Y.sum():.2f}% of potential output")
-print(f"Fully credible target: period-1 output = {Y_credible:.2f}%, inflation = {pi_credible:.2f}%")
+print(
+    f"Adaptive expectations: output lost over {T_MAX} periods = "
+    f"{-adaptive.Y.sum():.2f}% of potential output"
+)
+print(
+    f"Fully credible target: period-1 output = {Y_credible:.2f}%, "
+    f"inflation = {pi_credible:.2f}%"
+)
 ```
 
 Under adaptive expectations the disinflation costs about 2 percent of a year's output; with full credibility it costs
@@ -3155,6 +4266,7 @@ average inflation and the vertical axis its **volatility**, the standard deviati
 central bank is the point with 2 percent inflation and zero volatility.
 
 ```{python}
+# Load the data of Fig. 21: one row per 20-year window
 uk = pd.read_csv(DATA_URL + "fig13-21.csv")
 uk.tail(3)
 ```
@@ -3162,34 +4274,85 @@ uk.tail(3)
 Each row is one window. The last row covers only 9 years, 2017–2025, which include the burst of inflation of 2021–2023;
 it is not a full 20-year window, so we mark it differently.
 
-> **Python note.** `uk.loc[condition, "group"] = text` sets the column `group` in the rows where the condition is true.
-> `np.sqrt` is the square root, so `distance` is the straight-line distance from each point to the goal (2, 0).
-> `fig.data` is the list of traces of a figure, one per color group here, and `trace.hovertext` the names of its
-> points; for each one we look up a label position in `POSITIONS`, with `"middle right"` as the default.
-
 ```{python}
+# Step 1: three groups of windows: 1997-2016, the partial window, and the others.
+# `uk.loc[condition, "group"] = text` sets the column group in the rows where the
+# condition is true
 uk["group"] = "Other 20-year windows"
 uk.loc[uk.period == "1997–2016", "group"] = "1997–2016"
 uk.loc[uk.n_years < 20, "group"] = "2017–2025 (partial, 9 years)"
+# Step 2: the distance of each window to the goal (2, 0): 2% inflation with no
+# volatility. `np.sqrt` is the square root, so this is the straight-line distance
 uk["distance"] = np.sqrt((uk.avg_inflation - 2) ** 2 + uk.sd_inflation ** 2)
-POSITIONS = {"1757–1776": "middle left", "1777–1796": "middle left", "1817–1836": "middle left",
-             "1837–1856": "top right", "1937–1956": "bottom center"}
-fig = px.scatter(uk, x="avg_inflation", y="sd_inflation", color="group", text="period", hover_name="period",
-                 hover_data={"distance": ":.2f", "group": False}, color_discrete_sequence=[TEAL, BLUE, GREEN],
-                 labels={"avg_inflation": "Average inflation (percent)", "sd_inflation": "Volatility of inflation (percent)",
-                         "group": "Group", "distance": "distance to the goal"},
-                 title="Only 1997–2016 came close to the goal of 2% inflation with low volatility")
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 21, the windows and their labels
+# label positions moved off nearby points; "middle right" for all the others
+POSITIONS = {
+    "1757–1776": "middle left",
+    "1777–1796": "middle left",
+    "1817–1836": "middle left",
+    "1837–1856": "top right",
+    "1937–1956": "bottom center",
+}
+# Step 1: one point per window, a color per group; hover shows the distance
+fig = px.scatter(
+    uk,
+    x="avg_inflation",
+    y="sd_inflation",
+    color="group",
+    text="period",
+    hover_name="period",
+    hover_data={"distance": ":.2f", "group": False},
+    color_discrete_sequence=[TEAL, BLUE, GREEN],
+    labels={
+        "avg_inflation": "Average inflation (percent)",
+        "sd_inflation": "Volatility of inflation (percent)",
+        "group": "Group",
+        "distance": "distance to the goal",
+    },
+    title="Only 1997–2016 came close to the goal of 2% inflation with low volatility",
+)
+# Step 2: a label position for every point. `fig.data` is the list of traces of
+# the figure, one per color group here, and `trace.hovertext` the names of its
+# points; `POSITIONS.get(name, "middle right")` gives "middle right" by default
 for trace in fig.data:
     positions = []
     for name in trace.hovertext:
         positions.append(POSITIONS.get(name, "middle right"))
     trace.textposition = positions
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 21, the goal and the axes
+# Step 3: larger points; the partial window as an open circle
 fig.update_traces(marker_size=11, textfont_size=11)
-fig.update_traces(marker_symbol="circle-open", selector=dict(name="2017–2025 (partial, 9 years)"))
-fig.add_trace(go.Scatter(x=[2], y=[0], mode="markers+text", text=["Goal"], textposition="middle right", name="Goal",
-                         marker=dict(color="black", size=14, symbol="star")))
-fig.update_layout(xaxis=dict(range=[-3, 8.5], tickvals=[-2, 0, 2, 4, 6, 8]), yaxis=dict(range=[-0.7, 13], tickvals=[0, 2, 4, 6, 8, 10, 12]),
-                  legend=dict(x=0.99, y=0.99, xanchor="right", yanchor="top"), legend_title_text="")
+fig.update_traces(
+    marker_symbol="circle-open",
+    selector=dict(name="2017–2025 (partial, 9 years)"),
+)
+# Step 4: the goal, a black star at 2% inflation and zero volatility
+fig.add_trace(
+    go.Scatter(
+        x=[2],
+        y=[0],
+        mode="markers+text",
+        text=["Goal"],
+        textposition="middle right",
+        name="Goal",
+        marker=dict(color="black", size=14, symbol="star"),
+    )
+)
+# Step 5: the axes and the legend
+fig.update_layout(
+    xaxis=dict(range=[-3, 8.5], tickvals=[-2, 0, 2, 4, 6, 8]),
+    yaxis=dict(range=[-0.7, 13], tickvals=[0, 2, 4, 6, 8, 10, 12]),
+    legend=dict(x=0.99, y=0.99, xanchor="right", yanchor="top"),
+    legend_title_text="",
+)
 fig.show()
 ```
 
@@ -3216,7 +4379,11 @@ Chart: inspired by Fig. 13.21 in Jones (2024), [*Macroeconomics*, 6th ed.](https
 #### Key numbers: distance to the goal
 
 ```{python}
-uk.sort_values("distance")[["period", "n_years", "avg_inflation", "sd_inflation", "distance"]].head(5).round(2)
+# The five windows closest to the goal: `.sort_values("distance")` sorts the rows
+# from the closest to the farthest
+uk.sort_values("distance")[
+    ["period", "n_years", "avg_inflation", "sd_inflation", "distance"]
+].head(5).round(2)
 ```
 
 1997–2016 is at a distance of 1.07 from the goal; the next-best full window, 1877–1896, is at 3.48, with deflation of
@@ -3232,17 +4399,25 @@ prices for 17 more countries from 1870 to 2020; we extend them to 2025 with the 
 1737). We cut each country's years into the same 20-year windows as above and compute the mean and the standard
 deviation of each window. For the United Kingdom this gives exactly the points of the chart above.
 
-> **Python note.** `//` divides and drops the remainder, so `(year - 1737) // 20 * 20 + 1737` is the first year of the
-> 20-year window that contains `year` (1990 gives 1977). `.agg(["mean", "std", "count"])` computes three numbers for
-> each group, and `reset_index()` turns the group labels back into columns.
-
 ```{python}
+# Step 1: load the long series: one row per country and year
 history = pd.read_csv(DATA_URL + "inflation_long_annual.csv")
-history["start"] = (history.year - 1737) // 20 * 20 + 1737            # first year of the 20-year window
-windows = history.groupby(["country", "start"]).inflation.agg(["mean", "std", "count"]).reset_index()
-windows = windows[(windows["count"] == 20) | (windows.start == 2017)]  # full windows and the latest, partial one
-windows["period"] = windows.start.astype(str) + "–" + (windows.start + windows["count"] - 1).astype(str)
+# Step 2: the first year of the 20-year window that contains each year. `//`
+# divides and drops the remainder, so a year of 1990 gives 1977
+history["start"] = (history.year - 1737) // 20 * 20 + 1737
+# Step 3: the mean, the standard deviation and the number of years of each
+# window. `.agg(["mean", "std", "count"])` computes three numbers for each
+# group, and `reset_index()` turns the group labels back into columns
+windows = history.groupby(["country", "start"]).inflation.agg(["mean", "std", "count"])
+windows = windows.reset_index()
+# Step 4: keep the full windows and the latest, partial one
+windows = windows[(windows["count"] == 20) | (windows.start == 2017)]
+# Step 5: the label of each window, e.g. "1997–2016", and its distance to the goal
+windows["period"] = (
+    windows.start.astype(str) + "–" + (windows.start + windows["count"] - 1).astype(str)
+)
 windows["distance"] = np.sqrt((windows["mean"] - 2) ** 2 + windows["std"] ** 2)
+# the last three windows of the United Kingdom
 windows[windows.country == "United Kingdom"].tail(3).round(2)
 ```
 
@@ -3251,42 +4426,89 @@ alone, so the average inflation of 1917–1936 is billions of percent. Japan's 1
 inflation that followed it (an average of 71 percent a year). Averages of yearly rates are fragile when one year is
 extreme: the chart counts such windows in its title instead of drawing them.
 
+The function below draws the windows of the chosen countries, with the goal as a star; its title names the
+window closest to the goal.
+
 ```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 21, the windows of the chosen countries
 def windows_chart(countries=("United Kingdom",)):
-    """Fig. 13.21, extended: average and volatility of inflation in 20-year windows, chosen countries."""
+    """Average and volatility of inflation in 20-year windows, chosen countries.
+
+    Draws Fig. 21, extended to other countries (inspired by Fig. 13.21 in Jones).
+
+    Arguments
+        countries : the countries to show (a list or a tuple of names)
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the windows of the chosen countries, and the axes: one wider view,
+    # only when a chosen country needs it
     part = windows[windows.country.isin(countries)]
     x_range, y_range = [-3, 8.5], [-0.7, 13]
     if part["mean"].max() > 8.5 or part["std"].max() > 13 or part["mean"].min() < -3:
-        x_range, y_range = [-5, 40], [-3, 80]           # one wider view, only when a chosen country needs it
+        x_range, y_range = [-5, 40], [-3, 80]
+    # the windows that still leave the chart
     off = part[(part["mean"] > x_range[1]) | (part["std"] > y_range[1])]
+    # Step 2: the title names the window closest to the goal; `idxmin()` gives the
+    # row label of the smallest distance
     title = "No data for this choice"
     if len(part) > 0:
         best = part.loc[part.distance.idxmin()]
-        title = f"Closest to the goal: {best.country} {best.period} (distance {best.distance:.2f})"
+        title = (
+            f"Closest to the goal: {best.country} {best.period} "
+            f"(distance {best.distance:.2f})"
+        )
     if len(off) > 0:
         title += f"; {len(off)} off the chart"
-    fig = px.scatter(part, x="mean", y="std", color="country", hover_name="period",
-                     color_discrete_map=INFLATION_COLORS, hover_data={"distance": ":.2f", "count": True}, title=title,
-                     labels={"mean": "Average inflation (percent)", "std": "Volatility of inflation (percent)",
-                             "country": "Country", "count": "years"})
+    # Step 3: one point per window, a color per country
+    fig = px.scatter(
+        part,
+        x="mean",
+        y="std",
+        color="country",
+        hover_name="period",
+        color_discrete_map=INFLATION_COLORS,
+        hover_data={"distance": ":.2f", "count": True},
+        title=title,
+        labels={
+            "mean": "Average inflation (percent)",
+            "std": "Volatility of inflation (percent)",
+            "country": "Country",
+            "count": "years",
+        },
+    )
     fig.update_traces(marker_size=11)
-    fig.add_trace(go.Scatter(x=[2], y=[0], mode="markers", name="Goal", marker=dict(color="black", size=14, symbol="star")))
+    # Step 4: the goal, a black star at 2% inflation and zero volatility
+    star = dict(color="black", size=14, symbol="star")
+    fig.add_trace(go.Scatter(x=[2], y=[0], mode="markers", name="Goal", marker=star))
     fig.update_layout(xaxis_range=x_range, yaxis_range=y_range, legend_title_text="")
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(windows_chart, countries=SelectMultiple(options=sorted(windows.country.unique()), value=["United Kingdom"],
-                                                 rows=8, description="countries", style=WIDE));
+# Fig. 21 for the chosen countries: hold Ctrl or Cmd to choose several
+interact(
+    windows_chart,
+    countries=SelectMultiple(options=sorted(windows.country.unique()),
+                             value=["United Kingdom"], rows=8,
+                             description="countries", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: 20-year windows of 18 countries, with buttons for groups of countries
+# @title Website version: 20-year windows of 18 countries, with group buttons
+# Step 1: the windows of every country, with the U.K. title and axes
 everyone = sorted(windows.country.unique())
 fig = windows_chart(countries=everyone)
-fig.update_layout(title=windows_chart().layout.title.text, xaxis_range=[-3, 8.5], yaxis_range=[-0.7, 13])
+fig.update_layout(
+    title=windows_chart().layout.title.text,
+    xaxis_range=[-3, 8.5],
+    yaxis_range=[-0.7, 13],
+)
+# Step 2: the buttons; the U.K. and the goal are always drawn
 group_menu(fig, ["United Kingdom", "Goal"])
 ```
 

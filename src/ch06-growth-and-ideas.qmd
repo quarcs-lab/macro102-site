@@ -1212,59 +1212,186 @@ In the chart, $X$ is in billions of dollars and $Y$ in millions of doses, so $Y 
 
 ```{python}
 def doses(X, F=0.0):
-    """Antibiotic doses (millions) from spending X (billions of $) with a fixed cost F: Y = (X - F)/10."""
-    return 100 * np.maximum(X - F, 0)               # zero until the fixed cost is paid
+    """Antibiotic doses from spending X, with a fixed cost of research F (Fig. 1).
+
+    Y = (X - F) / 10 doses for X dollars. In the chart's units (X in billions of
+    dollars, Y in millions of doses) this is Y = 100 (X - F), and zero until F is paid.
+
+    Arguments
+        X : spending, in billions of dollars (a number or an array)
+        F : fixed cost of research, F-bar, in billions of dollars (0: none)
+    Returns
+        the number of doses, in millions
+    """
+    # `np.maximum(X - F, 0)` takes, for each number, the larger of X - F and 0:
+    # output is zero until the fixed cost is covered
+    return 100 * np.maximum(X - F, 0)
 ```
 
-> **Python note.** `np.maximum(X - F, 0)` takes, for each number, the larger of $X - \bar{F}$
-> and 0, so output is zero until the fixed cost is covered. `make_subplots(rows=1, cols=2)`
-> creates a figure with two panels side by side, and `row=..., col=...` tells `add_trace` where to draw.
-> In `if ... elif ... else`, `elif` ("else if") adds a second test: Python runs the first branch whose test is true.
+`fixed_cost_point` computes the numbers that the figure reports: the average product $Y/X$ at the two
+scales, which is the slope of each dashed ray in panel (b), and the output gain from doubling $X$.
 
 ```{python}
-def fixed_cost(F=2.5, X=7.2):
-    """Fig. 6.1: constant returns (a) and the same technology with a fixed cost F (b)."""
-    x = np.linspace(0, 10, 201)
-    half = X / 2                                     # the smaller of the two scales we compare
-    fig = make_subplots(rows=1, cols=2, subplot_titles=("(a) Constant returns: Y = X/10", f"(b) Fixed cost F̄ = {F} billion"))
-    fig.add_trace(go.Scatter(x=x, y=doses(x), line=dict(color=TEAL, width=3)), row=1, col=1)
-    fig.add_trace(go.Scatter(x=x, y=doses(x, F), line=dict(color=GREEN, width=3)), row=1, col=2)
-    for scale in [half, X]:                          # a dot in (a) and an average-product ray (slope Y/X) in (b)
-        fig.add_trace(go.Scatter(x=[scale], y=[doses(scale)], marker=dict(color="black", size=10)), row=1, col=1)
-        fig.add_trace(go.Scatter(x=[0, scale], y=[0, doses(scale, F)], mode="lines+markers", marker=dict(color="black", size=[0, 10]),
-                                 line=dict(color="black", dash="dash")), row=1, col=2)     # a dot at the far end only
-    if F > 0:
-        fig.add_annotation(x=2.6, y=620, xref="x2", yref="y2", showarrow=False, font=dict(size=13), text=f"Ray slopes, doses per "
-                           f"billion dollars:<br>{doses(half, F) / half:.0f} at X = {half:.1f}, {doses(X, F) / X:.0f} at X = {X:.1f}")
+def fixed_cost_point(F, X):
+    """The average product at two scales, and the output gain from doubling X (Fig. 1).
+
+    Average product Y/X = (1/10) (1 - F/X); here doses(X, F) / X, in millions of doses
+    per billion dollars: the slope of a ray from the origin to the point (X, Y).
+
+    Arguments
+        F : fixed cost of research, F-bar, in billions of dollars
+        X : the larger scale of production, in billions of dollars
+    Returns
+        half     : the smaller scale, X / 2
+        ray_half : the average product at X / 2
+        ray_full : the average product at X
+        gain     : how much output grows from X / 2 to X, as text for the title
+    """
+    half = X / 2                       # the smaller of the two scales we compare
+    # Step 1: the average product, output divided by spending, at both scales
+    ray_half = doses(half, F) / half
+    ray_full = doses(X, F) / X
+    # Step 2: the output gain. `elif` ("else if") adds a second test: Python runs
+    # the first branch whose test is true
     if doses(half, F) > 0:
         gain = f"×{doses(X, F) / doses(half, F):.2f}"
     elif doses(X, F) > 0:
         gain = "from zero"
     else:
-        gain = "still zero"                          # all the spending goes to research
-    fig.update_xaxes(title_text="Input, X (billions of dollars)", range=[0, 10], tickvals=[2, 4, 6, 8, 10])  # no label at the bottom-left corner
-    fig.update_yaxes(range=[0, 1000])                # the same scale in both panels, so (b) never leaves the chart
-    fig.update_layout(title=f"Doubling X from {half:.1f} to {X:.1f} billion: output ×2 in (a), {gain} in (b)",
-                      yaxis=dict(title="Output, Y (millions of doses)"), showlegend=False)
+        gain = "still zero"            # all the spending goes to research
+    return half, ray_half, ray_full, gain
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 1, the ray slopes, the axes and the title
+def fixed_cost_layout(fig, F, X, half, ray_half, ray_full, gain):
+    """The ray slopes, the axes and the title of Fig. 1.
+
+    Arguments
+        fig                : the two-panel figure of fixed_cost
+        F                  : fixed cost of research, F-bar, in billions of dollars
+        X, half            : the two scales of production
+        ray_half, ray_full : the average product at the two scales
+        gain               : the output gain in panel (b), as text
+    """
+    # Step 1: the slopes of the two rays, written in panel (b) (`xref="x2"` and
+    # `yref="y2"` are the axes of the second panel)
+    if F > 0:
+        fig.add_annotation(
+            x=2.6,
+            y=620,
+            xref="x2",
+            yref="y2",
+            showarrow=False,
+            font=dict(size=13),
+            text=(
+                f"Ray slopes, doses per billion dollars:<br>{ray_half:.0f} at "
+                f"X = {half:.1f}, {ray_full:.0f} at X = {X:.1f}"
+            ),
+        )
+    # Step 2: the axes, with the same vertical scale in both panels, so that (b)
+    # never leaves the chart
+    fig.update_xaxes(
+        title_text="Input, X (billions of dollars)",
+        range=[0, 10],
+        tickvals=[2, 4, 6, 8, 10],     # no label at the bottom-left corner
+    )
+    fig.update_yaxes(range=[0, 1000])
+    # Step 3: the title reports the output gain in both panels
+    fig.update_layout(
+        title=(
+            f"Doubling X from {half:.1f} to {X:.1f} billion: "
+            f"output ×2 in (a), {gain} in (b)"
+        ),
+        yaxis=dict(title="Output, Y (millions of doses)"),
+        showlegend=False,
+    )
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 1, constant returns and a fixed cost
+def fixed_cost(F=2.5, X=7.2):
+    """Constant returns (a), and the same technology with a fixed cost F (b).
+
+    Draws Fig. 1 (adapted from Fig. 6.1 in Jones): a dot at two scales of production
+    in panel (a), and in panel (b) a dashed ray to each scale, whose slope is the
+    average product Y/X.
+
+    Arguments
+        F : fixed cost of research, F-bar, in billions of dollars
+        X : the larger scale of production, in billions of dollars
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the numbers of the figure (fixed_cost_point)
+    half, ray_half, ray_full, gain = fixed_cost_point(F, X)
+    x = np.linspace(0, 10, 201)        # spending from 0 to 10 billion dollars
+
+    # Step 2: `make_subplots(rows=1, cols=2)` makes two panels side by side, and
+    # `row=..., col=...` tells `add_trace` which panel to draw in
+    fig = make_subplots(
+        rows=1,
+        cols=2,
+        subplot_titles=(
+            "(a) Constant returns: Y = X/10",
+            f"(b) Fixed cost F̄ = {F} billion",
+        ),
+    )
+    # the production function without (a) and with (b) the fixed cost
+    curve_a = go.Scatter(x=x, y=doses(x), line=dict(color=TEAL, width=3))
+    fig.add_trace(curve_a, row=1, col=1)
+    curve_b = go.Scatter(x=x, y=doses(x, F), line=dict(color=GREEN, width=3))
+    fig.add_trace(curve_b, row=1, col=2)
+
+    # Step 3: at both scales, a dot in (a) and a ray from the origin in (b)
+    for scale in [half, X]:
+        dot = go.Scatter(
+            x=[scale],
+            y=[doses(scale)],
+            marker=dict(color="black", size=10),
+        )
+        fig.add_trace(dot, row=1, col=1)
+        ray = go.Scatter(
+            x=[0, scale],
+            y=[0, doses(scale, F)],
+            mode="lines+markers",
+            marker=dict(color="black", size=[0, 10]),   # a dot at the far end only
+            line=dict(color="black", dash="dash"),
+        )
+        fig.add_trace(ray, row=1, col=2)
+    fixed_cost_layout(fig, F, X, half, ray_half, ray_full, gain)
     return fig
 ```
 
 Now the interactive version. Move the sliders and compare the two panels.
 
-> **Python note.** `interact` turns each argument of a function into a slider and calls the
-> function again every time you move one. The `;` at the end only hides an extra line of text.
-
 ```{python}
 #| kind: widget
-interact(fixed_cost,
-         F=FloatSlider(value=2.5, min=0.0, max=5.0, step=0.5, description="fixed cost F̄ (billions)", style=WIDE),
-         X=FloatSlider(value=7.2, min=5.0, max=10.0, step=0.2, description="scale of production X", style=WIDE));
+# Fig. 1 with sliders. `interact` turns each argument of fixed_cost into a slider,
+# and draws the figure again every time you move one. The `;` at the end only
+# hides an extra line of text.
+interact(
+    fixed_cost,
+    F=FloatSlider(value=2.5, min=0.0, max=5.0, step=0.5,
+                  description="fixed cost F̄ (billions)", style=WIDE),
+    X=FloatSlider(value=7.2, min=5.0, max=10.0, step=0.2,
+                  description="scale of production X", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 1 with a precomputed slider for the fixed cost
-slider_figure(fixed_cost, "F", [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5], start=2.5, label="fixed cost F̄ (billions)")
+# one picture of Fig. 1 per value of F
+slider_figure(
+    fixed_cost,
+    "F",
+    [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5],     # the values of F
+    start=2.5,
+    label="fixed cost F̄ (billions)",
+)
 ```
 
 **Source.** Adapted from Fig. 6.1 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -1288,11 +1415,16 @@ If the firm had to sell each dose at its marginal cost of \$10, the revenue woul
 production cost of the doses, and nothing would be left to pay for the research.
 
 ```{python}
-X = 5.0                                              # spend 2.5 billion on research and 2.5 on production
-Y = doses(X, F=2.5)                                  # millions of doses
-revenue = Y * 10 / 1000                              # billions of dollars at a price of $10 a dose
+# Pricing at marginal cost: spend 2.5 billion on research and 2.5 on production
+X = 5.0                            # total spending, billions of dollars
+Y = doses(X, F=2.5)                # millions of doses
+revenue = Y * 10 / 1000            # billions of dollars at a price of $10 a dose
 print(f"Spending {X} billion gives {Y:.0f} million doses")
-print(f"Revenue at marginal cost: {revenue:.1f} billion; profit: {revenue - X:.1f} billion")
+# profit: revenue minus all the spending, research included
+print(
+    f"Revenue at marginal cost: {revenue:.1f} billion; "
+    f"profit: {revenue - X:.1f} billion"
+)
 ```
 
 The firm loses exactly the research cost. This is why new ideas need a gap between price and marginal
@@ -1333,42 +1465,136 @@ grows too, at a constant rate.
 On a **ratio scale** a variable that grows at a constant rate is a straight line, and the slope of the
 line is the growth rate. The chart uses `vertical_axis` and `add_label` from "Model in code".
 
+`romer_growth` simulates the balanced growth path and computes its growth rate, the number in the title.
+
 ```{python}
-def romer_bgp(gamma=0.7, n=0.05, scale="ratio"):
-    """Fig. 6.2: output per person on the balanced growth path of the Romer model (y_2025 = 1)."""
+def romer_growth(gamma, n):
+    """The balanced growth path of the Romer model, and its growth rate (Fig. 2).
+
+    Equation (5): g_y* = gamma n-bar; simulate_romer gives the path year by year.
+
+    Arguments
+        gamma : the importance of ideas, gamma
+        n     : population growth rate, n-bar
+    Returns
+        years  : the years 2025-2100
+        y      : output per person in each year (2025 = 1)
+        growth : the growth rate of y, in percent a year
+    """
     years, y, y_bgp = simulate_romer(gamma=gamma, n=n)
+    # growth from the first year to the second: on the BGP it is the same every year
     growth = 100 * (y[1] / y[0] - 1)
+    return years, y, growth
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 2, the balanced growth path
+def romer_bgp(gamma=0.7, n=0.05, scale="ratio"):
+    """Output per person on the balanced growth path of the Romer model (2025 = 1).
+
+    Draws Fig. 2 (adapted from Fig. 6.2 in Jones).
+
+    Arguments
+        gamma : the importance of ideas, gamma
+        n     : population growth rate, n-bar
+        scale : "ratio" or "linear", the vertical scale
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the path and its growth rate (romer_growth)
+    years, y, growth = romer_growth(gamma, n)
+
+    # Step 2: `go.Figure()` starts an empty chart, and `add_trace` adds a line
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=years, y=y, name="Output per person, y", line=dict(color=BLUE, width=3)))
+    fig.add_trace(
+        go.Scatter(
+            x=years,
+            y=y,
+            name="Output per person, y",
+            line=dict(color=BLUE, width=3),
+        )
+    )
+    # a label at the end of the line, and the axes (tools from "Model in code")
     add_label(fig, 2101, y[-1], "Constant growth")
     vertical_axis(fig, scale)
-    fig.update_layout(title=f"Constant growth of {growth:.2f}% a year (γ·n = {100 * gamma * n:.2f}%); "
-                            f"y in 2100 = {y[-1]:.1f} × its 2025 level", showlegend=False)
+
+    # Step 3: the title reports the growth rate, gamma*n and y in 2100
+    fig.update_layout(
+        title=(
+            f"Constant growth of {growth:.2f}% a year "
+            f"(γ·n = {100 * gamma * n:.2f}%); "
+            f"y in 2100 = {y[-1]:.1f} × its 2025 level"
+        ),
+        showlegend=False,
+    )
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(romer_bgp,
-         gamma=FloatSlider(value=0.7, min=0.1, max=1.0, step=0.1, description="importance of ideas γ", style=WIDE),
-         n=FloatSlider(value=0.05, min=0.01, max=0.05, step=0.005, description="population growth n",
-                       style=WIDE, readout_format=".3f"),
-         scale=ToggleButtons(options=["ratio", "linear"], description="vertical scale"));
+# Fig. 2 with sliders. `ToggleButtons` shows its options as buttons: here the
+# vertical scale. n moves in steps of 0.005, shown with three decimals
+interact(
+    romer_bgp,
+    gamma=FloatSlider(value=0.7, min=0.1, max=1.0, step=0.1,
+                      description="importance of ideas γ", style=WIDE),
+    n=FloatSlider(value=0.05, min=0.01, max=0.05, step=0.005,
+                  description="population growth n",
+                  style=WIDE, readout_format=".3f"),
+    scale=ToggleButtons(options=["ratio", "linear"], description="vertical scale"),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: Fig. 2 with a precomputed slider for γ and buttons for the vertical scale
-fig = slider_figure(romer_bgp, "gamma", [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0], start=0.7,
-                    label="importance of ideas γ")
-fig.update_layout(updatemenus=[dict(type="buttons", direction="right", x=0.01, y=0.98, xanchor="left",
-                                    yanchor="top", buttons=[
-    dict(label="ratio scale", method="relayout",
-         args=[{"yaxis.type": "log", "yaxis.range": [np.log10(Y_LOW), np.log10(Y_HIGH)], "yaxis.tickvals": TICKS,
-                "yaxis.title.text": "Output per person, y (ratio scale, 2025 = 1)"}]),
-    dict(label="linear scale", method="relayout",
-         args=[{"yaxis.type": "linear", "yaxis.range": [0, Y_HIGH], "yaxis.tickvals": LINEAR_TICKS,
-                "yaxis.title.text": "Output per person, y (linear scale, 2025 = 1)"}])])])
+# @title Website version: Fig. 2 with a precomputed slider for γ and scale buttons
+# Step 1: one picture of Fig. 2 per value of gamma
+fig = slider_figure(
+    romer_bgp,
+    "gamma",
+    [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],     # the values of gamma
+    start=0.7,
+    label="importance of ideas γ",
+)
+# Step 2: two buttons switch the vertical axis between a ratio and a linear scale,
+# with the same ranges and ticks as `vertical_axis`
+fig.update_layout(
+    updatemenus=[
+        dict(
+            type="buttons",
+            direction="right",
+            x=0.01,
+            y=0.98,
+            xanchor="left",
+            yanchor="top",
+            buttons=[
+                dict(
+                    label="ratio scale",
+                    method="relayout",
+                    args=[{
+                        "yaxis.type": "log",
+                        "yaxis.range": [np.log10(Y_LOW), np.log10(Y_HIGH)],
+                        "yaxis.tickvals": TICKS,
+                        "yaxis.title.text":
+                            "Output per person, y (ratio scale, 2025 = 1)",
+                    }],
+                ),
+                dict(
+                    label="linear scale",
+                    method="relayout",
+                    args=[{
+                        "yaxis.type": "linear",
+                        "yaxis.range": [0, Y_HIGH],
+                        "yaxis.tickvals": LINEAR_TICKS,
+                        "yaxis.title.text":
+                            "Output per person, y (linear scale, 2025 = 1)",
+                    }],
+                ),
+            ],
+        )
+    ]
+)
 fig
 ```
 
@@ -1416,31 +1642,92 @@ and then more and more slowly as it gets close to the new path.
 We reuse `simulate_romer`. The old BGP is simply a simulation in which nothing changes, and
 `experiment_chart` from "Model in code" draws the three paths.
 
+`z_experiment` runs the experiment and computes the numbers in the title: the level effect and three
+growth rates.
+
 ```{python}
-def rise_in_z(z_new=8.0, scale="ratio"):
-    """Fig. 6.3: output per person when research productivity rises from 1 to z_new in 2050."""
+def z_experiment(z_new):
+    """The experiment of Fig. 3: research productivity rises from 1 to z_new in 2050.
+
+    The Romer model with and without the change (simulate_romer). By equation (4),
+    the new BGP is higher than the old one by the factor (z_new / z)^gamma.
+
+    Arguments
+        z_new : new research productivity, z-bar'
+    Returns
+        years  : the years 2025-2100
+        y      : output per person with the change
+        y_old  : output per person without it, the old BGP
+        y_bgp  : the new BGP
+        level  : the new BGP over the old one, the level effect
+        growth : the growth of y in 2051, in 2100 and on the old BGP, in percent
+    """
+    # Step 1: the economy with the change, and the old BGP: a simulation in which
+    # nothing changes
     years, y, y_bgp = simulate_romer(z_new=z_new)
-    years, y_old, y_old_bgp = simulate_romer()             # no change: the old balanced growth path
+    years, y_old, y_old_bgp = simulate_romer()
+    # Step 2: the level effect in the last year, 2100
     level = y_bgp[-1] / y_old[-1]
+    # Step 3: growth rates; y[25] is 2050, y[26] is 2051 and y[-1] is 2100
+    growth = (
+        100 * (y[26] / y[25] - 1),     # just after the change
+        100 * (y[-1] / y[-2] - 1),     # in 2100
+        100 * (y[1] / y[0] - 1),       # on the old BGP, before the change
+    )
+    return years, y, y_old, y_bgp, level, growth
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 3, a rise in research productivity
+def rise_in_z(z_new=8.0, scale="ratio"):
+    """Output per person when research productivity rises from 1 to z_new in 2050.
+
+    Draws Fig. 3 (adapted from Fig. 6.3 in Jones).
+
+    Arguments
+        z_new : new research productivity, z-bar'
+        scale : "ratio" or "linear", the vertical scale
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the experiment (z_experiment)
+    years, y, y_old, y_bgp, level, growth = z_experiment(z_new)
+    growth_2051, growth_2100, growth_bgp = growth
+    # Step 2: the path between the two BGPs (experiment_chart, from "Model in
+    # code"), and a title with the level effect and the growth rates
     fig = experiment_chart(years, y, y_old, y_bgp, scale)
-    # y[25] is 2050, y[26] is 2051 and y[-1] is the last year, 2100
-    fig.update_layout(title=f"New BGP ×{level:.2f} the old | growth {100 * (y[26] / y[25] - 1):.1f}% in 2051, "
-                            f"{100 * (y[-1] / y[-2] - 1):.1f}% in 2100 (BGP: {100 * (y[1] / y[0] - 1):.1f}%)")
+    fig.update_layout(
+        title=(
+            f"New BGP ×{level:.2f} the old | growth {growth_2051:.1f}% in 2051, "
+            f"{growth_2100:.1f}% in 2100 (BGP: {growth_bgp:.1f}%)"
+        )
+    )
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(rise_in_z,
-         z_new=FloatSlider(value=8.0, min=0.5, max=10.0, step=0.5, description="new research productivity z̄'",
-                           style=WIDE),
-         scale=ToggleButtons(options=["ratio", "linear"], description="vertical scale"));
+# Fig. 3 with a slider for the new research productivity, and buttons for the scale
+interact(
+    rise_in_z,
+    z_new=FloatSlider(value=8.0, min=0.5, max=10.0, step=0.5,
+                      description="new research productivity z̄'", style=WIDE),
+    scale=ToggleButtons(options=["ratio", "linear"], description="vertical scale"),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: Fig. 3 with a precomputed slider for the new research productivity
-slider_figure(rise_in_z, "z_new", [0.5, 1.0, 2.0, 4.0, 6.0, 8.0, 10.0], start=8.0, label="new research productivity z̄'")
+# @title Website version: Fig. 3 with a precomputed slider for research productivity
+# one picture of Fig. 3 per value of z-bar'
+slider_figure(
+    rise_in_z,
+    "z_new",
+    [0.5, 1.0, 2.0, 4.0, 6.0, 8.0, 10.0],     # the values of z-bar'
+    start=8.0,
+    label="new research productivity z̄'",
+)
 ```
 
 **Source.** Adapted from Fig. 6.3 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -1484,30 +1771,88 @@ For a research share that is not too large, the first effect wins and the new BG
 goods. So output per person **falls** on impact. After that, the economy is far below its new BGP
 and grows fast to catch up.
 
+`l_experiment` runs the experiment and computes the numbers in the title: the change on impact, the level
+effect and the growth rate in 2051.
+
 ```{python}
-def rise_in_l(l_new=0.35, scale="ratio"):
-    """Fig. 6.4: output per person when the research share rises from 0.03 to l_new in 2050."""
+def l_experiment(l_new):
+    """The experiment of Fig. 4: the research share rises from 0.03 to l_new in 2050.
+
+    The Romer model with and without the change (simulate_romer). By equation (4),
+    the new BGP is higher than the old one by (1 - l') l'^gamma / ((1 - l) l^gamma).
+
+    Arguments
+        l_new : new research share, l-bar'
+    Returns
+        years       : the years 2025-2100
+        y           : output per person with the change
+        y_old       : output per person without it, the old BGP
+        y_bgp       : the new BGP
+        level       : the new BGP over the old one, the level effect
+        impact      : the change of y in 2050 compared with the old path, in percent
+        growth_2051 : the growth of y in 2051, in percent
+    """
+    # Step 1: the economy with the change, and the old BGP (no change)
     years, y, y_bgp = simulate_romer(l_old=0.03, l_new=l_new)
-    years, y_old, y_old_bgp = simulate_romer(l_old=0.03, l_new=0.03)   # the old balanced growth path
+    years, y_old, y_old_bgp = simulate_romer(l_old=0.03, l_new=0.03)
+    # Step 2: the level effect in 2100, and the change on impact in 2050 (y[25])
     level = y_bgp[-1] / y_old[-1]
-    impact = 100 * (y[25] / y_old[25] - 1)                 # change in 2050 (y[25]) compared with the old path
+    impact = 100 * (y[25] / y_old[25] - 1)
+    # Step 3: growth in 2051 (y[26]), the first year after the change
+    growth_2051 = 100 * (y[26] / y[25] - 1)
+    return years, y, y_old, y_bgp, level, impact, growth_2051
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 4, a rise in the research share
+def rise_in_l(l_new=0.35, scale="ratio"):
+    """Output per person when the research share rises from 0.03 to l_new in 2050.
+
+    Draws Fig. 4 (adapted from Fig. 6.4 in Jones).
+
+    Arguments
+        l_new : new research share, l-bar'
+        scale : "ratio" or "linear", the vertical scale
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the experiment (l_experiment)
+    years, y, y_old, y_bgp, level, impact, growth_2051 = l_experiment(l_new)
+    # Step 2: the path between the two BGPs (experiment_chart), and a title with
+    # the impact, the level effect and the growth in 2051
     fig = experiment_chart(years, y, y_old, y_bgp, scale)
-    fig.update_layout(title=f"Impact in 2050: {impact:+.1f}% | new BGP ×{level:.2f} the old | "
-                            f"growth in 2051: {100 * (y[26] / y[25] - 1):.1f}%")
+    fig.update_layout(
+        title=(
+            f"Impact in 2050: {impact:+.1f}% | new BGP ×{level:.2f} the old | "
+            f"growth in 2051: {growth_2051:.1f}%"
+        )
+    )
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(rise_in_l,
-         l_new=FloatSlider(value=0.35, min=0.05, max=0.75, step=0.05, description="new research share ℓ̄'", style=WIDE),
-         scale=ToggleButtons(options=["ratio", "linear"], description="vertical scale"));
+# Fig. 4 with a slider for the new research share, and buttons for the scale
+interact(
+    rise_in_l,
+    l_new=FloatSlider(value=0.35, min=0.05, max=0.75, step=0.05,
+                      description="new research share ℓ̄'", style=WIDE),
+    scale=ToggleButtons(options=["ratio", "linear"], description="vertical scale"),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 4 with a precomputed slider for the new research share
-slider_figure(rise_in_l, "l_new", [0.05, 0.1, 0.2, 0.35, 0.5, 0.65, 0.75], start=0.35, label="new research share ℓ̄'")
+# one picture of Fig. 4 per value of l-bar'
+slider_figure(
+    rise_in_l,
+    "l_new",
+    [0.05, 0.1, 0.2, 0.35, 0.5, 0.65, 0.75],     # the values of l-bar'
+    start=0.35,
+    label="new research share ℓ̄'",
+)
 ```
 
 **Source.** Adapted from Fig. 6.4 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -1530,20 +1875,29 @@ The level effect $\dfrac{(1-\bar{\ell}')\,\bar{\ell}'^{\,\gamma}}{(1-\bar{\ell})
 **hump shaped** in the new share $\bar{\ell}'$. The table computes it for several shares, starting
 from $\bar{\ell} = 0.03$ with $\gamma = 0.6$.
 
-> **Python note.** `rows = []` starts an empty list, and the loop appends one `[share, ratio]` pair to it per
-> share. `pd.DataFrame(rows, columns=[...])` then turns the list of rows into a table, and `.round(2)` keeps
-> two decimals.
-
 ```{python}
 def bgp_level(l, gamma=0.6):
-    """The part of the BGP level (equation 4) that depends on the research share: (1 - l) l^gamma."""
+    """The part of the BGP level that depends on the research share.
+
+    Equation (4): y* is proportional to (1 - l) l^gamma.
+
+    Arguments
+        l     : the research share, l-bar
+        gamma : the importance of ideas, gamma
+    Returns
+        (1 - l) l^gamma
+    """
     return (1 - l) * l ** gamma
 
 
+# Step 1: the level effect of each new share, against the old share 0.03.
+# `rows = []` starts an empty list, and the loop appends one [share, ratio] pair
 rows = []
 for l_new in [0.03, 0.1, 0.2, 0.3, 0.35, 0.4, 0.5, 0.65, 0.8]:
     rows.append([l_new, bgp_level(l_new) / bgp_level(0.03)])
 print(f"The level effect is largest at l = gamma / (1 + gamma) = {0.6 / 1.6:.3f}")
+# Step 2: `pd.DataFrame(rows, columns=[...])` turns the list of rows into a table,
+# and `.round(2)` keeps two decimals
 pd.DataFrame(rows, columns=["new research share", "new BGP / old BGP"]).round(2)
 ```
 
@@ -1577,10 +1931,10 @@ them rose enormously. Simple supply and demand would predict rising prices. The 
 another possibility: new ideas, such as new ways to find, extract and use resources, can expand
 supply faster than demand.
 
-> **Python note.** `pd.read_csv` reads a data file into a *DataFrame*, a table with named
-> columns. `.head()` shows its first five rows, which is always a good first look at new data.
-
 ```{python}
+# Load the data of Fig. 5. `pd.read_csv` reads a data file into a DataFrame, a
+# table with named columns; `.head()` shows its first five rows, always a good
+# first look at new data.
 prices = pd.read_csv(DATA_URL + "fig6-5.csv")
 prices.head()
 ```
@@ -1591,22 +1945,37 @@ combines them with equal weights, and `extended_with_world_bank` marks the years
 added from a second source (World Bank prices). The textbook uses proprietary data, so our index differs
 somewhat in levels but has the same ups and downs.
 
-> **Python note.** `px.line(prices, x="year", y="commodity_index", ...)` draws a line chart straight from the
-> table: `x` and `y` name its columns, and `labels` gives them readable names on the axes.
-> `prices.set_index("year").commodity_index` makes the years the row labels of the index
-> column, so that `index[2000]` picks the value for 2000. `add_hline` draws a horizontal line.
+```{python}
+# The index, with the years as labels: `prices.set_index("year")` makes the years
+# the row labels, so that `index[2000]` picks the value for 2000
+index = prices.set_index("year").commodity_index
+```
 
 ```{python}
-index = prices.set_index("year").commodity_index
-fig = px.line(prices, x="year", y="commodity_index",
-              labels={"year": "Year", "commodity_index": "Equally weighted price index (1900 = 100)"},
-              title=f"Real commodity prices fell from 100 in 1900 to {index[2000]:.0f} in 2000, "
-                    f"then rose to {index[2011]:.0f} in 2011")
+#| kind: drawing
+# @title Drawing code: Fig. 5, the real commodity price index
+# Step 1: `px.line` draws a line chart straight from the table: `x` and `y` name
+# its columns, and `labels` gives them readable names on the axes
+fig = px.line(
+    prices,
+    x="year",
+    y="commodity_index",
+    labels={
+        "year": "Year",
+        "commodity_index": "Equally weighted price index (1900 = 100)",
+    },
+    title=(
+        f"Real commodity prices fell from 100 in 1900 to {index[2000]:.0f} in 2000, "
+        f"then rose to {index[2011]:.0f} in 2011"
+    ),
+)
 fig.update_traces(line=dict(color=TEAL, width=3))
+# Step 2: `add_hline` draws a horizontal line: here at 100 (1900) and at 20
 fig.add_hline(y=100, line_dash="dash", line_color=GRAY)
 fig.add_hline(y=20, line_dash="dash", line_color=GRAY)
+# Step 3: fixed axes, with no label at the bottom-left corner
 fig.update_layout(yaxis_range=[0, 140], xaxis_range=[1900, 2026])
-fig.update_yaxes(tickvals=[20, 40, 60, 80, 100, 120, 140])        # no label at the bottom-left corner
+fig.update_yaxes(tickvals=[20, 40, 60, 80, 100, 120, 140])
 fig.show()
 ```
 
@@ -1628,9 +1997,14 @@ Chart: inspired by Fig. 6.5 in Jones (2024), [*Macroeconomics*, 6th ed.](https:/
 #### Key numbers: the fall and the rise
 
 ```{python}
+# The fall and the rise of the index. `.idxmin()` gives the year of the lowest
+# value, and `.min()` the value itself
 print(f"Peak during World War I, 1916:  {index[1916]:.1f}")
 print(f"Lowest value, {index.idxmin()}:            {index.min():.1f}")
-print(f"Fall from 1900 to 2000:         factor {index[1900] / index[2000]:.1f} (textbook: almost 5)")
+print(
+    f"Fall from 1900 to 2000:         factor {index[1900] / index[2000]:.1f} "
+    f"(textbook: almost 5)"
+)
 print(f"Rise from 2000 to 2011:         factor {index[2011] / index[2000]:.2f}")
 print(f"Latest year, 2025:              {index[2025]:.1f}")
 ```
@@ -1648,15 +2022,28 @@ whose price shoots up would dominate it. The index here is a **geometric mean**:
 *logarithms* of the prices, turned back into a price with `np.exp`. Let us check that this rebuilds
 the index, and compare it with a simple (arithmetic) mean.
 
-> **Python note.** `prices[COMMODITIES]` keeps only the listed columns. `.mean(axis=1)` averages
-> *across* the columns of each row (one average per year), and `.isin([...])` keeps the listed years.
-
 ```{python}
-COMMODITIES = ["aluminum_real_1900_100", "coal_real_1900_100", "copper_real_1900_100",
-               "lead_real_1900_100", "iron_ore_real_1900_100", "zinc_real_1900_100"]
-check = pd.DataFrame({"year": prices.year, "index in the file": prices.commodity_index,
-                      "geometric mean": np.exp(np.log(prices[COMMODITIES]).mean(axis=1)),
-                      "arithmetic mean": prices[COMMODITIES].mean(axis=1)})
+# Step 1: the six price columns; `prices[COMMODITIES]` keeps only these columns
+COMMODITIES = [
+    "aluminum_real_1900_100",
+    "coal_real_1900_100",
+    "copper_real_1900_100",
+    "lead_real_1900_100",
+    "iron_ore_real_1900_100",
+    "zinc_real_1900_100",
+]
+# Step 2: the index rebuilt two ways. `.mean(axis=1)` averages across the columns
+# of each row (one average per year); the geometric mean averages the logs, and
+# `np.exp` turns the result back into a price
+check = pd.DataFrame(
+    {
+        "year": prices.year,
+        "index in the file": prices.commodity_index,
+        "geometric mean": np.exp(np.log(prices[COMMODITIES]).mean(axis=1)),
+        "arithmetic mean": prices[COMMODITIES].mean(axis=1),
+    }
+)
+# Step 3: a few years; `.isin([...])` keeps the listed years
 check[check.year.isin([1900, 1950, 2000, 2022, 2025])].round(1)
 ```
 
@@ -1664,36 +2051,85 @@ The geometric mean reproduces the index exactly. The arithmetic mean is much hig
 a single commodity. The chart below shows which one. It uses a ratio scale, because the six prices
 differ a lot. Click a name in the legend to hide or show that line.
 
-> **Python note.** `.melt(id_vars="year")` turns the commodity columns into rows: the old column names
-> go into a new column (`var_name`) and the numbers into another (`value_name`). `.map(NAMES)` replaces
-> each column name with a readable name, using the dictionary `NAMES`.
+First we stack the seven price columns into one long table, with one row per series and year and a readable
+name for each series.
 
 ```{python}
-NAMES = {"commodity_index": "Index", "aluminum_real_1900_100": "Aluminum", "coal_real_1900_100": "Coal",
-         "copper_real_1900_100": "Copper", "lead_real_1900_100": "Lead",
-         "iron_ore_real_1900_100": "Iron ore", "zinc_real_1900_100": "Zinc"}
-long = prices.melt(id_vars="year", value_vars=list(NAMES), var_name="series", value_name="price")
+# Step 1: readable names for the index and the six prices
+NAMES = {
+    "commodity_index": "Index",
+    "aluminum_real_1900_100": "Aluminum",
+    "coal_real_1900_100": "Coal",
+    "copper_real_1900_100": "Copper",
+    "lead_real_1900_100": "Lead",
+    "iron_ore_real_1900_100": "Iron ore",
+    "zinc_real_1900_100": "Zinc",
+}
+# Step 2: `.melt(id_vars="year")` turns the price columns into rows: the old
+# column names go into a new column (`var_name`) and the numbers into another
+# (`value_name`)
+long = prices.melt(
+    id_vars="year",
+    value_vars=list(NAMES),
+    var_name="series",
+    value_name="price",
+)
+# `.map(NAMES)` replaces each column name with its readable name, using the
+# dictionary NAMES
 long["commodity"] = long.series.map(NAMES)
-fig = px.line(long, x="year", y="price", color="commodity", log_y=True,
-              color_discrete_sequence=["black", "#5aa0d8", "#7fb23a", "#e0a33b", "#b04a5a", "#16528c", "#008070"],
-              labels={"year": "Year", "price": "Real price (1900 = 100, ratio scale)", "commodity": "Commodity"},
-              title="Aluminum became far cheaper; coal spiked in 2022")
-fig.update_traces(line=dict(width=1.5))
-fig.update_traces(line=dict(color="black", width=4), selector=dict(name="Index"))
-fig.update_yaxes(tickvals=[10, 20, 50, 100, 200, 500, 1000], range=[np.log10(4), np.log10(1000)])   # no corner label
-fig.show()
 ```
 
 ```{python}
-latest = prices.set_index("year").loc[2025, COMMODITIES]
-print("Real prices in 2025 (1900 = 100):")
-print(latest.round(1))
-print("Coal in 2022:", round(prices.set_index("year").loc[2022, "coal_real_1900_100"], 1))
+#| kind: drawing
+# @title Drawing code: Fig. 5, the six commodities and the index
+# Step 1: one line per commodity, on a ratio scale (`log_y=True`)
+fig = px.line(
+    long,
+    x="year",
+    y="price",
+    color="commodity",
+    log_y=True,
+    color_discrete_sequence=[
+        "black", "#5aa0d8", "#7fb23a", "#e0a33b", "#b04a5a", "#16528c", "#008070",
+    ],
+    labels={
+        "year": "Year",
+        "price": "Real price (1900 = 100, ratio scale)",
+        "commodity": "Commodity",
+    },
+    title="Aluminum became far cheaper; coal spiked in 2022",
+)
+# Step 2: thin lines, and a thick black line for the index (`selector` picks the
+# line named "Index")
+fig.update_traces(line=dict(width=1.5))
+fig.update_traces(line=dict(color="black", width=4), selector=dict(name="Index"))
+# Step 3: the ticks and the range of the ratio scale, with no corner label
+fig.update_yaxes(
+    tickvals=[10, 20, 50, 100, 200, 500, 1000],
+    range=[np.log10(4), np.log10(1000)],
+)
+fig.show()
 ```
 
 **Sources.** Data: Jacks (2019), ["From Boom to Bust: A Typology of Real Commodity Prices in the Long Run"](https://doi.org/10.1007/s11698-018-0173-5), *Cliometrica* 13(2), data file "Real commodity prices, 1850–2020" ([archived copy of the author's data page](https://web.archive.org/web/20221007161341/http://www.sfu.ca/~djacks/data/boombust/)), for 1900–2020; extended to 2025 with the [World Bank, Commodity Price Data (The Pink Sheet)](https://www.worldbank.org/en/research/commodity-markets), deflated by the [U.S. Bureau of Labor Statistics, Consumer Price Index for All Urban Consumers (`CPIAUCSL`), via FRED](https://fred.stlouisfed.org/series/CPIAUCSL).
 Prepared file: [`data/ch06/fig6-5.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch06/fig6-5.csv) (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch06/README.md)).
 Chart: inspired by Fig. 6.5 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
+
+The cell below lists the six real prices in 2025, and the price of coal in 2022.
+
+```{python}
+# The six real prices in the latest year; `.loc[2025, COMMODITIES]` picks the row
+# of 2025 and the six price columns
+latest = prices.set_index("year").loc[2025, COMMODITIES]
+print("Real prices in 2025 (1900 = 100):")
+print(latest.round(1))
+# coal in 2022, the year of its spike; `round(x, 1)` keeps one decimal
+print(
+    "Coal in 2022:",
+    round(prices.set_index("year").loc[2022, "coal_real_1900_100"], 1),
+)
+```
+
 
 <!-- cell -->
 
@@ -1714,6 +2150,8 @@ grains, "softs" such as coffee and cotton, animal products and minerals. A wider
 the same units.
 
 ```{python}
+# Load the wider file: the real prices of 40 commodities, one row per commodity
+# and year
 commodities = pd.read_csv(DATA_URL + "commodity_prices.csv")
 commodities.head()
 ```
@@ -1723,37 +2161,98 @@ The file is *long*: one row per commodity and year. `group` is the commodity's g
 (hides, pork, rye, chromium, manganese, steel, bauxite, sulfur, cottonseed and wool) have no matching World
 Bank price, so they stop in 2020. **Always check where each series ends before you compare "latest" values.**
 
-> **Python note.** `.isin(names)` keeps the rows whose commodity is in `names`. `.groupby("commodity").last()`
-> keeps the last row of each commodity, that is, its latest year. `color_discrete_map` gives each line its
-> fixed color from `group_colors`. A `SelectMultiple` is a list in which you can pick several items: hold Ctrl
-> (Cmd on a Mac) while you click.
+`commodity_data` keeps the rows of the chosen commodities and counts how many of them cost less in their
+latest year than in 1900.
 
 ```{python}
+# The commodities of the list, A to Z, and the textbook's six (the default choice)
 ALL_COMMODITIES = sorted(commodities.commodity.unique())
 SIX = ("Aluminum", "Coal", "Copper", "Iron ore", "Lead", "Zinc")
-COMMODITY_COLORS = group_colors(ALL_COMMODITIES, [SIX, ALL_COMMODITIES])   # the two website views
 
 
-def commodity_chart(names=SIX):
-    """Fig. 6.5, extended: real prices of any of the 40 commodities (1900 = 100, ratio scale)."""
+def commodity_data(names):
+    """The rows of the chosen commodities, and how many became cheaper (Fig. 5).
+
+    Arguments
+        names : the commodities to keep
+    Returns
+        chosen  : their rows of `commodities`, one per commodity and year
+        latest  : the latest row of each commodity
+        cheaper : how many of them cost less in their latest year than in 1900
+    """
+    # Step 1: `.isin(names)` keeps the rows whose commodity is in `names`
     chosen = commodities[commodities.commodity.isin(names)]
-    if len(chosen) == 0:
-        return go.Figure(layout=dict(title="Pick at least one commodity"))
+    # Step 2: `.groupby("commodity").last()` keeps the last row of each commodity,
+    # its latest year; a price below 100 is below its 1900 level
     latest = chosen.groupby("commodity").last()
     cheaper = (latest.real_price_1900_100 < 100).sum()
-    title = f"{cheaper} of these {len(latest)} commodities cost less in their latest year than in 1900"
+    return chosen, latest, cheaper
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 5, a fixed color for every commodity
+# `group_colors` (from "Model in code") gives each commodity one color, different
+# from the others in the two website views: the textbook's six, and all 40
+COMMODITY_COLORS = group_colors(ALL_COMMODITIES, [SIX, ALL_COMMODITIES])
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 5, any of the 40 commodities
+def commodity_chart(names=SIX):
+    """Real prices of any of the 40 commodities (1900 = 100, ratio scale).
+
+    Draws Fig. 5, extended (inspired by Fig. 6.5 in Jones).
+
+    Arguments
+        names : the commodities to draw
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the data (commodity_data); a chart with only a title when nothing
+    # is chosen
+    chosen, latest, cheaper = commodity_data(names)
+    if len(chosen) == 0:
+        return go.Figure(layout=dict(title="Pick at least one commodity"))
+    # Step 2: the title; with a single commodity, its latest price
+    title = (
+        f"{cheaper} of these {len(latest)} commodities cost less in their latest "
+        "year than in 1900"
+    )
     if len(latest) == 1:
-        title = f"{names[0]}: {latest.real_price_1900_100.iloc[0]:.0f} in {latest.year.iloc[0]} (1900 = 100)"
-    fig = px.line(chosen, x="year", y="real_price_1900_100", color="commodity", log_y=True,
-                  hover_name="commodity", color_discrete_map=COMMODITY_COLORS, title=title,
-                  labels={"year": "Year", "real_price_1900_100": "Real price (1900 = 100, ratio scale)",
-                          "commodity": "Commodity"})
-    low = 10 ** np.floor(np.log10(chosen.real_price_1900_100.min()))     # whole powers of ten
+        price, year = latest.real_price_1900_100.iloc[0], latest.year.iloc[0]
+        title = f"{names[0]}: {price:.0f} in {year} (1900 = 100)"
+    # Step 3: one line per commodity, on a ratio scale; `color_discrete_map` gives
+    # each line its fixed color from COMMODITY_COLORS
+    fig = px.line(
+        chosen,
+        x="year",
+        y="real_price_1900_100",
+        color="commodity",
+        log_y=True,
+        hover_name="commodity",
+        color_discrete_map=COMMODITY_COLORS,
+        title=title,
+        labels={
+            "year": "Year",
+            "real_price_1900_100": "Real price (1900 = 100, ratio scale)",
+            "commodity": "Commodity",
+        },
+    )
+    # Step 4: the vertical axis runs between whole powers of ten (`np.floor`
+    # rounds down, `np.ceil` rounds up), with a dashed line at the 1900 level
+    low = 10 ** np.floor(np.log10(chosen.real_price_1900_100.min()))
     high = 10 ** np.ceil(np.log10(chosen.real_price_1900_100.max()))
     fig.add_hline(y=100, line_dash="dash", line_color=GRAY)
-    fig.update_yaxes(range=[np.log10(low), np.log10(high)],
-                     tickvals=[1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000])
-    fig.update_xaxes(range=[1900, 2026], tickvals=[1920, 1940, 1960, 1980, 2000, 2020])   # no corner label
+    fig.update_yaxes(
+        range=[np.log10(low), np.log10(high)],
+        tickvals=[1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000],
+    )
+    fig.update_xaxes(
+        range=[1900, 2026],
+        tickvals=[1920, 1940, 1960, 1980, 2000, 2020],     # no corner label
+    )
     return fig
 ```
 
@@ -1762,33 +2261,67 @@ six are shown; **click a name in the legend to add it**, and double-click a name
 
 ```{python}
 #| kind: widget
-interact(commodity_chart,
-         names=SelectMultiple(options=ALL_COMMODITIES, value=SIX, rows=10, description="commodities", style=WIDE));
+# Fig. 5 with a list of commodities. A `SelectMultiple` is a list in which you can
+# pick several items: hold Ctrl (Cmd on a Mac) while you click
+interact(
+    commodity_chart,
+    names=SelectMultiple(options=ALL_COMMODITIES, value=SIX, rows=10,
+                         description="commodities", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: Fig. 5 with all 40 commodities (click a name in the legend to add it)
+# @title Website version: Fig. 5 with all 40 commodities (click a name to add it)
+# Step 1: every commodity in one chart, with two buttons: the textbook's six
+# (the others a click away in the legend) or all 40
 fig = commodity_chart(tuple(ALL_COMMODITIES))
 legend_menu(fig, SIX, label="The textbook's six")
+# Step 2: the title counts the cheaper commodities among all 40
 last_rows = commodities.groupby("commodity").last()
 cheaper_all = (last_rows.real_price_1900_100 < 100).sum()
-fig.update_layout(title=f"{cheaper_all} of the 40 commodities cost less in their latest year than in 1900")
+fig.update_layout(
+    title=(
+        f"{cheaper_all} of the 40 commodities cost less in their latest year "
+        "than in 1900"
+    )
+)
 fig.update_yaxes(autorange=True)          # the axis adapts to the commodities you add
 fig
-```
-
-```{python}
-change = commodities.pivot(index="year", columns="commodity", values="real_price_1900_100")
-bet = change.loc[[1980, 1990], ["Chromium", "Copper", "Nickel", "Tin"]]
-print((100 * (bet.loc[1990] / bet.loc[1980] - 1)).round(1))
-print("Cheaper than in 1900:", (last_rows.real_price_1900_100 < 100).sum(), "of", len(last_rows))
-print(last_rows[last_rows.real_price_1900_100 > 100].real_price_1900_100.sort_values().round(1))
 ```
 
 **Sources.** Data: Jacks (2019), ["From Boom to Bust: A Typology of Real Commodity Prices in the Long Run"](https://doi.org/10.1007/s11698-018-0173-5), *Cliometrica* 13(2), data file "Real commodity prices, 1850–2020" ([archived copy of the author's data page](https://web.archive.org/web/20221007161341/http://www.sfu.ca/~djacks/data/boombust/)), for 1900–2020; extended to 2025 with the [World Bank, Commodity Price Data (The Pink Sheet)](https://www.worldbank.org/en/research/commodity-markets), deflated by the [U.S. Bureau of Labor Statistics, Consumer Price Index for All Urban Consumers (`CPIAUCSL`), via FRED](https://fred.stlouisfed.org/series/CPIAUCSL); the World Bank extension covers 30 of the 40 commodities.
 Prepared file: [`data/ch06/commodity_prices.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch06/commodity_prices.csv) (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch06/README.md)).
 Chart: inspired by Fig. 6.5 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
+
+The next cell computes the numbers behind the notes below: the Simon-Ehrlich bet, and the commodities
+that cost more than in 1900.
+
+```{python}
+# Step 1: the Simon-Ehrlich bet, the change of four metal prices from 1980 to 1990,
+# in percent. `.pivot` makes one column per commodity, with the years as labels
+change = commodities.pivot(
+    index="year",
+    columns="commodity",
+    values="real_price_1900_100",
+)
+bet = change.loc[[1980, 1990], ["Chromium", "Copper", "Nickel", "Tin"]]
+print((100 * (bet.loc[1990] / bet.loc[1980] - 1)).round(1))
+# Step 2: how many of the 40 are cheaper than in 1900 (`last_rows` comes from the
+# website cell), and the latest prices of the others, from low to high
+print(
+    "Cheaper than in 1900:",
+    (last_rows.real_price_1900_100 < 100).sum(),
+    "of",
+    len(last_rows),
+)
+print(
+    last_rows[last_rows.real_price_1900_100 > 100]
+    .real_price_1900_100.sort_values()
+    .round(1)
+)
+```
+
 
 <!-- cell -->
 
@@ -1829,6 +2362,8 @@ $$\text{average growth} = 100 \times \frac{\ln y_t - \ln y_{t-10}}{10}\ \text{pe
 We load real GDP per person for every year since 1929 and the dates of the U.S. recessions.
 
 ```{python}
+# Load real GDP per person for every year, and the dates of the U.S. recessions;
+# `.tail()` shows the last five rows
 gdp = pd.read_csv(DATA_URL + "us_gdp_pc.csv")
 recessions = pd.read_csv(DATA_URL + "recessions.csv")
 gdp.tail()
@@ -1837,42 +2372,94 @@ gdp.tail()
 `gdp_pc` is real GDP per person in dollars of 2017. In `recessions`, `peak_year` and `trough_year` give the
 start and end of each recession as decimal years (1960.25 is April 1960).
 
-> **Python note.** `gdp.copy()` makes a copy of the table, so that adding a column inside the function
-> leaves `gdp` itself unchanged. `.shift(window)` moves a column down by `window` rows, so in each row it gives the value
-> from `window` years earlier. `np.log` is the natural logarithm. The `for` loop with `zip` hands over one
-> (start, end) pair of each recession at a time, and `fig.add_vrect` shades the band between them.
+`slowdown_data` computes the average growth over the preceding `window` years, and its mean before and
+after the Great Recession.
 
 ```{python}
-def slowdown_chart(window=10):
-    """Fig. 6.6: average annual growth of U.S. GDP per person over the preceding `window` years."""
+def slowdown_data(window):
+    """Average growth of U.S. GDP per person over the preceding years (Fig. 6).
+
+    average growth = 100 (ln y_t - ln y_(t - window)) / window, percent a year
+
+    Arguments
+        window : the number of years in the average
+    Returns
+        table  : one row per year from 1960, with the average growth in `growth`
+        before : its mean over 1960-2006
+        since  : its mean from 2009 on
+    """
+    # Step 1: `gdp.copy()` makes a copy of the table, so that adding a column here
+    # leaves `gdp` itself unchanged
     table = gdp.copy()
-    table["growth"] = 100 * (np.log(table.gdp_pc) - np.log(table.gdp_pc.shift(window))) / window
+    # Step 2: `.shift(window)` moves a column down by `window` rows, so in each row
+    # it gives the value from `window` years earlier; `np.log` is the natural log
+    table["growth"] = (
+        100 * (np.log(table.gdp_pc) - np.log(table.gdp_pc.shift(window))) / window
+    )
     table = table[table.year >= 1960]
+    # Step 3: the mean before the Great Recession, and since its end
     before = table[table.year <= 2006].growth.mean()
     since = table[table.year >= 2009].growth.mean()
-    fig = px.line(table, x="year", y="growth",
-                  labels={"year": "Year", "growth": f"{window}-year average growth (%)"},
-                  title=f"{window}-year average growth of GDP per person: {before:.1f}% in 1960–2006, "
-                        f"{since:.1f}% since 2009")
+    return table, before, since
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 6, a slowdown in U.S. growth
+def slowdown_chart(window=10):
+    """Average annual growth of U.S. GDP per person over the preceding years.
+
+    Draws Fig. 6 (inspired by Fig. 6.6 in Jones), with the recessions shaded.
+
+    Arguments
+        window : the number of years in the average
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the data (slowdown_data)
+    table, before, since = slowdown_data(window)
+    # Step 2: the line of average growth, with both means in the title
+    fig = px.line(
+        table,
+        x="year",
+        y="growth",
+        labels={"year": "Year", "growth": f"{window}-year average growth (%)"},
+        title=(
+            f"{window}-year average growth of GDP per person: {before:.1f}% in "
+            f"1960–2006, {since:.1f}% since 2009"
+        ),
+    )
     fig.update_traces(line=dict(color=BLUE, width=3))
+    # Step 3: a band for each recession. The `for` loop with `zip` hands over one
+    # (start, end) pair at a time, and `fig.add_vrect` shades the band between them
     for start, end in zip(recessions.peak_year, recessions.trough_year):
         fig.add_vrect(x0=start, x1=end, fillcolor=BLUE, opacity=0.12, line_width=0)
     fig.update_layout(yaxis_range=[-0.5, 4.5], xaxis_range=[1959, 2026])
     return fig
 ```
 
-> **Python note.** A `Dropdown` is a menu of choices. Here it sets the number of years in the average.
-
 ```{python}
 #| kind: widget
-interact(slowdown_chart,
-         window=Dropdown(options=[5, 10, 15, 20], value=10, description="years in the average", style=WIDE));
+# Fig. 6 with a menu. A `Dropdown` is a menu of choices: here the number of years
+# in the average
+interact(
+    slowdown_chart,
+    window=Dropdown(options=[5, 10, 15, 20], value=10,
+                    description="years in the average", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: Fig. 6 with a precomputed slider for the number of years in the average
-slider_figure(slowdown_chart, "window", [5, 10, 15, 20], start=10, label="years in the average")
+# @title Website version: Fig. 6 with a precomputed slider for the years averaged
+# one picture of Fig. 6 per number of years in the average
+slider_figure(
+    slowdown_chart,
+    "window",
+    [5, 10, 15, 20],     # the numbers of years
+    start=10,
+    label="years in the average",
+)
 ```
 
 **Sources.** Data: [U.S. Bureau of Economic Analysis, Real Gross Domestic Product (`GDPCA`), via FRED](https://fred.stlouisfed.org/series/GDPCA) and [U.S. Bureau of Economic Analysis, Population (`B230RC0A052NBEA`), via FRED](https://fred.stlouisfed.org/series/B230RC0A052NBEA); recessions from the [NBER based Recession Indicators (`USREC`), via FRED](https://fred.stlouisfed.org/series/USREC), which follow the [NBER Business Cycle Dating Committee](https://www.nber.org/research/business-cycle-dating).
@@ -1894,10 +2481,21 @@ Chart: inspired by Fig. 6.6 in Jones (2024), [*Macroeconomics*, 6th ed.](https:/
 #### Key numbers: the slowdown and growth accounting (Table 6.2)
 
 ```{python}
+# The 10-year averages of the textbook's figure, with the years as labels;
+# `.loc[1960:2006]` picks the years 1960 to 2006
 ten = pd.read_csv(DATA_URL + "fig6-6.csv").set_index("year").gdp_pc_growth_10yr
-print(f"Mean 1960-2006: {ten.loc[1960:2006].mean():.2f}%   (range {ten.loc[1960:2006].min():.2f} to {ten.loc[1960:2006].max():.2f})")
-print(f"Mean 2009-2018: {ten.loc[2009:2018].mean():.2f}%   (lowest: {ten.min():.2f} in {ten.idxmin()})")
-print(f"1983: {ten[1983]:.2f}%   1985: {ten[1985]:.2f}%   (the quick rebound after 1982)")
+print(
+    f"Mean 1960-2006: {ten.loc[1960:2006].mean():.2f}%   (range "
+    f"{ten.loc[1960:2006].min():.2f} to {ten.loc[1960:2006].max():.2f})"
+)
+print(
+    f"Mean 2009-2018: {ten.loc[2009:2018].mean():.2f}%   "
+    f"(lowest: {ten.min():.2f} in {ten.idxmin()})"
+)
+print(
+    f"1983: {ten[1983]:.2f}%   1985: {ten[1985]:.2f}%   "
+    "(the quick rebound after 1982)"
+)
 print(f"2019-2025:", ten.loc[2019:2025].round(2).tolist())
 ```
 
@@ -1909,32 +2507,57 @@ $$\underbrace{g_{Y}-g_{L}}_{\text{output per hour}} = \underbrace{\tfrac{1}{3}(g
 The Bureau of Labor Statistics publishes an index for each of the four terms. The average growth of an
 index between years $a$ and $b$ is $100 \times \ln(X_b/X_a)/(b-a)$.
 
-> **Python note.** `.loc[end]` picks the row of one year. Dividing two rows divides them column by column,
-> so one line computes the growth of all four indexes. A dictionary of columns then becomes a table.
-
 ```{python}
+# The four indexes of the BLS, one row per year
 accounts = pd.read_csv(DATA_URL + "growth_accounting.csv").set_index("year")
 
 
 def period_growth(start, end):
-    """Average annual growth (percent, log points) of every index from start to end (Table 6.2)."""
+    """Average annual growth of every index from start to end (Table 6.2).
+
+    100 ln(X_end / X_start) / (end - start), in percent a year (log points)
+
+    Arguments
+        start, end : the first and the last year
+    Returns
+        one growth rate per index: output per hour, K/L, labor composition and TFP
+    """
+    # `.loc[end]` picks the row of one year. Dividing two rows divides them column
+    # by column, so one line gives the growth of all four indexes
     return 100 * np.log(accounts.loc[end] / accounts.loc[start]) / (end - start)
 
 
+# Table 6.2: one column per period, then a dictionary of columns becomes a table
 columns = {}
-for start, end in [(1948, 2021), (1948, 1973), (1973, 1995), (1995, 2003), (2003, 2021), (2003, 2025)]:
+for start, end in [
+    (1948, 2021), (1948, 1973), (1973, 1995),
+    (1995, 2003), (2003, 2021), (2003, 2025),
+]:
     columns[f"{start}–{end}"] = period_growth(start, end)
 table62 = pd.DataFrame(columns)
-table62.index = ["Output per hour, Y/L", "Contribution of K/L", "Labor composition", "Contribution of TFP, A"]
+table62.index = [
+    "Output per hour, Y/L",
+    "Contribution of K/L",
+    "Labor composition",
+    "Contribution of TFP, A",
+]
 table62.round(1)
 ```
 
 The textbook's Table 6.2 for comparison (the last column is new):
 
 ```{python}
-book = pd.DataFrame({"1948–2021": [2.4, 0.9, 0.2, 1.2], "1948–1973": [3.3, 1.0, 0.2, 2.1],
-                     "1973–1995": [1.5, 0.8, 0.2, 0.5], "1995–2003": [3.2, 1.4, 0.3, 1.5],
-                     "2003–2021": [1.8, 0.8, 0.3, 0.7]}, index=table62.index)
+# The textbook's Table 6.2, with the same row names as ours
+book = pd.DataFrame(
+    {
+        "1948–2021": [2.4, 0.9, 0.2, 1.2],
+        "1948–1973": [3.3, 1.0, 0.2, 2.1],
+        "1973–1995": [1.5, 0.8, 0.2, 0.5],
+        "1995–2003": [3.2, 1.4, 0.3, 1.5],
+        "2003–2021": [1.8, 0.8, 0.3, 0.7],
+    },
+    index=table62.index,
+)
 book
 ```
 
@@ -1942,10 +2565,15 @@ Where do our numbers differ from the book's? We subtract the two tables (rounded
 check that the three contributions add up to the growth of output per hour, as equation (10) says.
 
 ```{python}
+# Step 1: our table (the book's periods only, one decimal) minus the book's
 print("Our table minus the book's table:")
 print(table62[book.columns].round(1) - book)
-gap = table62.iloc[1:].sum() - table62.iloc[0]      # contributions minus output per hour, every period
-print(f"\nLargest gap between the sum of contributions and output per hour: {gap.abs().max():.3f}")
+# Step 2: equation (10): the three contributions should add up to output per hour
+gap = table62.iloc[1:].sum() - table62.iloc[0]      # in every period
+print(
+    "\nLargest gap between the sum of contributions and output per hour: "
+    f"{gap.abs().max():.3f}"
+)
 ```
 
 Only three cells differ, by 0.1 point each, because the BLS has revised its data since the book was
@@ -1961,6 +2589,7 @@ countries since 1950, in 2021 U.S. dollars. A wider file holds it, one row per c
 country's World Bank region.
 
 ```{python}
+# Load the Penn World Table data: one row per country and year
 world = pd.read_csv(DATA_URL + "gdp_pc_countries.csv")
 world.head()
 ```
@@ -1969,52 +2598,131 @@ Many series start later than 1950: in 1960, 1970, or 1990 for the former Soviet 
 a country's 10-year average appears only ten years after its data start. For the United States, the PWT
 growth rates differ from the BEA numbers above by at most 0.2 points.
 
-> **Python note.** `growth_table` loops over the chosen countries, computes each one's growth with
-> `.shift(window)` as before, and joins the pieces with `pd.concat`. `.groupby("country").last()` keeps
-> each country's latest row, and `.idxmax()` gives the country with the highest growth. `set(a) - set(b)`
-> lists the names in `a` that are not in `b`: here, the countries with no data. `round(x, 1) + 0.0` turns a
-> rounded −0.0 into 0.0.
+`growth_table` computes the average growth of each chosen country, as for the United States above, and
+`growth_extremes` finds the fastest and the slowest grower in the latest year.
 
 ```{python}
+# The countries of the list, and each country's region: `zip` pairs the two
+# columns row by row, and `dict(...)` turns the pairs into a dictionary
 ALL_COUNTRIES = sorted(world.country.unique())
 GROWTH_REGIONS = dict(zip(world.country, world.region))
-GROWTH_SHOWN = ["United States", "China", "India"]          # the website's default view, colored first
-COUNTRY_COLORS = group_colors(GROWTH_SHOWN + ALL_COUNTRIES, region_groups(GROWTH_REGIONS, GROWTH_SHOWN),
-                              {"United States": BLUE})
 
 
 def growth_table(names, window):
-    """Average growth of GDP per person over the preceding `window` years, chosen countries, 1960 on."""
-    pieces = [world.head(0)]                    # an empty table to start with, so concat always works
+    """Average growth of GDP per person over the preceding `window` years (Fig. 6).
+
+    100 (ln y_t - ln y_(t - window)) / window, for the chosen countries, 1960 on
+
+    Arguments
+        names  : the countries
+        window : the number of years in the average
+    Returns
+        one table, with a row per country and year that has a growth rate
+    """
+    pieces = [world.head(0)]           # an empty table first, so concat always works
+    # one country at a time, the growth rate with `.shift(window)` as before
     for name in names:
         one = world[world.country == name].copy()
-        one["growth"] = 100 * (np.log(one.gdp_pc) - np.log(one.gdp_pc.shift(window))) / window
+        one["growth"] = (
+            100 * (np.log(one.gdp_pc) - np.log(one.gdp_pc.shift(window))) / window
+        )
         pieces.append(one[one.year >= 1960].dropna(subset=["growth"]))
+    # `pd.concat` stacks the pieces into one table
     return pd.concat(pieces)
+
+
+def growth_extremes(table, names):
+    """The fastest and the slowest country in the latest year (Fig. 6).
+
+    Arguments
+        table : rows of growth_table (at least one)
+        names : the countries that were asked for
+    Returns
+        latest               : each country's latest row
+        fast, slow           : the countries with the highest and the lowest growth
+        fast_rate, slow_rate : their growth rates, rounded to one decimal
+        missing              : the countries asked for that have no growth rate
+    """
+    # Step 1: `.groupby("country").last()` keeps each country's latest row, and
+    # `.idxmax()` gives the country with the highest growth (`.idxmin()`, lowest)
+    latest = table.groupby("country").last()
+    fast, slow = latest.growth.idxmax(), latest.growth.idxmin()
+    # `round(x, 1) + 0.0` turns a rounded -0.0 into 0.0
+    fast_rate = round(latest.growth[fast], 1) + 0.0
+    slow_rate = round(latest.growth[slow], 1) + 0.0
+    # Step 2: `set(a) - set(b)` lists the names in a that are not in b: here, the
+    # countries with no data
+    missing = sorted(set(names) - set(table.country))
+    return latest, fast, slow, fast_rate, slow_rate, missing
 ```
 
 ```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 6, a fixed color for every country
+# the website's default view, colored first
+GROWTH_SHOWN = ["United States", "China", "India"]
+# one color per country, different from the others in each website view (the
+# default view, then one view per region); the United States keeps the book's blue
+COUNTRY_COLORS = group_colors(
+    GROWTH_SHOWN + ALL_COUNTRIES,
+    region_groups(GROWTH_REGIONS, GROWTH_SHOWN),
+    {"United States": BLUE},
+)
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 6, growth in any countries
 def growth_by_country(names=("United States",), window=10):
-    """Fig. 6.6 for any countries: the latest highest and lowest growth in the title."""
+    """Fig. 6 for any countries, with the highest and lowest latest growth in the title.
+
+    Draws Fig. 6, extended (inspired by Fig. 6.6 in Jones).
+
+    Arguments
+        names  : the countries to draw
+        window : the number of years in the average
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the data (growth_table); a chart with only a title when no country
+    # has data. `", ".join(names)` glues the names into one line of text, and
+    # `or` gives "pick a country" when that text is empty
     table = growth_table(names, window)
     if len(table) == 0:
-        return go.Figure(layout=dict(title=f"No {window}-year growth rates for: " + (", ".join(names) or "pick a country")))
-    latest = table.groupby("country").last()
-    fast, slow = latest.growth.idxmax(), latest.growth.idxmin()
-    title = f"{window}-year growth in {latest.year.max()}: {fast} {round(latest.growth[fast], 1) + 0.0:.1f}%"
+        chosen = ", ".join(names) or "pick a country"
+        return go.Figure(
+            layout=dict(title=f"No {window}-year growth rates for: " + chosen)
+        )
+    # Step 2: the title, with the fastest and the slowest country (growth_extremes)
+    latest, fast, slow, fast_rate, slow_rate, missing = growth_extremes(table, names)
+    title = f"{window}-year growth in {latest.year.max()}: {fast} {fast_rate:.1f}%"
     if slow != fast:
-        title = title + f", {slow} {round(latest.growth[slow], 1) + 0.0:.1f}%"
-    missing = sorted(set(names) - set(table.country))
+        title = title + f", {slow} {slow_rate:.1f}%"
     if missing:
         title = title + " (no data: " + ", ".join(missing) + ")"
-    fig = px.line(table, x="year", y="growth", color="country", hover_name="country",
-                  color_discrete_map=COUNTRY_COLORS, title=title,
-                  labels={"year": "Year", "growth": f"{window}-year average growth (%)", "country": "Country"})
-    for low, high in [(-0.5, 4.5), (-2.5, 10.5), (-10.5, 20.5), (-40.5, 40.5)]:   # widen only when needed
+    # Step 3: one line per country, in its fixed color
+    fig = px.line(
+        table,
+        x="year",
+        y="growth",
+        color="country",
+        hover_name="country",
+        color_discrete_map=COUNTRY_COLORS,
+        title=title,
+        labels={
+            "year": "Year",
+            "growth": f"{window}-year average growth (%)",
+            "country": "Country",
+        },
+    )
+    # Step 4: the textbook's range, widened only when needed: the loop stops
+    # (`break`) at the first range that holds every growth rate
+    for low, high in [(-0.5, 4.5), (-2.5, 10.5), (-10.5, 20.5), (-40.5, 40.5)]:
         if table.growth.min() >= low and table.growth.max() <= high:
             break
     fig.update_layout(yaxis_range=[low, high], xaxis_range=[1959, 2024])
-    fig.update_xaxes(tickvals=[1970, 1980, 1990, 2000, 2010, 2020])      # no label at the bottom-left corner
+    # no label at the bottom-left corner
+    fig.update_xaxes(tickvals=[1970, 1980, 1990, 2000, 2010, 2020])
     return fig
 ```
 
@@ -2023,33 +2731,51 @@ window. **Pick a region in the menu, then click a country in the legend to add i
 
 ```{python}
 #| kind: widget
-interact(growth_by_country,
-         names=SelectMultiple(options=ALL_COUNTRIES, value=("United States",), rows=10,
-                              description="countries", style=WIDE),
-         window=Dropdown(options=[5, 10, 15, 20], value=10, description="years in the average", style=WIDE));
+# Fig. 6 for any countries: a list of countries and a menu for the window
+interact(
+    growth_by_country,
+    names=SelectMultiple(options=ALL_COUNTRIES, value=("United States",), rows=10,
+                         description="countries", style=WIDE),
+    window=Dropdown(options=[5, 10, 15, 20], value=10,
+                    description="years in the average", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
-# @title Website version: Fig. 6 for every country (pick a region, then click a country in the legend)
+# @title Website version: Fig. 6 for every country (pick a region, then a country)
+# Step 1: every country with a 10-year window, and a menu of regions
 fig = growth_by_country(tuple(ALL_COUNTRIES), window=10)
 region_menu(fig, GROWTH_REGIONS, shown=GROWTH_SHOWN, label="U.S., China, India")
-fig.update_layout(title="Growth slowed after 2007 in every G7 country, but rose in China and India")
+# Step 2: the title of the default view
+fig.update_layout(
+    title="Growth slowed after 2007 in every G7 country, but rose in China and India"
+)
 fig.update_yaxes(autorange=True)          # the axis adapts to the countries you add
 fig
-```
-
-```{python}
-for name in ["United States", "Japan", "Germany", "Italy", "China", "India"]:
-    one = world[world.country == name].set_index("year").gdp_pc
-    g10 = 100 * (np.log(one) - np.log(one.shift(10))) / 10
-    print(f"{name:14s} 1960-2006: {g10.loc[1960:2006].mean():4.1f}%   2009-2023: {g10.loc[2009:2023].mean():4.1f}%"
-          f"   1970: {g10.get(1970, np.nan):4.1f}%   2000: {g10.get(2000, np.nan):4.1f}%")
 ```
 
 **Sources.** Data: [Penn World Table 11.0](https://www.rug.nl/ggdc/productivity/pwt/), Groningen Growth and Development Centre ([DOI 10.34894/FABVLR](https://doi.org/10.34894/FABVLR)), variables `rgdpna` (real GDP at constant national prices) and `pop` (population); cite as Feenstra, Inklaar and Timmer (2015), ["The Next Generation of the Penn World Table"](https://doi.org/10.1257/aer.20130954), *American Economic Review* 105(10). Regions: [World Bank country and lending groups](https://datahelpdesk.worldbank.org/knowledgebase/articles/906519-world-bank-country-and-lending-groups).
 Prepared file: [`data/ch06/gdp_pc_countries.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch06/gdp_pc_countries.csv) (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch06/README.md)).
 Chart: inspired by Fig. 6.6 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
+
+The next cell compares the 10-year growth of six countries before and after the Great Recession.
+
+```{python}
+# The 10-year growth of six countries: the means over 1960-2006 and 2009-2023,
+# and the values in 1970 and 2000. `.get(1970, np.nan)` gives the value for 1970,
+# or "not a number" when the series has no such year
+for name in ["United States", "Japan", "Germany", "Italy", "China", "India"]:
+    one = world[world.country == name].set_index("year").gdp_pc
+    g10 = 100 * (np.log(one) - np.log(one.shift(10))) / 10
+    print(
+        f"{name:14s} 1960-2006: {g10.loc[1960:2006].mean():4.1f}%   "
+        f"2009-2023: {g10.loc[2009:2023].mean():4.1f}%"
+        f"   1970: {g10.get(1970, np.nan):4.1f}%   "
+        f"2000: {g10.get(2000, np.nan):4.1f}%"
+    )
+```
+
 
 <!-- cell -->
 
@@ -2095,37 +2821,107 @@ $$Y = X - 100 \quad \text{for } X > 100, \qquad Y = 0 \text{ otherwise.}$$
 If the firm sells copies at a price $p$ above the marginal cost of \$1, it **breaks even** when revenue
 covers the total cost: $pY = 100 + Y$, so $Y = 100/(p-1)$ million copies.
 
+`software_economics` computes the production function and the break-even point, the two things the
+figure shows.
+
 ```{python}
-def word_processor(F=100.0, p=20.0):
-    """Fig. 6.7: copies (millions) against spending X (millions of $), fixed cost F, $1 per copy."""
+def software_economics(F, p):
+    """The production function and the break-even point of the word processor (Fig. 7).
+
+    Y = X - F copies for X > F, zero otherwise (X and Y in millions); at a price p
+    the firm breaks even when pY = F + Y, so Y = F / (p - 1).
+
+    Arguments
+        F : fixed cost of creating the program, in millions of dollars
+        p : price per copy, in dollars
+    Returns
+        X         : spending from 0 to 320 million dollars
+        copies    : the copies it produces, in millions
+        breakeven : the copies needed to cover all costs at price p, in millions
+    """
     X = np.linspace(0, 320, 321)
-    copies = np.maximum(X - F, 0)                    # nothing until the program exists
-    breakeven = F / (p - 1)                          # copies needed to cover all costs at price p
+    copies = np.maximum(X - F, 0)      # nothing until the program exists
+    breakeven = F / (p - 1)            # copies needed to cover all costs at price p
+    return X, copies, breakeven
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 7, the word processor production function
+def word_processor(F=100.0, p=20.0):
+    """Copies against spending, with a fixed cost F and $1 per copy.
+
+    Draws Fig. 7 (adapted from Fig. 6.7 in Jones), with the break-even point at p.
+
+    Arguments
+        F : fixed cost of creating the program, in millions of dollars
+        p : price per copy, in dollars
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the numbers of the figure (software_economics)
+    X, copies, breakeven = software_economics(F, p)
+    # Step 2: the production function, and a black dot at the break-even point
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=X, y=copies, name="Production function", line=dict(color=TEAL, width=4)))
-    fig.add_trace(go.Scatter(x=[F + breakeven], y=[breakeven], name=f"Break-even point at a price of {p:.0f} dollars",
-                             mode="markers", marker=dict(color="black", size=12)))
+    fig.add_trace(
+        go.Scatter(
+            x=X,
+            y=copies,
+            name="Production function",
+            line=dict(color=TEAL, width=4),
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=[F + breakeven],
+            y=[breakeven],
+            name=f"Break-even point at a price of {p:.0f} dollars",
+            mode="markers",
+            marker=dict(color="black", size=12),
+        )
+    )
+    # Step 3: the axes, wider only when the break-even point is far out
     x_max, y_max = 210, 105
-    if F + breakeven > 200:                          # widen the axes only when the break-even point is far out
+    if F + breakeven > 200:
         x_max, y_max = 320, 160
-    fig.update_layout(title=f"At a price of {p:.0f} dollars a copy, the firm breaks even at {breakeven:.2f} million copies",
-                      xaxis=dict(title="Input, X (millions of dollars)", range=[0, x_max],
-                                 tickvals=list(range(50, x_max, 50))),  # no corner label
-                      yaxis=dict(title="Output, Y (millions of copies)", range=[0, y_max]))
+    fig.update_layout(
+        title=(
+            f"At a price of {p:.0f} dollars a copy, the firm breaks even at "
+            f"{breakeven:.2f} million copies"
+        ),
+        xaxis=dict(
+            title="Input, X (millions of dollars)",
+            range=[0, x_max],
+            tickvals=list(range(50, x_max, 50)),     # no corner label
+        ),
+        yaxis=dict(title="Output, Y (millions of copies)", range=[0, y_max]),
+    )
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(word_processor,
-         F=FloatSlider(value=100, min=50, max=150, step=10, description="fixed cost F (millions of $)", style=WIDE),
-         p=FloatSlider(value=20, min=2, max=100, step=1, description="price per copy p ($)", style=WIDE));
+# Fig. 7 with sliders for the fixed cost and the price per copy
+interact(
+    word_processor,
+    F=FloatSlider(value=100, min=50, max=150, step=10,
+                  description="fixed cost F (millions of $)", style=WIDE),
+    p=FloatSlider(value=20, min=2, max=100, step=1,
+                  description="price per copy p ($)", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 7 with a precomputed slider for the price per copy
-slider_figure(word_processor, "p", [2, 3, 5, 10, 20, 50, 100], start=20, label="price per copy p ($)")
+# one picture of Fig. 7 per price
+slider_figure(
+    word_processor,
+    "p",
+    [2, 3, 5, 10, 20, 50, 100],     # the prices, in dollars
+    start=20,
+    label="price per copy p ($)",
+)
 ```
 
 **Source.** Adapted from Fig. 6.7 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612), which illustrates a worked exercise.
@@ -2146,9 +2942,12 @@ slider_figure(word_processor, "p", [2, 3, 5, 10, 20, 50, 100], start=20, label="
 #### Key numbers: profits at marginal cost
 
 ```{python}
-copies = 1.0                                        # one million copies sold
-revenue, cost = 1.0 * copies, 100 + 1.0 * copies    # price = marginal cost = $1; millions of dollars
+# Profits when the price equals the marginal cost of $1 (in millions of dollars)
+copies = 1.0                       # one million copies sold
+# price = marginal cost = $1; the cost includes the fixed cost of 100 million
+revenue, cost = 1.0 * copies, 100 + 1.0 * copies
 print(f"Profit at a price of $1: {revenue - cost:.0f} million dollars")
+# the break-even sales, Y = 100 / (p - 1), at two prices
 for p in [20, 100]:
     print(f"Break-even sales at p = ${p}: {100 / (p - 1):.2f} million copies")
 ```
@@ -2196,55 +2995,143 @@ person on the BGP grows by the factor $(1+\bar{n})^{3\gamma/2}$, which is close 
 ```{python}
 def simulate_combined(s_old=0.05, s_new=0.05, gamma=2 / 3, n=0.03, d=0.02, z=1.0, l=0.1,
                       change_year=2050, first_year=2025, last_year=2100):
-    """Combined Solow-Romer model year by year (equations 7 to 9 on its BGP); s changes to s_new in change_year."""
+    """The combined Solow-Romer model, year by year; s changes to s_new in change_year.
+
+    Y = A^gamma K^(1/3) L_y^(2/3), capital accumulates as in Chapter 5, and ideas,
+    workers and population follow the Romer model. It starts on its BGP
+    (equations 7 to 9).
+
+    Arguments
+        s_old, s_new : investment rate before and from change_year, s-bar and s-bar'
+        gamma        : the importance of ideas, gamma
+        n            : population growth rate, n-bar
+        d            : depreciation rate, d-bar
+        z            : research productivity, z-bar
+        l            : research share, l-bar
+        change_year  : the year of the change
+        first_year, last_year : the first and the last year of the simulation
+    Returns
+        years    : the years, first_year to last_year
+        y_path   : output per person in each year (1 in the first year)
+        bgp_path : the BGP level for each year's investment rate (same scale)
+    """
+    # Step 1: the BGP growth rates, in yearly steps
     years = np.arange(first_year, last_year + 1)
-    g_y = (1 + n) ** (1.5 * gamma) - 1              # BGP growth of output per person, yearly steps
-    g_Y = (1 + g_y) * (1 + n) - 1                   # BGP growth of total output
+    g_y = (1 + n) ** (1.5 * gamma) - 1     # output per person, equation (7)
+    g_Y = (1 + g_y) * (1 + n) - 1          # total output
+    # Step 2: start on the old BGP
     N = 1.0
-    A = z * l * N / n                               # BGP stock of ideas, as in the Romer model
-    K = (s_old / (g_Y + d)) ** 1.5 * A ** (1.5 * gamma) * (1 - l) * N   # BGP capital, from equation (8)
+    A = z * l * N / n                      # stock of ideas, as in the Romer model
+    K = (s_old / (g_Y + d)) ** 1.5 * A ** (1.5 * gamma) * (1 - l) * N   # equation (8)
+    # Step 3: one pass of the loop per year
     y_path, bgp_path = [], []
     for year in years:
         if year < change_year:
             s = s_old
         else:
             s = s_new
-        Y = A ** gamma * K ** (1 / 3) * ((1 - l) * N) ** (2 / 3)        # output: the production function
+        Y = A ** gamma * K ** (1 / 3) * ((1 - l) * N) ** (2 / 3)   # production
         y_path.append(Y / N)
-        bgp_path.append((s / (g_Y + d)) ** 0.5 * A ** (1.5 * gamma) * (1 - l))   # BGP level, equation (9)
-        K = K + s * Y - d * K                       # capital accumulation
-        A = A + z * l * N                           # new ideas
-        N = N * (1 + n)                             # population growth
-    scale = 1 / y_path[0]                           # normalization: y = 1 in the first year
+        # the BGP level, equation (9)
+        bgp_path.append((s / (g_Y + d)) ** 0.5 * A ** (1.5 * gamma) * (1 - l))
+        K = K + s * Y - d * K              # capital accumulation
+        A = A + z * l * N                  # new ideas
+        N = N * (1 + n)                    # population growth
+    # Step 4: normalize, so that y = 1 in the first year
+    scale = 1 / y_path[0]
     return years, scale * np.array(y_path), scale * np.array(bgp_path)
 ```
 
+As in Figs. 3 and 4, `s_experiment` runs the experiment and computes the numbers in the title: the level
+effect and three growth rates.
+
 ```{python}
-def rise_in_s(s_old=0.05, s_new=0.6, scale="ratio"):
-    """Fig. 6.8: output per person when the investment rate rises from s_old to s_new in 2050."""
+def s_experiment(s_old, s_new):
+    """The experiment of Fig. 8: the investment rate rises from s_old to s_new in 2050.
+
+    The combined model with and without the change (simulate_combined). By equation
+    (9), the new BGP is higher than the old one by the factor (s_new / s_old)^(1/2).
+
+    Arguments
+        s_old : old investment rate, s-bar
+        s_new : new investment rate, s-bar'
+    Returns
+        years  : the years 2025-2100
+        y      : output per person with the change
+        y_old  : output per person without it, the old BGP
+        y_bgp  : the new BGP
+        level  : the new BGP over the old one, the level effect
+        growth : the growth of y in 2051, in 2100 and on the old BGP, in percent
+    """
+    # Step 1: the economy with the change, and the old BGP (no change)
     years, y, y_bgp = simulate_combined(s_old=s_old, s_new=s_new)
-    years, y_old, y_old_bgp = simulate_combined(s_old=s_old, s_new=s_old)   # the old balanced growth path
+    years, y_old, y_old_bgp = simulate_combined(s_old=s_old, s_new=s_old)
+    # Step 2: the level effect in the last year, 2100
     level = y_bgp[-1] / y_old[-1]
+    # Step 3: growth rates; y[25] is 2050, y[26] is 2051 and y[-1] is 2100
+    growth = (
+        100 * (y[26] / y[25] - 1),     # just after the change
+        100 * (y[-1] / y[-2] - 1),     # in 2100
+        100 * (y[1] / y[0] - 1),       # on the old BGP, before the change
+    )
+    return years, y, y_old, y_bgp, level, growth
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 8, a rise in the investment rate
+def rise_in_s(s_old=0.05, s_new=0.6, scale="ratio"):
+    """Output per person when the investment rate rises from s_old to s_new in 2050.
+
+    Draws Fig. 8 (adapted from Fig. 6.8 in Jones).
+
+    Arguments
+        s_old : old investment rate, s-bar
+        s_new : new investment rate, s-bar'
+        scale : "ratio" or "linear", the vertical scale
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the experiment (s_experiment)
+    years, y, y_old, y_bgp, level, growth = s_experiment(s_old, s_new)
+    growth_2051, growth_2100, growth_bgp = growth
+    # Step 2: the path between the two BGPs (experiment_chart), and a title with
+    # the level effect and the growth rates
     fig = experiment_chart(years, y, y_old, y_bgp, scale)
-    # y[25] is 2050, y[26] is 2051 and y[-1] is the last year, 2100
-    fig.update_layout(title=f"New BGP ×{level:.2f} the old | growth {100 * (y[26] / y[25] - 1):.1f}% in 2051, "
-                            f"{100 * (y[-1] / y[-2] - 1):.1f}% in 2100 (BGP: {100 * (y[1] / y[0] - 1):.1f}%)")
+    fig.update_layout(
+        title=(
+            f"New BGP ×{level:.2f} the old | growth {growth_2051:.1f}% in 2051, "
+            f"{growth_2100:.1f}% in 2100 (BGP: {growth_bgp:.1f}%)"
+        )
+    )
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(rise_in_s,
-         s_old=FloatSlider(value=0.05, min=0.05, max=0.8, step=0.05, description="old investment rate s̄", style=WIDE),
-         s_new=FloatSlider(value=0.6, min=0.05, max=0.8, step=0.05, description="new investment rate s̄'", style=WIDE),
-         scale=ToggleButtons(options=["ratio", "linear"], description="vertical scale"));
+# Fig. 8 with sliders for the old and the new investment rate, and buttons for
+# the scale
+interact(
+    rise_in_s,
+    s_old=FloatSlider(value=0.05, min=0.05, max=0.8, step=0.05,
+                      description="old investment rate s̄", style=WIDE),
+    s_new=FloatSlider(value=0.6, min=0.05, max=0.8, step=0.05,
+                      description="new investment rate s̄'", style=WIDE),
+    scale=ToggleButtons(options=["ratio", "linear"], description="vertical scale"),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 8 with a precomputed slider for the new investment rate
-slider_figure(rise_in_s, "s_new", [0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8], start=0.6,
-              label="new investment rate s̄'")
+# one picture of Fig. 8 per value of s-bar'
+slider_figure(
+    rise_in_s,
+    "s_new",
+    [0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8],     # the values of s-bar'
+    start=0.6,
+    label="new investment rate s̄'",
+)
 ```
 
 **Source.** Adapted from Fig. 6.8 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)

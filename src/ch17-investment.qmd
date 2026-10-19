@@ -1168,47 +1168,112 @@ So a young firm that starts with $K_0$ and wants $K^{\text{desired}}$ next year 
 $I = K^{\text{desired}} - (1-\bar{d})K_0$. The title shows this number. The arrow points from $K_0$ to
 the desired capital stock.
 
-> **Python note.** `if K_star > 2.6:` runs the indented lines below it only when the condition is true. Here
-> it widens the x-axis (`update_xaxes`) in the rare case of a very low user cost, when the desired capital
-> stock would otherwise fall off the chart; `tickvals=None` lets Plotly choose the tick marks. `round(x, 2)`
-> rounds a number to two decimals, and adding `0.0` turns a rounded `-0.0` into `0.0`, so the title never shows "-0.00".
+First we compute the three numbers of the title. `desired_capital_point` finds the user cost, the desired
+capital stock where the MPK curve meets it, and the investment that takes the firm from $K_0$ to that stock.
 
 ```{python}
-def desired_capital_diagram(R=0.02, d=0.08, gpk=0.0, A=A_BAR, K0=0.5):
-    """Fig. 17.1: invest until the marginal product of capital falls to the user cost."""
+def desired_capital_point(R, d, gpk, A, K0):
+    """The user cost, desired capital, and the investment that reaches it (Fig. 1).
+
+    Equations (2) and (5), then the capital accumulation equation K_1 = I + (1 - d) K0:
+    investment = K-desired - (1 - d) K0
+
+    Arguments
+        R   : real interest rate, R
+        d   : depreciation rate, d-bar
+        gpk : expected capital gain, the change in p_k over p_k
+        A   : productivity, A-bar
+        K0  : the firm's starting capital, K0
+    Returns
+        uc         : the user cost of capital, equation (2)
+        K_star     : the desired capital stock, where MPK equals uc (equation 5)
+        investment : this year's investment that reaches K_star next year
+    """
     uc = user_cost(R, d, gpk)
     K_star = desired_capital(uc, A)
-    I = round(K_star - (1 - d) * K0, 2) + 0.0        # investment that reaches K_star next year (capital accumulation)
-    fig = capital_figure(f"User cost {uc:.1%}  |  desired capital {K_star:.2f}  |  investment from K0 = {K0:.1f}: {I:+.2f}")
-    if K_star > 2.6:                                 # a very low user cost: widen the x-axis so K desired stays on it
+    # investment that reaches K_star next year (capital accumulation)
+    investment = K_star - (1 - d) * K0
+    return uc, K_star, investment
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 1, how much should a firm invest?
+def desired_capital_diagram(R=0.02, d=0.08, gpk=0.0, A=A_BAR, K0=0.5):
+    """The firm's diagram: the MPK curve and the flat user-cost line.
+
+    Draws Fig. 1 (adapted from Fig. 17.1 in Jones): the desired capital stock where the
+    two lines cross, and an arrow from the starting capital K0 to it.
+
+    Arguments
+        R   : real interest rate, R
+        d   : depreciation rate, d-bar
+        gpk : expected capital gain, the change in p_k over p_k
+        A   : productivity, A-bar
+        K0  : the firm's starting capital, K0
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the numbers of the figure (desired_capital_point)
+    uc, K_star, investment = desired_capital_point(R, d, gpk, A, K0)
+    # `round(x, 2)` rounds to two decimals; + 0.0 turns a rounded -0.0 into 0.0,
+    # so the title never shows "-0.00"
+    I = round(investment, 2) + 0.0
+
+    # Step 2: an empty diagram with fixed axes; the title reports the user cost,
+    # K desired and the investment from K0
+    fig = capital_figure(
+        f"User cost {uc:.1%}  |  desired capital {K_star:.2f}  |  "
+        f"investment from K0 = {K0:.1f}: {I:+.2f}"
+    )
+    # `if K_star > 2.6:` runs the indented line only when the condition is true:
+    # with a very low user cost, `update_xaxes` widens the x-axis so that K desired
+    # stays on it, and `tickvals=None` lets Plotly choose the tick marks
+    if K_star > 2.6:
         fig.update_xaxes(range=[0, 1.15 * K_star], tickvals=None)
+
+    # Step 3: the MPK curve, the teal user-cost line and the point where they cross
     add_mpk(fig, A)
     add_level(fig, uc, f"R + d − Δp/p = {uc:.1%}", TEAL)
     add_point(fig, K_star, uc, "K<sup>desired</sup>")
+    # the arrow on the x-axis, from K0 to K desired
     add_arrow(fig, K0, 0.03, K_star, 0.03, text="K<sub>0</sub>")
     return fig
 ```
 
 Now the interactive version. Move the sliders and watch where the two lines cross.
 
-> **Python note.** `interact` turns each argument of a function into a slider and calls the
-> function again every time you move one. The `;` at the end only hides an extra line of text.
-
 ```{python}
 #| kind: widget
-interact(desired_capital_diagram,
-         R=FloatSlider(value=0.02, min=0.01, max=0.08, step=0.01, description="interest rate R", style=WIDE),
-         d=FloatSlider(value=0.08, min=0.05, max=0.15, step=0.01, description="depreciation rate d", style=WIDE),
-         gpk=FloatSlider(value=0.0, min=-0.04, max=0.04, step=0.01, description="capital gain Δp/p", style=WIDE),
-         A=FloatSlider(value=0.3, min=0.15, max=0.45, step=0.05, description="productivity A", style=WIDE),
-         K0=FloatSlider(value=0.5, min=0.1, max=2.5, step=0.1, description="starting capital K0", style=WIDE));
+# Fig. 1 with sliders. `interact` turns each argument of desired_capital_diagram
+# into a slider, and draws the figure again every time you move one. The `;` at
+# the end only hides an extra line of text.
+interact(
+    desired_capital_diagram,
+    R=FloatSlider(value=0.02, min=0.01, max=0.08, step=0.01,
+                  description="interest rate R", style=WIDE),
+    d=FloatSlider(value=0.08, min=0.05, max=0.15, step=0.01,
+                  description="depreciation rate d", style=WIDE),
+    gpk=FloatSlider(value=0.0, min=-0.04, max=0.04, step=0.01,
+                    description="capital gain Δp/p", style=WIDE),
+    A=FloatSlider(value=0.3, min=0.15, max=0.45, step=0.05,
+                  description="productivity A", style=WIDE),
+    K0=FloatSlider(value=0.5, min=0.1, max=2.5, step=0.1,
+                   description="starting capital K0", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 1 with a precomputed slider for the interest rate
-slider_figure(desired_capital_diagram, "R", [0.01, 0.02, 0.03, 0.04, 0.05, 0.06], start=0.02,
-              label="interest rate R")
+# one picture of Fig. 1 per value of R; the slider shows one at a time
+slider_figure(
+    desired_capital_diagram,
+    "R",
+    [0.01, 0.02, 0.03, 0.04, 0.05, 0.06],     # the values of R
+    start=0.02,
+    label="interest rate R",
+)
 ```
 
 **Source.** Adapted from Fig. 17.1 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -1254,41 +1319,98 @@ user cost divided by $1-\tau$ (equation 3). The user-cost line shifts up, and th
 its MPK curve to a smaller capital stock. With the textbook's numbers, a 35 percent tax raises the
 user cost from 10 to about 15 percent.
 
+Again we compute first. `tax_effect` gives the user cost and the desired capital stock without the tax and with
+it.
+
 ```{python}
-def corporate_tax_diagram(tau=0.35, R=0.02, d=0.08):
-    """Fig. 17.2: a corporate income tax raises the user cost and lowers the desired capital stock."""
+def tax_effect(tau, R, d):
+    """The user cost and desired capital without and with a corporate tax (Fig. 2).
+
+    Equations (2) and (3), then (5):  uc = (R + d) / (1 - tau)
+
+    Arguments
+        tau : corporate income tax rate, tau
+        R   : real interest rate, R
+        d   : depreciation rate, d-bar
+    Returns
+        uc0, uc1 : the user cost without and with the tax
+        K0, K1   : the desired capital stock without and with the tax
+    """
+    # the user cost without the tax (equation 2) and with it (equation 3)
     uc0, uc1 = user_cost(R, d), user_cost(R, d, tau=tau)
+    # desired capital, where MPK equals each user cost (equation 5)
     K0, K1 = desired_capital(uc0), desired_capital(uc1)
-    fig = capital_figure(f"User cost {uc0:.1%} → {uc1:.1%}  |  desired capital {K0:.2f} → {K1:.2f} ({K1 / K0 - 1:+.0%})")
+    return uc0, uc1, K0, K1
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 2, an increase in the corporate income tax
+def corporate_tax_diagram(tau=0.35, R=0.02, d=0.08):
+    """The firm's diagram before and after a corporate income tax.
+
+    Draws Fig. 2 (adapted from Fig. 17.2 in Jones): the user-cost line shifts up, and
+    the desired capital stock falls.
+
+    Arguments
+        tau : corporate income tax rate, tau
+        R   : real interest rate, R
+        d   : depreciation rate, d-bar
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the numbers of the figure (tax_effect)
+    uc0, uc1, K0, K1 = tax_effect(tau, R, d)
+
+    # Step 2: an empty diagram; the title reports both user costs, both capital
+    # stocks and the change of desired capital in percent
+    fig = capital_figure(
+        f"User cost {uc0:.1%} → {uc1:.1%}  |  "
+        f"desired capital {K0:.2f} → {K1:.2f} ({K1 / K0 - 1:+.0%})"
+    )
+    # Step 3: the MPK curve, the new user-cost line, and the old one, dashed
     add_mpk(fig)
     add_level(fig, uc1, f"τ = {tau:.0%}: {uc1:.1%}", TEAL)
-    add_level(fig, uc0, f"τ = 0: {uc0:.1%}", GRAY, dash="dash")      # the old line, dashed
+    add_level(fig, uc0, f"τ = 0: {uc0:.1%}", GRAY, dash="dash")
+    # Step 4: the two desired capital stocks, and two arrows
     add_point(fig, K0, uc0, "K<sup>initial</sup>")
     add_point(fig, K1, uc1, "K<sup>desired</sup>", anchor="right")
-    add_arrow(fig, 0.06, uc0, 0.06, uc1)                              # the user cost shifts up
-    add_arrow(fig, K0, 0.06, K1, 0.06)                                # desired capital falls
+    add_arrow(fig, 0.06, uc0, 0.06, uc1)          # the user cost shifts up
+    add_arrow(fig, K0, 0.06, K1, 0.06)            # desired capital falls
     return fig
 ```
 
 The economy starts with no tax. Choose a tax rate, then press **Introduce the tax!**
 
-> **Python note.** `interact_manual` works like `interact`, but adds a button: nothing is redrawn until
-> you press it. `.options(manual_name=...)` sets the text on the button.
-
 ```{python}
 #| kind: widget
+# Fig. 2 with a button. `interact_manual` works like `interact`, but adds a button:
+# nothing is redrawn until you press it. `.options(manual_name=...)` sets the text
+# on the button.
 introduce = interact_manual.options(manual_name="Introduce the tax!")
-introduce(corporate_tax_diagram,
-          tau=FloatSlider(value=0.35, min=0.0, max=0.5, step=0.05, description="corporate tax rate τ", style=WIDE),
-          R=FloatSlider(value=0.02, min=0.01, max=0.06, step=0.01, description="interest rate R", style=WIDE),
-          d=FloatSlider(value=0.08, min=0.05, max=0.12, step=0.01, description="depreciation rate d", style=WIDE));
+introduce(
+    corporate_tax_diagram,
+    tau=FloatSlider(value=0.35, min=0.0, max=0.5, step=0.05,
+                    description="corporate tax rate τ", style=WIDE),
+    R=FloatSlider(value=0.02, min=0.01, max=0.06, step=0.01,
+                  description="interest rate R", style=WIDE),
+    d=FloatSlider(value=0.08, min=0.05, max=0.12, step=0.01,
+                  description="depreciation rate d", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 2 with a precomputed slider for the corporate tax rate
-slider_figure(corporate_tax_diagram, "tau", [0.0, 0.1, 0.2, 0.21, 0.3, 0.35, 0.4, 0.5], start=0.35,
-              label="corporate tax rate τ")
+# one picture of Fig. 2 per tax rate; 0.21 and 0.35 are the U.S. rates after and
+# before 2018
+slider_figure(
+    corporate_tax_diagram,
+    "tau",
+    [0.0, 0.1, 0.2, 0.21, 0.3, 0.35, 0.4, 0.5],     # the values of tau
+    start=0.35,
+    label="corporate tax rate τ",
+)
 ```
 
 **Source.** Adapted from Fig. 17.2 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -1311,18 +1433,23 @@ slider_figure(corporate_tax_diagram, "tau", [0.0, 0.1, 0.2, 0.21, 0.3, 0.35, 0.4
 After the tax, the firm has more capital than it wants. The capital accumulation equation says it can simply stop
 investing and let depreciation do the work. How many years does that take?
 
-> **Python note.** A `while` loop repeats its indented lines as long as its condition is true. Here
-> each pass is one year in which the capital stock shrinks by the depreciation rate, and `years += 1`
-> adds one to the counter.
-
 ```{python}
+# How many years with no investment take capital down to its new desired level?
+# Step 1: desired capital without and with the 35% tax (equations 2, 3 and 5)
 K_initial = desired_capital(user_cost(0.02, 0.08))
 K_target = desired_capital(user_cost(0.02, 0.08, tau=0.35))
+# Step 2: a `while` loop repeats its indented lines as long as its condition is
+# true. Each pass is one year in which capital shrinks by the depreciation rate,
+# and `years += 1` adds one to the counter
 K, years = K_initial, 0
 while K > K_target:
-    K = (1 - 0.08) * K                  # no new investment: capital accumulation with I = 0
+    K = (1 - 0.08) * K          # no new investment: capital accumulation with I = 0
     years += 1
-print(f"Capital falls from {K_initial:.2f} to {K_target:.2f}: {years} years with no investment at all")
+# Step 3: show the result
+print(
+    f"Capital falls from {K_initial:.2f} to {K_target:.2f}: "
+    f"{years} years with no investment at all"
+)
 ```
 
 In the long run the tax also lowers the **investment rate**. Equation (7) says that, for a given
@@ -1330,10 +1457,15 @@ growth rate of capital $g_K$, the investment rate is inversely proportional to t
 $g_K = 2$ percent, an illustrative long-run growth rate:
 
 ```{python}
+# The long-run investment rate I/Y of equation (7), without and with a 35% tax
 s_before = investment_rate(user_cost(0.02, 0.08))
 s_after = investment_rate(user_cost(0.02, 0.08, tau=0.35))
 print(f"Investment rate I/Y without the tax: {s_before:.1%}")
-print(f"Investment rate I/Y with a 35% tax:  {s_after:.1%}  (a fall by the factor 1 - tau = {s_after / s_before:.2f})")
+# the ratio of the two rates is 1 - tau: I/Y is inversely proportional to uc
+print(
+    f"Investment rate I/Y with a 35% tax:  {s_after:.1%}  "
+    f"(a fall by the factor 1 - tau = {s_after / s_before:.2f})"
+)
 ```
 
 <!-- cell -->
@@ -1346,14 +1478,11 @@ user cost before taxes is then $10 \times (1-0.21) = 7.9$ percent everywhere, an
 cost is $7.9/(1-\tau)$, as in equation (3). We load the OECD tax rates for every year since 2000,
 and the table as printed in the textbook.
 
-> **Python note.** `pd.read_csv` reads a data file into a *DataFrame*, a table with named columns, and
-> `.head()` shows its first rows. `taxes[taxes.year == year]` keeps only the rows of one year, and
-> `.copy()` makes it a new table to which we can add a column. `book.merge(table, on="country")` joins
-> two tables by matching the country names, like a lookup in a spreadsheet.
-
 ```{python}
-taxes = pd.read_csv(DATA_URL + "corporate_tax.csv")
-book = pd.read_csv(DATA_URL + "table17-1-book.csv")
+# Load the two tables. `pd.read_csv` reads a data file into a DataFrame, a table
+# with named columns, and `.head()` shows its first rows.
+taxes = pd.read_csv(DATA_URL + "corporate_tax.csv")    # OECD rates since 2000
+book = pd.read_csv(DATA_URL + "table17-1-book.csv")    # Table 17.1 as printed
 taxes.head()
 ```
 
@@ -1362,17 +1491,41 @@ of the central government, in percent.
 
 ```{python}
 def tax_table(year=2022):
-    """Table 17.1 for one year: tax rates and user costs, with the U.S. user cost fixed at 10 percent."""
+    """Table 17.1 for one year: tax rates and user costs.
+
+    The U.S. user cost is fixed at 10 percent, which gives the user cost before taxes,
+    10 (1 - tau_US) percent; each country's user cost is that number divided by
+    1 - tau, as in equation (3).
+
+    Arguments
+        year : the year of the OECD tax rates, 2000 to 2026
+    Returns
+        a table with one row per country: the textbook's columns and this year's
+    """
+    # Step 1: the rows of one year. `taxes[taxes.year == year]` keeps only the rows
+    # where the condition is true, and `.copy()` makes them a new table to which we
+    # can add a column
     table = taxes[taxes.year == year].copy()
+    # Step 2: the U.S. tax rate as a share (`.iloc[0]` takes the first value), and
+    # the user cost before taxes
     tau_us = table[table.country == "United States"].cit_rate.iloc[0] / 100
-    uc_no_tax = 0.10 * (1 - tau_us)                       # the user cost before taxes
-    table["user_cost"] = 100 * uc_no_tax / (1 - table.cit_rate / 100)       # equation (3)
+    uc_no_tax = 0.10 * (1 - tau_us)
+    # Step 3: each country's user cost, in percent: equation (3)
+    table["user_cost"] = 100 * uc_no_tax / (1 - table.cit_rate / 100)
+    # Step 4: `book.merge(..., on="country")` joins the two tables by matching the
+    # country names, like a lookup in a spreadsheet
     table = book.merge(table[["country", "cit_rate", "user_cost"]], on="country")
-    names = {"book_rate": "tax rate, book", "cit_rate": f"tax rate, {year}",
-             "book_user_cost": "user cost, book", "user_cost": f"user cost, {year}"}
+    # Step 5: readable column names, and one decimal
+    names = {
+        "book_rate": "tax rate, book",
+        "cit_rate": f"tax rate, {year}",
+        "book_user_cost": "user cost, book",
+        "user_cost": f"user cost, {year}",
+    }
     return table.rename(columns=names).round(1)
 
 
+# the table for 2022
 table_2022 = tax_table(2022)
 table_2022
 ```
@@ -1381,7 +1534,11 @@ table_2022
 use the numbers:
 
 ```{python}
-different = table_2022[(table_2022["tax rate, 2022"] - table_2022["tax rate, book"]).abs() > 0.05]
+# The countries whose 2022 rate differs from the textbook's by more than 0.05 points
+# (`.abs()` takes the absolute value of each difference)
+different = table_2022[
+    (table_2022["tax rate, 2022"] - table_2022["tax rate, book"]).abs() > 0.05
+]
 different
 ```
 
@@ -1393,12 +1550,15 @@ different
 
 Pick a year in the menu to rebuild the table for that year.
 
-> **Python note.** A `Dropdown` is a menu. `interact` shows the table that `tax_table` returns, and
-> builds it again whenever you choose another year.
-
 ```{python}
 #| kind: widget
-interact(tax_table, year=Dropdown(options=list(range(2000, 2027)), value=2022, description="year", style=WIDE));
+# Table 17.1 with a menu. A `Dropdown` is a menu: `interact` shows the table that
+# tax_table returns, and builds it again whenever you choose another year.
+interact(
+    tax_table,
+    year=Dropdown(options=list(range(2000, 2027)), value=2022,
+                  description="year", style=WIDE),
+);
 ```
 
 **Source.** Data: OECD, Corporate Tax Statistics, statutory corporate income tax rate of the central government (dataflow `DSD_TAX_CIT@DF_CIT`, measure `CIT`), via the [OECD Data Explorer](https://data-explorer.oecd.org/). The columns marked "book" are the values printed in the textbook, kept for comparison.
@@ -1414,8 +1574,10 @@ U.S. rate itself was 35 percent until 2017 (the textbook says 34, the rate on mi
 incomes) and 21 percent from 2018:
 
 ```{python}
+# The U.S. corporate tax rate since 2015
 us = taxes[(taxes.country == "United States") & (taxes.year >= 2015)]
-us.set_index("year")[["cit_rate"]].T         # .T turns the table on its side, so the years run across
+# `.T` turns the table on its side, so that the years run across
+us.set_index("year")[["cit_rate"]].T
 ```
 
 **Your turn.** The Tax Cuts and Jobs Act of 2017 cut the U.S. corporate tax rate from 35 to 21 percent.
@@ -1456,6 +1618,7 @@ This figure stays U.S.-only: Shiller's monthly data are the only free, long seri
 for other stock markets are sold by commercial data providers and cannot be shared here.
 
 ```{python}
+# Load Shiller's monthly P/E ratio; `.tail(3)` shows the last three rows
 cape = pd.read_csv(DATA_URL + "fig17-3.csv", parse_dates=["date"])
 cape.tail(3)
 ```
@@ -1463,49 +1626,163 @@ cape.tail(3)
 Each row is a month. `cape` is the P/E ratio and `cape_average` its average over all months since 1881.
 `parse_dates=["date"]` turns the text in the `date` column into real dates.
 
-> **Python note.** `px.area` draws a line and fills the area below it. `cape.iloc[-1]` is the last row
-> of the table. `if R > g:` runs the indented lines only when the condition holds; `else:` handles the
-> other case. Here it protects us from dividing by zero, because equation (9) has no finite price
-> when $g \geq R$. `"Model" if model < 48 else "Model ↑"` is a one-line `if`: it gives the first text when the
-> condition holds and the second one otherwise. `min(model, 48)` keeps the label inside the chart.
+First the numbers of the figure. `pe_summary` takes the latest month and the long-run average from the data,
+and computes the model ratio of equation (10).
 
 ```{python}
-def pe_chart(R=0.05, g=0.02, payout=0.5):
-    """Fig. 17.3: the P/E ratio, its average, and the model ratio payout / (R - g) of equation (10)."""
+def pe_summary(R, g, payout):
+    """The latest P/E ratio, its average, and the model ratio (Fig. 3).
+
+    Equation (10):  P/E = payout / (R - g), which has no finite value when g >= R
+
+    Arguments
+        R      : real interest rate, R
+        g      : growth rate of the dividend, g
+        payout : the payout ratio, dividend / earnings
+    Returns
+        last    : the last row of `cape`, the latest month
+        average : the average P/E ratio over all months since 1881
+        model   : the model P/E ratio of equation (10), or None when g >= R
+    """
+    # `cape.iloc[-1]` is the last row of the table (`iloc` picks rows by position)
     last, average = cape.iloc[-1], cape.cape.mean()
-    fig = px.area(cape, x="date", y="cape", color_discrete_sequence=["#5aa0d8"],
-                  labels={"date": "Year", "cape": "P/E ratio"})
-    fig.add_trace(go.Scatter(x=[cape.date.iloc[0], last.date], y=[average, average], mode="lines",
-                             name="Average", line=dict(color="black", width=1.5, dash="dash")))
-    fig.add_annotation(x="1981-01-01", y=average + 7, text=f"Mean 1881–{last.date.year}: {average:.1f}", showarrow=False, font=dict(size=14))
-    model_text = "model: no finite price, because g ≥ R"
+    # `if R > g:` runs the indented line only when the condition holds, and `else:`
+    # handles the other case. Equation (9) has no finite price when g >= R, so this
+    # also keeps us from dividing by zero
     if R > g:
         model = pe_ratio(payout, R, g)
-        fig.add_trace(go.Scatter(x=[cape.date.iloc[0], last.date], y=[model, model], mode="lines",
-                                 name="Model, equation (10)", line=dict(color=TEAL, width=3)))
+    else:
+        model = None
+    return last, average, model
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 3, the model line and its label
+def add_pe_model(fig, R, g, payout, model, last):
+    """Draw the teal model line of Fig. 3 and its label, when R > g.
+
+    Arguments
+        fig    : the figure to draw on
+        R      : real interest rate, R
+        g      : growth rate of the dividend, g
+        payout : the payout ratio, dividend / earnings
+        model  : the model P/E ratio (None when g >= R)
+        last   : the last row of `cape`, the latest month
+    Returns
+        the text about the model for the title
+    """
+    model_text = "model: no finite price, because g ≥ R"
+    if R > g:
+        # the flat teal line at the model ratio, across all the years
+        fig.add_trace(
+            go.Scatter(
+                x=[cape.date.iloc[0], last.date],
+                y=[model, model],
+                mode="lines",
+                name="Model, equation (10)",
+                line=dict(color=TEAL, width=3),
+            )
+        )
         model_text = f"model: {payout:.2f} / ({R:.1%} − {g:.2%}) = {model:.1f}"
-        label = "Model" if model < 48 else "Model ↑"      # a model line above the chart is not visible: point up
-        fig.add_annotation(x=last.date, y=min(model, 48), text=label, showarrow=False, xanchor="left",
-                           xshift=6, font=dict(color=TEAL, size=14))
-    fig.update_layout(title=f"P/E ratio {last.cape:.1f} in {last.date:%b %Y}  |  {model_text}",
-                      xaxis=dict(range=["1881-01-01", "2041-01-01"]),     # room for the label on the right
-                      yaxis=dict(range=[0, 50], tickvals=[0, 10, 20, 30, 40, 50]), showlegend=False)
+        # a one-line if: `a if condition else b` gives a when the condition holds
+        # and b otherwise. A model line above the chart is not visible: point up
+        label = "Model" if model < 48 else "Model ↑"
+        # its label at the right end; `min(model, 48)` keeps it inside the chart
+        fig.add_annotation(
+            x=last.date,
+            y=min(model, 48),
+            text=label,
+            showarrow=False,
+            xanchor="left",
+            xshift=6,
+            font=dict(color=TEAL, size=14),
+        )
+    return model_text
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 3, the price-earnings ratio in the stock market
+def pe_chart(R=0.05, g=0.02, payout=0.5):
+    """The P/E ratio, its average, and the model ratio payout / (R - g).
+
+    Draws Fig. 3 (inspired by Fig. 17.3 in Jones), with the model line of
+    equation (10).
+
+    Arguments
+        R      : real interest rate, R
+        g      : growth rate of the dividend, g
+        payout : the payout ratio, dividend / earnings
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the numbers of the figure (pe_summary)
+    last, average, model = pe_summary(R, g, payout)
+
+    # Step 2: `px.area` draws the P/E ratio as a line and fills the area below it
+    fig = px.area(
+        cape,
+        x="date",
+        y="cape",
+        color_discrete_sequence=["#5aa0d8"],
+        labels={"date": "Year", "cape": "P/E ratio"},
+    )
+    # the dashed black line: the average since 1881, and its label
+    fig.add_trace(
+        go.Scatter(
+            x=[cape.date.iloc[0], last.date],
+            y=[average, average],
+            mode="lines",
+            name="Average",
+            line=dict(color="black", width=1.5, dash="dash"),
+        )
+    )
+    fig.add_annotation(
+        x="1981-01-01",
+        y=average + 7,
+        text=f"Mean 1881–{last.date.year}: {average:.1f}",
+        showarrow=False,
+        font=dict(size=14),
+    )
+
+    # Step 3: the model line (add_pe_model), then the title and fixed axes
+    model_text = add_pe_model(fig, R, g, payout, model, last)
+    fig.update_layout(
+        title=f"P/E ratio {last.cape:.1f} in {last.date:%b %Y}  |  {model_text}",
+        # up to 2041: room for the label on the right
+        xaxis=dict(range=["1881-01-01", "2041-01-01"]),
+        yaxis=dict(range=[0, 50], tickvals=[0, 10, 20, 30, 40, 50]),
+        showlegend=False,
+    )
     return fig
 ```
 
 ```{python}
 #| kind: widget
-interact(pe_chart,
-         R=FloatSlider(value=0.05, min=0.03, max=0.08, step=0.005, description="interest rate R", style=WIDE, readout_format=".3f"),
-         g=FloatSlider(value=0.02, min=0.0, max=0.04, step=0.0025, description="dividend growth g", style=WIDE, readout_format=".4f"),
-         payout=FloatSlider(value=0.5, min=0.3, max=0.8, step=0.05, description="payout ratio", style=WIDE));
+# Fig. 3 with sliders; `readout_format` sets how many decimals each slider shows
+interact(
+    pe_chart,
+    R=FloatSlider(value=0.05, min=0.03, max=0.08, step=0.005,
+                  description="interest rate R", style=WIDE, readout_format=".3f"),
+    g=FloatSlider(value=0.02, min=0.0, max=0.04, step=0.0025,
+                  description="dividend growth g", style=WIDE, readout_format=".4f"),
+    payout=FloatSlider(value=0.5, min=0.3, max=0.8, step=0.05,
+                       description="payout ratio", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 3 with a precomputed slider for dividend growth
-slider_figure(pe_chart, "g", [0.0, 0.01, 0.02, 0.025, 0.03, 0.035, 0.0375], start=0.02,
-              label="dividend growth g")
+# one picture of Fig. 3 per value of g; all of them below R = 5%
+slider_figure(
+    pe_chart,
+    "g",
+    [0.0, 0.01, 0.02, 0.025, 0.03, 0.035, 0.0375],     # the values of g
+    start=0.02,
+    label="dividend growth g",
+)
 ```
 
 **Source.** Data: [Robert J. Shiller, Online Data, cyclically adjusted price-earnings ratio (CAPE) of the S&P composite index (file `ie_data.xls`)](https://shillerdata.com/), formerly at [econ.yale.edu](http://www.econ.yale.edu/~shiller/data.htm). The model line is our own, from equation (10).
@@ -1534,9 +1811,15 @@ The textbook prints an average of 17.4. That is the average up to March 2023, th
 textbook's figure. With the data up to today the average is a little higher.
 
 ```{python}
+# Step 1: the average P/E ratio up to the textbook's last month, and up to today
 book_sample = cape[cape.date <= "2023-03-01"]
-print(f"Average P/E ratio, 1881 to March 2023: {book_sample.cape.mean():.1f}   (textbook: 17.4)")
+print(
+    f"Average P/E ratio, 1881 to March 2023: {book_sample.cape.mean():.1f}"
+    "   (textbook: 17.4)"
+)
 print(f"Average P/E ratio, 1881 to {cape.date.iloc[-1]:%B %Y}: {cape.cape.mean():.1f}")
+# Step 2: the peak month of 1929 and of 1999 (`idxmax` gives the row label of the
+# largest value, and `.loc` picks that row)
 for year in [1929, 1999]:
     top = cape.loc[cape[cape.date.dt.year == year].cape.idxmax()]
     print(f"Peak of {year}: {top.cape:.1f} in {top.date:%B %Y}")
@@ -1546,9 +1829,17 @@ Turn equation (10) around: for a given payout ratio, the P/E ratio tells us the 
 market's price implies, $R - g = \text{payout}/(P/E)$.
 
 ```{python}
+# The R - g implied by a P/E ratio: R - g = payout / (P/E), equation (10) turned around
 last = cape.iloc[-1]
-for name, ratio in [("the long-run average", cape.cape.mean()), (f"{last.date:%B %Y}", last.cape)]:
-    print(f"P/E ratio of {ratio:.1f} ({name}): R - g = {0.5 / ratio:.2%} with a payout ratio of 0.5")
+# for the long-run average and for the latest month
+for name, ratio in [
+    ("the long-run average", cape.cape.mean()),
+    (f"{last.date:%B %Y}", last.cape),
+]:
+    print(
+        f"P/E ratio of {ratio:.1f} ({name}): R - g = {0.5 / ratio:.2%} "
+        "with a payout ratio of 0.5"
+    )
 ```
 
 Today's prices are consistent with the simple model only if investors expect dividends to grow almost as
@@ -1588,6 +1879,7 @@ In the national accounts, private investment has three parts:
 - **inventory investment**: the change in the stock of goods that firms have produced but not yet sold.
 
 ```{python}
+# Load the three tables of Fig. 4: annual shares, recession dates, quarterly shares
 invest = pd.read_csv(DATA_URL + "fig17-4.csv")
 recessions = pd.read_csv(DATA_URL + "recessions.csv", parse_dates=["peak", "trough"])
 quarterly = pd.read_csv(DATA_URL + "investment_quarterly.csv", parse_dates=["date"])
@@ -1601,69 +1893,144 @@ residential shares for every quarter.
 To draw all the parts with one `px.line` call, Plotly Express wants a **long** table: one row per year
 and component. We first give the columns readable names, which then appear in the legend.
 
-> **Python note.** `.rename(columns=...)` renames columns with a dictionary. `.melt(id_vars="year")`
-> turns a wide table into a long one: the column names go into a new column (`component`) and the
-> values into another (`share`). `pd.to_datetime(...)` turns the year into a date (1 January), so that
-> the years line up with the recession dates.
-
 ```{python}
-NAMES = {"total": "Total", "nonres_fixed": "Nonresidential fixed", "residential": "Residential",
-         "inventories": "Inventory"}
-COLORS = {"Total": BLUE, "Nonresidential fixed": GREEN, "Residential": TEAL, "Inventory": "#5aa0d8"}
+# Step 1: readable names for the columns; `.rename(columns=...)` renames columns
+# with a dictionary
+NAMES = {
+    "total": "Total",
+    "nonres_fixed": "Nonresidential fixed",
+    "residential": "Residential",
+    "inventories": "Inventory",
+}
 invest = invest.rename(columns=NAMES)
+
+# Step 2: the long table. `.melt(id_vars="year")` turns a wide table into a long one:
+# the column names go into a new column (`component`), the values into another
+# (`share`)
 annual_long = invest.melt(id_vars="year", var_name="component", value_name="share")
+# `pd.to_datetime(...)` turns the year into a date (1 January), so that the years
+# line up with the recession dates
 annual_long["date"] = pd.to_datetime(annual_long.year.astype(str))
 
+# Step 3: the same for the quarterly data since 1975
 recent = quarterly[quarterly.date >= "1975-01-01"].rename(columns=NAMES)
 quarterly_long = recent.melt(id_vars="date", var_name="component", value_name="share")
-low = recent.loc[recent[recent.date.dt.year == 2009].Total.idxmin()]      # the lowest quarter of 2009
+# the lowest quarter of 2009 (`idxmin` gives the row label of the smallest value)
+low = recent.loc[recent[recent.date.dt.year == 2009].Total.idxmin()]
 annual_long.head()
 ```
 
-`shade_recessions` shades the recessions. It adds one shaded rectangle (`add_vrect`) from the peak to the
-trough of each recession.
-
-> **Python note.** `zip(a, b)` hands over one pair of values at a time, here the peak and the trough of
-> each recession.
+The chart needs no new economics, so its code is all drawing code. `shade_recessions` shades the recessions,
+with one shaded rectangle (`add_vrect`) from the peak to the trough of each recession, and `components_chart`
+draws one line per component from the annual or the quarterly table; its quarterly title reports `low`.
 
 ```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 4, the colors and the recession bands
+# one color per component, the same for every country
+COLORS = {
+    "Total": BLUE,
+    "Nonresidential fixed": GREEN,
+    "Residential": TEAL,
+    "Inventory": "#5aa0d8",
+}
+
+
 def shade_recessions(fig, start):
-    """Shade every NBER recession that ends after the date start."""
+    """Shade every NBER recession that ends after the date start.
+
+    Draws the recession bands of Fig. 4: one shaded rectangle from the peak to the
+    trough of each recession.
+
+    Arguments
+        fig   : the figure to shade
+        start : a date; the recessions that end before it are left out
+    Returns
+        the same figure
+    """
+    # `zip(a, b)` hands over one pair of values at a time, here the peak and the
+    # trough of each recession
     for peak, trough in zip(recessions.peak, recessions.trough):
         if trough >= pd.Timestamp(start):
-            fig.add_vrect(x0=peak, x1=trough, fillcolor=BLUE, opacity=0.12, line_width=0)
-    return fig
-
-
-def components_chart(frequency="annual"):
-    """Fig. 17.4: investment and its components, percent of GDP, with recessions shaded."""
-    title = "Investment and its components: all of them fall in recessions"
-    data = annual_long
-    if frequency == "quarterly":
-        title = f"Quarterly data: total investment fell to {low.Total:.1f}% of GDP in {low.date.year}Q{low.date.quarter}"
-        data = quarterly_long
-    fig = px.line(data, x="date", y="share", color="component", color_discrete_map=COLORS, title=title,
-                  labels={"date": "Year", "share": "Percent of GDP", "component": "Component"})
-    shade_recessions(fig, "1975-01-01")
-    fig.add_hline(y=0, line_color="black", line_width=1)
-    fig.update_layout(xaxis_range=["1975-01-01", "2026-12-31"], yaxis=dict(range=[-5, 25], tickvals=[0, 5, 10, 15, 20, 25]),
-                      legend=dict(orientation="h", x=0.01, y=0.99, title=None))
+            # `add_vrect` shades a vertical band from x0 to x1
+            fig.add_vrect(
+                x0=peak,
+                x1=trough,
+                fillcolor=BLUE,
+                opacity=0.12,
+                line_width=0,
+            )
     return fig
 ```
 
-> **Python note.** A `ToggleButtons` widget shows one button per option; the function receives the
-> option you click.
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 4, components of private investment
+def components_chart(frequency="annual"):
+    """Investment and its components, percent of GDP, with recessions shaded.
+
+    Draws Fig. 4 (inspired by Fig. 17.4 in Jones), from the annual or the quarterly
+    long table.
+
+    Arguments
+        frequency : "annual" or "quarterly"
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the table and the title; the quarterly title reports the lowest quarter
+    title = "Investment and its components: all of them fall in recessions"
+    data = annual_long
+    if frequency == "quarterly":
+        title = (
+            f"Quarterly data: total investment fell to {low.Total:.1f}% of GDP "
+            f"in {low.date.year}Q{low.date.quarter}"
+        )
+        data = quarterly_long
+
+    # Step 2: one line per component, in the colors of COLORS
+    fig = px.line(
+        data,
+        x="date",
+        y="share",
+        color="component",
+        color_discrete_map=COLORS,
+        title=title,
+        labels={"date": "Year", "share": "Percent of GDP", "component": "Component"},
+    )
+    # Step 3: the recession bands, and a black line at zero
+    shade_recessions(fig, "1975-01-01")
+    fig.add_hline(y=0, line_color="black", line_width=1)
+    # Step 4: fixed axes, and the legend inside the chart at the top left
+    fig.update_layout(
+        xaxis_range=["1975-01-01", "2026-12-31"],
+        yaxis=dict(range=[-5, 25], tickvals=[0, 5, 10, 15, 20, 25]),
+        legend=dict(orientation="h", x=0.01, y=0.99, title=None),
+    )
+    return fig
+```
 
 ```{python}
 #| kind: widget
-interact(components_chart,
-         frequency=ToggleButtons(options=["annual", "quarterly"], value="annual", description="data"));
+# Fig. 4 with buttons. A `ToggleButtons` widget shows one button per option; the
+# function receives the option you click.
+interact(
+    components_chart,
+    frequency=ToggleButtons(options=["annual", "quarterly"], value="annual",
+                            description="data"),
+);
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 4 with a precomputed slider for annual or quarterly data
-slider_figure(components_chart, "frequency", ["annual", "quarterly"], start="annual", label="data")
+# one picture of Fig. 4 per option; the slider shows one at a time
+slider_figure(
+    components_chart,
+    "frequency",
+    ["annual", "quarterly"],
+    start="annual",
+    label="data",
+)
 ```
 
 **Sources.** Data: U.S. Bureau of Economic Analysis, NIPA Table 1.1.5, via FRED: [gross private domestic investment (`GPDIA`)](https://fred.stlouisfed.org/series/GPDIA), [private nonresidential fixed investment (`PNFIA`)](https://fred.stlouisfed.org/series/PNFIA), [private residential fixed investment (`PRFIA`)](https://fred.stlouisfed.org/series/PRFIA), [change in private inventories (`CBIA`)](https://fred.stlouisfed.org/series/CBIA) and [GDP (`GDPA`)](https://fred.stlouisfed.org/series/GDPA);
@@ -1701,6 +2068,7 @@ three parts for 35 countries, from 1970 or 1995 to the latest year:
 For the United States this gives the BEA's numbers of `fig17-4.csv` within 0.4 points of GDP in every year.
 
 ```{python}
+# Load the OECD data: one row per country and year, with the three parts of investment
 world = pd.read_csv(DATA_URL + "investment_components.csv")
 world.head(3)
 ```
@@ -1708,71 +2076,150 @@ world.head(3)
 The chart function draws one country at a time, with the same names and colors as Fig. 4. The vertical axis keeps
 the textbook's scale unless a country invests more than 25 percent of GDP; then it switches to a wider fixed scale.
 
+First the numbers: `country_components` takes one country's rows, makes the long table, and finds the years of
+the lowest and the highest private investment, which the title reports.
+
 ```{python}
-def components_by_country(country="United States"):
-    """Fig. 17.4 for one country: private investment and its parts, percent of GDP (OECD, annual)."""
+def country_components(country):
+    """One country's investment and its parts, and its lowest and highest year.
+
+    Private investment and its three parts, in percent of GDP, from the OECD's
+    national accounts (the data of Fig. 4 for 35 countries).
+
+    Arguments
+        country : the country's name, as in `world`
+    Returns
+        long      : one row per year and component, in percent of GDP
+        low, high : the rows of the years with the lowest and the highest total
+    """
+    # Step 1: the country's rows, with the names of Fig. 4
     rows = world[world.country == country].rename(columns=NAMES)
-    long = rows.melt(id_vars=["iso3", "country", "year", "region"], var_name="component", value_name="share")
+    # Step 2: the long table, one row per year and component
+    long = rows.melt(
+        id_vars=["iso3", "country", "year", "region"],
+        var_name="component",
+        value_name="share",
+    )
+    # Step 3: the years of the lowest and the highest total (`idxmin` and `idxmax`
+    # give the row labels of the smallest and the largest value)
     low, high = rows.loc[rows.Total.idxmin()], rows.loc[rows.Total.idxmax()]
+    return long, low, high
+```
+
+```{python}
+#| kind: drawing
+# @title Drawing code: Fig. 4, investment in one of 35 countries
+def components_by_country(country="United States"):
+    """Private investment and its parts in one country, percent of GDP (OECD, annual).
+
+    Draws Fig. 4 for one country (inspired by Fig. 17.4 in Jones).
+
+    Arguments
+        country : the country's name, as in `world`
+    Returns
+        a Plotly figure
+    """
+    # Step 1: the data (country_components)
+    long, low, high = country_components(country)
+    # Step 2: the textbook's scale, or a second, fixed scale for the
+    # high-investment countries
     top = 25
     if high.Total > 25:
-        top = 55                                # a second, fixed scale for the high-investment countries
-    fig = px.line(long, x="year", y="share", color="component", color_discrete_map=COLORS, hover_name="country",
-                  labels={"year": "Year", "share": "Percent of GDP", "component": "Component"},
-                  title=f"{country}: investment from {low.Total:.1f}% ({low.year}) to {high.Total:.1f}% "
-                        f"({high.year}) of GDP")
+        top = 55
+
+    # Step 3: one line per component, in the colors of Fig. 4
+    fig = px.line(
+        long,
+        x="year",
+        y="share",
+        color="component",
+        color_discrete_map=COLORS,
+        hover_name="country",
+        labels={"year": "Year", "share": "Percent of GDP", "component": "Component"},
+        title=f"{country}: investment from {low.Total:.1f}% ({low.year}) to "
+              f"{high.Total:.1f}% ({high.year}) of GDP",
+    )
+    # Step 4: a black line at zero, fixed axes, and the legend at the top left
     fig.add_hline(y=0, line_color="black", line_width=1)
-    fig.update_layout(xaxis_range=[1969, 2026], yaxis=dict(range=[-5, top]),
-                      legend=dict(orientation="h", x=0.01, y=0.99, title=None))
+    fig.update_layout(
+        xaxis_range=[1969, 2026],
+        yaxis=dict(range=[-5, top]),
+        legend=dict(orientation="h", x=0.01, y=0.99, title=None),
+    )
     return fig
 ```
 
 The widget below is the Colab version. The website version needs one precomputed chart per country, joined by a
 menu; the helper cell right after the widget builds it.
 
-> **Python note.** A `Dropdown` is a menu from which you pick one entry. `sorted(world.country.unique())` lists every
-> country once, in alphabetical order.
-
 ```{python}
 #| kind: widget
-interact(components_by_country,
-         country=Dropdown(options=sorted(world.country.unique()), value="United States", description="country",
-                          style=WIDE));
+# Fig. 4 for one country, with a menu. A `Dropdown` is a menu from which you pick one
+# entry; `sorted(world.country.unique())` lists every country once, in alphabetical
+# order.
+interact(
+    components_by_country,
+    country=Dropdown(options=sorted(world.country.unique()), value="United States",
+                     description="country", style=WIDE),
+);
 ```
 
 ```{python}
 #| kind: helper
-# @title Helper for the website versions with a country menu (run this cell; you do not need to read it)
+# @title Helper for the website versions with a country menu (run it; no need to read)
 def dropdown_figure(make_figure, options, start):
-    """Precompute make_figure(option) for every option and join the results with a dropdown menu.
+    """Precompute make_figure(option) for every option and join them with a menu.
 
-    The website cannot run Python, so a figure with a country menu gets this precomputed version."""
+    The website cannot run Python, so a figure with a country menu (Fig. 4 for 35
+    countries) gets this precomputed version: the traces of every option, and a
+    dropdown menu that shows one option's traces at a time.
+
+    Arguments
+        make_figure : the function that draws the figure for one option
+        options     : the options of the menu, e.g. the country names
+        start       : the option shown first
+    Returns
+        a Plotly figure with a dropdown menu
+    """
+    # Step 1: one figure per option; the one shown first gives the layout
     figures = [make_figure(o) for o in options]
     first = options.index(start)
     fig = go.Figure(layout=figures[first].layout)
-    owner = []                                  # which precomputed figure each trace comes from
+    # Step 2: all their traces in one figure; only those of `start` are visible
+    owner = []                  # which precomputed figure each trace comes from
     for i, f in enumerate(figures):
         for trace in f.data:
             trace.visible = (i == first)
             fig.add_trace(trace)
             owner.append(i)
+    # Step 3: one menu entry per option: it shows that option's traces, with its
+    # title, axis range, annotations and shapes
     buttons = []
     for i, f in enumerate(figures):
-        layout = {"title": f.layout.title.to_plotly_json(), "yaxis.range": f.layout.yaxis.range,
-                  "annotations": [a.to_plotly_json() for a in f.layout.annotations],
-                  "shapes": [s.to_plotly_json() for s in f.layout.shapes]}
+        layout = {
+            "title": f.layout.title.to_plotly_json(),
+            "yaxis.range": f.layout.yaxis.range,
+            "annotations": [a.to_plotly_json() for a in f.layout.annotations],
+            "shapes": [s.to_plotly_json() for s in f.layout.shapes],
+        }
         buttons.append(dict(label=str(options[i]), method="update",
                             args=[{"visible": [o == i for o in owner]}, layout]))
-    fig.update_layout(updatemenus=[dict(type="dropdown", active=first, buttons=buttons, x=0, y=1.02,
-                                        xanchor="left", yanchor="bottom")],
-                      margin=dict(t=110))
+    # Step 4: the menu above the chart, with room for it at the top
+    menu = dict(type="dropdown", active=first, buttons=buttons, x=0, y=1.02,
+                xanchor="left", yanchor="bottom")
+    fig.update_layout(updatemenus=[menu], margin=dict(t=110))
     return fig
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 4 for 35 countries, with a country menu
-dropdown_figure(components_by_country, sorted(world.country.unique()), start="United States")
+# one precomputed picture per country, joined by a menu (dropdown_figure)
+dropdown_figure(
+    components_by_country,
+    sorted(world.country.unique()),
+    start="United States",
+)
 ```
 
 **Sources.** Data: OECD, National Accounts at a Glance, Chapter 3, investment (gross fixed capital formation), the government's share of it and investment in dwellings (dataflows `DSD_NAAG@DF_NAAG_III` and `DSD_NAAG@DF_NAAG_III_GFCF`); OECD national accounts Table 1, GDP and changes in inventories (`DSD_NAMAIN10@DF_TABLE1_EXPENDITURE`); all via the [OECD Data Explorer](https://data-explorer.oecd.org/).
@@ -1802,12 +2249,17 @@ For four recessions we compute how much each part of investment changed, in perc
 from the year before the recession to its worst year.
 
 ```{python}
+# The change of each part of investment, in points of GDP, in four recessions
+# Step 1: one row per year; `.loc[year]` then picks the row of a year
 table = invest.set_index("year")
+# Step 2: for each episode, the change from the year before the recession to its
+# worst year; `rows.append` adds it to the list
 rows = []
 for start, end in [(1979, 1982), (2000, 2002), (2006, 2009), (2019, 2020)]:
     change = table.loc[end] - table.loc[start]
     change["episode"] = f"{start} to {end}"
     rows.append(change)
+# Step 3: the list of rows as one table, rounded to two decimals
 pd.DataFrame(rows).set_index("episode").round(2)
 ```
 
@@ -1831,14 +2283,37 @@ $\bar{d} = 2$ percent, $\tau = 0.3$ and expected price growth of 2 percent.
 
 ```{python}
 def house_price(rent, R, d, gp, tau, x):
-    """Price of a house: rent / (tau x R + (1 - tau) R + d - gp)   (equation 13; gp is the expected price growth)."""
+    """The price of a house, from the arbitrage equation.
+
+    Equation (13):  price = rent / (tau x R + (1 - tau) R + d - gp)
+
+    Arguments
+        rent : the rent, dollars a year
+        R    : real interest rate, R
+        d    : depreciation rate, d-bar
+        gp   : the expected growth of the house price
+        tau  : the tax rate at which mortgage interest can be deducted
+        x    : the down payment as a share of the price, x-bar
+    Returns
+        the price of the house, in dollars
+    """
+    # the rent divided by the user cost of the house
     return rent / (tau * x * R + (1 - tau) * R + d - gp)
 
 
+# Step 1: the baseline price (":,.0f" writes the thousands with commas)
 base = house_price(6000, 0.04, 0.02, 0.02, 0.3, 0.2)
 print(f"Baseline price (20% down payment, 2% price growth): {base:,.0f} dollars")
-print(f"Down payment falls to 10%:          {house_price(6000, 0.04, 0.02, 0.02, 0.3, 0.1) / base - 1:+.1%}")
-print(f"Expected price growth rises to 3%:  {house_price(6000, 0.04, 0.02, 0.03, 0.3, 0.2) / base - 1:+.1%}")
+# Step 2: the change in the price when the down payment falls to 10 percent, and
+# when expected price growth rises to 3 percent
+print(
+    "Down payment falls to 10%:          "
+    f"{house_price(6000, 0.04, 0.02, 0.02, 0.3, 0.1) / base - 1:+.1%}"
+)
+print(
+    "Expected price growth rises to 3%:  "
+    f"{house_price(6000, 0.04, 0.02, 0.03, 0.3, 0.2) / base - 1:+.1%}"
+)
 ```
 
 With these numbers, cheaper credit (a smaller down payment) raises the price by about 4 percent, but a
