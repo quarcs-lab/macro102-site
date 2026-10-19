@@ -1,6 +1,6 @@
 # Data Science and Macroeconomic Models
 
-*A Python Companion to Intermediate Macroeconomics* — interactive Python notebooks, one per chapter, that run in Google Colab.
+*An AI-powered Python companion to intermediate macroeconomics* — interactive Python notebooks, one per chapter, that run in Google Colab.
 
 - Website: https://quarcs-lab.github.io/macro102-site/
 - Author: Carlos Mendez
@@ -50,6 +50,7 @@
 
 | Path | What it holds |
 |---|---|
+| `images/book-cover-ai-powered-python.webp`, `images/book-cover-ai-powered-python-thumbnail.webp` | Current portrait cover and landscape thumbnail with the AI-powered subtitle, optimized for the web. |
 | `notebooks/` | The chapter notebooks (`.ipynb`, saved with outputs). Open them in Colab. |
 | `src/` | The source of each notebook (`.qmd`). The notebook is generated from it, so edit the source, not the `.ipynb`. |
 | `data/chNN/` | The CSV files each notebook reads, plus a `README.md` with sources and a `build_data.py` that rebuilds the wider files. |
