@@ -29,73 +29,6 @@ and in houses. By the end of this chapter you will be able to:
 
 <!-- cell -->
 
-## Setup
-
-We first load the Python libraries we need. You only have to run this cell once.
-
-> **Python note.** `import` loads a *library*, a toolbox written by other people. We give each
-> library a short nickname, for example `np` for NumPy, so that the code stays short. Text after
-> a `#` is a *comment*: Python ignores it, and it is there for human readers. The `try ... except`
-> block runs one Colab-only line and simply skips it anywhere else.
-
-```{python}
-# Libraries used in this chapter
-import numpy as np                              # numbers and arrays
-import pandas as pd                             # data tables
-import plotly.express as px                     # quick charts from data tables
-import plotly.graph_objects as go               # charts built piece by piece (model figures)
-import plotly.io as pio
-from ipywidgets import interact, interact_manual, FloatSlider, ToggleButtons, Dropdown, fixed
-
-# One light blue/green look for every chart
-BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
-pio.templates.default = "plotly_white"
-pio.templates["plotly_white"].layout.update(width=860, height=480)   # same size in Colab and on the website
-px.defaults.color_discrete_sequence = [BLUE, TEAL, GREEN, "#5aa0d8", "#0b4f47"]
-WIDE = {"description_width": "initial"}         # show the full slider labels
-
-# Colab only: let Plotly charts appear inside the interactive widgets
-try:
-    import google.colab
-    google.colab.output.enable_custom_widget_manager()
-except ImportError:
-    pass                                        # not running in Colab: nothing to do
-
-# The data files of this chapter live in the book's GitHub repository
-DATA_URL = "https://raw.githubusercontent.com/quarcs-lab/macro102-site/main/data/ch17/"
-```
-
-The next cell defines a helper that only the book website needs. Run it and move on.
-
-```{python}
-#| kind: helper
-# @title Helper for the website versions (run this cell; you do not need to read it)
-def slider_figure(make_figure, name, values, start, label=None):
-    """Precompute make_figure(name=value) for every value and join the results with one slider.
-
-    The website cannot run Python, so each interactive figure also gets this precomputed version.
-    """
-    figures = [make_figure(**{name: v}) for v in values]
-    first = values.index(start)
-    fig = go.Figure(layout=figures[first].layout)
-    owner = []                                  # which precomputed figure each trace comes from
-    for i, f in enumerate(figures):
-        for trace in f.data:
-            trace.visible = (i == first)
-            fig.add_trace(trace)
-            owner.append(i)
-    steps = []
-    for i, f in enumerate(figures):
-        layout = {"title": f.layout.title.to_plotly_json(),
-                  "annotations": [a.to_plotly_json() for a in f.layout.annotations],
-                  "shapes": [s.to_plotly_json() for s in f.layout.shapes]}
-        visible = [o == i for o in owner]
-        steps.append(dict(method="update", label=str(values[i]), args=[{"visible": visible}, layout]))
-    fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
-                                    currentvalue=dict(prefix=(label or name) + " = "))])
-    return fig
-```
-
 ## Model overview
 
 Back on **Islandia**, Harbor Boatworks builds the island's fishing boats. This year it has some cash to spare, and it faces a plain choice: leave the money in a savings account at a bank in town, or buy one more machine for its workshop, say a power saw that cuts planks. How many machines should the firm own, and how much should it spend on new ones each year? One idea answers both questions, and it also prices a share of Harbor Boatworks and an islander's seaside cottage.
@@ -115,7 +48,7 @@ Back on **Islandia**, Harbor Boatworks builds the island's fishing boats. This y
 4. [The stock market: pricing a share](#the-stock-market-pricing-a-share): what a share of Harbor Boatworks is worth.
 5. [Tobin's q: the stock market and investment](#tobins-q-the-stock-market-and-investment): how the share price tells the firm whether to invest.
 6. [Housing: the arbitrage equation for a house](#housing-the-arbitrage-equation-for-a-house): the price of a cottage bought with a mortgage.
-7. [The model in code](#the-model-in-code): every key result as a Python function, checked with numbers.
+7. [Model in code](#model-in-code): every key result as a Python function, checked with numbers.
 
 **Notation.** A bar over a letter marks a **parameter** that comes from outside the model, such as $\bar{d}$ or $\bar{A}$; Jones writes some given numbers, such as $R$, $\tau$ and $L$, without a bar. All rates are decimals: $R = 0.02$ means 2 percent a year.
 
@@ -688,138 +621,375 @@ The denominator falls by a full point of expected growth, from 0.0304 to 0.0204.
 
 <!-- cell -->
 
-### The model in code
+## Model in code
 
-We now turn the key results into Python functions, defined once and reused by every figure. The cells after them check the algebra above with numbers.
+Now we turn the Key results into Python. The section has four parts: the setup (folded, because it is the
+same in every chapter), the model as functions, numerical checks of the Key results, and the drawing tools that
+Figs. 1 and 2 use (folded too). Run its cells once, in order. Every later section of the notebook reuses them.
 
-> **Python note.** `def` creates a *function*: a named recipe that takes inputs (the
-> *arguments*) and gives back a result with `return`. Writing `gpk=0.0` gives the argument a
-> *default value*, used whenever we do not pass one. The text in triple quotes is a short
-> description of what the function does. `**` means "to the power of". Names in capital letters,
-> such as `A_BAR`, are constants that we set once and reuse.
+<!-- cell -->
+
+### Setup
+
+Run the setup cells once, before anything else. They load the Python libraries, give every chart the same look,
+store the address of the chapter's data and define a helper that only the book website needs. You can use the
+notebook without reading them; open the box if you are curious.
+
+<!-- cell -->
+
+::: {.callout-note .mic-fold collapse="true" title="Show the setup code"}
+
+The first cell loads the libraries and sets the look of the charts. Its comments explain each step.
 
 ```{python}
-A_BAR, L_BAR = 0.3, 1.0          # illustrative productivity and labor: the baseline desired capital is K = 1
+#| kind: folded
+# @title Setup: libraries, chart colors and the data location
+# Text after a "#" is a comment: Python ignores it, it is there for human readers.
+
+# Step 1: load the libraries. `import` loads a library, a toolbox written by
+# other people, and `as np` gives it a short nickname, so the code stays short.
+import numpy as np                              # numbers and arrays
+import pandas as pd                             # data tables
+import plotly.express as px                     # quick charts from data tables
+import plotly.graph_objects as go               # charts built piece by piece
+import plotly.io as pio                         # settings shared by every chart
+# sliders and buttons for the interactive figures
+from ipywidgets import interact, interact_manual, FloatSlider, ToggleButtons, Dropdown, fixed
+
+# Step 2: one light blue/green look for every chart
+BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
+pio.templates.default = "plotly_white"
+# the same chart size in Colab and on the website
+pio.templates["plotly_white"].layout.update(width=860, height=480)
+px.defaults.color_discrete_sequence = [BLUE, TEAL, GREEN, "#5aa0d8", "#0b4f47"]
+WIDE = {"description_width": "initial"}         # show the full slider labels
+
+# Step 3, Colab only: let Plotly charts appear inside the interactive widgets.
+# `try` runs the indented lines; if the import fails (we are not in Colab),
+# `except` skips them.
+try:
+    import google.colab
+    google.colab.output.enable_custom_widget_manager()
+except ImportError:
+    pass                                        # not running in Colab: nothing to do
+
+# Step 4: the data files of this chapter live in the book's GitHub repository
+DATA_URL = "https://raw.githubusercontent.com/quarcs-lab/macro102-site/main/data/ch17/"
+```
+
+The website cannot run Python, so each interactive figure also gets a version with a precomputed slider. The next
+helper builds those versions. Run it and move on.
+
+```{python}
+#| kind: folded
+# @title Helper for the website versions (run this cell; you do not need to read it)
+def slider_figure(make_figure, name, values, start, label=None):
+    """Join precomputed versions of a figure with one slider (the website cannot run Python).
+
+    Arguments
+        make_figure : the function that draws the figure, e.g. desired_capital_diagram
+        name        : the argument the slider moves, e.g. "R"
+        values      : the values of that argument to precompute
+        start       : the value shown first
+        label       : the slider's label (the argument name if None)
+    Returns
+        one Plotly figure with all versions and a slider that shows one at a time
+    """
+    # Step 1: draw the figure once for every value
+    figures = [make_figure(**{name: v}) for v in values]
+    first = values.index(start)
+    # Step 2: copy every curve into one figure; only the start value's are visible
+    fig = go.Figure(layout=figures[first].layout)
+    owner = []                          # which precomputed figure each trace is from
+    for i, f in enumerate(figures):
+        for trace in f.data:
+            trace.visible = (i == first)
+            fig.add_trace(trace)
+            owner.append(i)
+    # Step 3: one slider step per value: its curves, title, labels and shapes
+    steps = []
+    for i, f in enumerate(figures):
+        layout = {"title": f.layout.title.to_plotly_json(),
+                  "annotations": [a.to_plotly_json() for a in f.layout.annotations],
+                  "shapes": [s.to_plotly_json() for s in f.layout.shapes]}
+        visible = [o == i for o in owner]
+        steps.append(dict(method="update", label=str(values[i]), args=[{"visible": visible}, layout]))
+    fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
+                                    currentvalue=dict(prefix=(label or name) + " = "))])
+    return fig
+```
+
+:::
+
+<!-- cell -->
+
+### The model as functions
+
+Four Key results describe Harbor Boatworks' choice: the user cost, equations (2) and (3); the marginal product of
+capital, equation (4); desired capital, equation (5); and the investment rate, equation (7). We write each one as
+a Python *function*: a named recipe that takes inputs and gives back a result. Two constants come first, an
+illustrative productivity and labor force, chosen so that the baseline desired capital stock is 1.
+
+```{python}
+# The constants and the four functions of the firm's choice of capital.
+# Names in capitals, such as `A_BAR`, are constants that we set once and reuse.
+# illustrative productivity A-bar and labor L: the baseline desired capital is K = 1
+A_BAR, L_BAR = 0.3, 1.0
 
 
+# `def` creates a function. Its inputs are the arguments in parentheses.
+# `gpk=0.0` gives gpk a default value, used whenever we do not pass one.
+# The text in triple quotes describes the function.
 def user_cost(R, d, gpk=0.0, tau=0.0):
-    """User cost of capital: (R + d - gpk) / (1 - tau)   (equations 2 and 3; gpk is the capital gain)."""
+    """User cost of capital, uc.
+
+    Equation (2), or (3) with a tax:  uc = (R + d - gpk) / (1 - tau)
+
+    Arguments
+        R   : real interest rate
+        d   : depreciation rate, d-bar
+        gpk : expected capital gain, the change in p_k over p_k (0 unless we pass one)
+        tau : corporate tax rate (0 in the basic model)
+    Returns
+        the user cost of capital, uc
+    """
+    # `return` gives back the result: interest plus wear and tear minus the
+    # capital gain, divided by the share of profits the firm keeps
     return (R + d - gpk) / (1 - tau)
 
 
 def mpk(K, A=A_BAR, L=L_BAR):
-    """Marginal product of capital: MPK = (1/3) A (L/K)^(2/3)   (equation 4)."""
+    """Marginal product of capital, MPK.
+
+    Equation (4):  MPK = (1/3) A (L/K)^(2/3)
+
+    Arguments
+        K : capital
+        A : productivity, A-bar
+        L : labor
+    Returns
+        the marginal product of capital, MPK
+    """
+    # `**` means "to the power of"; K may also be a whole array of capital stocks
     return A / 3 * (L / K) ** (2 / 3)
 
 
 def desired_capital(uc, A=A_BAR, L=L_BAR):
-    """Desired capital stock, where MPK = uc: K = L (A / (3 uc))^(3/2)   (equation 5)."""
+    """Desired capital stock, where MPK equals the user cost.
+
+    Equation (5):  K-desired = L (A / (3 uc))^(3/2)
+
+    Arguments
+        uc : user cost of capital
+        A  : productivity, A-bar
+        L  : labor
+    Returns
+        the desired capital stock, K-desired
+    """
+    # equation (4) set equal to uc and solved for K
     return L * (A / (3 * uc)) ** (3 / 2)
 
 
 def investment_rate(uc, g_K=0.02, d=0.08):
-    """Investment rate: I/Y = (g_K + d) / (3 uc)   (equation 7)."""
+    """Investment rate of a firm that keeps its desired capital, I/Y.
+
+    Equation (7):  I/Y = (g_K + d) / (3 uc)
+
+    Arguments
+        uc  : user cost of capital
+        g_K : growth rate of capital
+        d   : depreciation rate, d-bar
+    Returns
+        the investment rate, I/Y
+    """
+    # new capital (g_K) plus replacement (d), divided by Y/K = 3 uc, equation (6)
     return (g_K + d) / (3 * uc)
 ```
 
+The same arbitrage idea prices a share of Harbor Boatworks and the firm itself. Three more functions write the
+price of a share, equation (9), its price-earnings ratio, equation (10), and Tobin's $q$, equation (12).
+
 ```{python}
 def stock_price(dividend, R, g=0.0):
-    """Price of a stock: dividend / (R - g)   (equation 9; dividends grow at rate g)."""
+    """Price of a share, p_s: the present value of its dividends.
+
+    Equation (9):  p_s = dividend / (R - g)
+
+    Arguments
+        dividend : this year's dividend
+        R        : real interest rate
+        g        : growth rate of the dividend (0 unless we pass one)
+    Returns
+        the price of the share, p_s
+    """
+    # the dividend, discounted at the interest rate less the dividend's growth
     return dividend / (R - g)
 
 
 def pe_ratio(payout, R, g):
-    """Price-earnings ratio: (dividend / earnings) / (R - g)   (equation 10)."""
+    """Price-earnings ratio of a share.
+
+    Equation (10):  p_s / earnings = (dividend / earnings) / (R - g)
+
+    Arguments
+        payout : the payout ratio, dividend / earnings
+        R      : real interest rate
+        g      : growth rate of the dividend
+    Returns
+        the price-earnings ratio, p_s / earnings
+    """
+    # equation (9) divided by earnings
     return payout / (R - g)
 
 
 def tobin_q(K, R=0.02, d=0.08, A=A_BAR):
-    """Tobin's q of a firm that owns only capital: (MPK - d) / R   (equation 12)."""
+    """Tobin's q of a firm that owns only capital.
+
+    Equation (12):  q = (MPK - d) / R
+
+    Arguments
+        K : the firm's capital
+        R : real interest rate
+        d : depreciation rate, d-bar
+        A : productivity, A-bar
+    Returns
+        Tobin's q: the market value of the firm over the cost of its capital
+    """
+    # the return per unit of capital net of wear and tear, priced as a share with g = 0
     return (mpk(K, A) - d) / R
 ```
 
-**Check 1: the user cost and the arbitrage equation.** At the desired capital stock, a dollar in capital must earn exactly what a dollar in the bank earns, with and without the tax.
+<!-- cell -->
 
-> **Python note.** An *f-string* such as `f"{uc:.1%}"` inserts the value of a variable into a
-> piece of text; `:.1%` shows a share as a percentage with one decimal (0.1 becomes 10.0%), and
-> `:.4f` shows four decimals.
+### Checking the key results
+
+The formulas came from algebra. Now we check them with numbers, one Key result at a time, using the baseline
+values $R = 0.02$ and $\bar{d} = 0.08$.
+
+**Check 1: the user cost and the arbitrage equation.** At the desired capital stock, a dollar in capital must
+earn exactly what a dollar in the bank earns, with and without the tax.
 
 ```{python}
+# Check 1: the user cost without and with a 35% tax, and the arbitrage equation
+# Step 1: the user cost, equations (2) and (3), and desired capital, equation (5)
 uc_base = user_cost(R=0.02, d=0.08)
 uc_tax = user_cost(R=0.02, d=0.08, tau=0.35)
 K_base, K_tax = desired_capital(uc_base), desired_capital(uc_tax)
+
+# Step 2: show the user costs. An f-string, f"... {value:.1%}", puts a value into
+# the text; ":.1%" shows a share as a percentage with one decimal (0.1 is 10.0%).
 print(f"User cost, no tax (equation 2):       {uc_base:.1%}")
 print(f"User cost, 35% tax (equation 3):      {uc_tax:.1%}")
+# Step 3: at desired capital, the bank and the machine pay the same (":.4f" shows
+# four decimals); with the tax, the firm keeps only (1 - tau) of MPK
 print(f"No tax:  bank pays R = 0.0200, capital pays MPK - d = {mpk(K_base) - 0.08:.4f}")
 print(f"Tax:     bank pays R = 0.0200, capital pays (1 - tau) MPK - d = {(1 - 0.35) * mpk(K_tax) - 0.08:.4f}")
+# Step 4: a capital gain lowers the user cost, a capital loss raises it
 print(f"A capital gain of 2%: user cost {user_cost(0.02, 0.08, gpk=0.02):.1%}; a loss of 4%: {user_cost(0.02, 0.08, gpk=-0.04):.1%}")
 ```
 
-**Check 2: desired capital, the capital-output ratio and the elasticity.** Equation (5) must give a capital stock at which $MPK$ equals the user cost, and there $Y/K$ must equal $3\cdot uc$ (equation 6). Raising the user cost by 1 percent should lower desired capital by about 1.5 percent.
+**Check 2: desired capital, the capital-output ratio and the elasticity.** Equation (5) must give a capital stock
+at which $MPK$ equals the user cost, and there $Y/K$ must equal $3\cdot uc$ (equation 6). Raising the user cost by
+1 percent should lower desired capital by about 1.5 percent.
 
 ```{python}
+# Check 2: desired capital, the output-capital ratio and the elasticity -3/2
+# Step 1: output at desired capital, Y = A K^(1/3) L^(2/3)
 Y_base = A_BAR * K_base ** (1 / 3) * L_BAR ** (2 / 3)
+# Step 2: MPK equals uc there (equation 5), and Y/K equals 3 uc (equation 6)
 print(f"Desired capital K = {K_base:.3f}, MPK there = {mpk(K_base):.4f}, user cost = {uc_base:.4f}")
 print(f"Y/K = {Y_base / K_base:.4f}   and   3 x uc = {3 * uc_base:.4f}")
+# Step 3: desired capital with a 1% higher user cost; ":+.3f" also shows the sign
 change_K = desired_capital(uc_base * 1.01) / K_base - 1
 print(f"1% higher user cost: desired capital changes by {100 * change_K:+.3f}%   (elasticity -1.5)")
+# Step 4: a 35% tax multiplies desired capital by (1 - tau)^(3/2)
 print(f"35% tax: K falls by the factor {K_tax / K_base:.4f}   and   0.65^(3/2) = {0.65 ** 1.5:.4f}")
 ```
 
-**Check 3: the investment rate, two ways.** Let a firm hold its desired capital and grow it at $g_K = 2$ percent. We compute the investment it needs from the accumulation equation, divide by output, and compare with equation (7).
+**Check 3: the investment rate, two ways.** Let a firm hold its desired capital and grow it at $g_K = 2$ percent.
+We compute the investment it needs from the accumulation equation, divide by output, and compare with
+equation (7).
 
 ```{python}
+# Check 3: the investment rate from the accumulation equation and from equation (7).
+# `for tau in [0.0, 0.35]` runs the indented lines once for each tax rate in the list.
 for tau in [0.0, 0.35]:
+    # Step 1: the firm holds its desired capital at this tax rate
     uc = user_cost(0.02, 0.08, tau=tau)
     K_now = desired_capital(uc)
+    # Step 2: the investment that grows capital by 2%, and output (L = 1)
     K_next = 1.02 * K_now                          # capital grows at g_K = 2 percent
-    I = K_next - (1 - 0.08) * K_now                # accumulation equation solved for investment
+    # accumulation equation K_next = I + (1 - d) K_now, solved for investment
+    I = K_next - (1 - 0.08) * K_now
     Y = A_BAR * K_now ** (1 / 3)
+    # Step 3: compare I/Y with equation (7)
     print(f"tau = {tau:.2f}: I/Y = {I / Y:.4f} (accumulation), {investment_rate(uc):.4f} (equation 7)")
 ```
 
 Equation (7) also says that, with $R = g_K$ and no capital gain, depreciation does not change the investment rate.
 
 ```{python}
+# The investment rate of equation (7) for three depreciation rates, with R = g_K = 2%
 for d in [0.05, 0.08, 0.12]:
     print(f"d = {d:.2f}: I/Y = {investment_rate(user_cost(0.02, d), g_K=0.02, d=d):.4f}")
 ```
 
-**Check 4: the stock price is a present value.** We add up the discounted dividends of the next 2,000 years, one year at a time, and compare the sum with equation (9). Then we confirm that the arbitrage equation makes the price grow at the rate $g$.
-
-> **Python note.** `range(1, 2001)` counts 1, 2, ..., 2000, so the `for` loop runs its indented lines once
-> for each year. `pv = pv + ...` adds one more term to the running total.
+**Check 4: the stock price is a present value.** We add up the discounted dividends of the next 2,000 years, one
+year at a time, and compare the sum with equation (9). Then we confirm that the arbitrage equation makes the price
+grow at the rate $g$.
 
 ```{python}
-D, R, g = 3.0, 0.05, 0.02                          # first dividend (dollars), interest rate, growth
-pv = 0.0
+# Check 4: the price of a share as the sum of its discounted dividends
+# Step 1: the first dividend (dollars), the interest rate and the dividend's growth
+D, R, g = 3.0, 0.05, 0.02
+pv = 0.0                                           # the running total starts at zero
+
+# Step 2: add up 2,000 years of dividends. `range(1, 2001)` counts 1, 2, ..., 2000,
+# and `pv = pv + ...` adds one more term to the running total each year.
 for t in range(1, 2001):
-    pv = pv + D * (1 + g) ** (t - 1) / (1 + R) ** t    # dividend of year t, discounted to today
+    # the dividend of year t, discounted to today
+    pv = pv + D * (1 + g) ** (t - 1) / (1 + R) ** t
 print(f"Sum of discounted dividends: {pv:.4f}   equation (9): {stock_price(D, R, g):.4f}")
 print(f"No growth: {stock_price(D, R):.2f} dollars")
 
+# Step 3: next year's price from the arbitrage equation, R p = dividend + change in p
 p_now = stock_price(D, R, g)
-p_next = (1 + R) * p_now - D                       # arbitrage: R p = dividend + change in p
+p_next = (1 + R) * p_now - D
 print(f"Price growth implied by arbitrage: {p_next / p_now - 1:.4f}   dividend growth g = {g:.4f}")
+# Step 4: the P/E ratio of equation (10) when half of earnings is paid out
 print(f"Model P/E ratio with a payout of 0.5: {pe_ratio(0.5, R, g):.1f}")
 ```
 
-**Check 5: Tobin's $q$.** A firm at its desired capital should have $q = 1$, and its market value from equation (9) should equal its capital. A firm below its desired capital should have $q > 1$, and one above it $q < 1$.
+**Check 5: Tobin's $q$.** A firm at its desired capital should have $q = 1$, and its market value from
+equation (9) should equal its capital. A firm below its desired capital should have $q > 1$, and one above it
+$q < 1$.
 
 ```{python}
+# Check 5: Tobin's q, from the firm's market value and from equation (12),
+# for a firm below, at and above its desired capital of 1
 for K_firm in [0.5, 1.0, 1.2]:
-    V = (mpk(K_firm) - 0.08) * K_firm / 0.02       # dividend (MPK - d) K priced with equation (9), g = 0
+    # the dividend (MPK - d) K, priced with equation (9) and g = 0
+    V = (mpk(K_firm) - 0.08) * K_firm / 0.02
     print(f"K = {K_firm:.1f}: MPK = {mpk(K_firm):.4f}, V = {V:.3f}, q = V/K = {V / K_firm:.3f}, "
           f"equation (12): {tobin_q(K_firm):.3f}")
 ```
 
-**Check 6: the house price.** We compute the price from equation (13), with the numbers used later in the notebook (a rent of 6,000 dollars a year, $R = 0.04$, $\bar{d} = 0.02$, $\tau = 0.3$, $\bar{x} = 0.2$, expected price growth of 2 percent). Then we put that price back into both sides of the arbitrage equation of step 1: they must match.
+**Check 6: the house price.** We compute the price from equation (13), with the numbers used later in the
+notebook (a rent of 6,000 dollars a year, $R = 0.04$, $\bar{d} = 0.02$, $\tau = 0.3$, $\bar{x} = 0.2$, expected
+price growth of 2 percent). Then we put that price back into both sides of the arbitrage equation of step 1: they
+must match.
 
 ```{python}
+# Check 6: the cottage's price, equation (13), and both sides of the arbitrage equation
+# Step 1: rent (dollars a year), R, d-bar, tau, x-bar and expected price growth
 rent, R, d, tau, x, gp = 6000, 0.04, 0.02, 0.3, 0.2, 0.02
 P = rent / (tau * x * R + (1 - tau) * R + d - gp)  # equation (13)
-bank = R * x * P                                   # return from keeping the down payment in the bank
-house = rent - d * P + gp * P - R * (1 - tau) * (1 - x) * P    # return from buying the house
+# Step 2: the return from keeping the down payment in the bank
+bank = R * x * P
+# the return from buying the house: rent, minus wear and tear, plus the price
+# gain, minus the after-tax interest on the mortgage
+house = rent - d * P + gp * P - R * (1 - tau) * (1 - x) * P
+# Step 3: show them; ":,.0f" adds thousands separators and shows no decimals
 print(f"House price: {P:,.0f} dollars")
 print(f"Bank: {bank:,.2f} dollars   House: {house:,.2f} dollars")
 ```
@@ -828,77 +998,150 @@ print(f"Bank: {bank:,.2f} dollars   House: {house:,.2f} dollars")
 
 ### Drawing tools
 
-Figs. 1 and 2 are the same kind of diagram, so we write its drawing steps once:
+Figs. 1 and 2 are the same kind of diagram, so we write its drawing steps once, as six small tools. Run them and
+move on, or open the box to see how they work.
 
-- `capital_figure` starts a diagram with fixed axes, so that you can see the curves move;
-- `add_mpk` draws the marginal product curve, and `add_level` draws a flat user-cost line; both
-  write a label on the plot next to the line (its equation or its value), and `add_label` skips a
-  label that would sit on top of another one;
-- `add_point` marks a desired capital stock with a dashed guide to the axis, and `add_arrow` draws an arrow.
+<!-- cell -->
 
-> **Python note.** `np.linspace(0.05, K_max, 300)` creates 300 evenly spaced numbers from 0.05 to `K_max`,
-> the right end of the x-axis, which `fig.layout.xaxis.range[1]` reads from the figure.
-> Because `mpk` works on a whole array at once, one call gives the whole curve. `go.Figure()`
-> starts an empty chart, and each `add_trace` adds one line or set of points. `MPK <= 0.4` is
-> true where the curve is inside the axes, `K[inside]` keeps those values, and `[0]` takes the
-> first of them. A `for` loop over `fig.layout.annotations` looks at every label already written,
-> and `return` inside the loop stops the function early.
+::: {.callout-note .mic-fold collapse="true" title="Show the drawing tools"}
+
+`capital_figure` starts a diagram with fixed axes, so that you can see the curves move. Every line carries its
+name on the plot, its equation or its value, and `add_label` leaves a name out when another one already sits
+close by, so that two names never overlap.
 
 ```{python}
-K_RANGE, RETURN_RANGE = [0, 3], [0, 0.4]          # fixed axes of Figs. 1 and 2
+#| kind: folded
+# @title Drawing tools: an empty diagram, and line names that never overlap
+# the fixed axes of Figs. 1 and 2
+K_RANGE, RETURN_RANGE = [0, 3], [0, 0.4]
 
 
 def capital_figure(title):
-    """An empty diagram: capital on the x-axis, returns per unit of capital (percent) on the y-axis."""
+    """An empty diagram: capital across, the return per unit of capital (percent) up.
+
+    Arguments
+        title : the chart's title
+    Returns
+        an empty Plotly figure with the fixed axes of Figs. 1 and 2
+    """
+    # `go.Figure()` starts an empty chart; the other tools add its lines
     fig = go.Figure()
+    # fixed axes and no legend: every line carries its name on the plot
     fig.update_layout(title=title, showlegend=False,
-                      xaxis=dict(title="Capital, K", range=K_RANGE, tickvals=[0.5, 1, 1.5, 2, 2.5, 3], zeroline=False),
+                      xaxis=dict(title="Capital, K", range=K_RANGE, tickvals=[0.5, 1, 1.5, 2, 2.5, 3],
+                                 zeroline=False),
                       yaxis=dict(title="Return per unit of capital", range=RETURN_RANGE,
                                  tickvals=[0, 0.1, 0.2, 0.3, 0.4], tickformat=".0%", zeroline=False))
     return fig
 
 
 def add_label(fig, x, y, text, color, xanchor="left"):
-    """Write a line name at (x, y), unless another name already sits within 2 points of it."""
+    """Write a line's name at (x, y), unless another name already sits within 2 points of it.
+
+    Arguments
+        fig     : the figure to write on
+        x, y    : where the name goes
+        text    : the name
+        color   : its color, e.g. BLUE
+        xanchor : "left" or "right": which end of the name sits at x
+    """
+    # Step 1: a `for` loop over `fig.layout.annotations` looks at every name already
+    # written (`abs` is the absolute value). If one is close, a bare `return` leaves
+    # the function early, without writing this name.
     for old in fig.layout.annotations:
         if old.showarrow is False and abs(old.x - x) < 0.5 and abs(old.y - y) < 0.02:
             return
+    # Step 2: no name close by: write this one
     fig.add_annotation(x=x, y=y, text=text, showarrow=False, xanchor=xanchor, yanchor="bottom",
                        font=dict(color=color, size=14))
 ```
 
+`add_mpk` draws the marginal product curve and `add_level` a flat user-cost line. `add_point` marks a desired
+capital stock with a dashed guide to the axis, and `add_arrow` draws an arrow.
+
 ```{python}
+#| kind: folded
+# @title Drawing tools: the MPK curve, a user-cost line, a point and an arrow
 def add_mpk(fig, A=A_BAR):
-    """Draw the MPK curve of equation (4) and write its name next to its top-left end."""
-    K_max = fig.layout.xaxis.range[1]                     # the right end of the x-axis
+    """Draw the MPK curve of equation (4) and write its name next to its top-left end.
+
+    Arguments
+        fig : the figure to draw on
+        A   : productivity, A-bar
+    """
+    # Step 1: `np.linspace(0.05, K_max, 300)` gives 300 evenly spaced capital stocks,
+    # up to the right end of the x-axis, which `fig.layout.xaxis.range[1]` reads
+    K_max = fig.layout.xaxis.range[1]
     K = np.linspace(0.05, K_max, 300)
+    # `mpk` works on a whole array at once, so one call gives the whole curve
     MPK = mpk(K, A)
-    inside = MPK <= RETURN_RANGE[1]                       # the part of the curve inside the axes
-    fig.add_trace(go.Scatter(x=K[inside], y=MPK[inside], mode="lines", name="MPK", line=dict(color=BLUE, width=3)))
+    # Step 2: keep the part inside the axes. `MPK <= RETURN_RANGE[1]` is True or False
+    # for each point; `K[inside]` keeps the points where it is True.
+    inside = MPK <= RETURN_RANGE[1]
+    # `add_trace` adds one line to the chart
+    fig.add_trace(go.Scatter(x=K[inside], y=MPK[inside], mode="lines", name="MPK",
+                             line=dict(color=BLUE, width=3)))
+    # Step 3: the name, next to the first point inside the axes (`[0]` is the first)
     add_label(fig, K[inside][0] + 0.05, MPK[inside][0] - 0.03, "MPK = (A/3)·(L/K)<sup>2/3</sup>", BLUE)
 
 
 def add_level(fig, uc, label, color, dash="solid"):
-    """Draw a flat user-cost line at the height uc and write its name at its right end."""
+    """Draw a flat user-cost line at the height uc and write its name at its right end.
+
+    Arguments
+        fig   : the figure to draw on
+        uc    : the user cost, the height of the line
+        label : the line's name
+        color : its color, e.g. TEAL
+        dash  : "solid" or "dash"
+    """
+    # Step 1: a flat line across the whole x-axis
     K_max = fig.layout.xaxis.range[1]
-    fig.add_trace(go.Scatter(x=[0, K_max], y=[uc, uc], mode="lines", name=label, line=dict(color=color, width=3, dash=dash)))
+    fig.add_trace(go.Scatter(x=[0, K_max], y=[uc, uc], mode="lines", name=label,
+                             line=dict(color=color, width=3, dash=dash)))
+    # Step 2: its name, at the right end
     add_label(fig, K_max, uc, label, color, xanchor="right")
 
 
 def add_point(fig, K, uc, label, anchor="left"):
-    """Mark (K, uc) with a dot and a dashed guide down to the x-axis, labelled next to the guide."""
+    """Mark (K, uc) with a dot and a dashed guide down to the x-axis, labelled next to the guide.
+
+    Arguments
+        fig    : the figure to draw on
+        K, uc  : the capital stock and the user cost at the point
+        label  : the text next to the guide, e.g. "K<sup>desired</sup>"
+        anchor : "left" or "right": the side of the guide the text sits on
+    """
+    # Step 1: the dashed guide, from the x-axis up to the point
     fig.add_trace(go.Scatter(x=[K, K], y=[0, uc], mode="lines", hoverinfo="skip",
                              line=dict(color="black", width=1, dash="dash")))
-    fig.add_trace(go.Scatter(x=[K], y=[uc], mode="markers", name=label, marker=dict(color="black", size=11)))
-    fig.add_annotation(x=K, y=0, text=label, showarrow=False, xanchor=anchor, yanchor="bottom", font=dict(size=14))
+    # Step 2: the dot, and the label at the foot of the guide
+    fig.add_trace(go.Scatter(x=[K], y=[uc], mode="markers", name=label,
+                             marker=dict(color="black", size=11)))
+    fig.add_annotation(x=K, y=0, text=label, showarrow=False, xanchor=anchor, yanchor="bottom",
+                       font=dict(size=14))
 
 
 def add_arrow(fig, x0, y0, x1, y1, text=""):
-    """Draw an arrow from (x0, y0) to (x1, y1), with an optional text at its tail; nothing if the points almost coincide."""
+    """Draw an arrow from (x0, y0) to (x1, y1), with an optional text at its tail.
+
+    Nothing is drawn if the two points almost coincide.
+
+    Arguments
+        fig    : the figure to draw on
+        x0, y0 : the tail of the arrow
+        x1, y1 : its head
+        text   : the text at the tail ("" for none)
+    """
+    # draw it only if the two points are visibly apart
     if abs(x1 - x0) > 0.03 or abs(y1 - y0) > 0.005:
         fig.add_annotation(x=x1, y=y1, ax=x0, ay=y0, xref="x", yref="y", axref="x", ayref="y", text=text,
                            showarrow=True, arrowhead=3, arrowwidth=2, arrowcolor="black")
 ```
+
+:::
+
+<!-- cell -->
 
 ## How firms choose their capital stock
 

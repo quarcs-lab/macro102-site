@@ -31,74 +31,6 @@ Covid-19 pandemic of 2020. This chapter looks at both in the data. By the end of
 
 <!-- cell -->
 
-## Setup
-
-We first load the Python libraries we need. You only have to run this cell once.
-
-> **Python note.** `import` loads a *library*, a toolbox written by other people. We give each
-> library a short nickname, for example `np` for NumPy, so that the code stays short. Text after
-> a `#` is a *comment*: Python ignores it, and it is there for human readers. The `try ... except`
-> block runs one Colab-only line and simply skips it anywhere else.
-
-```{python}
-# Libraries used in this chapter
-import numpy as np                    # numbers and arrays
-import pandas as pd                   # data tables
-import plotly.express as px           # quick charts from data tables
-import plotly.graph_objects as go     # charts built piece by piece
-import plotly.io as pio
-from ipywidgets import interact, Dropdown, ToggleButtons, SelectMultiple, FloatSlider, IntSlider
-
-# One light blue/green look for every chart
-BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
-ORANGE = "#e0a33b"                              # an extra color for the six-country comparison
-pio.templates.default = "plotly_white"
-pio.templates["plotly_white"].layout.update(width=860, height=480)   # same size in Colab and on the website
-px.defaults.color_discrete_sequence = [BLUE, TEAL, GREEN, "#5aa0d8", "#0b4f47"]
-WIDE = {"description_width": "initial"}         # show the full widget labels
-
-# Colab only: let Plotly charts appear inside the interactive widgets
-try:
-    import google.colab
-    google.colab.output.enable_custom_widget_manager()
-except ImportError:
-    pass                                        # not running in Colab: nothing to do
-
-# The data files of this chapter live in the book's GitHub repository
-DATA_URL = "https://raw.githubusercontent.com/quarcs-lab/macro102-site/main/data/ch10/"
-```
-
-The next cell defines a helper that only the book website needs. Run it and move on.
-
-```{python}
-#| kind: helper
-# @title Helper for the website versions (run this cell; you do not need to read it)
-def slider_figure(make_figure, name, values, start, label=None):
-    """Precompute make_figure(name=value) for every value and join the results with one slider.
-
-    The website cannot run Python, so each interactive figure also gets this precomputed version.
-    """
-    figures = [make_figure(**{name: v}) for v in values]
-    first = values.index(start)
-    fig = go.Figure(layout=figures[first].layout)
-    owner = []                                  # which precomputed figure each trace comes from
-    for i, f in enumerate(figures):
-        for trace in f.data:
-            trace.visible = (i == first)
-            fig.add_trace(trace)
-            owner.append(i)
-    steps = []
-    for i, f in enumerate(figures):
-        layout = {"title": f.layout.title.to_plotly_json(),
-                  "annotations": [a.to_plotly_json() for a in f.layout.annotations],
-                  "shapes": [s.to_plotly_json() for s in f.layout.shapes]}
-        visible = [o == i for o in owner]
-        steps.append(dict(method="update", label=str(values[i]), args=[{"visible": visible}, layout]))
-    fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
-                                    currentvalue=dict(prefix=(label or name) + " = "))])
-    return fig
-```
-
 ## Model overview
 
 Picture **Islandia** again. For about ten years its house prices climbed; then they fell by roughly a third, and its biggest commercial bank, which had lent heavily against houses, came close to failing. Years later a new virus shut its shops and ferries for a season, and output dropped faster than ever. How deep was each slump, how long did it last, and how could cheaper houses bring a bank to its knees? This chapter answers with a kit of tools, not a new model, and we try each one on Islandia.
@@ -119,7 +51,7 @@ Picture **Islandia** again. For about ten years its house prices climbed; then t
 5. [Short-run output and the cost of a slump](#short-run-output-and-the-cost-of-a-slump): the output gap and the output a slump destroys.
 6. [The components of GDP in a recession](#the-components-of-gdp-in-a-recession): which spending pulled GDP down.
 7. [Lives lost and their value](#lives-lost-and-their-value): the value of the years of life the pandemic took.
-8. [The model in code](#the-model-in-code): every result as a Python function, checked with numbers, plus the [tools for comparing countries](#tools-for-comparing-countries) behind the "Beyond the U.S." charts. Every later section reuses these functions.
+8. [Model in code](#model-in-code): every result as a Python function, checked with numbers, plus the [tools for comparing countries](#drawing-and-data-tools) behind the "Beyond the U.S." charts. Every later section reuses these functions.
 
 **Notation.** As in the rest of the book, a bar over a letter marks a value we take as given, such as potential output $\bar{Y}_t$, and a tilde marks short-run output $\tilde{Y}_t$. The textbook describes balance sheets only in words, so we give each item a letter where it first appears. Inside formulas, rates are decimals (0.05); in the text and the charts they are percentages (5 percent).
 
@@ -499,7 +431,7 @@ in percent of one year's GDP. The same sum with $-100\,\tilde{Y}_q$ in place of 
 #### What it predicts
 
 - **Depth times duration.** If output drops by $d$ percent at once and climbs back in a straight line over $T$ years, the sum in equation (12) is close to the area of a triangle, $\tfrac{1}{2}dT$. A slump twice as deep costs twice as much, and so does a slump twice as long.
-- So a deep but short slump can cost less than a moderate but long one. Against potential, the Great Recession pushed $\tilde{Y}$ to about $-5$ percent and kept it below zero for about nine years: a triangle of about $\tfrac{1}{2}\times5\times9 \approx 22$ percent of a year's GDP. The 2020 slump, near $-9$ percent but over within about a year, gives a triangle of about 4. [The model in code](#the-model-in-code) computes the exact sums with the data.
+- So a deep but short slump can cost less than a moderate but long one. Against potential, the Great Recession pushed $\tilde{Y}$ to about $-5$ percent and kept it below zero for about nine years: a triangle of about $\tfrac{1}{2}\times5\times9 \approx 22$ percent of a year's GDP. The 2020 slump, near $-9$ percent but over within about a year, gives a triangle of about 4. [Model in code](#model-in-code) computes the exact sums with the data.
 - Potential output is an estimate, and GDP is revised for years. Both change $\tilde{Y}$, as the two vintages of Fig. 8 show.
 
 ::: {.mo-takeaway}
@@ -642,139 +574,345 @@ A year of life is worth $v = V/T = 10{,}000{,}000/40 = 250{,}000$ dollars, so ha
 
 <!-- cell -->
 
-### The model in code
+## Model in code
 
-We now turn the results into Python functions. Each function's description names the equation it computes, and the cells after the functions check the algebra above with numbers. The first functions measure changes in any series.
+Now we turn the chapter's results into Python. The section has four parts: the setup (folded, because it is the
+same in every chapter), the results as functions, numerical checks of the Key results, and the data tools behind
+the recession shading and the "Beyond the U.S." charts (folded too). Run its cells once, in order. Every later
+section of the notebook reuses them.
 
-> **Python note.** `def` creates a *function*: a named recipe that takes inputs (the *arguments*) and
-> gives back a result with `return`. The text in triple quotes is a short description. For a pandas
-> *Series* with dates as row labels, `series[start:end]` keeps the rows between two dates,
-> `.idxmax()` gives the **date** of the largest value and `.idxmin()` the date of the smallest. A function
-> can `return` several results at once, separated by commas.
+<!-- cell -->
+
+### Setup
+
+Run the setup cells once, before anything else. They load the Python libraries, give every chart the same look,
+store the address of the chapter's data and define a helper that only the book website needs. You can use the
+notebook without reading them; open the box if you are curious.
+
+<!-- cell -->
+
+::: {.callout-note .mic-fold collapse="true" title="Show the setup code"}
+
+The first cell loads the libraries and sets the look of the charts. Its comments explain each step.
 
 ```{python}
+#| kind: folded
+# @title Setup: libraries, chart colors and the data location
+# Text after a "#" is a comment: Python ignores it, it is there for human readers.
+
+# Step 1: load the libraries. `import` loads a library, a toolbox written by
+# other people, and `as np` gives it a short nickname, so the code stays short.
+import numpy as np                    # numbers and arrays
+import pandas as pd                   # data tables
+import plotly.express as px           # quick charts from data tables
+import plotly.graph_objects as go     # charts built piece by piece
+import plotly.io as pio               # settings shared by every chart
+# menus, buttons, lists and sliders for the interactive figures
+from ipywidgets import interact, Dropdown, ToggleButtons, SelectMultiple, FloatSlider, IntSlider
+
+# Step 2: one light blue/green look for every chart
+BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
+# an extra color for the six-country comparison
+ORANGE = "#e0a33b"
+pio.templates.default = "plotly_white"
+# the same chart size in Colab and on the website
+pio.templates["plotly_white"].layout.update(width=860, height=480)
+px.defaults.color_discrete_sequence = [BLUE, TEAL, GREEN, "#5aa0d8", "#0b4f47"]
+WIDE = {"description_width": "initial"}         # show the full widget labels
+
+# Step 3, Colab only: let Plotly charts appear inside the interactive widgets.
+# `try` runs the indented lines; if the import fails (we are not in Colab),
+# `except` skips them.
+try:
+    import google.colab
+    google.colab.output.enable_custom_widget_manager()
+except ImportError:
+    pass                                        # not running in Colab: nothing to do
+
+# Step 4: the data files of this chapter live in the book's GitHub repository
+DATA_URL = "https://raw.githubusercontent.com/quarcs-lab/macro102-site/main/data/ch10/"
+```
+
+The website cannot run Python, so each interactive figure also gets a version with a precomputed slider. The next
+helper builds those versions. Run it and move on.
+
+```{python}
+#| kind: folded
+# @title Helper for the website versions (run this cell; you do not need to read it)
+def slider_figure(make_figure, name, values, start, label=None):
+    """Join precomputed versions of a figure with one slider (the website cannot run Python).
+
+    Arguments
+        make_figure : the function that draws the figure, e.g. housing_chart
+        name        : the argument the slider moves, e.g. "bust"
+        values      : the values of that argument to precompute
+        start       : the value shown first
+        label       : the slider's label (the argument name if None)
+    Returns
+        one Plotly figure with all versions and a slider that shows one at a time
+    """
+    # Step 1: draw the figure once for every value
+    figures = [make_figure(**{name: v}) for v in values]
+    first = values.index(start)
+    # Step 2: copy every curve into one figure; only the start value's are visible
+    fig = go.Figure(layout=figures[first].layout)
+    owner = []                          # which precomputed figure each trace is from
+    for i, f in enumerate(figures):
+        for trace in f.data:
+            trace.visible = (i == first)
+            fig.add_trace(trace)
+            owner.append(i)
+    # Step 3: one slider step per value: its curves, title, labels and shapes
+    steps = []
+    for i, f in enumerate(figures):
+        layout = {"title": f.layout.title.to_plotly_json(),
+                  "annotations": [a.to_plotly_json() for a in f.layout.annotations],
+                  "shapes": [s.to_plotly_json() for s in f.layout.shapes]}
+        visible = [o == i for o in owner]
+        steps.append(dict(method="update", label=str(values[i]), args=[{"visible": visible}, layout]))
+    fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
+                                    currentvalue=dict(prefix=(label or name) + " = "))])
+    return fig
+```
+
+:::
+
+<!-- cell -->
+
+### The model as functions
+
+Each framework of the Model overview becomes one or two Python *functions*: named recipes that take inputs and
+give back a result. Each function's description names the equation it computes. The first three measure changes
+in any series: the percent change of equation (1), and the peak-to-trough fall that the figures report.
+
+```{python}
+# `def` creates a function. Its inputs are the arguments in parentheses, and
+# `return` gives back the result. The text in triple quotes describes the function.
 def percent_change(new, old):
-    """Percent change from old to new: 100 (new / old - 1)   (equation 1)."""
+    """Percent change from an old value to a new one.
+
+    Equation (1):  %change = 100 (X_t / X_s - 1)
+
+    Arguments
+        new : the value at the later date, X_t
+        old : the value at the earlier date, X_s
+    Returns
+        the percent change from old to new
+    """
     return 100 * (new / old - 1)
 
 
 def peak_to_trough(series, start, end):
-    """The highest point between start and end, the lowest point after it, and the fall in percent."""
+    """The highest point between start and end, the lowest point after it, and the fall in percent.
+
+    Equation (1) from the peak to the trough:  fall = 100 (X_trough / X_peak - 1)
+
+    Arguments
+        series     : a pandas Series with dates as row labels
+        start, end : the first and the last date of the search window
+    Returns
+        the peak date, the trough date and the percent change between them
+    """
+    # Step 1: for a Series with dates as row labels, `series[start:end]` keeps
+    # the rows between the two dates
     window = series[start:end]
+    # Step 2: `.idxmax()` gives the date of the largest value, `.idxmin()` the date
+    # of the smallest
     peak = window.idxmax()                      # date of the highest value
-    trough = window[peak:].idxmin()             # date of the lowest value after the peak
+    # date of the lowest value after the peak
+    trough = window[peak:].idxmin()
+    # Step 3: a function can return several results at once, separated by commas
     return peak, trough, percent_change(window[trough], window[peak])
 
 
 def low_to_high(series, start, end):
-    """The opposite measure: the highest point between start and end, the lowest point before it, and the rise."""
+    """The opposite measure: the highest point, the lowest point before it, and the rise.
+
+    For a series that rises in a recession, such as the unemployment rate of Fig. 9
+
+    Arguments
+        series     : a pandas Series with dates as row labels
+        start, end : the first and the last date of the search window
+    Returns
+        the low date, the high date and the rise, in the units of the series
+    """
     window = series[start:end]
     high = window.idxmax()                      # date of the highest value
     low = window[:high].idxmin()                # date of the lowest value before it
+    # the rise is a difference, not a percent change: percentage points for a rate
     return low, high, window[high] - window[low]
 ```
 
 For a series that *rises* in a recession, such as the unemployment rate, `low_to_high` measures the rise from the
 lowest point to the highest one, in the units of the series (percentage points for a rate). Two more functions
-compute equations (2) and (3).
-
-> **Python note.** `**` means "to the power of", and `np.log` is the natural logarithm. An f-string such as
-> `f"g = {x:.2f}"` writes the value of `x` into the text; `:.2f` shows two decimals and `:+.1f` one decimal with its sign.
+compute equations (2) and (3): the average growth rate and the rise needed to undo a fall.
 
 ```{python}
 def annual_growth(factor, years):
-    """Average growth rate per year when a series is multiplied by `factor` in `years` years (equation 2)."""
+    """Average growth rate per year when a series is multiplied by `factor` in `years` years.
+
+    Equation (2):  g = (X_T / X_0)^(1/T) - 1
+
+    Arguments
+        factor : how many times the series is multiplied, X_T / X_0
+        years  : the number of years, T
+    Returns
+        the average growth rate per year, g (a decimal)
+    """
+    # `**` means "to the power of"
     return factor ** (1 / years) - 1
 
 
 def rise_needed(fall):
-    """Percent rise needed to undo a fall by the fraction `fall`: 100 f / (1 - f)   (equation 3)."""
+    """Percent rise needed to undo a fall.
+
+    Equation (3):  rise needed = 100 f / (1 - f)
+
+    Arguments
+        fall : the fraction lost from the peak, f (a decimal, e.g. 0.357)
+    Returns
+        the rise, in percent, that climbs back to the peak
+    """
+    # what is left after the fall, 1 - f, must grow by f / (1 - f) to get back to 1
     return 100 * fall / (1 - fall)
 ```
 
-**Check 1: the measurement tools.** Compound the growth rate of equation (2) for 10 years and see whether we get the
-factor back. Then let a series fall and rise by the amount equation (3) gives. Last, take a price level that rises by 9
-percent and compute both inflation measures and equation (4).
-
-> **Python note.** A `for` loop repeats its indented lines once for each element of a list. `np.exp` is the exponential
-> function $e^x$.
+A balance sheet gives two more functions: net worth and the leverage ratio of equation (5).
 
 ```{python}
-factor, years = 1.72, 10                         # real house prices, 1996 to 2006 (Fig. 1)
+def net_worth(assets, liabilities):
+    """Equity, or net worth: what the owners keep after all debts are repaid.
+
+    Equation (5):  E = A - D
+
+    Arguments
+        assets      : total assets, A
+        liabilities : total liabilities, D
+    Returns
+        net worth, E
+    """
+    # assets minus what is owed to others
+    return assets - liabilities
+
+
+def leverage(liabilities, equity):
+    """The leverage ratio: dollars borrowed per dollar of the owners' money.
+
+    Equation (5):  l = D / E
+
+    Arguments
+        liabilities : total liabilities, D
+        equity      : net worth, E
+    Returns
+        the leverage ratio, l (ell)
+    """
+    # liabilities per dollar of net worth
+    return liabilities / equity
+```
+
+A run costs the bank money only when the withdrawals exceed its cash. Then it must sell illiquid assets at a
+fire-sale discount. `run_loss` computes that loss, equation (9).
+
+```{python}
+def run_loss(withdrawals, cash, discount):
+    """Loss from selling illiquid assets at a discount to pay withdrawals beyond the cash.
+
+    Equation (9):  loss = delta (W - R) / (1 - delta), and 0 when W <= R
+
+    Arguments
+        withdrawals : the deposits withdrawn, W
+        cash        : cash and reserves, R
+        discount    : the fire-sale discount, delta (a decimal)
+    Returns
+        the loss from the fire sales
+    """
+    # `if` runs its indented line only when the condition is true. A `return`
+    # inside it leaves the function early with that result: the cash covers the run.
+    if withdrawals <= cash:
+        return 0.0
+    # sell (W - R) / (1 - delta) of assets to raise W - R in cash;
+    # the loss is delta times that
+    return discount * (withdrawals - cash) / (1 - discount)
+```
+
+The last function adds up the output that a slump destroys, quarter by quarter: the cumulative GDP loss of
+equation (12).
+
+```{python}
+def gdp_loss(index):
+    """Cumulative GDP loss, in percent of one year's GDP.
+
+    Equation (12):  GDP loss = (1/4) sum over the quarters q of max(0, 100 - I_q)
+
+    Arguments
+        index : quarterly output as an index, 100 at the old level (an array or Series)
+    Returns
+        the cumulative loss, in percent of one year's GDP
+    """
+    # `np.maximum(a, 0)` replaces every negative number by 0, so quarters above the
+    # old level count as no loss; dividing by 4 turns quarters into years
+    return np.maximum(100 - index, 0).sum() / 4
+```
+
+<!-- cell -->
+
+### Checking the key results
+
+The formulas came from algebra. Now we check them with numbers, one Key result at a time.
+
+**Check 1: the measurement tools.** Compound the growth rate of equation (2) for 10 years and see whether we get
+the factor back. Then let a series fall and rise by the amount equation (3) gives. Last, take a price level that
+rises by 9 percent and compute both inflation measures and equation (4).
+
+```{python}
+# Step 1: equation (2) for real house prices, 1996 to 2006 (Fig. 1).
+# An f-string, f"... {value:.2f}", puts a value into the text; ":.2f" shows two
+# decimals and ":+.1f" one decimal with its sign. `np.log` is the natural logarithm.
+factor, years = 1.72, 10
 g = annual_growth(factor, years)
 print(f"Equation (2): g = {100 * g:.2f}% a year;  shortcut ln(factor) / T = {100 * np.log(factor) / years:.2f}%")
+# compounding g for 10 years must give the factor back
 print(f"Compounded for 10 years: (1 + g)^10 = {(1 + g) ** years:.4f}   (the factor was {factor})")
 
+# Step 2: equation (3). A `for` loop repeats its indented lines once for each
+# element of a list, here three falls.
 for fall in [0.10, 0.357, 0.517]:
     rise = rise_needed(fall)
     back = 100 * (1 - fall) * (1 + rise / 100)   # start at 100, fall, then rise
     print(f"Fall {100 * fall:4.1f}%: rise needed {rise:5.1f}%;  100 -> {100 * (1 - fall):.1f} -> {back:.1f}")
 
-ratio = 1.09                                     # prices 9% higher than 12 months earlier
+# Step 3: prices 9% higher than 12 months earlier, as a log change and as a percent
+# change; `np.exp` is the exponential function e^x, used by equation (4)
+ratio = 1.09
 log_change = 100 * np.log(ratio)
 print(f"Log change {log_change:.3f}; percent change {100 * (ratio - 1):.3f}; equation (4) gives "
       f"{100 * (np.exp(log_change / 100) - 1):.3f}; approximation {log_change + log_change ** 2 / 200:.3f}")
 ```
 
-**Recessions.** Five figures shade the U.S. recessions, as dated by the National Bureau of Economic Research
-(NBER). The file `recessions.csv` lists, for each recession since 1953, the **peak** (the last month before
-the recession) and the **trough** (its last month), and the same dates in quarters. One small function adds
-the shaded bands to any figure.
-
-> **Python note.** `parse_dates=[...]` turns text such as `"2007-12-01"` into real dates.
-> `zip(recessions.peak, recessions.trough)` hands the loop one (peak, trough) pair at a time. The `if` skips
-> recessions that ended before the chart starts, and `fig.add_vrect` shades the band between two dates.
+**Balance sheets.** The hypothetical bank of Table 10.3 (billions of dollars) is a small table. We store it and
+compute its net worth and leverage with equation (5).
 
 ```{python}
-recessions = pd.read_csv(DATA_URL + "recessions.csv",
-                         parse_dates=["peak", "trough", "peak_quarter", "trough_quarter"])
-
-
-def shade_recessions(fig, start="2000-01-01"):
-    """Shade every NBER recession that ends after `start` (Figs. 2, 3, 7, 8 and 9)."""
-    for peak, trough in zip(recessions.peak, recessions.trough):
-        if trough >= pd.Timestamp(start):
-            fig.add_vrect(x0=peak, x1=trough, fillcolor=BLUE, opacity=0.15, line_width=0)
-    return fig
-
-
-recessions.tail(3)
-```
-
-The Great Recession runs from the peak in December 2007 to the trough in June 2009, and the Covid-19
-recession from February to April 2020, only two months.
-
-**Balance sheets.** The hypothetical bank of Table 10.3 (billions of dollars) is a small table, and two functions
-compute equation (5).
-
-> **Python note.** `pd.Series({...})` builds a list of numbers with labels from a *dictionary*, a set of
-> `key: value` pairs in curly braces. `.sum()` adds up all the values. In an f-string, `{x:,}` adds thousands
-> separators and `{x:.0f}` rounds to 0 decimals.
-
-```{python}
-def net_worth(assets, liabilities):
-    """Equity (net worth) E = A - D   (equation 5)."""
-    return assets - liabilities
-
-
-def leverage(liabilities, equity):
-    """Leverage ratio = D / E   (equation 5)."""
-    return liabilities / equity
-
-
+# Step 1: the bank of Table 10.3. `pd.Series({...})` builds a list of numbers with
+# labels from a dictionary, a set of `key: value` pairs in curly braces.
 assets = pd.Series({"Loans": 1000, "Investments": 900, "Cash and reserves": 100})
 liabilities = pd.Series({"Deposits": 1000, "Short-term debt": 400, "Long-term debt": 400})
+# Step 2: equation (5); `.sum()` adds up all the values
 equity = net_worth(assets.sum(), liabilities.sum())
+# Step 3: show them; in an f-string, "{x:,}" adds thousands separators and
+# "{x:.0f}" rounds to 0 decimals
 print(f"Total assets {assets.sum():,}, total liabilities {liabilities.sum():,}, net worth {equity:,}")
 print(f"Leverage = {liabilities.sum():,} / {equity} = {leverage(liabilities.sum(), equity):.0f}")
 print(f"Capital ratio = {100 * equity / assets.sum():.0f}% of assets; reserves = "
       f"{100 * assets['Cash and reserves'] / liabilities['Deposits']:.0f}% of deposits")
 ```
 
-**Check 2: leverage magnifies gains and losses (equation 6).** Let the investments gain or lose value. The liabilities
-do not change, so all of the gain or loss lands on net worth:
+**Check 2: leverage magnifies gains and losses (equation 6).** Let the investments gain or lose value. The
+liabilities do not change, so all of the gain or loss lands on net worth:
 
 ```{python}
+# The investments rise from 900 to 1,000, or fall to 600; the liabilities stay
+# the same, so net worth absorbs the whole change
 for new_investments in [1000, 600]:
     new_equity = net_worth(assets.sum() - assets["Investments"] + new_investments, liabilities.sum())
     print(f"Investments {assets['Investments']} -> {new_investments}: return "
@@ -782,61 +920,63 @@ for new_investments in [1000, 600]:
           f"return to the owners {percent_change(new_equity, equity):+.1f}%")
 ```
 
-A gain of 100 is 5 percent of total assets and becomes a gain of 50 percent for the owners, $1+\ell = 10$ times as
-much. A loss of 300, only 15 percent of total assets, is more than the 10 percent cushion of equation (7): net worth
-turns negative and the bank is **insolvent**. The same arithmetic works for a house bought for 500,000 dollars with
-20 percent down, where $1+\ell = 5$:
+A gain of 100 is 5 percent of total assets and becomes a gain of 50 percent for the owners, $1+\ell = 10$ times
+as much. A loss of 300, only 15 percent of total assets, is more than the 10 percent cushion of equation (7): net
+worth turns negative and the bank is **insolvent**. The same arithmetic works for a house bought for 500,000
+dollars with 20 percent down, where $1+\ell = 5$:
 
 ```{python}
+# A house of 500,000 dollars with a mortgage of 400,000: the owner's equity is 100,000
 house, mortgage = 500_000, 400_000
 for price_change in [10, -10, -20]:
+    # the house price changes, the mortgage does not
     new_equity = net_worth(house * (1 + price_change / 100), mortgage)
     print(f"House price {price_change:+d}%: equity {house - mortgage:,} -> {new_equity:,.0f} "
           f"({percent_change(new_equity, house - mortgage):+.0f}%)")
 ```
 
-**Check 3: the cushion and forced sales (equations 7 and 8).** Raise all assets by 1 percent and compare with equation
-(6). Then let them fall by exactly $f^* = 1/(1+\ell)$: net worth should be zero. Last, give the bank a loss of 10 and
-let it sell assets until leverage is back at 9: equation (8) says it must sell $9\times10 = 90$.
+**Check 3: the cushion and forced sales (equations 7 and 8).** Raise all assets by 1 percent and compare with
+equation (6). Then let them fall by exactly $f^* = 1/(1+\ell)$: net worth should be zero. Last, give the bank a
+loss of 10 and let it sell assets until leverage is back at 9: equation (8) says it must sell $9\times10 = 90$.
 
 ```{python}
+# Step 1: assets 1% higher; equation (6) predicts a (1 + l) % change in net worth
 A, D = assets.sum(), liabilities.sum()
 L = leverage(D, equity)
 print(f"Assets +1%: net worth changes by {percent_change(net_worth(1.01 * A, D), equity):+.1f}%;  "
       f"equation (6): {(1 + L) * 1:+.1f}%")
+# Step 2: equation (7), the fall f* = 1 / (1 + l) that wipes out net worth,
+# for this bank and for a bank with a leverage of 35
 for L_bank in [L, 35]:
     f_star = 1 / (1 + L_bank)
-    E_bank = A / (1 + L_bank)                    # a bank of the same size with leverage L_bank
+    # a bank of the same size with leverage L_bank
+    E_bank = A / (1 + L_bank)
     left = net_worth((1 - f_star) * A, A - E_bank)
     print(f"Leverage {L_bank:.0f}: wipe-out fall {100 * f_star:.1f}%; net worth after that fall {left:.1f}")
 
+# Step 3: equation (8), the sales that bring leverage back to l after a loss
 x = 10                                           # a loss of 10 billion dollars
-sales = (A - x) - (1 + L) * (equity - x)         # assets after the loss minus the target
+# the sales: the assets after the loss minus the target, (1 + l) times net worth
+sales = (A - x) - (1 + L) * (equity - x)
 new_A, new_D = A - x - sales, D - sales          # the cash from the sales repays debt
 print(f"Loss {x}: sales needed {sales:.0f} (equation (8): {L * x:.0f}); "
       f"leverage after the sales {leverage(new_D, net_worth(new_A, new_D)):.1f}")
 ```
 
-**Check 4: a bank run (equation 9).** We let the bank's depositors withdraw more and more, with a fire-sale discount of
-25 percent, and compute the loss and the net worth that is left. Then we confirm the two thresholds: a full run
-at the discount $\delta^*$, and a run of size $W^*$ at the discount of 25 percent, should both cost exactly the bank's net worth.
-
-> **Python note.** `if ... :` runs its indented lines only when the condition is true; a bare `return` inside it
-> leaves the function early with that result.
+**Check 4: a bank run (equation 9).** We let the bank's depositors withdraw more and more, with a fire-sale
+discount of 25 percent, and compute the loss and the net worth that is left. Then we confirm the two thresholds:
+a full run at the discount $\delta^*$, and a run of size $W^*$ at the discount of 25 percent, should both cost
+exactly the bank's net worth.
 
 ```{python}
-def run_loss(withdrawals, cash, discount):
-    """Loss from selling illiquid assets at a discount to pay withdrawals beyond the cash (equation 9)."""
-    if withdrawals <= cash:
-        return 0.0
-    return discount * (withdrawals - cash) / (1 - discount)
-
-
+# Step 1: the bank's cash R and deposits, and runs of growing size at a discount of 25%
 R, deposits = assets["Cash and reserves"], liabilities["Deposits"]
 for W in [100, 400, 700, 1000]:
     loss = run_loss(W, R, 0.25)
     print(f"Withdrawals {W:5,}: loss {loss:6.1f}, net worth left {equity - loss:7.1f}")
 
+# Step 2: the two thresholds, the critical discount of a full run and the critical
+# run at a discount of 25%; the loss at each must equal the net worth
 d_star = equity / (equity + deposits - R)
 W_star = R + equity * (1 - 0.25) / 0.25
 print(f"Full run: critical discount {100 * d_star:.1f}%, loss {run_loss(deposits, R, d_star):.1f} = net worth {equity}")
@@ -849,6 +989,7 @@ makes a lender indifferent, with a safe rate of 1 percent. The expected payoff o
 and the spread should be close to $p$.
 
 ```{python}
+# A safe rate of 1% and two probabilities of default, p
 i_safe = 0.01
 for p in [0.003, 0.032]:
     i_loan = (1 + i_safe) / (1 - p) - 1          # from (1 - p)(1 + i) = 1 + i_safe
@@ -857,69 +998,74 @@ for p in [0.003, 0.032]:
 ```
 
 **Check 6: the cumulative GDP loss (equation 12).** First a made-up slump: output drops by 8 percent at once and
-climbs back in a straight line over 2 years (8 quarters). The triangle rule gives $\tfrac12\times8\times2 = 8$. Then
-the real thing: the loss against potential output, from short-run output in the data of Fig. 8.
-
-> **Python note.** `np.linspace(92, 100, 9)` gives 9 evenly spaced numbers from 92 to 100. `np.maximum(a, 0)`
-> replaces every negative number by 0, so quarters above the old level count as no loss.
+climbs back in a straight line over 2 years (8 quarters). The triangle rule gives $\tfrac12\times8\times2 = 8$.
+Then the real thing: the loss against potential output, from short-run output in the data of Fig. 8.
 
 ```{python}
-def gdp_loss(index):
-    """Cumulative GDP loss in percent of one year's GDP; index = 100 at the old level (equation 12)."""
-    return np.maximum(100 - index, 0).sum() / 4
-
-
-path = np.linspace(92, 100, 9)                   # 2019Q4 = 100, then 92 at the trough, back to 100 after 8 quarters
+# Step 1: the made-up slump. `np.linspace(92, 100, 9)` gives 9 evenly spaced numbers
+# from 92 to 100: 2019Q4 = 100, then 92 at the trough, back to 100 after 8 quarters.
+path = np.linspace(92, 100, 9)
 print(f"Straight-line slump: equation (12) gives {gdp_loss(path):.2f}; the triangle rule gives {0.5 * 8 * 2:.2f}")
 
+# Step 2: short-run output of Fig. 8, in percent of potential. `parse_dates=[...]`
+# turns text such as "2007-12-01" into real dates, and `.set_index("date")` makes
+# the dates the row labels.
 short_run = pd.read_csv(DATA_URL + "fig10-8.csv", parse_dates=["date"]).set_index("date").short_run_output
-for name, start, end in [("Great Recession", "2008-01-01", "2017-12-01"), ("Covid-19", "2020-01-01", "2021-12-01")]:
+# Step 3: the loss of each slump; 100 + short-run output is output with potential = 100
+for name, start, end in [("Great Recession", "2008-01-01", "2017-12-01"),
+                         ("Covid-19", "2020-01-01", "2021-12-01")]:
     window = short_run[start:end]
     print(f"{name}: lowest short-run output {window.min():.1f}%; "
           f"loss against potential {gdp_loss(100 + window):.1f}% of a year's GDP")
 ```
 
-The sum is 9, not 8: with quarterly steps, the first quarter at the trough counts in full, which adds the depth times
-half a quarter of a year, $8\times\tfrac18 = 1$. In the data the Great Recession cost about 21 percent of a year's GDP against
-potential, more than six times the 3.4 percent of the Covid-19 slump, close to the triangles of about 22 and 4.
+The sum is 9, not 8: with quarterly steps, the first quarter at the trough counts in full, which adds the depth
+times half a quarter of a year, $8\times\tfrac18 = 1$. In the data the Great Recession cost about 21 percent of a
+year's GDP against potential, more than six times the 3.4 percent of the Covid-19 slump, close to the triangles of
+about 22 and 4.
 
-**Check 7: the contributions of the components (equation 13).** We take real GDP and its components at the quarterly
-NBER peak and trough of each recession, from the file `us_quarterly.csv` that Table 10.1 uses. The contributions
-should add up to the change in GDP, apart from a small residual.
-
-> **Python note.** `.set_index("date")` makes the dates the row labels, and `.loc["2007-10-01"]` picks the row of one
-> date. `SIGN.items()` hands the loop each key and its value; imports get the sign $-1$.
+**Check 7: the contributions of the components (equation 13).** We take real GDP and its components at the
+quarterly NBER peak and trough of each recession, from the file `us_quarterly.csv` that Table 10.1 uses. The
+contributions should add up to the change in GDP, apart from a small residual.
 
 ```{python}
+# Step 1: real GDP and its components, one row per quarter, and the sign of each
+# component in equation (13): imports get the sign -1
 components = pd.read_csv(DATA_URL + "us_quarterly.csv", parse_dates=["date"]).set_index("date")
 SIGN = {"consumption": 1, "investment": 1, "government": 1, "exports": 1, "imports": -1}
-for name, peak, trough in [("Great Recession", "2007-10-01", "2009-04-01"), ("Covid-19", "2019-10-01", "2020-04-01")]:
+for name, peak, trough in [("Great Recession", "2007-10-01", "2009-04-01"),
+                           ("Covid-19", "2019-10-01", "2020-04-01")]:
+    # Step 2: `.loc["2007-10-01"]` picks the row of one date: the peak and the trough
     before, after = components.loc[peak], components.loc[trough]
     print(f"{name}: GDP {percent_change(after.gdp, before.gdp):+.2f}%")
+    # Step 3: `SIGN.items()` hands the loop each key and its value
     total = 0
     for part, sign in SIGN.items():
         share = 100 * before[part] / before.gdp
         change = percent_change(after[part], before[part])
+        # equation (13): the share in GDP times the percent change, with its sign
         contribution = sign * share * change / 100
         total = total + contribution
         print(f"   {part:12} share {share:4.1f}%, change {change:+6.1f}%, contribution {contribution:+.2f} points")
+    # the sum should be close to the change in GDP
     print(f"   sum of the contributions {total:+.2f} points")
 ```
 
-In the Great Recession, investment alone subtracted 4.8 points from GDP, more than the whole fall of 3.8 percent, and
-falling imports added 2.5 points back. In 2020, consumption subtracted 6.9 of the 9.1 points. The contributions miss
-GDP growth by less than 0.1 points.
+In the Great Recession, investment alone subtracted 4.8 points from GDP, more than the whole fall of 3.8 percent,
+and falling imports added 2.5 points back. In 2020, consumption subtracted 6.9 of the 9.1 points. The
+contributions miss GDP growth by less than 0.1 points.
 
-**Check 8: the value of a year of life.** We compute $v$ with and without discounting, and then add up the present
-value of 40 years at the discounted $v$, one year at a time: it should give back the 10 million dollars.
-
-> **Python note.** `range(1, T + 1)` counts 1, 2, ..., T. `total = total + ...` adds one more term to the sum on each
-> pass of the loop.
+**Check 8: the value of a year of life.** We compute $v$ with and without discounting, and then add up the
+present value of 40 years at the discounted $v$, one year at a time: it should give back the 10 million dollars.
 
 ```{python}
+# Step 1: the value of a statistical life V, the years ahead T and the discount rate r
 V, T, r = 10e6, 40, 0.03
+# Step 2: v without discounting, V / T, and with discounting at r
 v_simple = V / T
 v_discounted = r * V / (1 - (1 + r) ** -T)
+# Step 3: `range(1, T + 1)` counts 1, 2, ..., T; on each pass of the loop,
+# `present_value = present_value + ...` adds one more year to the total
 present_value = 0
 for t in range(1, T + 1):
     present_value = present_value + v_discounted / (1 + r) ** t
@@ -929,7 +1075,54 @@ print(f"Present value of {T} years at {v_discounted:,.0f}: {present_value:,.0f} 
 
 <!-- cell -->
 
-### Tools for comparing countries
+### Drawing and data tools
+
+The figures share a few data tools: one shades the U.S. recessions, and the others read, color, pick and
+summarize the countries of the "Beyond the U.S." charts. Run them and move on, or open the box to see how they
+work.
+
+<!-- cell -->
+
+::: {.callout-note .mic-fold collapse="true" title="Show the drawing and data tools"}
+
+Five figures shade the U.S. recessions, as dated by the National Bureau of Economic Research (NBER). The file
+`recessions.csv` lists, for each recession since 1953, the **peak** (the last month before the recession) and the
+**trough** (its last month), and the same dates in quarters. One small function adds the shaded bands to any
+figure.
+
+```{python}
+#| kind: folded
+# @title Data tool: shade the NBER recessions
+# Step 1: the peak and the trough of every recession since 1953, in months and quarters
+recessions = pd.read_csv(DATA_URL + "recessions.csv",
+                         parse_dates=["peak", "trough", "peak_quarter", "trough_quarter"])
+
+
+def shade_recessions(fig, start="2000-01-01"):
+    """Shade every NBER recession that ends after `start` (Figs. 2, 3, 7, 8 and 9).
+
+    Arguments
+        fig   : the figure to shade
+        start : the first date of the chart; earlier recessions are skipped
+    Returns
+        the same figure, with one shaded band per recession
+    """
+    # `zip(recessions.peak, recessions.trough)` hands the loop one (peak, trough)
+    # pair at a time
+    for peak, trough in zip(recessions.peak, recessions.trough):
+        # the `if` skips the recessions that ended before the chart starts
+        if trough >= pd.Timestamp(start):
+            # `fig.add_vrect` shades the band between two dates
+            fig.add_vrect(x0=peak, x1=trough, fillcolor=BLUE, opacity=0.15, line_width=0)
+    return fig
+
+
+# Step 2: show the last three recessions
+recessions.tail(3)
+```
+
+The Great Recession runs from the peak in December 2007 to the trough in June 2009, and the Covid-19 recession
+from February to April 2020, only two months.
 
 The textbook's figures show the United States, and two of them the U.K. and the euro area. But the financial
 crisis and the pandemic hit the whole world, and the same data exist for many other economies: the Bank for
@@ -939,40 +1132,54 @@ get a **"Beyond the U.S."** part, where you pick the countries. Each of those da
 country and date. The small file `countries.csv` lists every economy with its region.
 
 ```{python}
+#| kind: folded
+# @title Data tool: the economies and their regions
+# one row per economy, with its region
 countries = pd.read_csv(DATA_URL + "countries.csv")
 countries.head()
 ```
 
-A country should keep its color in every chart, so we give each one a fixed color once. The textbook's
-economies keep the chapter's colors.
-
-> **Python note.** `enumerate(...)` hands over each country name together with its position `i` (0, 1, 2, ...).
-> `i % len(PALETTE)` is the remainder of the division, so the positions cycle through the list of colors.
-> `.update({...})` overwrites some entries of a dictionary.
+A country should keep its color in every chart, so we give each one a fixed color once. The textbook's economies
+keep the chapter's colors.
 
 ```{python}
+#| kind: folded
+# @title Data tool: a fixed color for every country
+# Step 1: a long list of colors, three Plotly palettes joined with `+`
 PALETTE = px.colors.qualitative.Dark24 + px.colors.qualitative.Alphabet + px.colors.qualitative.Light24
+# Step 2: `enumerate(...)` hands over each country name with its position i
+# (0, 1, 2, ...).
+# `i % len(PALETTE)` is the remainder of the division, so the positions cycle
+# through the list of colors.
 COUNTRY_COLORS = {}
 for i, name in enumerate(countries.country):
     COUNTRY_COLORS[name] = PALETTE[i % len(PALETTE)]
+# Step 3: `.update({...})` overwrites some entries of a dictionary: the textbook's
+# economies get the chapter's colors
 COUNTRY_COLORS.update({"United States": BLUE, "United Kingdom": GREEN, "Euro area": TEAL,
                        "S. Korea": "#5aa0d8", "Sweden": ORANGE, "Germany": "#0b4f47"})
 ```
 
-Three small functions do the work in every "Beyond the U.S." chart. `pick` keeps the rows of the chosen
-countries and lists the chosen countries that have no data. `largest_fall` and `largest_rise` apply
-`peak_to_trough` and `low_to_high` to each chosen country and report the most extreme one.
-
-> **Python note.** `panel.country.isin(names)` is true for the rows of the chosen countries, and
-> `panel[column].notna()` for the rows with a value; `&` requires both. `for name, rows in chosen.groupby("country")`
-> visits one country at a time, with `rows` holding its rows. `None` means "nothing found yet".
-> `", ".join(missing)` glues a list of names into one text, separated by commas. In a Plotly title, `<br>` starts a
-> new line and `<sup>...</sup>` writes smaller text.
+Three small functions do the work in every "Beyond the U.S." chart. `pick` keeps the rows of the chosen countries
+and lists the chosen countries that have no data, and `no_data_note` names them in the title.
 
 ```{python}
+#| kind: folded
+# @title Data tools: the chosen countries, and a note on those without data
 def pick(panel, names, column):
-    """Rows of the chosen countries that have a value in `column`, and the chosen countries without data."""
+    """Rows of the chosen countries that have a value in `column`, and the chosen countries without data.
+
+    Arguments
+        panel  : a long data table, one row per country and date
+        names  : the chosen countries
+        column : the variable to plot
+    Returns
+        the rows of the chosen countries with a value, and the list of chosen countries without data
+    """
+    # Step 1: `panel.country.isin(names)` is True for the rows of the chosen countries,
+    # and `panel[column].notna()` for the rows with a value; `&` requires both
     chosen = panel[panel.country.isin(names) & panel[column].notna()]
+    # Step 2: the chosen countries that have no row left
     missing = []
     for name in names:
         if name not in set(chosen.country):
@@ -981,71 +1188,124 @@ def pick(panel, names, column):
 
 
 def no_data_note(missing):
-    """A second, smaller title line that names the chosen countries without data."""
+    """A second, smaller title line that names the chosen countries without data.
+
+    Arguments
+        missing : the chosen countries without data (from pick)
+    Returns
+        the extra title line, or an empty text when every country has data
+    """
+    # `", ".join(missing)` glues the names into one text, separated by commas.
+    # In a Plotly title, <br> starts a new line and <sup>...</sup> writes smaller text.
     if missing:
         return "<br><sup>No data: " + ", ".join(missing) + "</sup>"
     return ""
 ```
 
+`largest_fall` and `largest_rise` apply `peak_to_trough` and `low_to_high` to each chosen country and report the
+most extreme one.
+
 ```{python}
+#| kind: folded
+# @title Data tools: the largest fall and the largest rise among the chosen countries
 def largest_fall(chosen, column, start, end):
-    """Among the chosen countries, the largest peak-to-trough fall between start and end."""
+    """Among the chosen countries, the largest peak-to-trough fall between start and end.
+
+    Arguments
+        chosen     : the rows of the chosen countries (from pick)
+        column     : the variable, e.g. "real_house_price"
+        start, end : the search window
+    Returns
+        (country, peak date, trough date, percent change), or None if no country has data
+    """
+    # `None` means "nothing found yet"
     worst = None
+    # `chosen.groupby("country")` visits one country at a time, with `rows`
+    # holding its rows
     for name, rows in chosen.groupby("country"):
         series = rows.set_index("date")[column]
+        # only countries with at least two values in the window
         if len(series[start:end]) > 1:
             peak, trough, change = peak_to_trough(series, start, end)
+            # keep this country if its fall is the largest so far
             if worst is None or change < worst[3]:
                 worst = (name, peak, trough, change)
-    return worst                                # (country, peak date, trough date, percent change)
+    # (country, peak date, trough date, percent change)
+    return worst
 
 
 def largest_rise(chosen, column, start, end):
-    """Among the chosen countries, the largest rise from a low to a later high between start and end."""
+    """Among the chosen countries, the largest rise from a low to a later high between start and end.
+
+    Arguments
+        chosen     : the rows of the chosen countries (from pick)
+        column     : the variable, e.g. "policy_rate"
+        start, end : the search window
+    Returns
+        (country, low date, high date, rise in points), or None if no country has data
+    """
+    # the same steps as largest_fall, with low_to_high
     most = None
     for name, rows in chosen.groupby("country"):
         series = rows.set_index("date")[column]
         if len(series[start:end]) > 1:
             low, high, rise = low_to_high(series, start, end)
+            # keep this country if its rise is the largest so far
             if most is None or rise > most[3]:
                 most = (name, low, high, rise)
-    return most                                 # (country, low date, high date, rise in points)
+    # (country, low date, high date, rise in points)
+    return most
 ```
 
 The website cannot run Python, so its versions of these charts draw **every** country at once and show only the
-textbook's countries; a click on a name in the legend adds a country, and a menu shows one region at a time.
-The next helper sets that up. Run it and move on.
+textbook's countries; a click on a name in the legend adds a country, and a menu shows one region at a time. The
+next helper sets that up. Run it and move on.
 
 ```{python}
-#| kind: helper
+#| kind: folded
 # @title Helper for the website versions with all countries (run this cell; you do not need to read it)
 def all_countries(make_figure, names, shown):
-    """Draw make_figure(names) for every country; show only `shown` and add a menu by region."""
+    """Draw make_figure(names) for every country; show only `shown` and add a menu by region.
+
+    Arguments
+        make_figure : the function that draws the chart, e.g. house_world
+        names       : every country with data
+        shown       : the countries drawn at the start (the textbook's view)
+    Returns
+        one Plotly figure with every country, the others one click away in the legend
+    """
+    # Step 1: draw every country, with the title of the textbook's view
     fig = make_figure(tuple(names))
-    fig.update_layout(title=make_figure(tuple(shown)).layout.title)      # the title of the textbook's view
+    fig.update_layout(title=make_figure(tuple(shown)).layout.title)
+    # Step 2: the menu entries: the textbook's view, all countries, and one per region
     region = dict(zip(countries.country, countries.region))
     choices = [("Textbook's view", list(shown)), ("All countries", list(names))]
     for r in ["Americas", "Europe", "Asia and Pacific", "Africa and Middle East"]:
         choices.append((r, [n for n in names if region.get(n) == r]))
+    # each entry draws its countries and puts the others in the legend only
     buttons = []
     for label, members in choices:
         visible = [True if t.name in members else "legendonly" for t in fig.data]
         buttons.append(dict(label=label, method="restyle", args=[{"visible": visible}]))
+    # Step 3: start with the textbook's view, and make the page lighter: the country
+    # name once in the hover text instead of once per point, months without the day
+    # and time, and values rounded to 2 decimals
     for trace in fig.data:
         trace.visible = True if trace.name in shown else "legendonly"
-        # a lighter page: the country name once in the hover text instead of once per point, months without the
-        # day and time, and values rounded to 2 decimals
         trace.hovertemplate = trace.hovertemplate.replace("%{hovertext}", trace.name)
         trace.hovertext = None
         if trace.x is not None and len(trace.x) > 0 and hasattr(trace.x[0], "strftime"):
             trace.x = [d.strftime("%Y-%m") for d in pd.to_datetime(trace.x)]
         trace.y = np.round(np.asarray(trace.y, dtype=float), 2)
-    fig.update_yaxes(autorange=True, tickmode="auto")                  # the y-axis follows the visible countries
+    # Step 4: the y-axis follows the visible countries, and the menu goes above the plot
+    fig.update_yaxes(autorange=True, tickmode="auto")
     fig.update_layout(margin=dict(t=120), legend=dict(title_text="Click to add"),
                       updatemenus=[dict(type="dropdown", direction="down", x=0, y=1.02, xanchor="left",
                                         yanchor="bottom", buttons=buttons, showactive=True)])
     return fig
 ```
+
+:::
 
 <!-- cell -->
 
@@ -1263,7 +1523,7 @@ Four periods tell the story. The menu zooms in on one of them, and the title rep
 rate in that window.
 
 > **Python note.** `px.area` draws a line with the area below it filled in. `fig.update_xaxes(range=[a, b])`
-> sets the dates shown. `shade_recessions(fig)` is our function from "Model overview".
+> sets the dates shown. `shade_recessions(fig)` is our function from "Model in code".
 
 ```{python}
 PERIODS = {"2000–2026": ("2000-01-01", "2026-09-01"),
@@ -2389,7 +2649,7 @@ unemployment[unemployment.date.between("2025-08-01", "2025-12-01")]
 **Data hygiene.** October 2025 is missing: the Bureau of Labor Statistics could not run its household survey
 during the federal government shutdown. The chart simply joins September and November.
 
-To measure the rise in unemployment we use `low_to_high` from "Model overview", the opposite of
+To measure the rise in unemployment we use `low_to_high` from "Model in code", the opposite of
 `peak_to_trough`: the highest unemployment rate in a window and the lowest rate *before* it.
 
 ```{python}
@@ -3005,7 +3265,7 @@ FRED](https://fred.stlouisfed.org/series/NIKKEI225).
 
 In (a) the fraction that was lost is $f = 1 - 7{,}054.98/38{,}915.87$. In (b) the factor is $39{,}098.68/7{,}054.98$.
 In (c), write $1.05^T$ = record / low and take logs of both sides to solve for $T$. The functions `rise_needed` and
-`annual_growth` of the Model overview do the arithmetic of (a) and (b).
+`annual_growth` of "Model in code" do the arithmetic of (a) and (b).
 
 </details>
 
@@ -3277,7 +3537,7 @@ e.g. `GDPC1`](https://fred.stlouisfed.org/series/GDPC1)) and `recessions.csv` ([
 
 <details><summary>Hint</summary>
 
-Check 7 of the Model overview computes the contributions for two recessions. Read `recessions.csv` into a table, say
+Check 7 of "Model in code" computes the contributions for two recessions. Read `recessions.csv` into a table, say
 `nber`, put Check 7's inner loop inside a loop over `zip(nber.peak_quarter, nber.trough_quarter)`, and store one
 dictionary per recession in a list; then `pd.DataFrame(rows)` makes the table. For (c), `contrib[list(SIGN)].idxmin(axis=1)` names the most negative
 contribution in each row.

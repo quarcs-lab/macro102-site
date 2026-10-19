@@ -28,108 +28,6 @@ of it you will be able to:
 
 <!-- cell -->
 
-## Setup
-
-We first load the Python libraries we need. You only have to run this cell once.
-
-> **Python note.** `import` loads a *library*, a toolbox written by other people. We give each
-> library a short nickname, for example `np` for NumPy, so that the code stays short. Text after
-> a `#` is a *comment*: Python ignores it, and it is there for human readers. The `try ... except`
-> block runs one Colab-only line and simply skips it anywhere else.
-
-```{python}
-# Libraries used in this chapter
-import numpy as np                              # numbers and arrays
-import pandas as pd                             # data tables
-import plotly.express as px                     # quick charts from data tables
-import plotly.graph_objects as go               # charts built piece by piece (model figures)
-import plotly.io as pio
-from plotly.subplots import make_subplots       # several panels in one figure
-from ipywidgets import interact, FloatSlider, IntRangeSlider, ToggleButtons, Dropdown, SelectMultiple
-
-# One light blue/green look for every chart
-BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
-pio.templates.default = "plotly_white"
-pio.templates["plotly_white"].layout.update(width=860, height=480)   # same size in Colab and on the website
-px.defaults.color_discrete_sequence = [BLUE, TEAL, GREEN, "#5aa0d8", "#0b4f47", "#e0a33b", "#b04a5a"]
-WIDE = {"description_width": "initial"}         # show the full slider labels
-
-# Colab only: let Plotly charts appear inside the interactive widgets
-try:
-    import google.colab
-    google.colab.output.enable_custom_widget_manager()
-except ImportError:
-    pass                                        # not running in Colab: nothing to do
-
-# The data files of this chapter live in the book's GitHub repository
-DATA_URL = "https://raw.githubusercontent.com/quarcs-lab/macro102-site/main/data/ch03/"
-```
-
-The next cell defines a helper that only the book website needs. Run it and move on.
-
-```{python}
-#| kind: helper
-# @title Helper for the website versions (run this cell; you do not need to read it)
-def slider_figure(make_figure, name, values, start, label=None):
-    """Precompute make_figure(name=value) for every value and join the results with one slider.
-
-    The website cannot run Python, so each interactive figure also gets this precomputed version.
-    """
-    figures = [make_figure(**{name: v}) for v in values]
-    first = values.index(start)
-    fig = go.Figure(layout=figures[first].layout)
-    owner = []                                  # which precomputed figure each trace comes from
-    for i, f in enumerate(figures):
-        for trace in f.data:
-            trace.visible = (i == first)
-            fig.add_trace(trace)
-            owner.append(i)
-    steps = []
-    for i, f in enumerate(figures):
-        layout = {"title": f.layout.title.to_plotly_json(),
-                  "annotations": [a.to_plotly_json() for a in f.layout.annotations],
-                  "shapes": [s.to_plotly_json() for s in f.layout.shapes]}
-        visible = [o == i for o in owner]
-        steps.append(dict(method="update", label=str(values[i]), args=[{"visible": visible}, layout]))
-    fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
-                                    currentvalue=dict(prefix=(label or name) + " = "))])
-    return fig
-```
-
-```{python}
-#| kind: helper
-# @title Helper for the website versions with many countries (run this cell; you do not need to read it)
-def country_menu(fig, shown, regions, label="Textbook countries"):
-    """Draw the countries in `shown` and put every other country one click away in the legend.
-
-    `regions` maps each country to its region. With more than 40 countries, a menu above the plot
-    chooses the region whose countries the legend lists. Traces that are not countries stay as they are.
-    """
-    countries = [trace.name for trace in fig.data if trace.name in regions]
-    groups = [label] + sorted(set(regions[name] for name in countries))
-    if len(countries) <= 40:
-        groups = [None]                                 # a short legend lists every country at once
-    buttons = []
-    for group in groups:
-        visible = []
-        for trace in fig.data:
-            if trace.name in shown:
-                visible.append(True)
-            elif trace.name not in regions:
-                visible.append(True if trace.visible is None else trace.visible)
-            elif group is None or regions[trace.name] == group:
-                visible.append("legendonly")
-            else:
-                visible.append(False)
-        buttons.append(dict(label=group, method="restyle", args=[{"visible": visible}]))
-    for trace, v in zip(fig.data, buttons[0]["args"][0]["visible"]):
-        trace.visible = v
-    if len(groups) > 1:
-        menu = dict(type="dropdown", buttons=buttons, x=1, xanchor="right", y=1.02, yanchor="bottom")
-        fig.update_layout(updatemenus=list(fig.layout.updatemenus) + [menu], margin=dict(t=110))
-    return fig
-```
-
 ## Model overview
 
 Picture **Islandia**, a small imaginary island country. For most of its history, islanders lived about as well as their great-grandparents had. Then, at some point, income per person began to rise a little every year, and it has kept rising ever since. In this chapter's baseline, each islander earns 6 units of the island's good a year, and income per person grows by 2 percent a year. Is 2 percent a lot? How long until incomes double? This section builds the small toolkit that answers, using Islandia's record at every step.
@@ -147,7 +45,7 @@ Picture **Islandia**, a small imaginary island country. For most of its history,
 2. [Logarithms, the ratio scale and the Rule of 70](#logarithms-the-ratio-scale-and-the-rule-of-70): why constant growth is a straight line in logs, and how long doubling takes.
 3. [The average annual growth rate](#the-average-annual-growth-rate): the one steady pace that links two data points.
 4. [Growth rates of products, ratios and powers](#growth-rates-of-products-ratios-and-powers): three rules, and what they say about the production function.
-5. [The model in code](#the-model-in-code): the tools as Python functions, checked with numbers, before the data sections apply them.
+5. [Model in code](#model-in-code): the tools as Python functions, checked with numbers, before the data sections apply them.
 
 **Notation.** A bar over a letter marks a value we hold **constant** and take as given, such as the growth rate $\bar{g}$ of income or $\bar{n}$ of population. A subscript is the year: $y_t$ is the value in year $t$, and $y_0$ the value in the starting year. A growth rate without a bar, such as $g_x$, may change from year to year. In the code we simply write `g` and `n`.
 
@@ -512,43 +410,230 @@ By the per-person form of equation (10), $g_y = 1 + \tfrac{1}{3} \times 3 = 2$ p
 
 <!-- cell -->
 
-### The model in code
+## Model in code
 
-We now turn the tools into Python functions. Each function's description names the equation it computes. The cells after it check every result above with numbers.
+Now we turn the tools of the Model overview into Python. The section has three parts: the setup (folded, because
+it is the same in every chapter), the tools as functions, and numerical checks of the Key results. Run its cells
+once, in order. Every later section of the notebook reuses them.
 
-> **Python note.** `def` creates a *function*: a named recipe that takes inputs (the
-> *arguments*) and gives back a result with `return`. The text in triple quotes is a short
-> description of what the function does. `**` means "to the power of", and `np.log` is the natural logarithm.
+<!-- cell -->
+
+### Setup
+
+Run the setup cells once, before anything else. They load the Python libraries, give every chart the same look,
+store the address of the chapter's data and define two helpers that only the book website needs. You can use
+the notebook without reading them; open the box if you are curious.
+
+<!-- cell -->
+
+::: {.callout-note .mic-fold collapse="true" title="Show the setup code"}
+
+The first cell loads the libraries and sets the look of the charts. Its comments explain each step.
 
 ```{python}
+#| kind: folded
+# @title Setup: libraries, chart colors and the data location
+# Text after a "#" is a comment: Python ignores it, it is there for human readers.
+
+# Step 1: load the libraries. `import` loads a library, a toolbox written by
+# other people, and `as np` gives it a short nickname, so the code stays short.
+import numpy as np                              # numbers and arrays
+import pandas as pd                             # data tables
+import plotly.express as px                     # quick charts from data tables
+import plotly.graph_objects as go               # charts built piece by piece
+import plotly.io as pio                         # settings shared by every chart
+from plotly.subplots import make_subplots       # several panels in one figure
+# sliders, buttons and menus for the interactive figures
+from ipywidgets import interact, FloatSlider, IntRangeSlider, ToggleButtons, Dropdown, SelectMultiple
+
+# Step 2: one light blue/green look for every chart
+BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
+pio.templates.default = "plotly_white"
+# the same chart size in Colab and on the website
+pio.templates["plotly_white"].layout.update(width=860, height=480)
+# the colors of the lines, in order
+px.defaults.color_discrete_sequence = [BLUE, TEAL, GREEN, "#5aa0d8", "#0b4f47", "#e0a33b", "#b04a5a"]
+WIDE = {"description_width": "initial"}         # show the full slider labels
+
+# Step 3, Colab only: let Plotly charts appear inside the interactive widgets.
+# `try` runs the indented lines; if the import fails (we are not in Colab),
+# `except` skips them.
+try:
+    import google.colab
+    google.colab.output.enable_custom_widget_manager()
+except ImportError:
+    pass                                        # not running in Colab: nothing to do
+
+# Step 4: the data files of this chapter live in the book's GitHub repository
+DATA_URL = "https://raw.githubusercontent.com/quarcs-lab/macro102-site/main/data/ch03/"
+```
+
+The website cannot run Python, so each interactive figure also gets a version with a precomputed slider or menu.
+The next two helpers build those versions. Run them and move on.
+
+```{python}
+#| kind: folded
+# @title Helper for the website versions (run this cell; you do not need to read it)
+def slider_figure(make_figure, name, values, start, label=None):
+    """Join precomputed versions of a figure with one slider (the website cannot run Python).
+
+    Arguments
+        make_figure : the function that draws the figure, e.g. population_path
+        name        : the argument the slider moves, e.g. "n"
+        values      : the values of that argument to precompute
+        start       : the value shown first
+        label       : the slider's label (the argument name if None)
+    Returns
+        one Plotly figure with all versions and a slider that shows one at a time
+    """
+    # Step 1: draw the figure once for every value
+    figures = [make_figure(**{name: v}) for v in values]
+    first = values.index(start)
+    # Step 2: copy every curve into one figure; only the start value's are visible
+    fig = go.Figure(layout=figures[first].layout)
+    owner = []                          # which precomputed figure each trace is from
+    for i, f in enumerate(figures):
+        for trace in f.data:
+            trace.visible = (i == first)
+            fig.add_trace(trace)
+            owner.append(i)
+    # Step 3: one slider step per value: its curves, title, labels and shapes
+    steps = []
+    for i, f in enumerate(figures):
+        layout = {"title": f.layout.title.to_plotly_json(),
+                  "annotations": [a.to_plotly_json() for a in f.layout.annotations],
+                  "shapes": [s.to_plotly_json() for s in f.layout.shapes]}
+        visible = [o == i for o in owner]
+        steps.append(dict(method="update", label=str(values[i]), args=[{"visible": visible}, layout]))
+    fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
+                                    currentvalue=dict(prefix=(label or name) + " = "))])
+    return fig
+```
+
+```{python}
+#| kind: folded
+# @title Helper for the website versions with many countries (run this cell; you do not need to read it)
+def country_menu(fig, shown, regions, label="Textbook countries"):
+    """Draw the countries in `shown` and put every other country one click away in the legend.
+
+    With more than 40 countries, a menu above the plot chooses the region whose countries the legend lists.
+    Traces that are not countries stay as they are.
+
+    Arguments
+        fig     : a Plotly figure with one trace per country
+        shown   : the countries drawn at the start
+        regions : maps each country to its region
+        label   : the name of the first menu entry
+    Returns
+        the same figure, with the visibility set and, for many countries, the region menu
+    """
+    # Step 1: the menu entries, the textbook countries and then one entry per region
+    # the traces that are countries, and each of their regions once, A to Z
+    countries = [trace.name for trace in fig.data if trace.name in regions]
+    groups = [label] + sorted(set(regions[name] for name in countries))
+    if len(countries) <= 40:
+        groups = [None]                     # a short legend lists every country at once
+    # Step 2: for each entry, which traces are drawn, in the legend only, or hidden
+    buttons = []
+    for group in groups:
+        visible = []
+        for trace in fig.data:
+            if trace.name in shown:
+                visible.append(True)                    # a textbook country: drawn
+            elif trace.name not in regions:
+                # not a country: as it was
+                visible.append(True if trace.visible is None else trace.visible)
+            elif group is None or regions[trace.name] == group:
+                visible.append("legendonly")            # in this region: a click away
+            else:
+                visible.append(False)                   # another region: hidden
+        buttons.append(dict(label=group, method="restyle", args=[{"visible": visible}]))
+    # Step 3: start with the first entry, and add the menu when there is more than one
+    for trace, v in zip(fig.data, buttons[0]["args"][0]["visible"]):
+        trace.visible = v
+    if len(groups) > 1:
+        menu = dict(type="dropdown", buttons=buttons, x=1, xanchor="right", y=1.02, yanchor="bottom")
+        fig.update_layout(updatemenus=list(fig.layout.updatemenus) + [menu], margin=dict(t=110))
+    return fig
+```
+
+:::
+
+<!-- cell -->
+
+### The model as functions
+
+Three Key results do most of the work in this chapter: the constant growth rule, equation (2), the exact
+doubling time, equation (4), and the average annual growth rate, equation (6). We write each one as a Python
+*function*: a named recipe that takes inputs and gives back a result. The later sections use all three.
+
+```{python}
+# `def` creates a function. Its inputs are the arguments in parentheses.
+# The text in triple quotes describes the function.
 def constant_growth(y0, g, t):
-    """Value after t years of constant growth at rate g: y_t = y0 (1 + g)^t   (equation 2)."""
+    """Value after t years of constant growth.
+
+    Equation (2):  y_t = y0 (1 + g)^t
+
+    Arguments
+        y0 : the starting value, y_0
+        g  : the constant growth rate, g-bar (0.02 for 2 percent)
+        t  : the number of years (a number or an array of years)
+    Returns
+        the value after t years, y_t
+    """
+    # `return` gives back the result; `**` means "to the power of"
     return y0 * (1 + g) ** t
 
 
 def growth_rate(y0, yt, t):
-    """Average annual growth rate between two values t years apart: (yt / y0)^(1/t) - 1   (equation 6)."""
+    """Average annual growth rate between two values t years apart.
+
+    Equation (6):  g = (y_t / y_0)^(1/t) - 1
+
+    Arguments
+        y0, yt : the values at the start and t years later, y_0 and y_t
+        t      : the number of years between them
+    Returns
+        the average annual growth rate, g (0.02 for 2 percent)
+    """
+    # equation (2) solved for g
     return (yt / y0) ** (1 / t) - 1
 
 
 def doubling_time(g):
-    """Exact number of years it takes to double at growth rate g: ln 2 / ln(1 + g)   (equation 4)."""
+    """Exact number of years it takes a value to double.
+
+    Equation (4):  t = ln 2 / ln(1 + g)
+
+    Arguments
+        g : the constant growth rate, g-bar
+    Returns
+        the doubling time in years
+    """
+    # `np.log` is the natural logarithm, ln
     return np.log(2) / np.log(1 + g)
 ```
+
+<!-- cell -->
+
+### Checking the key results
+
+The formulas came from algebra. Now we check them with numbers, one Key result at a time.
 
 **Check 1: compounding.** We follow the population of Fig. 3, 6 billion people growing at 2 percent, and
 compare compound growth, equation (2), with simple growth, which adds the same 2 percent of the *starting*
 value every year.
 
-> **Python note.** A `for` loop repeats its indented lines once for each value in the list after `in`, here
-> the years 1, 35, 70 and 100. An *f-string* such as `f"{x:.2f}"` inserts the value of a variable into a piece
-> of text: `:.2f` shows two decimals, and `:8.2f` also pads the number to 8 characters so the columns line up.
-
 ```{python}
+# Compound and simple growth of 6 billion people at 2%, after 1, 35, 70 and 100 years
 print("Years   compound growth, eq. (2)   simple growth")
+# A `for` loop runs its indented lines once for each value after `in`
 for t in (1, 35, 70, 100):
-    compound = constant_growth(6.0, 0.02, t)
-    simple = 6.0 * (1 + 0.02 * t)
+    compound = constant_growth(6.0, 0.02, t)       # equation (2)
+    simple = 6.0 * (1 + 0.02 * t)                  # 2% of the start, added t times
+    # An f-string, f"... {value:.2f}", puts a value into the text; ":.2f" means
+    # "two decimals", and ":8.2f" also pads the number to 8 characters
     print(f"{t:5d}   {compound:15.2f} billion   {simple:8.2f} billion")
 ```
 
@@ -558,15 +643,16 @@ gets only to 1.7 and 2.4 times the start.
 **Check 2: a straight line in logs.** Equation (3) says that the log of a constantly growing variable rises
 by the same amount, $\ln(1+\bar{g})$, every year.
 
-> **Python note.** `np.arange(0, 6)` gives the whole numbers 0, 1, ..., 5, and `constant_growth` then works on
-> all of them at once. `np.log` takes the log of every value, `np.diff` subtracts each value from the next one,
-> and `.round(4)` keeps four decimals.
-
 ```{python}
+# Step 1: the population in years 0 to 5. `np.arange(0, 6)` gives 0, 1, ..., 5,
+# and `constant_growth` works on all of them at once
 years = np.arange(0, 6)
 L = constant_growth(6.0, 0.02, years)
+# Step 2: the yearly change in ln L. `np.diff` subtracts each value from the
+# next one, and `.round(4)` keeps four decimals
 print("Population (billions):    ", L.round(4))
 print("Yearly change in ln L:    ", np.diff(np.log(L)).round(5))
+# Step 3: the slope that equation (3) predicts
 print(f"Slope of eq. (3), ln(1.02): {np.log(1.02):.5f}   (close to g = 0.02)")
 ```
 
@@ -574,10 +660,12 @@ print(f"Slope of eq. (3), ln(1.02): {np.log(1.02):.5f}   (close to g = 0.02)")
 equation (5), and confirm that the population really is twice as large after one exact doubling time.
 
 ```{python}
+# Step 1: the doubling time at four growth rates, exact and approximate
 print("Growth rate   exact, eq. (4)   69.3 / g   Rule of 70, eq. (5)")
 for g in (0.01, 0.02, 0.03, 0.07):
     G = 100 * g                                     # the growth rate in percent
     print(f"{G:9.0f}%   {doubling_time(g):14.2f}   {69.3 / G:8.2f}   {70 / G:19.2f}")
+# Step 2: 6 billion at 2% for one exact doubling time should give 12 billion
 print(f"At 2%, after {doubling_time(0.02):.2f} years: {constant_growth(6.0, 0.02, doubling_time(0.02)):.3f} billion")
 ```
 
@@ -588,12 +676,17 @@ grows once growth rates go well beyond a few percent: at 7 percent it is off by 
 agree with it, and the geometric mean of step 5 must give the right answer where the plain average does not.
 
 ```{python}
+# Step 1: grow 6 billion at 2% for 100 years, then recover the 2% with equation (6)
 end = constant_growth(6.0, 0.02, 100)
 print(f"6 billion at 2% for 100 years:          {end:.2f} billion")
 print(f"Equation (6) gives back:                {growth_rate(6.0, end, 100):.4f}")
+# Step 2: the log version, the slope of ln y turned back into a growth rate
 print(f"Log version, exp(slope) - 1:            {np.exp((np.log(end) - np.log(6.0)) / 100) - 1:.4f}")
+# Step 3: over one year the formula is a plain percentage change
 print(f"One year, t = 1 (a percentage change):  {growth_rate(6.0, 6.3, 1):.4f}")
+# Step 4: the geometric mean of +10% and -10% is below 0
 print(f"Up 10% then down 10%, two years:        {growth_rate(1.0, 1.10 * 0.90, 2):+.4f}   (not 0)")
+# Step 5: a 1% higher end point after 100 years barely moves the growth rate
 higher = growth_rate(6.0, 1.01 * end, 100)
 print(f"Final value 1% higher: the growth rate rises by {100 * (higher - 0.02):.4f} percentage points")
 ```
@@ -602,13 +695,17 @@ print(f"Final value 1% higher: the growth rate rises by {100 * (higher - 0.02):.
 1.4 percent for the population, and compare each rule with the exact growth over one year.
 
 ```{python}
-gy, gL = 0.019, 0.014                               # GDP per person and population, U.S. since 1870 (Fig. 9)
+# Step 1: GDP per person and population, U.S. since 1870 (Fig. 9), and the values
+# one year later
+gy, gL = 0.019, 0.014
 y0, L0 = 1.0, 1.0
-y1, L1 = y0 * (1 + gy), L0 * (1 + gL)               # the values one year later
+y1, L1 = y0 * (1 + gy), L0 * (1 + gL)
+# Step 2: each rule, equations (7) to (9), against the exact growth over the year
 print(f"Product  y x L:    rule (7) {gy + gL:.5f}   exact {(y1 * L1) / (y0 * L0) - 1:.5f}")
 print(f"Ratio    y / L:    rule (8) {gy - gL:.5f}   exact {(y1 / L1) / (y0 / L0) - 1:.5f}")
 print(f"Power    y^(1/3):  rule (9) {gy / 3:.5f}   exact {y1 ** (1 / 3) / y0 ** (1 / 3) - 1:.5f}")
 print(f"Power    L^(-2):   rule (9) {-2 * gL:.5f}   exact {L1 ** -2 / L0 ** -2 - 1:.5f}")
+# Step 3: in logs, ln(yL) = ln y + ln L, so the product rule holds exactly
 change_logs = np.log(y1 * L1) - np.log(y0 * L0)
 print(f"In logs the product rule is exact: {change_logs:.5f} = {np.log(1 + gy) + np.log(1 + gL):.5f}")
 ```

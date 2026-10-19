@@ -31,131 +31,6 @@ of this chapter you will be able to:
 
 <!-- cell -->
 
-## Setup
-
-We first load the Python libraries we need. You only have to run this cell once.
-
-> **Python note.** `import` loads a *library*, a toolbox written by other people. We give each
-> library a short nickname, for example `np` for NumPy, so that the code stays short. Text after
-> a `#` is a *comment*: Python ignores it, and it is there for human readers. The `try ... except`
-> block runs one Colab-only line and simply skips it anywhere else.
-
-```{python}
-# Libraries used in this chapter
-import numpy as np                    # numbers and arrays
-import pandas as pd                   # data tables
-import plotly.express as px           # quick charts from data tables
-import plotly.graph_objects as go     # charts built piece by piece (model figures)
-import plotly.io as pio
-from plotly.subplots import make_subplots       # several panels in one figure
-from ipywidgets import interact, interact_manual, fixed, FloatSlider, ToggleButtons, Dropdown, SelectMultiple
-
-# One light blue/green look for every chart
-BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
-pio.templates.default = "plotly_white"
-pio.templates["plotly_white"].layout.update(width=860, height=480)   # same size in Colab and on the website
-px.defaults.color_discrete_sequence = [BLUE, TEAL, GREEN, "#5aa0d8", "#0b4f47", "#e0a33b"]
-WIDE = {"description_width": "initial"}         # show the full slider labels
-
-# Colab only: let Plotly charts appear inside the interactive widgets
-try:
-    import google.colab
-    google.colab.output.enable_custom_widget_manager()
-except ImportError:
-    pass                                        # not running in Colab: nothing to do
-
-# The data files of this chapter live in the book's GitHub repository
-DATA_URL = "https://raw.githubusercontent.com/quarcs-lab/macro102-site/main/data/ch07/"
-```
-
-The next cell defines a helper that only the book website needs. Run it and move on.
-
-```{python}
-#| kind: helper
-# @title Helper for the website versions (run this cell; you do not need to read it)
-def slider_figure(make_figure, name, values, start, label=None):
-    """Precompute make_figure(name=value) for every value and join the results with one slider.
-
-    The website cannot run Python, so each model figure gets this precomputed version.
-    """
-    figures = [make_figure(**{name: v}) for v in values]
-    first = values.index(start)
-    fig = go.Figure(layout=figures[first].layout)
-    owner = []                                  # which figure each trace comes from
-    for i, f in enumerate(figures):
-        for trace in f.data:
-            trace.visible = (i == first)
-            fig.add_trace(trace)
-            owner.append(i)
-    steps = []
-    for i, f in enumerate(figures):
-        layout = {"title": f.layout.title.to_plotly_json(),
-                  "annotations": [a.to_plotly_json() for a in f.layout.annotations],
-                  "shapes": [s.to_plotly_json() for s in f.layout.shapes]}
-        visible = [o == i for o in owner]
-        steps.append(dict(method="update", label=str(values[i]), args=[{"visible": visible}, layout]))
-    fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
-                                    currentvalue=dict(prefix=(label or name) + " = "))])
-    return fig
-```
-
-The multi-country charts have three more website helpers. `region_menu` adds a menu of world regions to a
-chart that holds many countries, because a legend with 180 names would be unreadable. `region_groups` lists
-the countries that each view of that menu shows together, so that we can give them different colors.
-`legend_menu` keeps the textbook's lines on, puts the others in the legend, and adds two reset buttons.
-
-```{python}
-#| kind: helper
-# @title Helper for the website versions of the multi-country charts (run this cell; you do not need to read it)
-def region_menu(fig, regions, shown, label=None):
-    """Add a region menu: the countries in `shown` stay on, the chosen region's countries go into the legend.
-
-    `regions` maps each country (trace name) to its region. The website cannot run Python, so this menu
-    replaces the Colab country picker: pick a region, then click a country in the legend to add it.
-    """
-    names = [trace.name for trace in fig.data]
-    groups = sorted(set(regions[n] for n in names if n in regions))
-    buttons = []
-    for group in [label or "Textbook: " + ", ".join(shown)] + groups:
-        visible = []
-        for n in names:
-            if n in shown:
-                visible.append(True)
-            elif regions.get(n) == group:
-                visible.append("legendonly")
-            else:
-                visible.append(False)
-        buttons.append(dict(label=group, method="restyle", args=[{"visible": visible}]))
-    for trace in fig.data:
-        trace.visible = True if trace.name in shown else False
-    fig.update_layout(updatemenus=[dict(buttons=buttons, active=0, direction="down", showactive=True,
-                                        x=0, xanchor="left", y=1.02, yanchor="bottom")],
-                      margin=dict(t=120), legend_title_text="")
-    return fig
-
-
-def region_groups(regions, shown):
-    """The views of `region_menu`, for `group_colors`: `shown` alone, then `shown` plus each region's countries."""
-    groups = [list(shown)]
-    for region in sorted(set(regions.values())):
-        groups.append(list(shown) + [n for n in regions if regions[n] == region])
-    return groups
-
-
-def legend_menu(fig, shown, label="Textbook view"):
-    """For a chart with up to 40 lines: `shown` stay on, the others wait in the legend; two reset buttons."""
-    book = [True if t.name in shown else "legendonly" for t in fig.data]
-    everything = [True for t in fig.data]
-    for trace, v in zip(fig.data, book):
-        trace.visible = v
-    fig.update_layout(updatemenus=[dict(type="buttons", direction="right", x=0, xanchor="left", y=1.02,
-                                        yanchor="bottom", buttons=[
-                                            dict(label=label, method="restyle", args=[{"visible": book}]),
-                                            dict(label="All lines", method="restyle", args=[{"visible": everything}])])],
-                      margin=dict(t=120), legend_title_text="")
-    return fig
-```
-
 ## Model overview
 
 Back on **Islandia**, most islanders earn their living at Harbor Boatworks, the island's firm, which builds and repairs boats. Every month some of them lose a job and some jobless islanders find one, and every year the wage is settled between the firm and the people who want to work. How many islanders have a job, what does a job pay, and why are some islanders without work even in calm years? And is it worth spending four years in college before starting to work? This section answers these questions with three small models, and we follow Islandia through each one.
@@ -174,7 +49,7 @@ Back on **Islandia**, most islanders earn their living at Harbor Boatworks, the 
 3. [The bathtub model of unemployment](#the-bathtub-model-of-unemployment): job losses and job findings, the natural rate and the path toward it.
 4. [Present discounted value](#present-discounted-value): one payment, a stream of payments and the value of a working life.
 5. [The return to education](#the-return-to-education): the college wage premium and the net present value of a degree.
-6. [The model in code](#the-model-in-code): every key result as a Python function, checked with numbers.
+6. [Model in code](#model-in-code): every key result as a Python function, checked with numbers.
 
 **Notation.** As in the book, a bar over a letter marks a **parameter**, a number fixed outside the model. Letters without a bar are **endogenous variables**: the model solves for them. A star marks an equilibrium or a steady state. Careful: in this chapter $\bar{s}$ is the job *separation* rate, not the investment rate of the Solow model.
 
@@ -717,140 +592,453 @@ By equation (11), with $x_d = 0$, $\Delta w^* = -0.4\times 10 = -4$, so the coll
 
 <!-- cell -->
 
-### The model in code
+## Model in code
 
-We now turn the key results into Python functions. Each function's description names the equation it computes. The cells after it check the algebra above with numbers, in the order of the blocks.
+Now we turn the Key results into Python. The section has four parts: the setup (folded, because it is the
+same in every chapter), the model as functions, numerical checks of the Key results, and the drawing and data
+tools that the figures use (folded too). Run its cells once, in order. Every later section of the notebook
+reuses them.
 
-> **Python note.** `def` creates a *function*: a named recipe that takes inputs (the *arguments*)
-> and gives back a result with `return`. Writing `a_d=100.0` gives the argument a *default value*,
-> used whenever we do not pass one. A function can return two results at once, separated by a comma.
+<!-- cell -->
+
+### Setup
+
+Run the setup cells once, before anything else. They load the Python libraries, give every chart the same look,
+store the address of the chapter's data and define four helpers that only the book website needs. You can use
+the notebook without reading them; open the box if you are curious.
+
+<!-- cell -->
+
+::: {.callout-note .mic-fold collapse="true" title="Show the setup code"}
+
+The first cell loads the libraries and sets the look of the charts. Its comments explain each step.
 
 ```{python}
+#| kind: folded
+# @title Setup: libraries, chart colors and the data location
+# Text after a "#" is a comment: Python ignores it, it is there for human readers.
+
+# Step 1: load the libraries. `import` loads a library, a toolbox written by
+# other people, and `as np` gives it a short nickname, so the code stays short.
+import numpy as np                    # numbers and arrays
+import pandas as pd                   # data tables
+import plotly.express as px           # quick charts from data tables
+import plotly.graph_objects as go     # charts built piece by piece (model figures)
+import plotly.io as pio               # settings shared by every chart
+from plotly.subplots import make_subplots       # several panels in one figure
+# sliders, buttons and menus for the interactive figures
+from ipywidgets import interact, interact_manual, fixed, FloatSlider, ToggleButtons, Dropdown, SelectMultiple
+
+# Step 2: one light blue/green look for every chart
+BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
+pio.templates.default = "plotly_white"
+# the same chart size in Colab and on the website
+pio.templates["plotly_white"].layout.update(width=860, height=480)
+px.defaults.color_discrete_sequence = [BLUE, TEAL, GREEN, "#5aa0d8", "#0b4f47", "#e0a33b"]
+WIDE = {"description_width": "initial"}         # show the full slider labels
+
+# Step 3, Colab only: let Plotly charts appear inside the interactive widgets.
+# `try` runs the indented lines; if the import fails (we are not in Colab),
+# `except` skips them.
+try:
+    import google.colab
+    google.colab.output.enable_custom_widget_manager()
+except ImportError:
+    pass                                        # not running in Colab: nothing to do
+
+# Step 4: the data files of this chapter live in the book's GitHub repository
+DATA_URL = "https://raw.githubusercontent.com/quarcs-lab/macro102-site/main/data/ch07/"
+```
+
+The website cannot run Python, so each interactive figure also gets a version with a precomputed slider. The next
+helper builds those versions. Run it and move on.
+
+```{python}
+#| kind: folded
+# @title Helper for the website versions (run this cell; you do not need to read it)
+def slider_figure(make_figure, name, values, start, label=None):
+    """Join precomputed versions of a figure with one slider (the website cannot run Python).
+
+    Arguments
+        make_figure : the function that draws the figure, e.g. labor_market
+        name        : the argument the slider moves, e.g. "a_d"
+        values      : the values of that argument to precompute
+        start       : the value shown first
+        label       : the slider's label (the argument name if None)
+    Returns
+        one Plotly figure with all versions and a slider that shows one at a time
+    """
+    # Step 1: draw the figure once for every value
+    figures = [make_figure(**{name: v}) for v in values]
+    first = values.index(start)
+    # Step 2: copy every curve into one figure; only the start value's are visible
+    fig = go.Figure(layout=figures[first].layout)
+    owner = []                                  # which figure each trace comes from
+    for i, f in enumerate(figures):
+        for trace in f.data:
+            trace.visible = (i == first)
+            fig.add_trace(trace)
+            owner.append(i)
+    # Step 3: one slider step per value: its curves, title, labels and shapes
+    steps = []
+    for i, f in enumerate(figures):
+        layout = {"title": f.layout.title.to_plotly_json(),
+                  "annotations": [a.to_plotly_json() for a in f.layout.annotations],
+                  "shapes": [s.to_plotly_json() for s in f.layout.shapes]}
+        visible = [o == i for o in owner]
+        steps.append(dict(method="update", label=str(values[i]), args=[{"visible": visible}, layout]))
+    fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
+                                    currentvalue=dict(prefix=(label or name) + " = "))])
+    return fig
+```
+
+The multi-country charts have three more website helpers. `region_menu` adds a menu of world regions to a
+chart that holds many countries, because a legend with 180 names would be unreadable. `region_groups` lists
+the countries that each view of that menu shows together, so that we can give them different colors.
+`legend_menu` keeps the textbook's lines on, puts the others in the legend, and adds two reset buttons.
+
+```{python}
+#| kind: folded
+# @title Helpers for the multi-country website charts (run this cell; you do not need to read it)
+def region_menu(fig, regions, shown, label=None):
+    """Add a region menu: the countries in `shown` stay on, the chosen region's go into the legend.
+
+    The website cannot run Python, so this menu replaces the Colab country picker: pick a region,
+    then click a country in the legend to add it.
+
+    Arguments
+        fig     : a Plotly figure with one trace per country
+        regions : maps each country (trace name) to its region
+        shown   : the countries drawn at the start (the textbook's)
+        label   : the name of the first menu entry ("Textbook: ..." if None)
+    Returns
+        the same figure, with the textbook's countries on and the region menu
+    """
+    # Step 1: the trace names, and each region once, A to Z
+    names = [trace.name for trace in fig.data]
+    groups = sorted(set(regions[n] for n in names if n in regions))
+    # Step 2: for each menu entry, which traces are drawn, in the legend only, or hidden
+    buttons = []
+    for group in [label or "Textbook: " + ", ".join(shown)] + groups:
+        visible = []
+        for n in names:
+            if n in shown:
+                visible.append(True)                # a textbook country: drawn
+            elif regions.get(n) == group:
+                visible.append("legendonly")        # in this region: a click away
+            else:
+                visible.append(False)               # another region: hidden
+        buttons.append(dict(label=group, method="restyle", args=[{"visible": visible}]))
+    # Step 3: start with the textbook's countries, and put the menu above the plot
+    for trace in fig.data:
+        trace.visible = True if trace.name in shown else False
+    fig.update_layout(updatemenus=[dict(buttons=buttons, active=0, direction="down", showactive=True,
+                                        x=0, xanchor="left", y=1.02, yanchor="bottom")],
+                      margin=dict(t=120), legend_title_text="")
+    return fig
+
+
+def region_groups(regions, shown):
+    """The views of `region_menu`, for `group_colors`.
+
+    Arguments
+        regions : maps each country to its region
+        shown   : the textbook's countries
+    Returns
+        a list of country lists: `shown` alone, then `shown` plus each region's countries
+    """
+    # the first view, then one view per region, A to Z
+    groups = [list(shown)]
+    for region in sorted(set(regions.values())):
+        groups.append(list(shown) + [n for n in regions if regions[n] == region])
+    return groups
+
+
+def legend_menu(fig, shown, label="Textbook view"):
+    """For a chart with up to 40 lines: `shown` stay on, the others wait in the legend.
+
+    Two buttons above the plot reset the chart to the textbook's lines or turn every line on.
+
+    Arguments
+        fig   : a Plotly figure with one trace per country
+        shown : the countries drawn at the start
+        label : the name of the first button
+    Returns
+        the same figure, with the visibility set and the two buttons
+    """
+    # Step 1: the two views, the textbook's lines and every line
+    book = [True if t.name in shown else "legendonly" for t in fig.data]
+    everything = [True for t in fig.data]
+    # Step 2: start with the textbook view and add the two buttons
+    for trace, v in zip(fig.data, book):
+        trace.visible = v
+    fig.update_layout(updatemenus=[dict(type="buttons", direction="right", x=0, xanchor="left", y=1.02,
+                                        yanchor="bottom", buttons=[
+                                            dict(label=label, method="restyle", args=[{"visible": book}]),
+                                            dict(label="All lines", method="restyle", args=[{"visible": everything}])])],
+                      margin=dict(t=120), legend_title_text="")
+    return fig
+```
+
+:::
+
+<!-- cell -->
+
+### The model as functions
+
+The supply-and-demand model has two straight lines and their crossing, equations (3) to (5). We write each one
+as a Python *function*: a named recipe that takes inputs and gives back a result. The default values are
+Islandia's two lines, $\bar{a}_d = 100$, $\bar{b}_d = 1$, $\bar{a}_s = 10$ and $\bar{b}_s = 1$, and `tau` is the
+income tax of equation (4). The last two functions read the lines the other way round: the employment at a
+given wage.
+
+```{python}
+# `def` creates a function: a named recipe that takes inputs (the arguments in
+# parentheses) and gives back a result with `return`. Writing `a_d=100.0` gives
+# the argument a default value, used whenever we do not pass one.
 def labor_demand(L, a_d=100.0, b_d=1.0):
-    """Labor demand: the wage firms are willing to pay when they employ L, w = a_d - b_d L."""
+    """Labor demand: the wage firms are willing to pay when they employ L.
+
+    The demand line of assumption 3 and Fig. 3:  w = a_d - b_d L
+
+    Arguments
+        L   : employment
+        a_d : intercept of labor demand, a-bar_d
+        b_d : slope of labor demand, b-bar_d
+    Returns
+        the wage firms are willing to pay, w
+    """
+    # the offer falls by b_d with every extra worker (diminishing returns)
     return a_d - b_d * L
 
 
 def labor_supply(L, a_s=10.0, b_s=1.0):
-    """Labor supply: the wage workers need to receive to supply L, w = a_s + b_s L."""
+    """Labor supply: the wage workers need to receive to supply L.
+
+    The supply line of assumption 3 and Fig. 3:  w = a_s + b_s L
+
+    Arguments
+        L   : employment
+        a_s : intercept of labor supply, a-bar_s
+        b_s : slope of labor supply, b-bar_s
+    Returns
+        the wage workers need, w
+    """
+    # it takes b_s more in pay to draw in each extra worker
     return a_s + b_s * L
 
 
 def equilibrium(a_d=100.0, b_d=1.0, a_s=10.0, b_s=1.0, tau=0.0):
-    """Equations (3) and (4): employment L* and the wage firms pay w*, when workers keep (1 - tau) w."""
+    """Employment L* and the wage firms pay w*, when workers keep (1 - tau) w.
+
+    Equation (4), and equation (3) when tau = 0:
+        L* = ((1 - tau) a_d - a_s) / ((1 - tau) b_d + b_s),   w* = a_d - b_d L*
+
+    Arguments
+        a_d, b_d : intercept and slope of labor demand, a-bar_d and b-bar_d
+        a_s, b_s : intercept and slope of labor supply, a-bar_s and b-bar_s
+        tau      : tax rate on labor income (0 without a tax)
+    Returns
+        L_star, w_star : employment and the wage firms pay
+    """
+    # Step 1: employment, where the take-home wage meets the supply line
     L_star = ((1 - tau) * a_d - a_s) / ((1 - tau) * b_d + b_s)
+    # Step 2: the wage firms pay, read off the demand line at L*
     w_star = labor_demand(L_star, a_d, b_d)
+    # a function can return two results at once, separated by a comma
     return L_star, w_star
 
 
 def demand_at_wage(w, a_d=100.0, b_d=1.0):
-    """Equation (5): the employment firms want at a given wage w (labor demand solved for L)."""
+    """The employment firms want at a given wage w (labor demand solved for L).
+
+    Equation (5), with a wage that does not fall:  L = (a_d - w) / b_d
+
+    Arguments
+        w        : the wage
+        a_d, b_d : intercept and slope of labor demand, a-bar_d and b-bar_d
+    Returns
+        the employment firms want, L
+    """
+    # with a rigid wage, employment is what firms want at that wage
     return (a_d - w) / b_d
 
 
 def supply_at_wage(w, a_s=10.0, b_s=1.0):
-    """The number of people who want to work at a given wage w (labor supply solved for L)."""
+    """The number of people who want to work at a given wage w (labor supply solved for L).
+
+    The supply line of Fig. 3, read the other way round:  L = (w - a_s) / b_s
+
+    Arguments
+        w        : the wage
+        a_s, b_s : intercept and slope of labor supply, a-bar_s and b-bar_s
+    Returns
+        the number of people who want to work, L
+    """
+    # the supply line w = a_s + b_s L, solved for L
     return (w - a_s) / b_s
 ```
 
-Three more functions hold the closed forms of the bathtub model, of present values and of the value of a degree.
-`100_000` is simply 100000: Python ignores the underscore, which only makes large numbers easier to read.
+Three more functions hold the closed forms of the bathtub model, equation (7), of present values, equation (10),
+and of the value of a degree, equation (12).
 
 ```{python}
 def natural_rate(s=0.01, f=0.20):
-    """Equation (7): the steady-state unemployment rate u* = s / (f + s)."""
+    """The natural rate of unemployment, the steady state of the bathtub model.
+
+    Equation (7):  u* = s / (f + s)
+
+    Arguments
+        s : monthly job separation rate, s-bar
+        f : monthly job finding rate, f-bar
+    Returns
+        the steady-state unemployment rate, u*
+    """
+    # jobs lost s E equal jobs found f U exactly at this rate
     return s / (f + s)
 
 
 def annuity_factor(R, n):
-    """Equation (10) for a payment of 1: the value today of 1 dollar a year for n years, starting today."""
+    """The value today of 1 dollar a year for n years, the first payment today.
+
+    Equation (10) for a payment of 1:  S_n = (1 - a^n) / (1 - a), with a = 1 / (1 + R)
+
+    Arguments
+        R : the interest rate
+        n : the number of yearly payments
+    Returns
+        the present discounted value of the stream, S_n
+    """
+    # the discount factor: 1 dollar next year is worth a dollars today
     a = 1 / (1 + R)
+    # the sum of the geometric series 1 + a + a^2 + ... + a^(n-1)
     return (1 - a ** n) / (1 - a)
 
 
 def college_npv(R, premium=30_000, cost=75_000):
-    """Equation (12): net present value of 4 years of college followed by 45 years of a higher wage."""
+    """The net present value of 4 years of college followed by 45 years of a higher wage.
+
+    Equation (12):  NPV = premium * S_45 / (1 + R)^4 - cost * S_4
+
+    Arguments
+        R       : the interest rate
+        premium : the yearly wage gain after college, in dollars
+        cost    : the yearly cost during college (the lost wage plus tuition), in dollars
+    Returns
+        the net present value of the degree, in dollars
+    """
+    # `30_000` is simply 30000: Python ignores the underscore, which only makes
+    # large numbers easier to read. The gain starts in year 4, so we discount
+    # it four more years; the costs come in years 0 to 3.
     return premium * annuity_factor(R, 45) / (1 + R) ** 4 - cost * annuity_factor(R, 4)
 ```
 
-A quick check of the functions against the numbers above.
+<!-- cell -->
 
-> **Python note.** `L_star, w_star = equilibrium()` stores the two results in two variables. An
-> *f-string* such as `f"L* = {L_star:.1f}"` inserts a value into a piece of text; `:.1f` means "one decimal".
+### Checking the key results
+
+The formulas came from algebra. Now we check them with numbers, one Key result at a time. First we try the
+functions on Islandia's two lines: at the equilibrium of equation (3), the demand and supply lines must give the
+same wage, and a 25 percent income tax must lower employment, equation (4).
 
 ```{python}
+# Step 1: Islandia's equilibrium. `L_star, w_star = equilibrium()` stores the
+# two results in two variables. An f-string, f"L* = {L_star:.1f}", puts a value
+# into the text; ":.1f" means "one decimal".
 L_star, w_star = equilibrium()
 print(f"Equilibrium:            L* = {L_star:.1f}, w* = {w_star:.1f}")
+# both lines give the same wage at L*
 print(f"At L*, demand wage = {labor_demand(L_star):.1f} and supply wage = {labor_supply(L_star):.1f}: the market clears")
+# Step 2: the same market with a 25% tax on labor income (equation 4)
 L_tax, w_tax = equilibrium(tau=0.25)
 print(f"With a 25% income tax:  L' = {L_tax:.2f}, firms pay w' = {w_tax:.2f}, workers keep {0.75 * w_tax:.2f}")
 ```
 
-**Check 1: the identity of the labor-market ratios.** With 100 adults, a labor force of 62 and 3 unemployed, both sides of identity (1) must agree. Then one jobless person stops searching.
+**Check 1: the identity of the labor-market ratios.** With 100 adults, a labor force of 62 and 3 unemployed, both
+sides of identity (1) must agree. Then one jobless person stops searching.
 
 ```{python}
+# Step 1: adults N, labor force LF and unemployed U; the employed are the rest
 N, LF, U = 100, 62, 3
 E = LF - U
+# Step 2: both sides of identity (1), E/N = (1 - u) LF/N
 print(f"E/N directly:            {E / N:.4f}")
 print(f"(1 - u) x LF/N, eq. (1): {(1 - U / LF) * (LF / N):.4f}   with u = {100 * U / LF:.2f}%")
-U, LF = 2, 61                                     # one unemployed person leaves the labor force
+# Step 3: one unemployed person leaves the labor force: u falls, E/N stays
+U, LF = 2, 61
 print(f"After one person gives up: u = {100 * U / LF:.2f}%, E/N = {(LF - U) / N:.2f} (unchanged)")
 ```
 
-**Check 2: the closed form and the elasticities of equation (3).** The function `equilibrium` solves the model with the tax formula. Equation (3) must give the same numbers, and a 1 percent rise in each parameter must reproduce the elasticities of the table.
-
-> **Python note.** `cases` is a list of pairs: a name and a list of the four parameter values, in the order
-> `a_d, b_d, a_s, b_s`. `for name, values in cases` unpacks each pair into two variables, and `values[0]` is the
-> first element of the list `values`.
+**Check 2: the closed form and the elasticities of equation (3).** The function `equilibrium` solves the model
+with the tax formula. Equation (3) must give the same numbers, and a 1 percent rise in each parameter must
+reproduce the elasticities of the table.
 
 ```{python}
+# Step 1: Islandia's parameters and equation (3) written out
 a_d, b_d, a_s, b_s = 100.0, 1.0, 10.0, 1.0
 print(f"Equation (3): L* = {(a_d - a_s) / (b_d + b_s):.2f}, w* = {(b_s * a_d + b_d * a_s) / (b_d + b_s):.2f}")
 L0, w0 = equilibrium(a_d, b_d, a_s, b_s)
+# Step 2: `cases` is a list of pairs: a name and the four parameter values, in the
+# order a_d, b_d, a_s, b_s, with one of them 1% higher
 cases = [["a_d", [101.0, 1.0, 10.0, 1.0]], ["a_s", [100.0, 1.0, 10.1, 1.0]],
          ["b_d", [100.0, 1.01, 10.0, 1.0]], ["b_s", [100.0, 1.0, 10.0, 1.01]]]
+# Step 3: `for name, values in cases` unpacks each pair into two variables, and
+# `values[0]` is the first element of the list `values`; ":+.3f" shows the sign
 for name, values in cases:
     L1, w1 = equilibrium(values[0], values[1], values[2], values[3])
     print(f"1% higher {name}: L* {100 * (L1 / L0 - 1):+.3f}%, w* {100 * (w1 / w0 - 1):+.3f}%")
 ```
 
-**Check 3: the tax and the rigid wage.** A higher tax rate must always lower employment, equation (4). With a fall in demand of 20, a rigid wage must cut employment by $\Delta/\bar{b}_d = 20$, twice the flexible fall, equation (5).
+**Check 3: the tax and the rigid wage.** A higher tax rate must always lower employment, equation (4). With a fall
+in demand of 20, a rigid wage must cut employment by $\Delta/\bar{b}_d = 20$, twice the flexible fall, equation
+(5).
 
 ```{python}
+# Step 1: employment and the wedge for four tax rates (equation 4)
 for tau in [0.0, 0.1, 0.25, 0.4]:
     L_t, w_t = equilibrium(tau=tau)
     print(f"tau = {tau:.2f}: L = {L_t:.2f}, firms pay {w_t:.2f}, workers keep {(1 - tau) * w_t:.2f}")
+# Step 2: demand falls by 20. `[0]` takes the first result, employment;
+# with a flexible wage the market clears again, with a rigid one firms hire
+# what they want at the old wage w* (equation 5)
 L_flex = equilibrium(a_d=80.0)[0]
 L_rigid = demand_at_wage(w_star, a_d=80.0)
 print(f"Demand falls by 20: flexible wage L' = {L_flex:.1f}, rigid wage L'' = {L_rigid:.1f}")
+# Step 3: the people who want a job at the old wage, minus the jobs
 print(f"Want a job at the old wage but have none: {supply_at_wage(w_star) - L_rigid:.1f}")
 ```
 
-**Check 4: the bathtub model.** We start at 10 percent unemployment and apply equation (6) month by month. The simulation must match the closed form (8) and settle at the natural rate (7), where the inflow equals the outflow.
-
-> **Python note.** `range(1, 61)` counts 1, 2, ..., 60, one step per month. Inside the loop, `U = U + ...` replaces the old
-> number of unemployed with the new one, and `if t in (3, 12, 60)` is true only in those three months.
+**Check 4: the bathtub model.** We start at 10 percent unemployment and apply equation (6) month by month. The
+simulation must match the closed form (8) and settle at the natural rate (7), where the inflow equals the outflow.
 
 ```{python}
+# Step 1: Islandia's monthly rates, the labor force and the natural rate
 s, f, L_bar = 0.01, 0.20, 100.0
 u_star = natural_rate(s, f)
 U = 10.0                                          # start at 10% unemployment
+# Step 2: `range(1, 61)` counts 1, 2, ..., 60, one step per month. Inside the
+# loop, `U = U + ...` replaces the old number of unemployed with the new one,
+# and `if t in (3, 12, 60)` is true only in those three months.
 for t in range(1, 61):
     U = U + s * (L_bar - U) - f * U               # equation (6), with E = L_bar - U
     if t in (3, 12, 60):
         closed = u_star + (1 - s - f) ** t * (0.10 - u_star)          # equation (8)
         print(f"Month {t:2d}: simulated u = {100 * U / L_bar:.4f}%, equation (8) gives {100 * closed:.4f}%")
+# Step 3: the natural rate and the two flows in the steady state
 print(f"Natural rate, equation (7): u* = {100 * u_star:.4f}%")
 E_star = L_bar * (1 - u_star)
 print(f"Steady-state flows: jobs lost {s * E_star:.3f} = jobs found {f * u_star * L_bar:.3f}")
 ```
 
-**Check 5: the elasticities of the natural rate and the firing-cost example.** A 1 percent rise in $\bar{s}$ or $\bar{f}$ must change $u^*$ by about $\pm(1 - u^*) = \pm 0.95$ percent.
+**Check 5: the elasticities of the natural rate and the firing-cost example.** A 1 percent rise in $\bar{s}$ or
+$\bar{f}$ must change $u^*$ by about $\pm(1 - u^*) = \pm 0.95$ percent.
 
 ```{python}
+# Step 1: u* at the base rates, then with s or f 1% higher (equation 7)
 u0 = natural_rate(0.01, 0.20)
 print(f"1% higher s: u* changes by {100 * (natural_rate(0.0101, 0.20) / u0 - 1):+.3f}%   (1 - u* = {1 - u0:.3f})")
 print(f"1% higher f: u* changes by {100 * (natural_rate(0.01, 0.202) / u0 - 1):+.3f}%")
+# Step 2: firing costs make firms fire less (lower s), and perhaps hire less (lower f)
 print(f"Firing costs lower s only:     u* = {100 * natural_rate(0.008, 0.20):.2f}%")
 print(f"Firing costs lower s and f:    u* = {100 * natural_rate(0.008, 0.15):.2f}%")
 ```
@@ -858,189 +1046,272 @@ print(f"Firing costs lower s and f:    u* = {100 * natural_rate(0.008, 0.15):.2f
 The change for $\bar{f}$ comes out at $-0.94$ rather than $-0.95$ percent, because an elasticity describes very small
 changes and 1 percent is small but not zero.
 
-**Check 6: present values, two ways.** A deposit of $pdv$ from equation (9) must grow back into the future payment. The loop over 45 years must match the formula (10), and the formula must approach $(1+R)/R$ for a very long stream.
+**Check 6: present values, two ways.** A deposit of $pdv$ from equation (9) must grow back into the future
+payment. The loop over 45 years must match the formula (10), and the formula must approach $(1+R)/R$ for a very
+long stream.
 
 ```{python}
+# Step 1: one payment of 10,000 dollars in 10 years, and the deposit that grows
+# into it; ":,.2f" writes thousands with commas and two decimals
 R = 0.03
 deposit = 10_000 / (1 + R) ** 10                   # equation (9)
 print(f"10,000 dollars in 10 years are worth {deposit:,.2f} today; {deposit:,.2f} x 1.03^10 = {deposit * (1 + R) ** 10:,.2f}")
+# Step 2: add up one discounted dollar per year, t = 0 is today
 total = 0.0
-for t in range(45):                                # one discounted dollar per year, t = 0 is today
+for t in range(45):
     total = total + 1 / (1 + R) ** t
 print(f"1 dollar a year for 45 years: loop {total:.4f}, equation (10) {annuity_factor(R, 45):.4f}")
+# Step 3: a working life, a very long stream, and one more point of interest
 print(f"A working life at 100,000 dollars a year: {100_000 * annuity_factor(R, 45):,.0f} dollars")
 print(f"1,000 years: {annuity_factor(R, 1000):.4f}   and (1 + R)/R = {(1 + R) / R:.4f}")
 print(f"One more point of interest, payment in 10 years: {100 * (1.03 / 1.04) ** 10 - 100:+.1f}%")
 ```
 
-**Check 7: the college market and the value of a degree.** Equation (11) must agree with the equilibrium function for the shifts of Figs. 9 and 13, and equation (12) gives the net present value of a degree.
+**Check 7: the college market and the value of a degree.** Equation (11) must agree with the equilibrium function
+for the shifts of Figs. 9 and 13, and equation (12) gives the net present value of a degree.
 
 ```{python}
+# Step 1: the high school wage and the college wage before the shifts
 w_hs = equilibrium()[1]
 w_1 = equilibrium(a_d=90.0, b_d=0.4, a_s=30.0, b_s=0.6)[1]
+# Step 2: the shifts of Fig. 9 and of Fig. 13, solved again and by equation (11);
+# ":.0%" shows a share as a percentage
 for x_d, x_s in [[15.0, 10.0], [10.0, 25.0]]:
     w_2 = equilibrium(a_d=90.0 + x_d, b_d=0.4, a_s=30.0 - x_s, b_s=0.6)[1]
     formula = (0.6 * x_d - 0.4 * x_s) / (0.4 + 0.6)                      # equation (11)
     print(f"x_d = {x_d:4.1f}, x_s = {x_s:4.1f}: wage change {w_2 - w_1:+.2f} (equation 11: {formula:+.2f}), "
           f"premium {w_1 / w_hs - 1:.0%} -> {w_2 / w_hs - 1:.0%}")
+# Step 3: the value of a degree at R = 3% (equation 12)
 print(f"NPV of a degree at R = 3%: {college_npv(0.03):,.0f} dollars")
 ```
 
-**The rate of return on a degree.** We raise the interest rate in small steps until the net present value of equation (12) turns negative.
-
-> **Python note.** A `while` loop repeats its indented lines as long as its condition is true. Here it stops at the first
-> interest rate at which the degree no longer pays.
+**The rate of return on a degree.** We raise the interest rate in small steps until the net present value of
+equation (12) turns negative.
 
 ```{python}
+# A `while` loop repeats its indented lines as long as its condition is true.
+# Here it stops at the first interest rate at which the degree no longer pays.
 R = 0.03
 while college_npv(R) > 0:
-    R = R + 0.0001                                 # one hundredth of a percentage point at a time
+    # one hundredth of a percentage point at a time
+    R = R + 0.0001
 print(f"The NPV of a degree turns negative at R = {100 * R:.2f}%: this is its rate of return")
 ```
 
 <!-- cell -->
 
-### Drawing the curves
+### Drawing and data tools
 
-Three small drawing helpers save us from repeating the same lines in every figure. `add_curve` draws
-one curve and writes its name (such as $L^s$) at one end, as the textbook does, and skips the name when it
-would sit on top of another curve's name (`avoid`); `add_point` marks an
-equilibrium with a dot, a label and dotted lines down to the axes; `market_axes` gives every diagram
-the same fixed axes.
+The labor-market diagrams share three drawing tools: one draws a curve and writes its name on the plot, one marks
+an equilibrium, and one sets up the axes. Two data tools shade the U.S. recessions and give every country a
+fixed color. Run them and move on, or open the box to see how they work.
 
-> **Python note.** `np.linspace(0, 110, 111)` creates 111 evenly spaced numbers from 0 to 110: the
-> employment levels at which we compute each curve. `go.Figure()` starts an empty chart and
-> `add_trace` adds one line or set of points to it. `w[inside]` keeps only the points where the
-> condition `inside` is true. `row` and `col` are only needed in figures with several panels; `None`
-> means "the only panel".
+<!-- cell -->
+
+::: {.callout-note .mic-fold collapse="true" title="Show the drawing and data tools"}
+
+As in the textbook, every curve carries its name on the plot (such as $L^s$) at one end, so the diagrams need no
+legend. `add_curve` draws one curve and writes its name, and it skips the name when it would sit on top of
+another curve's name (`avoid`).
 
 ```{python}
-L_grid = np.linspace(0, 110, 111)          # employment levels used to draw every curve (the whole x-axis)
+#| kind: folded
+# @title Drawing tool: a curve with its name on the plot
+# `np.linspace(0, 110, 111)` creates 111 evenly spaced numbers from 0 to 110:
+# the employment levels at which we compute every curve (the whole x-axis)
+L_grid = np.linspace(0, 110, 111)
 
 
 def add_curve(fig, w, label, color, dash="solid", row=None, col=None, start=False, avoid=None):
-    """Draw one curve inside the axes and write its label at the end (start=True: the top-left end)."""
-    inside = (w >= 0) & (w <= 110)                      # keep the part of the curve inside the axes
+    """Draw one curve inside the axes and write its label at one end.
+
+    Arguments
+        fig      : the figure to draw on
+        w        : the wage on the curve at each point of L_grid
+        label    : the curve's name, e.g. "Lˢ" ("" for no name)
+        color    : its color, e.g. TEAL
+        dash     : "solid" or "dash"
+        row, col : the panel to draw in; `None` means "the only panel"
+        start    : True puts the label at the top-left end (for downward curves)
+        avoid    : the spot of another curve's label, to keep the two apart
+    Returns
+        the spot (L, w) where the label goes
+    """
+    # Step 1: keep the part of the curve inside the axes. `(w >= 0) & (w <= 110)`
+    # is True or False for each point; `w[inside]` keeps the points where it is True.
+    inside = (w >= 0) & (w <= 110)
     L, w = L_grid[inside], w[inside]
+    # `add_trace` adds one line or set of points to a chart made by `go.Figure()`
     fig.add_trace(go.Scatter(x=L, y=w, mode="lines", name=label, showlegend=False,
                              line=dict(color=color, width=3, dash=dash)), row=row, col=col)
-    if start:                                           # downward curves: label above the top-left end
+    # Step 2: the label's spot; downward curves: above the top-left end
+    if start:
         spot, anchor = (L[0], w[0]), "bottom"
     else:
         spot, anchor = (L[-1], w[-1]), "middle"
+    # Step 3: skip a label that would sit on another one (`abs`: absolute value)
     near = avoid is not None and abs(spot[0] - avoid[0]) < 8 and abs(spot[1] - avoid[1]) < 8
-    if label != "" and not near:                        # skip a label that would sit on another one
+    if label != "" and not near:
         fig.add_annotation(x=spot[0], y=spot[1], text=label, showarrow=False, xanchor="left", xshift=5,
                            yanchor=anchor, font=dict(color=color, size=15), row=row, col=col)
     return spot
 ```
 
+`add_point` marks an equilibrium with a dot, a label and dotted lines down to the axes, and `market_axes` gives
+every diagram the same fixed axes, so that you can see the curves move.
+
 ```{python}
+#| kind: folded
+# @title Drawing tools: an equilibrium point and the fixed axes
 def add_point(fig, L_point, w_point, label, row=None, col=None):
-    """Mark an equilibrium with a dot, a short label and dotted lines down to the axes."""
+    """Mark an equilibrium with a dot, a short label and dotted lines down to the axes.
+
+    Arguments
+        fig              : the figure to draw on
+        L_point, w_point : employment and the wage at the point
+        label            : the point's name, e.g. "A"
+        row, col         : the panel to draw in (None: the only panel)
+    """
+    # Step 1: the dotted lines from the point to the two axes
     fig.add_trace(go.Scatter(x=[0, L_point, L_point], y=[w_point, w_point, 0], mode="lines", showlegend=False,
                              line=dict(color="black", width=1, dash="dot")), row=row, col=col)
+    # Step 2: the dot and its label above it
     fig.add_trace(go.Scatter(x=[L_point], y=[w_point], mode="markers+text", text=[label], showlegend=False,
                              textposition="top center", textfont=dict(size=15),
                              marker=dict(color="black", size=11)), row=row, col=col)
 
 
 def market_axes(fig, title, x_title="Employment, L", y_title="Wage, w"):
-    """Fixed axes for every labor-market diagram (no tick label in the bottom-left corner) and the title."""
+    """Fixed axes for every labor-market diagram (no tick label in the bottom-left corner) and the title.
+
+    Arguments
+        fig              : the figure to set up
+        title            : the chart title
+        x_title, y_title : the axis titles
+    Returns
+        the same figure
+    """
+    # both axes run from 0 to 110, with ticks at 20, 40, ..., 100
     fig.update_xaxes(title_text=x_title, range=[0, 110], tickvals=[20, 40, 60, 80, 100], zeroline=False)
     fig.update_yaxes(title_text=y_title, range=[0, 110], tickvals=[20, 40, 60, 80, 100], zeroline=False)
     fig.update_layout(title=title)
     return fig
 ```
 
-<!-- cell -->
-
-### Shading recessions
-
-Three data figures shade the U.S. recessions, so we write the shading once, here. A small file lists
-the start (peak) and end (trough) month of every U.S. recession since the 1950s, as dated by the NBER.
-
-> **Python note.** `pd.read_csv(...)` reads a data file into a *DataFrame*, a table with named
-> columns. `parse_dates=[...]` turns text such as `"2020-02-01"` into real dates. A `for` loop repeats
-> the indented lines once for each recession: `zip(recessions.peak, recessions.trough)` hands over one
-> (peak, trough) pair at a time. The `if` skips recessions that ended before the chart starts, and
-> `fig.add_vrect` shades the band between two dates.
+Three data figures shade the U.S. recessions, so we write the shading once, here. A small file lists the start
+(peak) and end (trough) month of every U.S. recession since the 1950s, as dated by the NBER.
 
 ```{python}
+#| kind: folded
+# @title Data tool: shading the U.S. recessions
+# Step 1: `pd.read_csv(...)` reads a data file into a DataFrame, a table with
+# named columns; `parse_dates=[...]` turns text such as "2020-02-01" into dates
 recessions = pd.read_csv(DATA_URL + "recessions.csv", parse_dates=["peak", "trough"])
 
 
 def shade_recessions(fig, start):
-    """Figs. 7.1, 7.2 and 7.10: shade every NBER recession (peak to trough) that ends after the date start."""
+    """Shade every NBER recession (peak to trough) that ends after the date `start` (Figs. 1, 2 and 10).
+
+    Arguments
+        fig   : the figure to shade
+        start : the first date of the chart, e.g. "1960-01-01"
+    """
+    # Step 2: `zip(recessions.peak, recessions.trough)` hands over one
+    # (peak, trough) pair at a time; the `if` skips recessions that ended
+    # before the chart starts, and `fig.add_vrect` shades the band between two dates
     for peak, trough in zip(recessions.peak, recessions.trough):
         if trough >= pd.Timestamp(start):
             fig.add_vrect(x0=peak, x1=trough, fillcolor=BLUE, opacity=0.15, line_width=0)
 
 
+# Step 3: show the last three recessions
 recessions.tail(3)
 ```
 
-<!-- cell -->
-
-### Fixed colors for many countries
-
-Most data figures of this chapter end with a section that goes beyond the textbook's countries, where you
-can add any country to the chart. A line should keep its color when you add or remove others, so we give
-every country one fixed color. The textbook's countries keep the colors of `BOOK_COLORS`. Two countries that
-can appear together (in the same menu view) should not share a color, so each country takes the first color
-that its neighbors do not use.
-
-> **Python note.** `PALETTE` starts as a list of Plotly's 24 dark colors, and the loop appends the colors of a
-> second palette that are dark enough to read on white. `first_free` returns as soon as it finds a color. If every
-> color is already used next to this country, the second loop picks the one used least often (`.count`).
+Most data figures of this chapter end with a section that goes beyond the textbook's countries, where you can add
+any country to the chart. A line should keep its color when you add or remove others, so we give every country
+one fixed color. The textbook's countries keep the colors of `BOOK_COLORS`. Two countries that can appear
+together (in the same menu view) should not share a color, so each country takes the first color that its
+neighbors do not use.
 
 ```{python}
-LIGHT = {"#F7E1A0", "#E2E2E2", "#FBE426", "#16FF32", "#1CFFCE", "#2ED9FF"}      # too pale on white
+#| kind: folded
+# @title Data tool: a palette of 44 colors and the first free color
+# Step 1: `PALETTE` starts as Plotly's 24 dark colors, and the loop appends the
+# colors of a second palette that are dark enough to read on white
+# these colors are too pale on white
+LIGHT = {"#F7E1A0", "#E2E2E2", "#FBE426", "#16FF32", "#1CFFCE", "#2ED9FF"}
 PALETTE = list(px.colors.qualitative.Dark24)
 for color in px.colors.qualitative.Alphabet:
     if color not in LIGHT:
         PALETTE.append(color)                       # 24 + 20 = 44 distinct colors
+# Step 2: this blue is close to the U.S. navy: use it last
 PALETTE.remove("#2E91E5")
-PALETTE.append("#2E91E5")                          # this blue is close to the U.S. navy: use it last
+PALETTE.append("#2E91E5")
+# Step 3: the textbook's countries keep the book's colors
 BOOK_COLORS = {"United States": BLUE, "France": TEAL, "Japan": GREEN, "Euro area (12 countries)": "#e0a33b"}
 
 
 def first_free(used, taken):
-    """The first PALETTE color not in `used`, if possible one that no country has `taken` yet."""
+    """The first PALETTE color not in `used`, if possible one that no country has `taken` yet.
+
+    Arguments
+        used  : the colors of the countries shown together with this one
+        taken : the colors given to any country so far
+    Returns
+        a color of PALETTE
+    """
+    # Step 1: `first_free` returns as soon as it finds a free color
     for color in PALETTE:
         if color not in used and color not in taken:
             return color
-    best = PALETTE[0]                               # every color is used: share the least-used one,
-    for color in PALETTE:                           # from the end of the palette (far from the default view)
+    # Step 2: every color is used next to this country: share the one used least
+    # often (`.count`), from the end of the palette (far from the default view)
+    best = PALETTE[0]
+    for color in PALETTE:
         if used.count(color) <= used.count(best):
             best = color
     return best
 ```
 
-> **Python note.** `fixed or {}` is `fixed` when it is given and an empty dictionary when it is `None`, and
-> `dict(...)` copies it, so the original stays unchanged. `continue` skips to the next name. The inner loops
-> collect `used`, the colors of every country that shares a group with `name`. Each figure below lists the
-> countries of its website's default view first, so they get the first colors.
+`group_colors` gives the colors out, one country at a time. Each figure below lists the countries of its
+website's default view first, so they get the first colors.
 
 ```{python}
+#| kind: folded
+# @title Data tool: one fixed color per country
 def group_colors(names, groups, fixed=None):
     """Give each country a color that no other country in its groups uses, as far as the palette allows.
 
-    names: every country; groups: the lists of countries shown together (menu views); fixed: {country: color}
-    for the textbook's countries, so the default view keeps the book's colors."""
+    Arguments
+        names  : every country
+        groups : the lists of countries shown together (the menu views)
+        fixed  : {country: color} for the textbook's countries, so the default view keeps the book's colors
+    Returns
+        a dictionary {country: color}
+    """
+    # Step 1: `fixed or {}` is `fixed` when it is given and an empty dictionary
+    # when it is `None`; `dict(...)` copies it, so the original stays unchanged
     colors = dict(fixed or {})
     for name in names:
         if name in colors:
-            continue
-        used = []                                   # colors of the countries shown together with `name`
+            continue                                # `continue` skips to the next name
+        # Step 2: the inner loops collect `used`, the colors of every country
+        # that shares a group with `name`
+        used = []
         for group in groups:
             if name in group:
                 for other in group:
                     if other in colors:
                         used.append(colors[other])
+        # Step 3: the first color that none of them uses
         colors[name] = first_free(used, list(colors.values()))
     return colors
 ```
+
+:::
+
+<!-- cell -->
 
 ## The U.S. labor market in the data
 
@@ -1054,7 +1325,7 @@ We start with two monthly series: the share of adults who work and the share of 
 
 The **employment-population ratio** is the percentage of the population aged 16 and over that has a
 job. The data are monthly, from the Bureau of Labor Statistics. The recessions are shaded with
-`shade_recessions` from "Model overview".
+`shade_recessions` from "Model in code".
 
 > **Python note.** `.tail()` shows the last five rows of a DataFrame.
 
@@ -3202,7 +3473,7 @@ that suggest about how people value future payments?
 <details><summary>Hint</summary>
 
 (a) The lump sum is worth $0.15BY$ today; the annuity pays $0.025BY$ a year for $2Y$ years. (b) Reuse the
-`while` loop that found the rate of return on a degree in "The model in code", starting at $R = 0.01$ (the formula
+`while` loop that found the rate of return on a degree in "Model in code", starting at $R = 0.01$ (the formula
 divides by zero at $R = 0$). (c) Model overview shows what $S_n$ approaches when $n$ grows without limit.
 
 </details>

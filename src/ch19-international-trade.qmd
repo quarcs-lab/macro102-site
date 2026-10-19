@@ -30,142 +30,6 @@ countries trade at all. By the end of it you will be able to:
 
 <!-- cell -->
 
-## Setup
-
-We first load the Python libraries we need. You only have to run this cell once.
-
-> **Python note.** `import` loads a *library*, a toolbox written by other people. We give each
-> library a short nickname, for example `np` for NumPy, so that the code stays short. Text after
-> a `#` is a *comment*: Python ignores it, and it is there for human readers. The `try ... except`
-> block runs one Colab-only line and simply skips it anywhere else.
-
-```{python}
-# Libraries used in this chapter
-import numpy as np                    # numbers and arrays
-import pandas as pd                   # data tables
-import plotly.express as px           # quick charts from data tables
-import plotly.graph_objects as go     # charts built piece by piece
-import plotly.io as pio
-from ipywidgets import interact, IntSlider, FloatSlider, ToggleButtons, Dropdown, SelectMultiple, fixed
-
-# One light blue/green look for every chart
-BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
-pio.templates.default = "plotly_white"
-pio.templates["plotly_white"].layout.update(width=860, height=480)   # same size in Colab and on the website
-px.defaults.color_discrete_sequence = [BLUE, TEAL, GREEN, "#5aa0d8", "#0b4f47"]
-WIDE = {"description_width": "initial"}         # show the full widget labels
-
-# Colab only: let Plotly charts appear inside the interactive widgets
-try:
-    import google.colab
-    google.colab.output.enable_custom_widget_manager()
-except ImportError:
-    pass                                        # not running in Colab: nothing to do
-
-# The data files of this chapter live in the book's GitHub repository
-DATA_URL = "https://raw.githubusercontent.com/quarcs-lab/macro102-site/main/data/ch19/"
-```
-
-The next cell defines a helper that only the book website needs. Run it and move on.
-
-```{python}
-#| kind: helper
-# @title Helper for the website versions (run this cell; you do not need to read it)
-def slider_figure(make_figure, name, values, start, label=None):
-    """Precompute make_figure(name=value) for every value and join the results with one slider.
-
-    The website cannot run Python, so each interactive figure also gets this precomputed version.
-    """
-    figures = [make_figure(**{name: v}) for v in values]
-    first = values.index(start)
-    fig = go.Figure(layout=figures[first].layout)
-    owner = []                                  # which precomputed figure each trace comes from
-    for i, f in enumerate(figures):
-        for trace in f.data:
-            trace.visible = (i == first)
-            fig.add_trace(trace)
-            owner.append(i)
-    steps = []
-    for i, f in enumerate(figures):
-        layout = {"title": f.layout.title.to_plotly_json(),
-                  "annotations": [a.to_plotly_json() for a in f.layout.annotations],
-                  "shapes": [s.to_plotly_json() for s in f.layout.shapes]}
-        visible = [o == i for o in owner]
-        steps.append(dict(method="update", label=str(values[i]), args=[{"visible": visible}, layout]))
-    fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
-                                    currentvalue=dict(prefix=(label or name) + " = "))])
-    return fig
-```
-
-Every figure of this chapter can also show other countries. On the website, the many-country versions get a menu,
-built by two more helpers.
-
-```{python}
-#| kind: helper
-# @title Helpers for the many-country website versions (run this cell; you do not need to read it)
-G7 = ["U.S.", "Japan", "Germany", "France", "United Kingdom", "Italy", "Canada"]
-EMERGING = ["China", "India", "Brazil", "Russia", "Mexico", "Indonesia", "Türkiye", "South Africa",
-            "Saudi Arabia", "Argentina"]
-
-
-def country_groups(regions, book):
-    """Menu groups: the textbook's countries, the G7, large emerging economies, then the World Bank regions."""
-    groups = {"Textbook": list(book), "G7": G7, "Large emerging": EMERGING}
-    for region in sorted(regions.region.unique()):
-        groups[region] = list(regions[regions.region == region].country)
-    return groups
-
-
-def group_menu(fig, groups, start, title):
-    """Show one group of countries at a time. A trace belongs to the country named before ', ' in its legendgroup.
-    Each group gets a y range that covers its values; in groups of more than 15 countries it leaves out extreme
-    outliers (double-click the chart to show them)."""
-    owners = [t.legendgroup.split(", ")[0] for t in fig.data]
-    buttons = []
-    for name, members in groups.items():
-        visible = [o in members for o in owners]
-        ys = np.concatenate([np.asarray(t.y, dtype=float) for t, v in zip(fig.data, visible) if v] or [np.zeros(1)])
-        ys = ys[np.isfinite(ys)] if np.isfinite(ys).any() else np.zeros(1)
-        lo, hi = ys.min(), ys.max()
-        if len(set(o for o, v in zip(owners, visible) if v)) > 15:     # large groups: leave out extreme outliers
-            q5, q95 = np.percentile(ys, [5, 95])
-            lo, hi = max(lo, q5 - 0.3 * (q95 - q5)), min(hi, q95 + 0.3 * (q95 - q5))
-        pad = 0.06 * (hi - lo) + 0.5
-        buttons.append(dict(label=name, method="update",
-                            args=[{"visible": visible}, {"yaxis.range": [lo - pad, hi + pad], "yaxis.autorange": False}]))
-    first = list(groups).index(start)
-    for t, v in zip(fig.data, buttons[first]["args"][0]["visible"]):
-        t.visible = v
-    fig.update_layout(title=title, yaxis_range=buttons[first]["args"][1]["yaxis.range"], yaxis_tickvals=None,
-                      margin=dict(t=115), updatemenus=[dict(buttons=buttons, active=first, direction="down",
-                                                             x=0, y=1.02, xanchor="left", yanchor="bottom")])
-    return fig
-```
-
-```{python}
-#| kind: helper
-# @title Helper for the website versions with a menu of countries (run this cell; you do not need to read it)
-def menu_figure(make_figure, name, values, start):
-    """Like slider_figure, but with a drop-down menu, and each choice also sets its own y-axis range."""
-    figures = [make_figure(**{name: v}) for v in values]
-    fig = go.Figure(layout=figures[values.index(start)].layout)
-    owner = []
-    for i, f in enumerate(figures):
-        for trace in f.data:
-            trace.visible = (values[i] == start)
-            fig.add_trace(trace)
-            owner.append(i)
-    buttons = []
-    for i, f in enumerate(figures):
-        rng = f.layout.yaxis.range
-        layout = {"title": f.layout.title.to_plotly_json(), "yaxis.autorange": rng is None,
-                  "yaxis.range": list(rng) if rng is not None else None}
-        buttons.append(dict(label=str(values[i]), method="update", args=[{"visible": [o == i for o in owner]}, layout]))
-    fig.update_layout(margin=dict(t=115), updatemenus=[dict(buttons=buttons, active=values.index(start),
-                                                            direction="down", x=0, y=1.02, xanchor="left", yanchor="bottom")])
-    return fig
-```
-
 ## Model overview
 
 Picture **Islandia**, the small island country we have followed through the book, and its large trading partner across the water, **Mainland**. Islanders sell fish to Mainland and buy many goods they do not make, and in some years they buy more than they sell. How does Islandia pay for the gap, and why trade at all with a partner that is better at almost everything? This section answers with a few accounting rules and four small trade models, with Islandia in view throughout.
@@ -186,7 +50,7 @@ Picture **Islandia**, the small island country we have followed through the book
 5. [Trade across time: Oddtopia and Eventopia](#trade-across-time-oddtopia-and-eventopia): deficits and surpluses as loans.
 6. [Comparative advantage: the North and the South](#comparative-advantage-the-north-and-the-south): [autarky](#solving-the-model-autarky), [free trade](#solving-the-model-free-trade) and who gains.
 7. [Free migration: moving workers instead of goods](#free-migration-moving-workers-instead-of-goods): what happens when people move instead of goods.
-8. [The model in code](#the-model-in-code): every rule as a Python function, checked with numbers.
+8. [Model in code](#model-in-code): every rule as a Python function, checked with numbers.
 
 **Notation.** Capital letters are flows of goods during a year, and lower-case letters are the same flows divided by GDP, such as $c = C/Y$. A bar marks a **parameter**, picked from outside; letters without a bar are **endogenous variables**.
 
@@ -244,7 +108,7 @@ $$nx = 1 - c - i - g \tag{2}$$
 
 The trade balance is production minus domestic use, in levels (1) or in shares of GDP (2).
 
-**Islandia in numbers.** Take the economy of Check 1 in [The model in code](#the-model-in-code): $Y = 100$, $C = 70$, $I = 20$ and $G = 15$. Then $NX = 100 - 105 = -5$, a trade deficit of 5 percent of GDP.
+**Islandia in numbers.** Take the economy of Check 1 in [Model in code](#model-in-code): $Y = 100$, $C = 70$, $I = 20$ and $G = 15$. Then $NX = 100 - 105 = -5$, a trade deficit of 5 percent of GDP.
 :::
 
 **Step 3: the world as a whole.** Divide the world into two regions, the United States (US) and the rest of the world (RoW). Whatever the United States imports, the rest of the world exports, and the other way round: $IM_{US} = EX_{RoW}$ and $EX_{US} = IM_{RoW}$. So
@@ -787,37 +651,307 @@ Under free trade, the South's 400 workers grow apples with their own technology.
 
 <!-- cell -->
 
-### The model in code
+## Model in code
 
-We now turn the accounting rules into Python functions, check each derivation above with numbers, and recompute the textbook's tables for the trade examples. Each function's description names the equation it computes. The figure sections reuse these functions.
+Now we turn the accounting rules and the trade models into Python. The section has three parts: the setup
+(folded, because it is the same in every chapter), the model as functions, and numerical checks that also
+recompute the textbook's tables. Run its cells once, in order. Every later section of the notebook reuses them.
 
-> **Python note.** `def` creates a *function*: a named recipe that takes inputs (the *arguments*) and gives back a
-> result with `return`. The text in triple quotes is a short description. The same function works for single
-> numbers and for whole columns of a data table, because pandas does arithmetic on every row at once.
+<!-- cell -->
+
+### Setup
+
+Run the setup cells once, before anything else. They load the Python libraries, give every chart the same look,
+store the address of the chapter's data and define the helpers that only the book website needs. You can use
+the notebook without reading them; open the box if you are curious.
+
+<!-- cell -->
+
+::: {.callout-note .mic-fold collapse="true" title="Show the setup code"}
+
+The first cell loads the libraries and sets the look of the charts. Its comments explain each step.
 
 ```{python}
+#| kind: folded
+# @title Setup: libraries, chart colors and the data location
+# Text after a "#" is a comment: Python ignores it, it is there for human readers.
+
+# Step 1: load the libraries. `import` loads a library, a toolbox written by
+# other people, and `as np` gives it a short nickname, so the code stays short.
+import numpy as np                    # numbers and arrays
+import pandas as pd                   # data tables
+import plotly.express as px           # quick charts from data tables
+import plotly.graph_objects as go     # charts built piece by piece
+import plotly.io as pio               # settings shared by every chart
+# sliders, buttons and menus for the interactive figures
+from ipywidgets import interact, IntSlider, FloatSlider, ToggleButtons, Dropdown, SelectMultiple, fixed
+
+# Step 2: one light blue/green look for every chart
+BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
+pio.templates.default = "plotly_white"
+# the same chart size in Colab and on the website
+pio.templates["plotly_white"].layout.update(width=860, height=480)
+px.defaults.color_discrete_sequence = [BLUE, TEAL, GREEN, "#5aa0d8", "#0b4f47"]
+WIDE = {"description_width": "initial"}         # show the full widget labels
+
+# Step 3, Colab only: let Plotly charts appear inside the interactive widgets.
+# `try` runs the indented lines; if the import fails (we are not in Colab),
+# `except` skips them.
+try:
+    import google.colab
+    google.colab.output.enable_custom_widget_manager()
+except ImportError:
+    pass                                        # not running in Colab: nothing to do
+
+# Step 4: the data files of this chapter live in the book's GitHub repository
+DATA_URL = "https://raw.githubusercontent.com/quarcs-lab/macro102-site/main/data/ch19/"
+```
+
+The website cannot run Python, so each interactive figure also gets a version with a precomputed slider. The next
+helper builds those versions. Run it and move on.
+
+```{python}
+#| kind: folded
+# @title Helper for the website versions (run this cell; you do not need to read it)
+def slider_figure(make_figure, name, values, start, label=None):
+    """Join precomputed versions of a figure with one slider (the website cannot run Python).
+
+    Arguments
+        make_figure : the function that draws the figure
+        name        : the argument the slider moves
+        values      : the values of that argument to precompute
+        start       : the value shown first
+        label       : the slider's label (the argument name if None)
+    Returns
+        one Plotly figure with all versions and a slider that shows one at a time
+    """
+    # Step 1: draw the figure once for every value
+    figures = [make_figure(**{name: v}) for v in values]
+    first = values.index(start)
+    # Step 2: copy every curve into one figure; only the start value's are visible
+    fig = go.Figure(layout=figures[first].layout)
+    owner = []                          # which precomputed figure each trace is from
+    for i, f in enumerate(figures):
+        for trace in f.data:
+            trace.visible = (i == first)
+            fig.add_trace(trace)
+            owner.append(i)
+    # Step 3: one slider step per value: its curves, title, labels and shapes
+    steps = []
+    for i, f in enumerate(figures):
+        layout = {"title": f.layout.title.to_plotly_json(),
+                  "annotations": [a.to_plotly_json() for a in f.layout.annotations],
+                  "shapes": [s.to_plotly_json() for s in f.layout.shapes]}
+        visible = [o == i for o in owner]
+        steps.append(dict(method="update", label=str(values[i]), args=[{"visible": visible}, layout]))
+    fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
+                                    currentvalue=dict(prefix=(label or name) + " = "))])
+    return fig
+```
+
+Every figure of this chapter can also show other countries. On the website, the many-country versions get a menu
+of country groups, built by two more helpers.
+
+```{python}
+#| kind: folded
+# @title Helpers for the many-country website versions (run this cell; you do not need to read it)
+# Step 1: two fixed groups of countries for the menus
+G7 = ["U.S.", "Japan", "Germany", "France", "United Kingdom", "Italy", "Canada"]
+EMERGING = ["China", "India", "Brazil", "Russia", "Mexico", "Indonesia", "Türkiye", "South Africa",
+            "Saudi Arabia", "Argentina"]
+
+
+def country_groups(regions, book):
+    """The menu groups: the textbook's countries, the G7, large emerging economies, the World Bank regions.
+
+    Arguments
+        regions : a table with one row per country and the columns country and region
+        book    : the countries the textbook shows
+    Returns
+        a dictionary from each group's name to its list of countries
+    """
+    # Step 2: the three fixed groups first, then one group per region, A to Z
+    groups = {"Textbook": list(book), "G7": G7, "Large emerging": EMERGING}
+    for region in sorted(regions.region.unique()):
+        # the countries whose region is this one
+        groups[region] = list(regions[regions.region == region].country)
+    return groups
+
+
+def group_menu(fig, groups, start, title):
+    """Show one group of countries at a time, chosen from a menu above the chart.
+
+    A trace belongs to the country named before ', ' in its legendgroup. Each group gets a y range that covers
+    its values; in groups of more than 15 countries it leaves out extreme outliers (double-click the chart to
+    show them).
+
+    Arguments
+        fig    : a Plotly figure with the traces of every country
+        groups : the menu groups, from country_groups
+        start  : the group shown first
+        title  : the chart's title
+    Returns
+        the same figure, with the menu
+    """
+    # Step 3: the country of each trace
+    owners = [t.legendgroup.split(", ")[0] for t in fig.data]
+    # Step 4: one menu entry per group: its traces and a y range that fits them
+    buttons = []
+    for name, members in groups.items():
+        visible = [o in members for o in owners]   # the traces of this group
+        # all their y values, without the missing ones (or a single 0 if none)
+        ys = np.concatenate([np.asarray(t.y, dtype=float) for t, v in zip(fig.data, visible) if v]
+                            or [np.zeros(1)])
+        ys = ys[np.isfinite(ys)] if np.isfinite(ys).any() else np.zeros(1)
+        lo, hi = ys.min(), ys.max()
+        # large groups: leave out extreme outliers
+        if len(set(o for o, v in zip(owners, visible) if v)) > 15:
+            q5, q95 = np.percentile(ys, [5, 95])
+            lo, hi = max(lo, q5 - 0.3 * (q95 - q5)), min(hi, q95 + 0.3 * (q95 - q5))
+        pad = 0.06 * (hi - lo) + 0.5                # a little room above and below
+        buttons.append(dict(label=name, method="update",
+                            args=[{"visible": visible},
+                                  {"yaxis.range": [lo - pad, hi + pad], "yaxis.autorange": False}]))
+    # Step 5: start with the group `start`, and put the menu above the chart
+    first = list(groups).index(start)
+    for t, v in zip(fig.data, buttons[first]["args"][0]["visible"]):
+        t.visible = v
+    # the title, the start group's y range and the menu at the top left
+    fig.update_layout(title=title, yaxis_range=buttons[first]["args"][1]["yaxis.range"], yaxis_tickvals=None,
+                      margin=dict(t=115), updatemenus=[dict(buttons=buttons, active=first, direction="down",
+                                                             x=0, y=1.02, xanchor="left", yanchor="bottom")])
+    return fig
+```
+
+The last helper is like `slider_figure`, but with a drop-down menu instead of a slider.
+
+```{python}
+#| kind: folded
+# @title Helper for the website versions with a menu of countries (run this cell; you do not need to read it)
+def menu_figure(make_figure, name, values, start):
+    """Like slider_figure, but with a drop-down menu; each choice also sets its own y-axis range.
+
+    Arguments
+        make_figure : the function that draws the figure
+        name        : the argument the menu sets
+        values      : the values of that argument to precompute
+        start       : the value shown first
+    Returns
+        one Plotly figure with all versions and a menu that shows one at a time
+    """
+    # Step 1: draw the figure once for every value, and copy every trace into one figure
+    figures = [make_figure(**{name: v}) for v in values]
+    fig = go.Figure(layout=figures[values.index(start)].layout)
+    owner = []                          # which precomputed figure each trace is from
+    for i, f in enumerate(figures):
+        for trace in f.data:
+            trace.visible = (values[i] == start)
+            fig.add_trace(trace)
+            owner.append(i)
+    # Step 2: one menu entry per value: its traces, title and y range
+    buttons = []
+    for i, f in enumerate(figures):
+        # the version's own y range, or Plotly's automatic one if it has none
+        rng = f.layout.yaxis.range
+        layout = {"title": f.layout.title.to_plotly_json(), "yaxis.autorange": rng is None,
+                  "yaxis.range": list(rng) if rng is not None else None}
+        buttons.append(dict(label=str(values[i]), method="update",
+                            args=[{"visible": [o == i for o in owner]}, layout]))
+    # Step 3: the menu at the top left, starting at the value `start`
+    fig.update_layout(margin=dict(t=115), updatemenus=[dict(buttons=buttons, active=values.index(start),
+                                                            direction="down", x=0, y=1.02, xanchor="left",
+                                                            yanchor="bottom")])
+    return fig
+```
+
+:::
+
+<!-- cell -->
+
+### The model as functions
+
+We write each accounting rule and each trade model as a Python *function*: a named recipe that takes inputs and
+gives back a result. Each function's description names the equation it computes, and the figure sections reuse
+them.
+
+#### The accounting rules
+
+The first five functions are the trade balance and the national income identity, equations (1) and (2), plus two
+ways to express a variable as a share of GDP.
+
+```{python}
+# `def` creates a function. Its inputs are the arguments in parentheses, and
+# `return` gives back the result. The text in triple quotes describes it.
+# The same function works for single numbers and for whole columns of a data
+# table, because pandas does arithmetic on every row at once.
 def share_of_gdp(x, gdp):
-    """Any variable as a percent of GDP: 100 x / Y."""
+    """Any variable as a percent of GDP, as in Fig. 1.
+
+    Fig. 1:  100 x / Y
+
+    Arguments
+        x   : the variable, e.g. exports EX or the trade balance NX
+        gdp : GDP, Y
+    Returns
+        x as a percent of GDP
+    """
     return 100 * x / gdp
 
 
 def net_exports(exports, imports):
-    """The trade balance (net exports): NX = EX - IM."""
+    """The trade balance (net exports).
+
+    Fig. 2:  NX = EX - IM
+
+    Arguments
+        exports : exports, EX
+        imports : imports, IM
+    Returns
+        net exports, NX (negative for a trade deficit)
+    """
     return exports - imports
 
 
 def net_exports_from_uses(Y, C, I, G):
-    """The national income identity solved for net exports: NX = Y - (C + I + G)   (equation 1)."""
+    """The national income identity solved for net exports.
+
+    Equation (1):  NX = Y - (C + I + G)
+
+    Arguments
+        Y : output, GDP
+        C, I, G : consumption, investment and government purchases
+    Returns
+        net exports, NX: what is produced minus what is used at home
+    """
     return Y - (C + I + G)
 
 
 def trade_balance_share(c, i, g):
-    """NX as a percent of GDP from the GDP shares of C, I and G: 100 (1 - c - i - g)   (equation 2)."""
+    """Net exports as a percent of GDP, from the GDP shares of C, I and G.
+
+    Equation (2):  100 nx = 100 (1 - c - i - g)
+
+    Arguments
+        c, i, g : C, I and G as fractions of GDP
+    Returns
+        net exports as a percent of GDP
+    """
+    # equation (1) with Y = 1, so that NX is already a share of GDP
     return 100 * net_exports_from_uses(1, c, i, g)
 
 
 def share_of_us_gdp(share, gdp, gdp_us):
-    """Rescale a share of a country's own GDP to a share of U.S. GDP (Fig. 19.3, second bar)."""
+    """Rescale a share of a country's own GDP to a share of U.S. GDP.
+
+    Fig. 3, second bar:  share * Y / Y_US
+
+    Arguments
+        share  : a variable as a percent of the country's own GDP
+        gdp    : the country's GDP
+        gdp_us : U.S. GDP, in the same units
+    Returns
+        the same variable as a percent of U.S. GDP
+    """
     return share * gdp / gdp_us
 ```
 
@@ -825,30 +959,160 @@ Four more functions handle saving and the data over time: two forms of equation 
 years**, and the **sum of past flows**, which turns yearly trade balances into a stock of foreign assets or debt
 (equation 5 with $\bar{r} = 0$).
 
-> **Python note.** For a table whose rows are years, `data.loc[start:end]` keeps the rows from `start` to `end`,
-> both included, and `.mean()` averages them (one average per column). `.cumsum()` is the *cumulative sum*: row by
-> row, the sum of all values so far.
-
 ```{python}
 def domestic_saving(I, NX):
-    """Domestic saving S = Y - C - G, from equation (4): S = I + NX."""
+    """Domestic saving, S = Y - C - G, from investment and the trade balance.
+
+    Equation (4) solved for S:  S = I + NX
+
+    Arguments
+        I  : investment
+        NX : net exports
+    Returns
+        domestic saving, S
+    """
     return I + NX
 
 
 def net_capital_outflow(S, I):
-    """Equation (4): the trade balance equals domestic saving minus investment, NX = S - I."""
+    """The trade balance as saving minus investment.
+
+    Equation (4):  NX = S - I
+
+    Arguments
+        S : domestic saving
+        I : investment
+    Returns
+        net exports, NX: what the country lends abroad (borrows, if negative)
+    """
     return S - I
 
 
 def period_average(data, start, end):
-    """Simple average over the years start to end (rows are years): one number per column."""
+    """The simple average over the years start to end, as in Fig. 4.
+
+    Fig. 4:  the average of each column over a window of years
+
+    Arguments
+        data       : a table whose rows are years
+        start, end : the first and the last year of the window
+    Returns
+        one average per column
+    """
+    # `data.loc[start:end]` keeps the rows from start to end, both included,
+    # and `.mean()` averages them, one average per column
     return data.loc[start:end].mean()
 
 
 def accumulate(start_value, flows):
-    """Net foreign assets with no interest: start from start_value and add each year's trade balance (equation 5)."""
+    """Net foreign assets with no interest: the starting value plus each year's trade balance.
+
+    Equation (5) with r-bar = 0:  F_t = F_(t-1) + NX_t
+
+    Arguments
+        start_value : net foreign assets before the first year, F_0
+        flows       : the trade balances NX_t, one row per year
+    Returns
+        net foreign assets F_t at the end of each year
+    """
+    # `.cumsum()` is the cumulative sum: row by row, the sum of all values so far
     return start_value + flows.cumsum()
 ```
+
+The long-run debt ratio of equation (7) is the last accounting function.
+
+```{python}
+def debt_ratio_steady_state(nx, g, r=0.0):
+    """Long-run net foreign assets as a share of GDP, f*.
+
+    Equation (7):  f* = (1 + g) nx / (g - r)
+
+    Arguments
+        nx : the trade balance as a fraction of GDP (negative for a deficit)
+        g  : the growth rate of nominal GDP, g-bar
+        r  : the return on foreign assets, r-bar (0 unless we pass another value)
+    Returns
+        long-run net foreign assets as a fraction of GDP, f*
+    """
+    # `r=0.0` gives r a default value, used whenever we do not pass one
+    return (1 + g) * nx / (g - r)
+```
+
+#### The North and the South
+
+Two functions solve the comparative-advantage model. `autarky` follows Steps 1 to 4 of the autarky solution:
+the wage and price of equation (9), and consumption from equation (8).
+
+```{python}
+def autarky(x, z, L):
+    """Table 19.3: a closed economy whose L workers each make x apples or z computers.
+
+    Equations (9) and (8):  w = x,  p = x / z,  c_A = w / 2,  c_C = w / (2 p)
+
+    Arguments
+        x : apples per worker
+        z : computers per worker
+        L : the number of workers
+    Returns
+        the economy's row of Table 19.3: wage, price, consumption and production
+    """
+    # the wage in apples: what a worker makes in the apple sector (equation 9)
+    w = x
+    # the price of a computer: both sectors must pay the same wage (equation 9)
+    p = x / z
+    # `pd.Series({...})` builds a list of numbers with labels from a dictionary
+    # of label: value pairs
+    return pd.Series({"Wage, w (apples)": w,
+                      "Price of a computer, p (apples)": p,
+                      "Apples per person": w / 2,          # equation (8), apples cost 1
+                      "Computers per person": w / 2 / p,   # equation (8)
+                      "Workers making apples (%)": 50,
+                      "Workers making computers (%)": 50,
+                      "Apples produced": L / 2 * x,
+                      "Computers produced": L / 2 * z})
+```
+
+`free_trade` follows Steps 2 to 5 of the free-trade solution: complete specialization, the world price of
+equation (10), and the wages and consumption from equation (8).
+
+```{python}
+def free_trade(x_n, z_n, L_n, x_s, z_s, L_s):
+    """Table 19.4: the North makes only computers, the South only apples, and they trade.
+
+    Equations (10) and (8):  p = L_s x_s / (L_n z_n),  w_n = z_n p,  w_s = x_s
+
+    Arguments
+        x_n, z_n, L_n : apples or computers per worker, and workers, in the North
+        x_s, z_s, L_s : the same for the South
+    Returns
+        Table 19.4: a table with one column per country
+    """
+    # Step 1: world production, with each country fully specialized
+    computers = L_n * z_n                      # world production of computers
+    apples = L_s * x_s                         # world production of apples
+    # Step 2: the world price and the wages
+    # equation (10): half of world spending goes to each good
+    p = apples / computers
+    w_n, w_s = z_n * p, x_s                    # wages in apples
+    # Step 3: each country's column, as in autarky
+    north = pd.Series({"Wage, w (apples)": w_n, "Price of a computer, p (apples)": p,
+                       "Apples per person": w_n / 2, "Computers per person": w_n / 2 / p,
+                       "Workers making apples (%)": 0, "Workers making computers (%)": 100,
+                       "Apples produced": 0, "Computers produced": computers})
+    south = pd.Series({"Wage, w (apples)": w_s, "Price of a computer, p (apples)": p,
+                       "Apples per person": w_s / 2, "Computers per person": w_s / 2 / p,
+                       "Workers making apples (%)": 100, "Workers making computers (%)": 0,
+                       "Apples produced": apples, "Computers produced": 0})
+    # `pd.DataFrame({...})` builds a table from a dictionary of columns
+    return pd.DataFrame({"North": north, "South": south})
+```
+
+<!-- cell -->
+
+### Checking the key results
+
+The formulas came from algebra. Now we check them with numbers, one Key result at a time, and recompute the
+textbook's tables for the trade examples.
 
 #### Checking the accounting
 
@@ -856,16 +1120,23 @@ def accumulate(start_value, flows):
 collects 12 in taxes. Each identity must give the same trade balance.
 
 ```{python}
+# Step 1: output, consumption, investment, government purchases and taxes
 Y, C, I, G, T = 100, 70, 20, 15, 12
+# Step 2: equation (1). An f-string, f"... {value:.0f}", puts a value into
+# the text; ":.0f" means no decimals and ":.1f" one decimal.
 NX = net_exports_from_uses(Y, C, I, G)
 print(f"Equation (1): NX = {Y} - ({C} + {I} + {G}) = {NX}, or {share_of_gdp(NX, Y):.0f}% of GDP")
+# equation (2), from the shares c = C/Y, i = I/Y and g = G/Y
 print(f"Equation (2): 100 (1 - c - i - g) = {trade_balance_share(C / Y, I / Y, G / Y):.1f}% of GDP")
+# Step 3: equation (3), the three kinds of saving add up to investment
 private, government, foreign = Y - T - C, T - G, -NX
 print(f"Equation (3): private {private} + government {government} + foreign {foreign} "
       f"= {private + government + foreign}, and I = {I}")
+# Step 4: equation (4), with domestic saving = private + government saving
 S = private + government
 print(f"Equation (4): S - I = {S} - {I} = {net_capital_outflow(S, I)}, the same as NX = {NX}")
 print(f"... and back again: S = I + NX = {domestic_saving(I, NX)}")
+# Step 5: the economy uses more than it makes
 print(f"Domestic uses C + I + G = {C + I + G} > Y = {Y}: a trade deficit")
 ```
 
@@ -873,9 +1144,11 @@ print(f"Domestic uses C + I + G = {C + I + G} > Y = {Y}: a trade deficit")
 three times as large, runs the matching surplus.
 
 ```{python}
+# Step 1: two economies, the rest of the world three times as large
 gdp_us, gdp_row = 100, 300
 NX_us = -3
-NX_row = -NX_us                                  # every U.S. import is a rest-of-world export
+NX_row = -NX_us                         # every U.S. import is a rest-of-world export
+# Step 2: the surplus as a share of its own GDP and of U.S. GDP (Fig. 3)
 row_share = share_of_gdp(NX_row, gdp_row)
 print(f"World trade balance: {NX_us + NX_row}")
 print(f"Rest of the world: a surplus of {row_share:.0f}% of its own GDP, "
@@ -886,18 +1159,21 @@ print(f"Rest of the world: a surplus of {row_share:.0f}% of its own GDP, "
 the loan with 5 percent interest in year 2. Equation (5) should bring its assets back to zero, and the present value
 of its two trade balances should be zero, as equation (6) says.
 
-> **Python note.** `range(1, 3)` counts 1, 2. A list is numbered from 0, so `trade_balance[t - 1]` is the trade
-> balance of year `t`. `x = x + ...` replaces the old value of `x` with the new one.
-
 ```{python}
+# Step 1: the loan; a list in square brackets holds the two trade balances
 r = 0.05
-trade_balance = [-50, 50 * (1 + r)]              # borrow 50, then repay 50 plus interest
-F = 0.0                                          # no foreign assets at the start
+trade_balance = [-50, 50 * (1 + r)]     # borrow 50, then repay 50 plus interest
+F = 0.0                                 # no foreign assets at the start
 present_value = 0.0
+# Step 2: one pass per year. `range(1, 3)` counts 1, 2, so the `for` loop runs
+# its indented lines twice. A list is numbered from 0, so `trade_balance[t - 1]`
+# is the trade balance of year t. `x = x + ...` replaces the old value of x
+# with the new one, and `**` means "to the power of".
 for t in range(1, 3):
     F = (1 + r) * F + trade_balance[t - 1]                     # equation (5)
     present_value = present_value + trade_balance[t - 1] / (1 + r) ** t
     print(f"Year {t}: NX = {trade_balance[t - 1]:+.1f}, F = {F:+.2f}")
+# Step 3: equation (6) with F_0 = 0
 print(f"Present value of the trade balances = {present_value:.6f}   (equation 6: -F0 = 0)")
 ```
 
@@ -905,30 +1181,33 @@ print(f"Present value of the trade balances = {present_value:.6f}   (equation 6:
 deficit of 3 percent of GDP, and compare where it ends with the formula of equation (7).
 
 ```{python}
-def debt_ratio_steady_state(nx, g, r=0.0):
-    """Long-run net foreign assets as a share of GDP: f* = (1 + g) nx / (g - r)   (equation 7)."""
-    return (1 + g) * nx / (g - r)
-
-
+# For three pairs of the growth rate g and the return r, apply equation (5)
+# divided by GDP for 1,000 years; ":.0%" shows a share as a percentage
 for g, r in [(0.04, 0.0), (0.05, 0.0), (0.04, 0.02)]:
     f = 0.0                                          # start with no foreign assets
     for year in range(1000):
         f = (1 + r) / (1 + g) * f + (-0.03)          # equation (5) divided by GDP
+    # the end point of the simulation next to equation (7)
     print(f"g = {g:.0%}, r = {r:.0%}: simulated f = {100 * f:.1f}% of GDP, "
           f"formula = {100 * debt_ratio_steady_state(-0.03, g, r):.1f}%")
 ```
 
 #### Gains from exchange: the banana-and-fish islands
 
-> **Python note.** `min(a, b)` is the smaller of two numbers: the number of complete meals.
+**Check 5: the gains from exchange.** Each island swaps half of the gap between its fish and its bananas, one for
+one, and the number of complete meals (one banana and one fish) per person should rise.
 
 ```{python}
+# Step 1: what each island has, per person
 bananas_1, fish_1 = 200, 800                     # island 1, per person
 bananas_2, fish_2 = 800, 200                     # island 2, per person
-q = (fish_1 - bananas_1) / 2                     # fish that island 1 swaps for bananas, one for one
+# the fish that island 1 swaps for bananas, one for one
+q = (fish_1 - bananas_1) / 2
+# Step 2: what each island eats after the swap
 print(f"Island 1 swaps {q:.0f} fish for {q:.0f} bananas")
 print(f"Island 1 eats {bananas_1 + q:.0f} bananas and {fish_1 - q:.0f} fish; "
       f"island 2 eats {bananas_2 - q:.0f} bananas and {fish_2 + q:.0f} fish")
+# Step 3: `min(a, b)` is the smaller of two numbers: the number of complete meals
 print(f"Meals per person on island 1: {min(bananas_1, fish_1)} without trade, "
       f"{min(bananas_1 + q, fish_1 - q):.0f} with trade")
 ```
@@ -936,30 +1215,42 @@ print(f"Meals per person on island 1: {min(bananas_1, fish_1)} without trade, "
 #### Trade across time: Oddtopia and Eventopia (Table 19.1)
 
 With no investment and no government, equation (1) gives $NX = Y - C$, the harvest minus what is eaten. The sum of
-past trade balances (equation 5 with $\bar{r} = 0$) is what the other island owes.
-
-> **Python note.** `pd.DataFrame({...})` builds a table from a *dictionary* of columns. The `for` loop repeats the
-> indented lines for each island, and `island + " harvest"` glues two pieces of text into a column name. `.T`
-> turns the table on its side, so that the years become columns, as in the textbook.
+past trade balances (equation 5 with $\bar{r} = 0$) is what the other island owes. The next cell builds Table 19.1.
 
 ```{python}
+# Step 1: the harvests of the two islands, one row per year
 wheat = pd.DataFrame({"year": [1, 2, 3, 4, 5, 6],
                       "Oddtopia harvest": [100, 0, 100, 0, 100, 0],
                       "Eventopia harvest": [0, 100, 0, 100, 0, 100]})
+# Step 2: the `for` loop repeats the indented lines for each island in the list;
+# `island + " harvest"` glues two pieces of text into a column name
 for island in ["Oddtopia", "Eventopia"]:
-    wheat[island + " consumption"] = 50                    # half of the world harvest, every year
+    # each island eats half of the world harvest, every year
+    wheat[island + " consumption"] = 50
+    # equation (1) with I = G = 0: NX = Y - C
     wheat[island + " trade balance"] = net_exports_from_uses(wheat[island + " harvest"],
                                                              wheat[island + " consumption"], 0, 0)
+    # equation (5) with r = 0: the sum of past trade balances
     wheat[island + " is owed"] = accumulate(0, wheat[island + " trade balance"])
+# Step 3: `.T` turns the table on its side, so that the years become columns,
+# as in the textbook
 wheat.set_index("year").T
 ```
 
+**Check 6: Table 19.1.** Oddtopia's trade balance should match the textbook's row, the two islands' balances
+should add to zero every year, and each island's trade balances should sum to zero, as equation (6) says with
+$\bar{r} = 0$.
+
 ```{python}
-book_balance = [50, -50, 50, -50, 50, -50]                 # Oddtopia's row of Table 19.1
+# Step 1: compare with the textbook. `==` compares the two row by row, giving
+# True or False, and `.all()` is True only when every row is True.
+book_balance = [50, -50, 50, -50, 50, -50]      # Oddtopia's row of Table 19.1
 same = (wheat["Oddtopia trade balance"] == book_balance).all()
 print(f"Oddtopia's trade balance equals Table 19.1: {same}")
+# Step 2: the world's trade balance in every year
 world = wheat["Oddtopia trade balance"] + wheat["Eventopia trade balance"]
 print(f"The two trade balances add to zero in every year: {(world == 0).all()}")
+# Step 3: equation (6) with r = 0; `.iloc[0]` is the first row
 for island in ["Oddtopia", "Eventopia"]:
     print(f"{island}: sum of trade balances {wheat[island + ' trade balance'].sum()} (equation 6 with r = 0), "
           f"consumption always {wheat[island + ' consumption'].iloc[0]}")
@@ -967,91 +1258,75 @@ for island in ["Oddtopia", "Eventopia"]:
 
 #### Comparative advantage: the North and the South (Tables 19.2 to 19.5)
 
+The productivities of Table 19.2 come first. The North is better at making both goods, but much more so at making
+computers.
+
 ```{python}
-x_n, z_n, L_n = 160, 16, 100        # North: apples or computers per worker, number of workers (Table 19.2)
+# Table 19.2: apples or computers per worker, and the number of workers
+x_n, z_n, L_n = 160, 16, 100        # North
 x_s, z_s, L_s = 100, 2, 400         # South
+# absolute advantage: how many times more productive the North is
 print(f"North / South productivity: apples {x_n / x_s:.1f} times, computers {z_n / z_s:.0f} times")
+# comparative advantage: the cost of a computer in apples
 print(f"Apples given up for one computer: North {x_n / z_n:.0f}, South {x_s / z_s:.0f}")
 ```
 
-**Autarky.** The function follows Steps 1 to 4 of the autarky solution.
-
-> **Python note.** `pd.Series({...})` builds a list of numbers with labels from a dictionary. `pd.DataFrame` then
-> puts two such lists side by side as the columns "North" and "South". `pd.concat([...], axis=1, keys=[...])`
-> places two tables next to each other under two headings.
+**Autarky.** We compute Table 19.3 with `autarky` and put the textbook's numbers next to it.
 
 ```{python}
-def autarky(x, z, L):
-    """Table 19.3: a closed economy whose L workers each make x apples or z computers."""
-    w = x                        # the wage in apples: what a worker makes in the apple sector (equation 9)
-    p = x / z                    # the price of a computer: both sectors must pay the same wage (equation 9)
-    return pd.Series({"Wage, w (apples)": w,
-                      "Price of a computer, p (apples)": p,
-                      "Apples per person": w / 2,              # equation (8): an apple costs 1
-                      "Computers per person": w / 2 / p,       # equation (8)
-                      "Workers making apples (%)": 50,
-                      "Workers making computers (%)": 50,
-                      "Apples produced": L / 2 * x,
-                      "Computers produced": L / 2 * z})
-
-
+# Step 1: Table 19.3, one column per country
 table_19_3 = pd.DataFrame({"North": autarky(x_n, z_n, L_n), "South": autarky(x_s, z_s, L_s)})
+# Step 2: the textbook's numbers, in the same rows
 book_19_3 = pd.DataFrame({"North": [160, 10, 80, 8, 50, 50, 8000, 800],
                           "South": [100, 50, 50, 1, 50, 50, 20000, 400]}, index=table_19_3.index)
+# Step 3: `pd.concat([...], axis=1, keys=[...])` places the two tables next to
+# each other under two headings
 pd.concat([table_19_3, book_19_3], axis=1, keys=["Notebook", "Textbook"])
 ```
 
-**Free trade.** The function follows Steps 2 to 5 of the free-trade solution: complete specialization, the world
-price of equation (10), the wages and consumption from equation (8).
+**Free trade.** We compute Table 19.4 with `free_trade`.
 
 ```{python}
-def free_trade(x_n, z_n, L_n, x_s, z_s, L_s):
-    """Table 19.4: the North makes only computers, the South only apples, and they trade."""
-    computers = L_n * z_n                      # world production of computers
-    apples = L_s * x_s                         # world production of apples
-    p = apples / computers                     # equation (10): half of world spending goes to each good
-    w_n, w_s = z_n * p, x_s                    # wages in apples
-    north = pd.Series({"Wage, w (apples)": w_n, "Price of a computer, p (apples)": p,
-                       "Apples per person": w_n / 2, "Computers per person": w_n / 2 / p,
-                       "Workers making apples (%)": 0, "Workers making computers (%)": 100,
-                       "Apples produced": 0, "Computers produced": computers})
-    south = pd.Series({"Wage, w (apples)": w_s, "Price of a computer, p (apples)": p,
-                       "Apples per person": w_s / 2, "Computers per person": w_s / 2 / p,
-                       "Workers making apples (%)": 100, "Workers making computers (%)": 0,
-                       "Apples produced": apples, "Computers produced": 0})
-    return pd.DataFrame({"North": north, "South": south})
-
-
+# Table 19.4: complete specialization and the world price of equation (10)
 table_19_4 = free_trade(x_n, z_n, L_n, x_s, z_s, L_s)
 table_19_4
 ```
 
 The textbook's Table 19.4 has the same numbers: a world price of 25 apples, a northern wage of 400 apples, and
-consumption of 200 apples and 8 computers in the North and 50 apples and 2 computers in the South. Two checks: both
-world markets clear, and condition (11) holds, so complete specialization really is the outcome.
+consumption of 200 apples and 8 computers in the North and 50 apples and 2 computers in the South.
+
+**Check 7: free trade is an equilibrium.** Both world markets clear, and condition (11) holds, so complete
+specialization really is the outcome.
 
 ```{python}
+# Step 1: world demand = consumption per person times the number of people;
+# ":,.0f" shows no decimals and a comma between thousands
 demand_computers = (table_19_4.loc["Computers per person"] * [L_n, L_s]).sum()
 demand_apples = (table_19_4.loc["Apples per person"] * [L_n, L_s]).sum()
 print(f"Computers: demand {demand_computers:,.0f} = supply {table_19_4.loc['Computers produced'].sum():,.0f}")
 print(f"Apples:    demand {demand_apples:,.0f} = supply {table_19_4.loc['Apples produced'].sum():,.0f}")
+# Step 2: condition (11), the world price between the two autarky prices
 p_world = table_19_4.loc["Price of a computer, p (apples)", "North"]
 print(f"Condition (11): autarky price South {x_s / z_s:.0f} > world price {p_world:.0f} > autarky price North "
       f"{x_n / z_n:.0f}: {x_s / z_s > p_world > x_n / z_n}")
+# Step 3: world output under autarky and with trade
 print(f"World output: {table_19_3.loc['Apples produced'].sum():,.0f} apples and "
       f"{table_19_3.loc['Computers produced'].sum():,.0f} computers under autarky, "
       f"{table_19_4.loc['Apples produced'].sum():,.0f} and {table_19_4.loc['Computers produced'].sum():,.0f} with trade")
 ```
 
-**Check: the elasticities.** Raise northern computer productivity $z_n$ by 1 percent. The comparative-statics table
+**Check 8: the elasticities.** Raise northern computer productivity $z_n$ by 1 percent. The comparative-statics table
 predicts $-1\%$ for the world price, $0$ for the northern wage and for apples per person in both countries, and $+1\%$
 for computers per person in both countries.
 
 ```{python}
+# Step 1: free trade with z_n 1% higher
 better = free_trade(x_n, z_n * 1.01, L_n, x_s, z_s, L_s)
+# Step 2: the rows and countries to compare, as (row, country) pairs
 items = [("Price of a computer, p (apples)", "North"), ("Wage, w (apples)", "North"),
          ("Apples per person", "North"), ("Computers per person", "North"),
          ("Apples per person", "South"), ("Computers per person", "South")]
+# Step 3: the percent change of each; `row, country = item` unpacks a pair
 for item in items:
     row, country = item
     change = better.loc[row, country] / table_19_4.loc[row, country] - 1
@@ -1060,10 +1335,13 @@ for item in items:
 
 The price falls by 0.99 percent rather than exactly 1 percent, because an elasticity describes very small changes.
 
-**Free migration.** If workers can move instead of goods, every southern worker moves to the North, where wages are
+#### Free migration (Table 19.5)
+
+If workers can move instead of goods, every southern worker moves to the North, where wages are
 higher. The world then looks like the North under autarky, with all 500 workers (Table 19.5).
 
 ```{python}
+# the North under autarky with all 500 workers; migrants and natives fare alike
 migration = autarky(x_n, z_n, L_n + L_s)
 table_19_5 = pd.DataFrame({"Born in the North": migration, "Migrants from the South": migration})
 table_19_5
@@ -1072,30 +1350,38 @@ table_19_5
 Who gains? The next table compares what one worker consumes under the three arrangements.
 
 ```{python}
+# Step 1: the three arrangements, each as a table with the columns North and South
 regimes = {"Autarky": table_19_3, "Free trade": table_19_4,
            "Free migration": pd.DataFrame({"North": migration, "South": migration})}
+# Step 2: one row per arrangement; `for name in regimes` goes through the
+# dictionary's names, and `rows.append(...)` adds a row to the list
 rows = []
 for name in regimes:
     t = regimes[name]
     rows.append([name, t.loc["Apples per person", "North"], t.loc["Computers per person", "North"],
                  t.loc["Apples per person", "South"], t.loc["Computers per person", "South"]])
-pd.DataFrame(rows, columns=["Regime", "North: apples", "North: computers", "South: apples", "South: computers"])
+# Step 3: the rows as a table
+pd.DataFrame(rows, columns=["Regime", "North: apples", "North: computers",
+                            "South: apples", "South: computers"])
 ```
 
-**Check: compensating the North.** Each migrant hands 30 apples to the North. Northerners should get back their
+**Check 9: compensating the North.** Each migrant hands 30 apples to the North. Northerners should get back their
 free-trade bundle, migrants should still beat theirs, and the world's apples and computers should be enough for all.
 
 ```{python}
+# Step 1: the transfer, shared among the 100 northerners
 fee = 30                                                       # apples per migrant
 north_apples = migration["Apples per person"] + fee * L_s / L_n
 migrant_apples = migration["Apples per person"] - fee
 computers_each = migration["Computers per person"]
+# Step 2: each group's bundle next to its free-trade bundle
 print(f"Northerner: {north_apples:.0f} apples, {computers_each:.0f} computers "
       f"(free trade: {table_19_4.loc['Apples per person', 'North']:.0f} and "
       f"{table_19_4.loc['Computers per person', 'North']:.0f})")
 print(f"Migrant:    {migrant_apples:.0f} apples, {computers_each:.0f} computers "
       f"(free trade: {table_19_4.loc['Apples per person', 'South']:.0f} and "
       f"{table_19_4.loc['Computers per person', 'South']:.0f})")
+# Step 3: the apples eaten add up to the apples produced
 print(f"Apples eaten {L_n * north_apples + L_s * migrant_apples:,.0f} = apples produced "
       f"{migration['Apples produced']:,.0f}")
 ```
@@ -3174,7 +3460,7 @@ def south_grows(L_s=400):
 interact(south_grows, L_s=IntSlider(value=400, min=200, max=800, step=50, description="southern workers L_s", style=WIDE));
 ```
 
-**Source.** A calculator built on the `autarky` and `free_trade` functions of the Model overview, adapted from the apple-and-computer example in Chapter 19 of Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
+**Source.** A calculator built on the `autarky` and `free_trade` functions of "Model in code", adapted from the apple-and-computer example in Chapter 19 of Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 ```{python}
 # Your answer here

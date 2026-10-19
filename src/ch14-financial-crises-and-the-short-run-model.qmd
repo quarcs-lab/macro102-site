@@ -32,74 +32,6 @@ end of it you will be able to:
 
 <!-- cell -->
 
-## Setup
-
-We first load the Python libraries we need. You only have to run this cell once.
-
-> **Python note.** `import` loads a *library*, a toolbox written by other people. We give each
-> library a short nickname, for example `np` for NumPy, so that the code stays short. Text after
-> a `#` is a *comment*: Python ignores it, and it is there for human readers. The `try ... except`
-> block runs one Colab-only line and simply skips it anywhere else.
-
-```{python}
-# Libraries used in this chapter
-import numpy as np                              # numbers and arrays
-import pandas as pd                             # data tables
-import plotly.express as px                     # quick charts from data tables
-import plotly.graph_objects as go               # charts built piece by piece (model figures)
-import plotly.io as pio
-from plotly.subplots import make_subplots       # several panels in one figure
-from ipywidgets import interact, FloatSlider, IntSlider, ToggleButtons, Dropdown, SelectMultiple, fixed
-
-# One light blue/green look for every chart
-BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
-pio.templates.default = "plotly_white"
-pio.templates["plotly_white"].layout.update(width=860, height=480)   # same size in Colab and on the website
-px.defaults.color_discrete_sequence = [BLUE, TEAL, GREEN, "#5aa0d8", "#0b4f47"]
-WIDE = {"description_width": "initial"}         # show the full slider labels
-
-# Colab only: let Plotly charts appear inside the interactive widgets
-try:
-    import google.colab
-    google.colab.output.enable_custom_widget_manager()
-except ImportError:
-    pass                                        # not running in Colab: nothing to do
-
-# The data files of this chapter live in the book's GitHub repository
-DATA_URL = "https://raw.githubusercontent.com/quarcs-lab/macro102-site/main/data/ch14/"
-```
-
-The next cell defines a helper that only the book website needs. Run it and move on.
-
-```{python}
-#| kind: helper
-# @title Helper for the website versions (run this cell; you do not need to read it)
-def slider_figure(make_figure, name, values, start, label=None):
-    """Precompute make_figure(name=value) for every value and join the results with one slider.
-
-    The website cannot run Python, so each interactive figure also gets this precomputed version.
-    """
-    figures = [make_figure(**{name: v}) for v in values]
-    first = values.index(start)
-    fig = go.Figure(layout=figures[first].layout)
-    owner = []                                  # which precomputed figure each trace comes from
-    for i, f in enumerate(figures):
-        for trace in f.data:
-            trace.visible = (i == first)
-            fig.add_trace(trace)
-            owner.append(i)
-    steps = []
-    for i, f in enumerate(figures):
-        layout = {"title": f.layout.title.to_plotly_json(),
-                  "annotations": [a.to_plotly_json() for a in f.layout.annotations],
-                  "shapes": [s.to_plotly_json() for s in f.layout.shapes]}
-        visible = [o == i for o in owner]
-        steps.append(dict(method="update", label=str(values[i]), args=[{"visible": visible}, layout]))
-    fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
-                                    currentvalue=dict(prefix=(label or name) + " = "))])
-    return fig
-```
-
 ## Model overview
 
 **Islandia** has had a good run, until a housing boom on the island turns to bust and fear spreads through its banks. Lenders now ask Harbor Boatworks and the islanders for a much higher rate than before, even though the Bank of Islandia is cutting its own rate as fast as it can. Prices start to fall, and the central bank soon has no room left to cut. Can a scare in the banks drag a whole island into a deep slump, and what can policy do about it? This section adds the missing link, a **risk premium**, to the short-run model of Chapters 11 to 13 and follows Islandia through the crisis.
@@ -117,7 +49,7 @@ def slider_figure(make_figure, name, values, start, label=None):
 2. [The new AD curve](#the-new-ad-curve-a-financial-friction-in-the-asad-model): the friction in the AS/AD model, [solved period by period](#solving-the-model-1), with its [long run and comparative statics](#what-the-model-predicts-1).
 3. [Deflation and the zero lower bound](#deflation-and-the-zero-lower-bound): the Fisher equation, the floor on the real rate and the [deflationary spiral](#solving-the-model-2).
 4. [Balance sheets, leverage and the policy responses](#balance-sheets-leverage-and-the-policy-responses): the [definitions](#definitions), the algebra of leverage, asset prices, quantitative easing, forward guidance and fiscal stimulus, and [a table of the policies](#what-the-model-predicts-3).
-5. [The model in code](#the-model-in-code): the key results as Python functions, checked with numbers, followed by the [drawing tools](#drawing-tools) for the diagrams and the [tools for the data figures](#tools-for-the-data-figures) (recession shading and a peak-to-trough calculator).
+5. [Model in code](#model-in-code): the key results as Python functions, checked with numbers, followed by the [drawing tools](#drawing-and-data-tools) for the diagrams and the [tools for the data figures](#drawing-and-data-tools) (recession shading and a peak-to-trough calculator).
 
 **Notation.** A bar over a letter marks a **parameter**, a number set outside the model; letters without a bar are **endogenous variables** that the model solves for. Short-run output $\tilde{Y}_t$ is the percentage gap between actual and potential output, and all interest and inflation rates are in percent per year. In the code we write `a`, `f`, `m`, `B_BAR`, `NU`, and so on.
 
@@ -610,302 +542,657 @@ By equation (14), the 3-year rate is $(0 + 2 + 4)/3 = 2$ percent before the prom
 
 <!-- cell -->
 
-### The model in code
+## Model in code
 
-We now turn the key results into Python functions, then check the algebra above with numbers. The constants hold the baseline values. Every later section of the notebook reuses these functions.
+Now we turn the Key results into Python. The section has four parts: the setup (folded, because it is the
+same in every chapter), the model as functions, numerical checks of the Key results, and the drawing and data
+tools that the figures use (folded too). Run its cells once, in order. Every later section of the notebook
+reuses them.
 
-> **Python note.** `def` creates a *function*: a named recipe that takes inputs (the *arguments*) and gives
-> back a result with `return`. Writing `a=0.0` gives an argument a *default value*, used whenever we do not
-> pass one. Names in capital letters, such as `R_BAR`, are constants we set once and never change.
+<!-- cell -->
+
+### Setup
+
+Run the setup cells once, before anything else. They load the Python libraries, give every chart the same look,
+store the address of the chapter's data and define a helper that only the book website needs. You can use the
+notebook without reading them; open the box if you are curious.
+
+<!-- cell -->
+
+::: {.callout-note .mic-fold collapse="true" title="Show the setup code"}
+
+The first cell loads the libraries and sets the look of the charts. Its comments explain each step.
 
 ```{python}
-R_BAR, B_BAR = 2.0, 1.0            # marginal product of capital 2%, interest sensitivity b = 1
-PI_BAR, M_BAR, NU = 2.0, 1.0, 0.5  # inflation target 2%, policy response m = 1, Phillips slope nu = 0.5
-A_HOUSING, F_CRISIS = -2.0, 4.0    # 2008: the housing bust a' = -2 and a risk premium f = 4 points
-HIKE, A_CRASH = 3.0, -3.0          # 1929: the Fed's hike of 3 points and the crash a' = -3
+#| kind: folded
+# @title Setup: libraries, chart colors and the data location
+# Text after a "#" is a comment: Python ignores it, it is there for human readers.
+
+# Step 1: load the libraries. `import` loads a library, a toolbox written by
+# other people, and `as np` gives it a short nickname, so the code stays short.
+import numpy as np                              # numbers and arrays
+import pandas as pd                             # data tables
+import plotly.express as px                     # quick charts from data tables
+import plotly.graph_objects as go               # charts built piece by piece
+import plotly.io as pio                         # settings shared by every chart
+from plotly.subplots import make_subplots       # several panels in one figure
+# sliders, buttons and country lists for the interactive figures
+from ipywidgets import interact, FloatSlider, IntSlider, ToggleButtons, Dropdown, SelectMultiple, fixed
+
+# Step 2: one light blue/green look for every chart
+BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
+pio.templates.default = "plotly_white"
+# the same chart size in Colab and on the website
+pio.templates["plotly_white"].layout.update(width=860, height=480)
+px.defaults.color_discrete_sequence = [BLUE, TEAL, GREEN, "#5aa0d8", "#0b4f47"]
+WIDE = {"description_width": "initial"}         # show the full slider labels
+
+# Step 3, Colab only: let Plotly charts appear inside the interactive widgets.
+# `try` runs the indented lines; if the import fails (we are not in Colab),
+# `except` skips them.
+try:
+    import google.colab
+    google.colab.output.enable_custom_widget_manager()
+except ImportError:
+    pass                                        # not running in Colab: nothing to do
+
+# Step 4: the data files of this chapter live in the book's GitHub repository
+DATA_URL = "https://raw.githubusercontent.com/quarcs-lab/macro102-site/main/data/ch14/"
+```
+
+The website cannot run Python, so each interactive figure also gets a version with a precomputed slider. The next
+helper builds those versions. Run it and move on.
+
+```{python}
+#| kind: folded
+# @title Helper for the website versions (run this cell; you do not need to read it)
+def slider_figure(make_figure, name, values, start, label=None):
+    """Join precomputed versions of a figure with one slider (the website cannot run Python).
+
+    Arguments
+        make_figure : the function that draws the figure, e.g. one of the IS/MP diagrams
+        name        : the argument the slider moves, e.g. "f"
+        values      : the values of that argument to precompute
+        start       : the value shown first
+        label       : the slider's label (the argument name if None)
+    Returns
+        one Plotly figure with all versions and a slider that shows one at a time
+    """
+    # Step 1: draw the figure once for every value
+    figures = [make_figure(**{name: v}) for v in values]
+    first = values.index(start)
+    # Step 2: copy every curve into one figure; only the start value's are visible
+    fig = go.Figure(layout=figures[first].layout)
+    owner = []                          # which precomputed figure each trace is from
+    for i, f in enumerate(figures):
+        for trace in f.data:
+            trace.visible = (i == first)
+            fig.add_trace(trace)
+            owner.append(i)
+    # Step 3: one slider step per value: its curves, title, labels and shapes
+    steps = []
+    for i, f in enumerate(figures):
+        layout = {"title": f.layout.title.to_plotly_json(),
+                  "annotations": [a.to_plotly_json() for a in f.layout.annotations],
+                  "shapes": [s.to_plotly_json() for s in f.layout.shapes]}
+        visible = [o == i for o in owner]
+        steps.append(dict(method="update", label=str(values[i]), args=[{"visible": visible}, layout]))
+    fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
+                                    currentvalue=dict(prefix=(label or name) + " = "))])
+    return fig
+```
+
+:::
+
+<!-- cell -->
+
+### The model as functions
+
+The model has four blocks: the IS curve with a financial friction, the new AD curve, the zero lower bound and
+the balance sheets. We write each Key result as a Python *function*: a named recipe that takes inputs and gives
+back a result. The first cell sets Islandia's baseline values, the constants that every function and figure
+uses, and then writes the IS/MP block: the IS curve (2), the borrowing rate (1) and the Fisher equation (8).
+
+```{python}
+# Islandia's baseline. Names in capital letters, such as `R_BAR`, are constants:
+# we set them once and never change them.
+# Step 1: the IS curve: marginal product of capital r-bar = 2%,
+# interest sensitivity b = 1
+R_BAR, B_BAR = 2.0, 1.0
+# the policy rule and the AS curve: inflation target 2%, policy response m = 1,
+# Phillips slope nu = 0.5
+PI_BAR, M_BAR, NU = 2.0, 1.0, 0.5
+# 2008: the housing bust a' = -2 and a risk premium f = 4 points
+A_HOUSING, F_CRISIS = -2.0, 4.0
+# 1929: the Fed's hike of 3 points and the crash a' = -3
+HIKE, A_CRASH = 3.0, -3.0
 
 
+# Step 2: the IS/MP block, one function per equation.
+# `def` creates a function. Its inputs are the arguments in parentheses.
+# `a=0.0` gives a a default value, used whenever we do not pass one.
+# The text in triple quotes describes the function.
 def is_output(R, a=0.0):
-    """IS curve: short-run output Y~ = a - b (R - r_bar), in percent."""
+    """Short-run output on the IS curve, in percent.
+
+    The IS curve:  Y~ = a - b (R - r-bar). With R = R_ff + f from equation (1),
+    this is equation (2).
+
+    Arguments
+        R : the real interest rate that firms and households pay, in percent
+        a : the demand shock, a-bar (0 unless we pass another value)
+    Returns
+        short-run output, Y~, in percent
+    """
+    # `return` gives back the result
     return a - B_BAR * (R - R_BAR)
 
 
 def is_rate(Y, a=0.0):
-    """The IS curve solved for the real interest rate, R = r_bar + (a - Y) / b (used to draw it)."""
+    """The IS curve solved for the real interest rate (used to draw the curve).
+
+    Equation (2) solved for R:  R = r-bar + (a - Y~) / b
+
+    Arguments
+        Y : short-run output, Y~, in percent
+        a : the demand shock, a-bar
+    Returns
+        the real interest rate R, in percent
+    """
+    # the same line as is_output, read from Y~ to R
     return R_BAR + (a - Y) / B_BAR
 
 
 def borrowing_rate(R_ff, f=0.0):
-    """Equation (1): firms and households borrow at R = R_ff + f."""
+    """The rate at which firms and households borrow.
+
+    Equation (1):  R = R_ff + f
+
+    Arguments
+        R_ff : the (real) fed funds rate, in percent
+        f    : the risk premium, f-bar, in percentage points
+    Returns
+        the borrowing rate R, in percent
+    """
+    # the banks add the premium on top of the central bank's rate
     return R_ff + f
 
 
 def real_rate(i, pi):
-    """The Fisher equation (8): the real interest rate R = i - pi."""
+    """The real interest rate, from the Fisher equation.
+
+    Equation (8):  R = i - pi
+
+    Arguments
+        i  : the nominal interest rate, in percent
+        pi : inflation, in percent
+    Returns
+        the real interest rate R, in percent
+    """
+    # the nominal rate minus what inflation takes away
     return i - pi
 ```
 
-The AS/AD part of the model needs three more functions: the new AD curve (4), the AS curve and the point where they cross, equation (5).
+The AS/AD block needs three more functions: the new AD curve (4), the AS curve and the point where the two cross,
+equation (5).
 
 ```{python}
 def ad_output(pi, a=0.0, f=0.0, m=M_BAR):
-    """Equation (4), the new AD curve: Y~ = (a - b f) - b m (pi - pi_bar)."""
+    """Short-run output on the new AD curve.
+
+    Equation (4):  Y~ = (a - b f) - b m (pi - pi-bar)
+
+    Arguments
+        pi : inflation, in percent
+        a  : the demand shock, a-bar
+        f  : the risk premium, f-bar
+        m  : how hard the central bank reacts to inflation, m-bar
+    Returns
+        short-run output, Y~, in percent
+    """
+    # the friction enters exactly like a fall in demand, a - b f
     return a - B_BAR * f - B_BAR * m * (pi - PI_BAR)
 
 
 def as_inflation(Y, pi_prev=PI_BAR):
-    """The AS curve (the Phillips curve): pi = pi_prev + nu Y~, with pi_prev last period's inflation."""
+    """Inflation on the AS curve (the Phillips curve).
+
+    The AS curve, the second half of equation (5):  pi = pi_prev + nu Y~
+
+    Arguments
+        Y       : short-run output, Y~, in percent
+        pi_prev : last period's inflation, in percent
+    Returns
+        this period's inflation, pi, in percent
+    """
+    # a boom (Y~ > 0) pushes inflation above last year's
     return pi_prev + NU * Y
 
 
 def solve_asad(pi_prev, a=0.0, f=0.0, m=M_BAR):
-    """Equation (5): where the AD and AS curves cross, this period's output and inflation."""
+    """This period's output and inflation, where the AD and AS curves cross.
+
+    Equation (5):  Y~ = (a - b f - b m (pi_prev - pi-bar)) / (1 + b m nu),
+                   pi = pi_prev + nu Y~
+
+    Arguments
+        pi_prev : last period's inflation, in percent
+        a       : the demand shock, a-bar
+        f       : the risk premium, f-bar
+        m       : how hard the central bank reacts to inflation, m-bar
+    Returns
+        two numbers: short-run output Y~ and inflation pi, both in percent
+    """
+    # Step 1: output from the first half of equation (5)
     Y = (a - B_BAR * f - B_BAR * m * (pi_prev - PI_BAR)) / (1 + B_BAR * m * NU)
+    # Step 2: inflation from the AS curve; a comma returns both numbers at once
     return Y, as_inflation(Y, pi_prev)
 ```
 
-Three small functions for the zero lower bound and for balance sheets:
+The last cell holds three small functions for the zero lower bound and for balance sheets: the best output at the
+bound (10), the loss of net worth (12) and the price-earnings ratio (13).
 
 ```{python}
 def zlb_best_output(pi, a=0.0, f=0.0):
-    """Equation (10): the highest output the Fed can reach with its nominal rate at zero."""
+    """The highest output the central bank can reach with its nominal rate at zero.
+
+    Equation (10):  Y~max = a - b f + b (r-bar + pi)
+
+    Arguments
+        pi : inflation, in percent
+        a  : the demand shock, a-bar
+        f  : the risk premium, f-bar
+    Returns
+        the best reachable short-run output, Y~max, in percent
+    """
+    # with i = 0 the real rate is -pi, so deflation (pi < 0) lowers the ceiling
     return a - B_BAR * f + B_BAR * (R_BAR + pi)
 
 
 def net_worth_change(asset_fall, capital_ratio):
-    """Equation (12): the percent change in net worth when assets lose asset_fall percent."""
+    """The percent change in a bank's net worth when its assets lose value.
+
+    Equation (12):  change in net worth / net worth = -x / kappa
+
+    Arguments
+        asset_fall    : the fall in the value of the assets, x, in percent
+        capital_ratio : net worth over assets, kappa (e.g. 0.07)
+    Returns
+        the change in net worth, in percent
+    """
+    # leverage magnifies the loss: a 7% capital ratio turns 1% into about 14%
     return -asset_fall / capital_ratio
 
 
 def price_earnings(R, g):
-    """Equation (13): the price-earnings ratio 1 / (R - g), with R and g in percent."""
+    """The price-earnings ratio of a share.
+
+    Equation (13):  P/E = 1 / (R - g)
+
+    Arguments
+        R : the interest rate used to discount profits, in percent
+        g : the growth rate of profits, in percent
+    Returns
+        the price-earnings ratio, P/E
+    """
+    # divide by 100 to turn the percentages into shares
     return 1 / ((R - g) / 100)
 ```
 
-A quick check of the 2008 story with these functions:
+<!-- cell -->
 
-> **Python note.** An *f-string* such as `f"Y~ = {Y:.1f}%"` inserts a value into text; `:.1f` means "show one
-> decimal". `Y, pi = solve_asad(...)` *unpacks* the two results of a function into two variables.
+### Checking the key results
+
+The formulas came from algebra. Now we check them with numbers, using Islandia's baseline. First the 2008 story
+of Fig. 2 with the IS/MP functions, and then the first year of the crisis in the AS/AD model.
 
 ```{python}
-R_ff = R_BAR + A_HOUSING / B_BAR                  # the cut that offsets the housing bust
-R = borrowing_rate(R_ff, F_CRISIS)                # what firms pay once the crisis hits
+# Step 1: the cut that offsets the housing bust, and what firms pay once the crisis hits
+R_ff = R_BAR + A_HOUSING / B_BAR
+R = borrowing_rate(R_ff, F_CRISIS)
+
+# Step 2: output at the three stages of Fig. 2. An f-string, f"... {value:.1f}",
+# puts a value into the text; ":.1f" means "one decimal".
 print(f"Housing bust, Fed does nothing (B):  Y~ = {is_output(R_BAR, A_HOUSING):.1f}%")
 print(f"Fed cuts R_ff to {R_ff:.1f}% (C):          Y~ = {is_output(R_ff, A_HOUSING):.1f}%")
 print(f"Risk premium f = 4, so R = {R:.1f}% (D):  Y~ = {is_output(R, A_HOUSING):.1f}%")
+# equation (3): the fed funds rate that brings Y~ back to 0
 print(f"Rate that restores Y~ = 0, eq. (3):  R_ff* = {R_BAR + A_HOUSING / B_BAR - F_CRISIS:.1f}%")
+
+# Step 3: the AS/AD version. `Y, pi = solve_asad(...)` unpacks the two results
+# of the function into two variables.
 Y, pi = solve_asad(PI_BAR, A_HOUSING, F_CRISIS)
 print(f"AS/AD, first year of the crisis:     Y~ = {Y:.1f}%, inflation = {pi:.1f}%")
 ```
 
-The Fed's cut would fully offset the housing bust, but the risk premium undoes it and more: output ends 4 percent below
-potential. In the AS/AD version the policy rule also reacts to inflation, so the first-year recession is 4 percent and
-inflation falls from 2 to 0 percent.
+The Fed's cut would fully offset the housing bust, but the risk premium undoes it and more: output ends 4 percent
+below potential. In the AS/AD version the policy rule also reacts to inflation, so the first-year recession is
+4 percent and inflation falls from 2 to 0 percent.
 
-**Check 1: the crossing point lies on both curves, and the friction is a demand shock.** The output and inflation from
-equation (5) must satisfy the AD curve (4) and the AS curve. And a premium $\bar{f}$ must do exactly what a fall of
-$\bar{a}$ by $\bar{b}\bar{f}$ does.
+**Check 1: the crossing point lies on both curves, and the friction is a demand shock.** The output and inflation
+from equation (5) must satisfy the AD curve (4) and the AS curve. And a premium $\bar{f}$ must do exactly what a
+fall of $\bar{a}$ by $\bar{b}\bar{f}$ does.
 
 ```{python}
+# Step 1: the crossing point from equation (5)
 Y, pi = solve_asad(PI_BAR, A_HOUSING, F_CRISIS)
 print(f"Equation (5): Y~ = {Y:.3f}, pi = {pi:.3f}")
+# Step 2: the point must lie on the AD curve (4) and on the AS curve
 print(f"AD curve (4) at this pi:  Y~ = {ad_output(pi, A_HOUSING, F_CRISIS):.3f}")
 print(f"AS curve at this Y~:      pi = {as_inflation(Y):.3f}")
+# Step 3: no premium, but a demand shock lower by b f: the same AD output
 same = ad_output(pi, a=A_HOUSING - B_BAR * F_CRISIS, f=0.0)
-print(f"AD with f = 4: {ad_output(pi, A_HOUSING, F_CRISIS):.3f};  AD with f = 0 and a lowered by b f: {same:.3f}")
+print(f"AD with f = 4: {ad_output(pi, A_HOUSING, F_CRISIS):.3f};  "
+      f"AD with f = 0 and a lowered by b f: {same:.3f}")
 ```
 
-**Check 2: the path of inflation.** We solve the AS/AD model year by year with equation (5) and compare inflation with
-the closed form (7), which says the gap to $\pi_C$ shrinks by the factor $1/1.5$ each year.
-
-> **Python note.** `range(1, 9)` counts 1, 2, ..., 8, so the `for` loop runs its indented lines 8 times.
-> `pi_prev = pi` hands this year's inflation on to the next year. `**` means "to the power of", and `{Y:6.2f}`
-> shows two decimals in a space six characters wide, so that the columns line up.
+**Check 2: the path of inflation.** We solve the AS/AD model year by year with equation (5) and compare inflation
+with the closed form (7), which says the gap to $\pi_C$ shrinks by the factor $1/1.5$ each year.
 
 ```{python}
+# Step 1: long-run inflation, equation (6), and the factor of equation (7)
 pi_C = PI_BAR + (A_HOUSING - B_BAR * F_CRISIS) / (B_BAR * M_BAR)     # equation (6)
 factor = 1 / (1 + B_BAR * M_BAR * NU)
 print(f"Long-run inflation, equation (6): pi_C = {pi_C:.2f}%")
+
+# Step 2: solve year by year. `range(1, 9)` counts 1, 2, ..., 8, so the `for` loop
+# runs its indented lines 8 times. `**` means "to the power of", and `{Y:6.2f}`
+# shows two decimals in a space six characters wide, so that the columns line up.
 pi_prev = PI_BAR                                  # inflation before the crisis
 for t in range(1, 9):
     Y, pi = solve_asad(pi_prev, A_HOUSING, F_CRISIS)
     closed = pi_C + factor ** t * (PI_BAR - pi_C)                      # equation (7)
     print(f"Year {t}: Y~ = {Y:6.2f}%   pi = {pi:6.3f}% (year by year)   {closed:6.3f}% (equation 7)")
+    # `pi_prev = pi` hands this year's inflation on to the next year
     pi_prev = pi
 ```
 
-**Check 3: the comparative statics.** Raise the premium by one point and compare the first-year effects and the
+**Check 3: the comparative statics.** We raise the premium by one point and compare the first-year effects and the
 long-run inflation with the table: $-0.67$, $-0.33$ and $-1$.
 
 ```{python}
+# Step 1: the first year with the baseline premium and with one point more
 Y0, pi0 = solve_asad(PI_BAR, A_HOUSING, F_CRISIS)
 Y1, pi1 = solve_asad(PI_BAR, A_HOUSING, F_CRISIS + 1)
+# Step 2: long-run inflation, equation (6), in both cases
 pi_C0 = PI_BAR + (A_HOUSING - B_BAR * F_CRISIS) / (B_BAR * M_BAR)
 pi_C1 = PI_BAR + (A_HOUSING - B_BAR * (F_CRISIS + 1)) / (B_BAR * M_BAR)
+# Step 3: the differences; ":+.3f" shows the sign and three decimals
 print(f"One more point of f: first-year output {Y1 - Y0:+.3f}, first-year inflation {pi1 - pi0:+.3f}")
 print(f"                     long-run inflation {pi_C1 - pi_C0:+.3f}")
 ```
 
 **Check 4: the zero lower bound.** Equation (10) must give the same output as setting the nominal rate to zero and
-going through the Fisher equation (8), equation (1) and the IS curve. Equation (9) shows when the rule hits the bound.
-
-> **Python note.** A `for` loop can also run over a few values written in parentheses, here three inflation rates.
+going through the Fisher equation (8), equation (1) and the IS curve. Equation (9) shows when the rule hits the
+bound.
 
 ```{python}
+# A `for` loop can also run over a few values written in parentheses,
+# here three inflation rates
 for pi in (2.0, 0.0, -2.0):
-    R_floor = borrowing_rate(real_rate(0.0, pi), F_CRISIS)      # nominal rate zero, plus the premium
+    # Step 1: nominal rate zero, then the Fisher equation (8) and the premium (1)
+    R_floor = borrowing_rate(real_rate(0.0, pi), F_CRISIS)
     direct = is_output(R_floor, A_HOUSING)
+    # Step 2: compare with equation (10), and show the nominal rate rule (9) asks for
     print(f"pi = {pi:+.0f}%: best output {direct:+.1f}% (step by step), "
           f"{zlb_best_output(pi, A_HOUSING, F_CRISIS):+.1f}% (equation 10); "
           f"rule (9) asks for i = {R_BAR + pi + M_BAR * (pi - PI_BAR):+.1f}%")
 ```
 
-**Check 5: the deflationary spiral.** We freeze the nominal rate at the 1929 level, $\bar{i} = \bar{r} + 3 = 5$ percent,
-start from the crash ($\bar{a}' = -3$, inflation zero) and let the real rate follow last year's inflation. Equation (11)
-says each year's gap is 1.5 times the last.
+**Check 5: the deflationary spiral.** We freeze the nominal rate at the 1929 level, $\bar{i} = \bar{r} + 3 = 5$
+percent, start from the crash ($\bar{a}' = -3$, inflation zero) and let the real rate follow last year's inflation.
+Equation (11) says each year's gap is 1.5 times the last.
 
 ```{python}
-i_fixed = R_BAR + HIKE                            # the nominal rate the Fed kept (inflation was about zero)
+# Step 1: the nominal rate the Fed kept (inflation was about zero)
+i_fixed = R_BAR + HIKE
 pi_prev = 0.0
-Y_prev = is_output(real_rate(i_fixed, pi_prev), A_CRASH)         # year 1: the crash, point C
+# year 1: the crash, point C
+Y_prev = is_output(real_rate(i_fixed, pi_prev), A_CRASH)
 print(f"Year 1: Y~ = {Y_prev:6.2f}%")
+
+# Step 2: years 2 to 4, each with last year's inflation
 for year in range(2, 5):
-    pi_prev = as_inflation(Y_prev, pi_prev)                      # last year's slump lowered inflation ...
-    Y = is_output(real_rate(i_fixed, pi_prev), A_CRASH)          # ... which raises this year's real rate
-    print(f"Year {year}: Y~ = {Y:6.2f}%   ratio to last year = {Y / Y_prev:.2f}  (equation 11: {1 + B_BAR * NU:.2f})")
+    # last year's slump lowered inflation ...
+    pi_prev = as_inflation(Y_prev, pi_prev)
+    # ... which raises this year's real rate
+    Y = is_output(real_rate(i_fixed, pi_prev), A_CRASH)
+    print(f"Year {year}: Y~ = {Y:6.2f}%   ratio to last year = {Y / Y_prev:.2f}  "
+          f"(equation 11: {1 + B_BAR * NU:.2f})")
     Y_prev = Y
 ```
 
 The first two years are the points $C$ and $D$ of Figs. 12 and 13, $-6$ and $-9$ percent.
 
-**Check 6: leverage and asset prices.** Equation (12) against a balance sheet written out in dollars, and equation (13)
-against a long sum of discounted profits.
-
-> **Python note.** `total += ...` is short for `total = total + ...`: it adds one more term each time the loop runs.
+**Check 6: leverage and asset prices.** We check equation (12) against a balance sheet written out in dollars,
+and equation (13) against a long sum of discounted profits.
 
 ```{python}
-bank_assets, bank_capital = 100.0, 7.0            # a bank with a 7% capital ratio
-bank_debts = bank_assets - bank_capital           # liabilities stay fixed in dollars
-new_capital = bank_assets * (1 - 0.03) - bank_debts                  # assets lose 3%
+# Step 1: a bank with a 7% capital ratio; its liabilities stay fixed in dollars
+bank_assets, bank_capital = 100.0, 7.0
+bank_debts = bank_assets - bank_capital
+# the assets lose 3%
+new_capital = bank_assets * (1 - 0.03) - bank_debts
 print(f"Leverage = {bank_debts / bank_capital:.1f}; net worth {bank_capital:.0f} -> {new_capital:.0f}: "
-      f"{100 * (new_capital / bank_capital - 1):.1f}% (balance sheet), {net_worth_change(3, 0.07):.1f}% (equation 12)")
+      f"{100 * (new_capital / bank_capital - 1):.1f}% (balance sheet), "
+      f"{net_worth_change(3, 0.07):.1f}% (equation 12)")
+
+# Step 2: profits of 1 next year, growing 2% a year, discounted at 7%.
+# `total += ...` is short for `total = total + ...`: it adds one more term each
+# time the loop runs.
 total = 0.0
-for year in range(1, 2001):                       # profits of 1 next year, growing 2% a year, discounted at 7%
+for year in range(1, 2001):
     total += 1.02 ** (year - 1) / 1.07 ** year
 print(f"P/E: {total:.2f} (sum of 2,000 years), {price_earnings(7, 2):.2f} (equation 13); "
-      f"with R = 8%: {price_earnings(8, 2):.2f}, a change of {100 * (price_earnings(8, 2) / price_earnings(7, 2) - 1):.0f}%")
+      f"with R = 8%: {price_earnings(8, 2):.2f}, "
+      f"a change of {100 * (price_earnings(8, 2) / price_earnings(7, 2) - 1):.0f}%")
+
+# Step 3: forward guidance, equation (14): the long rate averages the short rates
 print(f"Forward guidance, equation (14): {(0 + 1 + 2 + 3) / 4:.2f}% -> {(0 + 0 + 0 + 2) / 4:.2f}%")
 ```
 
 <!-- cell -->
 
-### Drawing tools
+### Drawing and data tools
 
-All model diagrams use the same few drawing steps, so we write them once:
+The figures share a set of tools. The drawing tools put curves, points and arrows on the IS/MP and AS/AD
+diagrams; the data tools shade the U.S. recessions, measure peaks and troughs, and give every country its own
+color. Run them and move on, or open the box to see how they work.
 
-- `add_curve` draws one curve and writes its name at its right end; `add_label` skips a name that would sit on top of
-  another one;
-- `add_point` marks a point with dashed guides to the axes, and `add_arrow` draws an arrow;
-- `model_figure` starts a figure with one or two panels, and `model_axes` fixes the axes and writes the title.
+<!-- cell -->
 
-> **Python note.** `np.linspace(-7.5, 4.5, 121)` creates 121 evenly spaced numbers from −7.5 to 4.5. Because our model
-> functions work on a whole array at once, one call gives a whole curve. `(x >= x0) & (y <= y1)` is true where *both*
-> conditions hold, `x[inside]` keeps the values where `inside` is true, and `[-1]` takes the last of them. A `for` loop
-> over `fig.layout.annotations` looks at every label already written, and `return` inside the loop stops the function
-> early.
+::: {.callout-note .mic-fold collapse="true" title="Show the drawing and data tools"}
+
+All model diagrams use the same few drawing steps, so we write them once. `add_curve` draws one curve and writes
+its name at its right end, and `add_label` leaves out a name that would sit on top of another one.
 
 ```{python}
-FADED_TEAL, FADED_BLUE = "rgba(0,128,112,0.35)", "rgba(22,82,140,0.35)"   # curves before a shock
+#| kind: folded
+# @title Drawing tools: curves and their names
+# Step 1: faded colors for the curves before a shock
+FADED_TEAL, FADED_BLUE = "rgba(0,128,112,0.35)", "rgba(22,82,140,0.35)"
 
 
 def axis_names(col):
-    """The names Plotly gives the axes of panel col: x and y in panel 1, x2 and y2 in panel 2."""
+    """The names Plotly gives the axes of a panel.
+
+    Arguments
+        col : the panel, 1 or 2
+    Returns
+        the names of its axes: "x" and "y" in panel 1, "x2" and "y2" in panel 2
+    """
+    # Step 2: panel 1 has plain names, the others end in their number
     if col == 1:
         return "x", "y"
     return f"x{col}", f"y{col}"
 
 
 def add_label(fig, x, y, text, color, col=1):
-    """Write a curve name at (x, y), unless another name already sits within 0.6 axis units."""
+    """Write a curve's name at (x, y), unless another name already sits close by.
+
+    Arguments
+        fig   : the figure to draw on
+        x, y  : where the name goes, in axis units
+        text  : the curve's name, e.g. "IS"
+        color : its color, e.g. TEAL
+        col   : the panel to write in
+    """
     xref, yref = axis_names(col)
+    # Step 3: a `for` loop over fig.layout.annotations looks at every name already
+    # written; `abs` is the absolute value, and `return` inside the loop stops the
+    # function early, so a name within 0.6 axis units is left out
     for old in fig.layout.annotations:
         if old.xref == xref and old.showarrow is False and abs(old.x - x) < 1.5 and abs(old.y - y) < 0.6:
             return
+    # Step 4: no name close by: write this one
     fig.add_annotation(x=x, y=y, xref=xref, yref=yref, text=text, showarrow=False, xanchor="left",
                        yanchor="bottom", font=dict(color=color, size=14))
 
 
 def add_curve(fig, x, y, label, color, box, dash="solid", col=1):
-    """Draw a curve in panel col and write its name at its last point inside box = (x range, y range)."""
+    """Draw a curve in a panel and write its name at its last point inside the axes.
+
+    Arguments
+        fig   : the figure to draw on
+        x, y  : the points of the curve (arrays)
+        label : the curve's name ("" for none)
+        color : its color
+        box   : the axes, (x range, y range)
+        dash  : "solid" or "dash"
+        col   : the panel to draw in
+    """
+    # Step 1: draw the curve; `row=1, col=col` picks the panel. The arrays x and y
+    # usually come from `np.linspace(-7.5, 4.5, 121)`, 121 evenly spaced numbers,
+    # put through a model function, which works on a whole array at once
     fig.add_trace(go.Scatter(x=x, y=y, mode="lines", name=label, showlegend=False,
                              line=dict(color=color, width=3, dash=dash)), row=1, col=col)
+    # Step 2: which points lie inside the axes? `&` is true where both conditions
+    # hold, and the right edge leaves room for the text
     (x0, x1), (y0, y1) = box
-    inside = (x >= x0) & (x <= x1 - 1.2) & (y >= y0) & (y <= y1)    # leave room for the text
+    inside = (x >= x0) & (x <= x1 - 1.2) & (y >= y0) & (y <= y1)
+    # Step 3: `x[inside]` keeps the values where `inside` is true, and `[-1]`
+    # takes the last of them: the name goes after the last point inside
     if inside.any() and label != "":
         add_label(fig, x[inside][-1], y[inside][-1], label, color, col)
 ```
 
+`add_point` marks a point with dashed guides to the axes, and `add_arrow` draws an arrow between two points.
+
 ```{python}
+#| kind: folded
+# @title Drawing tools: points and arrows
 def add_point(fig, x, y, label, box, guides="v", col=1, where="top right"):
-    """Mark (x, y) with a dot and a letter placed `where`; dashed guides to the x-axis ("v"), both axes ("both") or none."""
+    """Mark (x, y) with a dot and a letter, with dashed guides to the axes.
+
+    Arguments
+        fig    : the figure to draw on
+        x, y   : the point, in axis units
+        label  : its letter, e.g. "A"
+        box    : the axes, (x range, y range)
+        guides : "v" for a guide down to the x-axis, "both" for both axes, "none"
+        col    : the panel to draw in
+        where  : where the letter sits, e.g. "top right"
+    """
+    # Step 1: the dashed guides; by default one line, from the point down to the x-axis
     (x0, x1), (y0, y1) = box
     xs, ys = [x, x], [y, y0]
+    # "both": from the y-axis across to the point, then down to the x-axis
     if guides == "both":
         xs, ys = [x0, x, x], [y, y, y0]
+    # "none": no guides at all
     if guides != "none":
         fig.add_trace(go.Scatter(x=xs, y=ys, mode="lines", showlegend=False, hoverinfo="skip",
                                  line=dict(color="black", width=1, dash="dash")), row=1, col=col)
+    # Step 2: the dot and its letter
     fig.add_trace(go.Scatter(x=[x], y=[y], mode="markers+text", text=[label], textposition=where,
                              name=label, showlegend=False, textfont=dict(size=16),
                              marker=dict(color="black", size=10)), row=1, col=col)
 
 
 def add_arrow(fig, x0, y0, x1, y1, col=1):
-    """Draw an arrow from (x0, y0) to (x1, y1) in axis units; nothing if the two points almost coincide."""
+    """Draw an arrow from (x0, y0) to (x1, y1) in axis units (none if the points almost coincide).
+
+    Arguments
+        fig    : the figure to draw on
+        x0, y0 : where the arrow starts
+        x1, y1 : where it points
+        col    : the panel to draw in
+    """
+    # draw it only if the two points are visibly apart
     if abs(x1 - x0) + abs(y1 - y0) > 0.15:
+        # the arrow's tip (x, y) and tail (ax, ay), both in the panel's axis units
         xref, yref = axis_names(col)
         fig.add_annotation(x=x1, y=y1, ax=x0, ay=y0, xref=xref, yref=yref, axref=xref, ayref=yref, text="",
                            showarrow=True, arrowhead=3, arrowwidth=2, arrowcolor="black")
 ```
 
-> **Python note.** `make_subplots(rows=1, cols=2)` creates a figure with two panels side by side, and
-> `add_trace(..., row=1, col=2)` draws in the second panel. `fig.update_xaxes(..., row=1, col=col)` changes the
-> horizontal axis of one panel only.
+`model_figure` starts a figure with one or two panels, and `model_axes` fixes the axes, so that you can see the
+curves move, and writes the title.
 
 ```{python}
+#| kind: folded
+# @title Drawing tools: the panels and their fixed axes
 def model_figure(cols=1, titles=None):
-    """An empty figure with cols panels side by side (titles: one short title per panel)."""
+    """An empty figure with one or more panels side by side.
+
+    Arguments
+        cols   : the number of panels
+        titles : one short title per panel (None for no titles)
+    Returns
+        the empty Plotly figure
+    """
+    # `make_subplots(rows=1, cols=2)` creates a figure with two panels side by side,
+    # and `add_trace(..., row=1, col=2)` then draws in the second panel
     return make_subplots(rows=1, cols=cols, subplot_titles=titles, horizontal_spacing=0.1)
 
 
 def model_axes(fig, title, box, y_title, x_ticks, y_ticks, panels=1):
-    """Fixed axes in every panel, so that you can see the curves move, and the title readout."""
+    """Fix the axes of every panel, so that you can see the curves move, and write the title.
+
+    Arguments
+        fig              : the figure
+        title            : the title, with the readout of the sliders
+        box              : the axes, (x range, y range)
+        y_title          : the name of the vertical axis
+        x_ticks, y_ticks : the tick values of the two axes
+        panels           : the number of panels
+    """
+    # `fig.update_xaxes(..., row=1, col=col)` changes the horizontal axis of one
+    # panel only, so the loop sets the axes panel by panel
     for col in range(1, panels + 1):
-        fig.update_xaxes(title_text="Output, Ỹ (%)", range=box[0], tickvals=x_ticks, zeroline=False, row=1, col=col)
+        fig.update_xaxes(title_text="Output, Ỹ (%)", range=box[0], tickvals=x_ticks, zeroline=False,
+                         row=1, col=col)
         fig.update_yaxes(title_text=y_title, range=box[1], tickvals=y_ticks, zeroline=False, row=1, col=col)
     fig.update_layout(title=title)
 ```
 
-<!-- cell -->
-
-### Tools for the data figures
-
-Two data tools are used by several figures. `shade_recessions` shades the U.S. recessions, as dated by the National
-Bureau of Economic Research (NBER). The file `recessions.csv` lists, for each recession since 1953, the **peak** (the
-last month before the recession) and the **trough** (its last month). `peak_to_trough` finds the highest value of a
-series between two dates, the lowest value after it, and the fall in percent between the two.
-
-> **Python note.** `pd.read_csv` reads a data file into a *DataFrame*, a table with named columns, and
-> `parse_dates=[...]` turns text such as `"2007-12-01"` into real dates. `zip(a, b)` hands over one pair of values at a
-> time. `data[(data.date >= start) & (data.date <= end)]` keeps the rows between two dates, `.idxmax()` gives the row
-> label of the largest value, and `.loc[label]` picks that row.
+Two data tools are used by several figures. `shade_recessions` shades the U.S. recessions, as dated by the
+National Bureau of Economic Research (NBER). The file `recessions.csv` lists, for each recession since 1953, the
+**peak** (the last month before the recession) and the **trough** (its last month). `peak_to_trough` finds the
+highest value of a series between two dates, the lowest value after it, and the fall in percent between the two.
 
 ```{python}
+#| kind: folded
+# @title Data tools: recession shading and peak-to-trough falls
+# Step 1: read the recession dates. `pd.read_csv` reads a data file into a
+# DataFrame, a table with named columns, and `parse_dates=[...]` turns text
+# such as "2007-12-01" into real dates.
 recessions = pd.read_csv(DATA_URL + "recessions.csv", parse_dates=["peak", "trough"])
 
 
 def shade_recessions(fig, start):
-    """Shade every NBER recession that ends after the date start (Figs. 4 and 6)."""
+    """Shade every NBER recession, from peak to trough, that ends after the date start.
+
+    Used in Figs. 4 and 6.
+
+    Arguments
+        fig   : the figure to draw on, with dates on the horizontal axis
+        start : a date such as "1990-01-01"; recessions that end earlier are left out
+    Returns
+        the same figure, with the shading
+    """
+    # Step 2: `zip(recessions.peak, recessions.trough)` hands over one (peak, trough)
+    # pair at a time, and the `if` skips recessions that end before `start`
     for peak, trough in zip(recessions.peak, recessions.trough):
         if trough >= pd.Timestamp(start):
             fig.add_vrect(x0=peak, x1=trough, fillcolor=BLUE, opacity=0.12, line_width=0)
@@ -913,14 +1200,29 @@ def shade_recessions(fig, start):
 
 
 def peak_to_trough(data, column, start, end):
-    """The peak of column between two dates, the lowest value after it, and the fall in percent (Figs. 7, 8)."""
+    """The peak of a series between two dates, the lowest value after it, and the fall.
+
+    Used in Figs. 7 and 8.
+
+    Arguments
+        data       : a data table with a `date` column
+        column     : the name of the series, e.g. "cape"
+        start, end : the dates between which to look
+    Returns
+        three things: the peak row, the trough row and the fall in percent
+    """
+    # Step 3: keep the rows between the two dates; `&` requires both conditions
     window = data[(data.date >= start) & (data.date <= end)]
+    # `.idxmax()` gives the row label of the largest value,
+    # and `.loc[label]` picks that row
     peak = window.loc[window[column].idxmax()]
+    # Step 4: the lowest value after the peak, and the fall from peak to trough
     after = window[window.date >= peak.date]
     trough = after.loc[after[column].idxmin()]
     return peak, trough, 100 * (1 - trough[column] / peak[column])
 
 
+# Step 5: show the last three recessions of the file
 recessions.tail(3)
 ```
 
@@ -929,55 +1231,86 @@ exist for other countries too. Where they do, a subsection called *Beyond the Un
 series for many countries, with the textbook's countries picked to start with. Two more tools serve those charts:
 `group_colors` gives every country a color that stays the same whichever countries you pick, and that no other
 country shown with it uses, and `fit_axis` chooses the narrowest of a few fixed axis ranges that still holds every
-point, so the axis only widens when a country needs it.
-
-> **Python note.** `px.colors.qualitative.Dark24` and `Alphabet` are lists of colors that Plotly ships with, and
-> `PALETTE.append(color)` adds a color at the end of a list. `group_colors` walks through the countries one by one.
-> `colors.get(other)` is the color of `other`, or `None` if it has none yet. `new + free + PALETTE` joins three lists
-> and `[0]` takes the first item: a color that no country uses yet if there is one, else one that no country of the
-> same groups uses.
+point, so the axis only widens when a country needs it. The colors come from a palette of 44 colors.
 
 ```{python}
-LIGHT = ["#F7E1A0", "#E2E2E2", "#FBE426", "#16FF32", "#1CFFCE", "#2ED9FF"]      # too pale on a white page
-PALETTE = list(px.colors.qualitative.Dark24)                                     # 24 dark colors ...
-for color in px.colors.qualitative.Alphabet:                                     # ... and 20 more
+#| kind: folded
+# @title Color tool: a palette of 44 colors
+# Step 1: the colors that are too pale on a white page
+LIGHT = ["#F7E1A0", "#E2E2E2", "#FBE426", "#16FF32", "#1CFFCE", "#2ED9FF"]
+# Step 2: `px.colors.qualitative.Dark24` and `Alphabet` are lists of colors that
+# Plotly ships with: 24 dark colors ...
+PALETTE = list(px.colors.qualitative.Dark24)
+# ... and 20 more; `PALETTE.append(color)` adds a color at the end of the list
+for color in px.colors.qualitative.Alphabet:
     if color not in LIGHT:
         PALETTE.append(color)
+# Step 3: this blue is close to the U.S. navy: use it last
 PALETTE.remove("#2E91E5")
-PALETTE.append("#2E91E5")                          # this blue is close to the U.S. navy: use it last
+PALETTE.append("#2E91E5")
 ```
 
+`group_colors` walks through the countries one by one and gives each the first color that no country shown with
+it uses.
+
 ```{python}
+#| kind: folded
+# @title Color tool: one color for each country
 def group_colors(names, groups, fixed=None):
     """A color for each country that no other country of its groups uses, as far as the palette allows.
-    groups: lists of countries shown together (the website menus); fixed: {country: color} for the book's countries."""
+
+    Arguments
+        names  : the countries, in the order they get their colors
+        groups : lists of countries shown together (the website menus)
+        fixed  : {country: color} for the book's countries (None for none)
+    Returns
+        {country: color} for every country in names
+    """
     colors = dict(fixed or {})
     for name in names:
+        # a country with a fixed color keeps it; `continue` jumps to the next one
         if name in colors:
             continue
-        used = []                                    # colors of the countries already shown with this one
+        # Step 1: the colors of the countries already shown with this one.
+        # `colors.get(other)` is the color of `other`, or `None` if it has none yet.
+        used = []
         for group in groups:
             if name in group:
                 for other in group:
                     used.append(colors.get(other))
-        free, new = [], []                           # free: not used in its groups; new: not used by any country
+        # Step 2: free: not used in its groups; new: not used by any country
+        free, new = [], []
         for color in PALETTE:
             if color not in used:
                 free.append(color)
                 if color not in colors.values():
                     new.append(color)
+        # Step 3: `new + free + PALETTE` joins three lists and `[0]` takes the first
+        # item: a color that no country uses yet if there is one, else one that no
+        # country of the same groups uses
         colors[name] = (new + free + PALETTE)[0]
     return colors
 ```
 
-> **Python note.** `for bottom, top in ranges:` unpacks each pair of the list `ranges`.
+`fit_axis` picks the first of a few fixed axis ranges that holds every value.
 
 ```{python}
+#| kind: folded
+# @title Drawing tool: an axis range that widens only when needed
 def fit_axis(low, high, ranges):
-    """The first range (bottom, top) in the list that holds every value from low to high; else a range that just fits."""
+    """The first range in the list that holds every value from low to high, else one that just fits.
+
+    Arguments
+        low, high : the lowest and highest values to show
+        ranges    : a list of (bottom, top) ranges, narrowest first
+    Returns
+        the axis range [bottom, top]
+    """
+    # Step 1: `for bottom, top in ranges:` unpacks each pair of the list `ranges`
     for bottom, top in ranges:
         if bottom <= low and high <= top:
             return [bottom, top]
+    # Step 2: no range is wide enough: add 5% of room on each side
     pad = 0.05 * (high - low)
     return [low - pad, high + pad]
 ```
@@ -986,25 +1319,42 @@ The website cannot run Python, so its versions of these charts draw every countr
 them on in the legend. The next helper does that. Run it and move on.
 
 ```{python}
-#| kind: helper
+#| kind: folded
 # @title Helper for the multi-country website versions (run this cell; you do not need to read it)
 def legend_menu(fig, shown, groups=None):
     """Website version of a country picker: the countries in `shown` are drawn, the others wait in the legend.
 
     Without groups, every other country is in the legend ('legendonly'), one click away, and a menu offers
-    "Show all". With groups ({menu label: [countries]}), the menu puts one group at a time in the legend.
-    Traces that are not countries (showlegend=False) always stay visible. The y-axis rescales to what is shown.
+    "Show all". With groups, the menu puts one group at a time in the legend. Traces that are not countries
+    (showlegend=False) always stay visible. The y-axis rescales to what is shown.
+
+    Arguments
+        fig    : a Plotly figure with one trace per country
+        shown  : the countries drawn at the start
+        groups : {menu label: [countries]}, or None for one "Show all" entry
+    Returns
+        the same figure, with the visibility set and the menu
     """
     def visibility(members):
+        """Whether each trace is drawn, in the legend only, or hidden.
+
+        Arguments
+            members : the countries put in the legend (None for all)
+        Returns
+            one value per trace: True, "legendonly" or False
+        """
         out = []
         for t in fig.data:
+            # not a country, or a country shown at the start: drawn
             if t.showlegend is False or t.name in shown:
                 out.append(True)
+            # in the group: a click away
             elif members is None or t.name in members:
                 out.append("legendonly")
             else:
                 out.append(False)
         return out
+    # Step 1: the menu entries, the textbook view first
     if groups is None:
         buttons = [dict(method="restyle", label="Textbook view", args=[{"visible": visibility(None)}]),
                    dict(method="restyle", label="Show all", args=[{"visible": [True] * len(fig.data)}])]
@@ -1012,31 +1362,50 @@ def legend_menu(fig, shown, groups=None):
         buttons = [dict(method="restyle", label="Textbook view", args=[{"visible": visibility([])}])]
         for label, members in groups.items():
             buttons.append(dict(method="restyle", label=label, args=[{"visible": visibility(members)}]))
+    # Step 2: start with the textbook view, and make the website file smaller
     for trace, visible in zip(fig.data, buttons[0]["args"][0]["visible"]):
         trace.visible = visible
         compact(trace)
+    # Step 3: let the y-axis rescale, and add the menu above the plot
     fig.layout.yaxis.range = None
     fig.update_yaxes(autorange=True)
-    fig.update_layout(updatemenus=[dict(buttons=buttons, active=0, direction="down", x=1, y=1.02, xanchor="right",
-                                        yanchor="bottom")], margin=dict(t=110))
+    fig.update_layout(updatemenus=[dict(buttons=buttons, active=0, direction="down", x=1, y=1.02,
+                                        xanchor="right", yanchor="bottom")], margin=dict(t=110))
     return fig
 
 
 def compact(trace):
-    """Shorter website files: dates without the time of day, values rounded to 2 decimals."""
+    """Shorter website files: dates without the time of day, values rounded to 2 decimals.
+
+    Arguments
+        trace : one curve of a Plotly figure, changed in place
+    """
+    # dates as plain text, e.g. "2008-09-01"
     if trace.x is not None and len(trace.x) > 0 and hasattr(trace.x[0], "strftime"):
         trace.x = pd.to_datetime(trace.x).strftime("%Y-%m-%d")
+    # numbers with two decimals
     if trace.y is not None and np.asarray(trace.y).dtype.kind == "f":
         trace.y = np.round(np.asarray(trace.y), 2)
 
 
 def region_groups(data):
-    """{region: [countries]} for the website menus of long country lists."""
+    """The country groups of the website menus for long country lists, one per region.
+
+    Arguments
+        data : a data table with `country` and `region` columns
+    Returns
+        {"Add: " + region: [countries of the region, A to Z]}
+    """
     groups = {}
+    # one entry per region, with its countries sorted A to Z
     for region, rows in data.groupby("region"):
         groups["Add: " + region] = sorted(rows.country.unique())
     return groups
 ```
+
+:::
+
+<!-- cell -->
 
 ## Financial frictions in the short-run model
 

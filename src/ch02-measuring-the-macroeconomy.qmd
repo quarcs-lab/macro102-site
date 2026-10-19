@@ -27,145 +27,6 @@ numbers that describe a whole economy. By the end of it you will be able to:
 
 <!-- cell -->
 
-## Setup
-
-We first load the Python libraries we need. You only have to run this cell once.
-
-> **Python note.** `import` loads a *library*, a toolbox written by other people. We give each
-> library a short nickname, for example `pd` for pandas, so that the code stays short. Text after
-> a `#` is a *comment*: Python ignores it, and it is there for human readers. The `try ... except`
-> block runs one Colab-only line and simply skips it anywhere else.
-
-```{python}
-# Libraries used in this chapter
-import numpy as np                    # numbers and arrays
-import pandas as pd                   # data tables
-import plotly.express as px           # quick charts from data tables
-import plotly.graph_objects as go     # charts built piece by piece
-import plotly.io as pio
-from ipywidgets import interact, ToggleButtons, Dropdown, SelectMultiple, FloatSlider, IntSlider
-
-# One light blue/green look for every chart
-BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
-pio.templates.default = "plotly_white"
-pio.templates["plotly_white"].layout.update(width=860, height=480)   # same size in Colab and on the website
-px.defaults.color_discrete_sequence = [BLUE, TEAL, GREEN, "#5aa0d8", "#0b4f47", "#e0a33b"]
-WIDE = {"description_width": "initial"}         # show the full widget labels
-
-# Colab only: let Plotly charts appear inside the interactive widgets
-try:
-    import google.colab
-    google.colab.output.enable_custom_widget_manager()
-except ImportError:
-    pass                                        # not running in Colab: nothing to do
-
-# The data files of this chapter live in the book's GitHub repository
-DATA_URL = "https://raw.githubusercontent.com/quarcs-lab/macro102-site/main/data/ch02/"
-```
-
-The next cell defines a helper that only the book website needs. Run it and move on.
-
-```{python}
-#| kind: helper
-# @title Helper for the website versions (run this cell; you do not need to read it)
-def slider_figure(make_figure, name, values, start, label=None):
-    """Precompute make_figure(name=value) for every value and join the results with one slider.
-
-    The website cannot run Python, so each interactive figure also gets this precomputed version.
-    """
-    figures = [make_figure(**{name: v}) for v in values]
-    first = values.index(start)
-    fig = go.Figure(layout=figures[first].layout)
-    owner = []                                  # which precomputed figure each trace comes from
-    for i, f in enumerate(figures):
-        for trace in f.data:
-            trace.visible = (i == first)
-            fig.add_trace(trace)
-            owner.append(i)
-    steps = []
-    for i, f in enumerate(figures):
-        layout = {"title": f.layout.title.to_plotly_json(),
-                  "annotations": [a.to_plotly_json() for a in f.layout.annotations],
-                  "shapes": [s.to_plotly_json() for s in f.layout.shapes]}
-        visible = [o == i for o in owner]
-        steps.append(dict(method="update", label=str(values[i]), args=[{"visible": visible}, layout]))
-    fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
-                                    currentvalue=dict(prefix=(label or name) + " = "))])
-    return fig
-```
-
-The data figures of this chapter let you add other countries. On the website, a menu above each of
-these figures adds a group of countries (the G7, a world region, ...); the next cell builds those menus.
-
-```{python}
-#| kind: helper
-# @title Helpers for the website's country menus (run this cell; you do not need to read it)
-def country_traces(data, y, skip, x="year", fmt=".1f", markers=False):
-    """One line per country of a long table (country, x, y), leaving out the countries in skip."""
-    extra = {}
-    for name, part in data.groupby("country"):
-        if name not in skip:
-            extra[name] = [go.Scatter(x=part[x], y=part[y], name=name, mode="lines+markers" if markers else "lines",
-                                      line=dict(color=COLORS[name], width=2),
-                                      hovertemplate=f"<b>{name}</b><br>%{{x}}: %{{y:{fmt}}}<extra></extra>")]
-    return extra
-
-
-def country_menu(fig, extra, countries):
-    """Add the extra countries' traces hidden, and a menu that shows one group of them (G7, a region, ...).
-
-    The traces already in fig (the textbook's) stay as they are, and slider steps only switch those."""
-    n = len(fig.data)
-    owner = []
-    for name, traces in extra.items():
-        for trace in traces:
-            trace.visible = False
-            fig.add_trace(trace)
-            owner.append(name)
-    groups = {"G7": countries.country[countries.g7], "G20": countries.country[countries.g20],
-              "OECD": countries.country[countries.oecd]}
-    for region in sorted(countries.region.unique()):
-        groups[region] = countries.country[countries.region == region]
-    rest, autoscale = list(range(n, len(fig.data))), {"yaxis.autorange": True}
-    buttons = [dict(label="Textbook only", method="update", args=[{"visible": [False] * len(owner)}, autoscale, rest])]
-    for label, members in groups.items():
-        visible = [o in set(members) for o in owner]
-        if any(visible):
-            buttons.append(dict(label=f"+ {label} ({sum(visible)})", method="update", args=[{"visible": visible}, autoscale, rest]))
-    menu = dict(type="dropdown", buttons=buttons, active=0, x=1, xanchor="right", y=1.02, yanchor="bottom")
-    fig.update_layout(updatemenus=list(fig.layout.updatemenus) + [menu], margin=dict(t=110))
-    for slider in fig.layout.sliders:
-        for step in slider.steps:
-            step.args = [{"visible": list(step.args[0]["visible"])}, step.args[1], list(range(n))]
-    return fig
-```
-
-```{python}
-#| kind: helper
-# @title Helper for the website's one-country menus (run this cell; you do not need to read it)
-def dropdown_figure(make_figure, name, values, start):
-    """Like slider_figure, but with a dropdown menu: one precomputed figure per value (e.g. per country)."""
-    figures = [make_figure(**{name: v}) for v in values]
-    fig = go.Figure(layout=figures[values.index(start)].layout)
-    owner = []
-    for i, f in enumerate(figures):
-        for trace in f.data:
-            trace.visible = (values[i] == start)
-            fig.add_trace(trace)
-            owner.append(i)
-    buttons = []
-    for i, f in enumerate(figures):
-        layout = {"title": f.layout.title.to_plotly_json(), "annotations": [a.to_plotly_json() for a in f.layout.annotations],
-                  "shapes": [s.to_plotly_json() for s in f.layout.shapes], "yaxis": f.layout.yaxis.to_plotly_json(),
-                  "xaxis": f.layout.xaxis.to_plotly_json()}
-        if "yaxis2" in f.layout.to_plotly_json():       # a second vertical axis (Fig. 2)
-            layout["yaxis2"] = f.layout.yaxis2.to_plotly_json()
-        buttons.append(dict(label=str(values[i]), method="update", args=[{"visible": [o == i for o in owner]}, layout]))
-    menu = dict(type="dropdown", buttons=buttons, active=values.index(start), x=1, xanchor="right", y=1.02, yanchor="bottom")
-    fig.update_layout(updatemenus=[menu], margin=dict(t=110))
-    return fig
-```
-
 ## Model overview
 
 Back on **Islandia**, the island country we met in Chapter 1, a small statistics office has a job to do every year: put one number on everything the island produced. Farms grow grain, mills grind it, bakeries sell bread, Harbor Boatworks builds boats, the Islandia Treasury hires teachers, and some goods arrive by ship from Mainland. How do the statisticians add all of that up without counting anything twice? How do they tell a richer year from a year in which only prices went up? And how can Islandia compare itself with Mainland, which pays in another currency? This section builds the accounting tools that answer these three questions, following Islandia's statisticians step by step.
@@ -183,7 +44,7 @@ Back on **Islandia**, the island country we met in Chapter 1, a small statistics
 2. [Real GDP: quantity indexes and chain weighting](#real-gdp-quantity-indexes-and-chain-weighting): how to strip out price changes with the Laspeyres, Paasche and chained indexes.
 3. [Price indexes and inflation](#price-indexes-and-inflation): how nominal growth splits into inflation and real growth.
 4. [Comparing countries: exchange rates and purchasing power parity](#comparing-countries-exchange-rates-and-purchasing-power-parity): how to compare economies that use different currencies.
-5. [The model in code](#the-model-in-code): the formulas as Python functions, checked with numbers, including Islandia's apples and computers (Table 2.4).
+5. [Model in code](#model-in-code): the formulas as Python functions, checked with numbers, including Islandia's apples and computers (Table 2.4).
 
 **Notation.** A bar over a letter marks a **parameter**, a number we choose; this chapter has none. Every letter below is a variable measured in the data, which later chapters call **endogenous** once a model explains it. All the results of this section are **identities**: they hold in any data set because of the way the variables are defined, which makes them useful checks on the data.
 
@@ -614,169 +475,473 @@ At the exchange rate, Islandia's GDP falls in Mainland's currency, one for one w
 
 <!-- cell -->
 
-### The model in code
+## Model in code
 
-We now turn the measurement rules into Python functions, and then check every result above with numbers. Each function's description names the equation it computes.
+Now we turn the measurement rules into Python. The section has three parts: the setup (folded, because it is
+nearly the same in every chapter), the rules as functions, and numerical checks of the Key results, from
+Islandia's bakery to China at common prices. Run its cells once, in order. Every later section of the notebook
+reuses them.
 
-> **Python note.** `def` creates a *function*: a named recipe that takes inputs (the *arguments*)
-> and gives back a result with `return`. The text in triple quotes is a short description of what
-> the function does. `.sum()` adds up all the values of a column or a row.
+<!-- cell -->
+
+### Setup
+
+Run the setup cells once, before anything else. They load the Python libraries, give every chart the same look,
+store the address of the chapter's data and define four helpers that only the book website needs. You can use
+the notebook without reading them; open the box if you are curious.
+
+<!-- cell -->
+
+::: {.callout-note .mic-fold collapse="true" title="Show the setup code"}
+
+The first cell loads the libraries and sets the look of the charts. Its comments explain each step.
 
 ```{python}
+#| kind: folded
+# @title Setup: libraries, chart colors and the data location
+# Text after a "#" is a comment: Python ignores it, it is there for human readers.
+
+# Step 1: load the libraries. `import` loads a library, a toolbox written by
+# other people, and `as pd` gives pandas the short nickname pd, so the code stays short.
+import numpy as np                    # numbers and arrays
+import pandas as pd                   # data tables
+import plotly.express as px           # quick charts from data tables
+import plotly.graph_objects as go     # charts built piece by piece
+import plotly.io as pio               # settings shared by every chart
+# menus, buttons and sliders for the interactive figures
+from ipywidgets import interact, ToggleButtons, Dropdown, SelectMultiple, FloatSlider, IntSlider
+
+# Step 2: one light blue/green look for every chart
+BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
+pio.templates.default = "plotly_white"
+# the same chart size in Colab and on the website
+pio.templates["plotly_white"].layout.update(width=860, height=480)
+px.defaults.color_discrete_sequence = [BLUE, TEAL, GREEN, "#5aa0d8", "#0b4f47", "#e0a33b"]
+WIDE = {"description_width": "initial"}         # show the full widget labels
+
+# Step 3, Colab only: let Plotly charts appear inside the interactive widgets.
+# `try` runs the indented lines; if the import fails (we are not in Colab),
+# `except` skips them.
+try:
+    import google.colab
+    google.colab.output.enable_custom_widget_manager()
+except ImportError:
+    pass                                        # not running in Colab: nothing to do
+
+# Step 4: the data files of this chapter live in the book's GitHub repository
+DATA_URL = "https://raw.githubusercontent.com/quarcs-lab/macro102-site/main/data/ch02/"
+```
+
+The website cannot run Python, so each interactive figure also gets a version with a precomputed slider or menu.
+The next helpers build those versions. Run them and move on.
+
+```{python}
+#| kind: folded
+# @title Helper for the website versions (run this cell; you do not need to read it)
+def slider_figure(make_figure, name, values, start, label=None):
+    """Join precomputed versions of a figure with one slider (the website cannot run Python).
+
+    Arguments
+        make_figure : the function that draws the figure, e.g. changes_chart
+        name        : the argument the slider moves, e.g. "base_year"
+        values      : the values of that argument to precompute
+        start       : the value shown first
+        label       : the slider's label (the argument name if None)
+    Returns
+        one Plotly figure with all versions and a slider that shows one at a time
+    """
+    # Step 1: draw the figure once for every value
+    figures = [make_figure(**{name: v}) for v in values]
+    first = values.index(start)
+    # Step 2: copy every curve into one figure; only the start value's are visible
+    fig = go.Figure(layout=figures[first].layout)
+    owner = []                          # which precomputed figure each trace is from
+    for i, f in enumerate(figures):
+        for trace in f.data:
+            trace.visible = (i == first)
+            fig.add_trace(trace)
+            owner.append(i)
+    # Step 3: one slider step per value: its curves, title, labels and shapes
+    steps = []
+    for i, f in enumerate(figures):
+        layout = {"title": f.layout.title.to_plotly_json(),
+                  "annotations": [a.to_plotly_json() for a in f.layout.annotations],
+                  "shapes": [s.to_plotly_json() for s in f.layout.shapes]}
+        visible = [o == i for o in owner]
+        steps.append(dict(method="update", label=str(values[i]), args=[{"visible": visible}, layout]))
+    fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
+                                    currentvalue=dict(prefix=(label or name) + " = "))])
+    return fig
+```
+
+The data figures of this chapter let you add other countries. On the website, a menu above each of these
+figures adds a group of countries (the G7, a world region, ...); the next cell builds those menus.
+
+```{python}
+#| kind: folded
+# @title Helpers for the website's country menus (run this cell; you do not need to read it)
+def country_traces(data, y, skip, x="year", fmt=".1f", markers=False):
+    """One line per country of a long table, leaving out the countries in `skip`.
+
+    Arguments
+        data    : a long table with one row per country and year (columns country, x, y)
+        y       : the column to draw
+        skip    : the countries to leave out
+        x       : the column on the horizontal axis
+        fmt     : the number format of the hover text, e.g. ".1f"
+        markers : True to draw a dot at every point of the line
+    Returns
+        a dictionary: each country's name and its list of traces (one line in its color)
+    """
+    # Step 1: go through the table one country at a time
+    extra = {}
+    for name, part in data.groupby("country"):
+        if name not in skip:
+            # Step 2: one line for this country, in its COLORS color, with hover text
+            extra[name] = [go.Scatter(x=part[x], y=part[y], name=name,
+                                      mode="lines+markers" if markers else "lines",
+                                      line=dict(color=COLORS[name], width=2),
+                                      hovertemplate=f"<b>{name}</b><br>%{{x}}: %{{y:{fmt}}}<extra></extra>")]
+    return extra
+
+
+def country_menu(fig, extra, countries):
+    """Add the extra countries' lines hidden, and a menu that shows one group of them.
+
+    The groups are the G7, the G20, the OECD and each world region. The traces already in
+    fig (the textbook's) stay as they are, and the slider steps only switch those.
+
+    Arguments
+        fig       : a Plotly figure with the textbook's countries
+        extra     : the other countries' lines, from country_traces
+        countries : a table with one row per country (columns country, region, g7, g20, oecd)
+    Returns
+        the same figure, with the extra lines hidden and the group menu above the plot
+    """
+    # Step 1: add every extra line, hidden, and remember whose line it is
+    n = len(fig.data)                           # the number of textbook traces
+    owner = []
+    for name, traces in extra.items():
+        for trace in traces:
+            trace.visible = False
+            fig.add_trace(trace)
+            owner.append(name)
+    # Step 2: the groups of the menu: G7, G20, OECD, then each region, A to Z
+    groups = {"G7": countries.country[countries.g7], "G20": countries.country[countries.g20],
+              "OECD": countries.country[countries.oecd]}
+    for region in sorted(countries.region.unique()):
+        groups[region] = countries.country[countries.region == region]
+    # Step 3: one button per group; each switches only the extra lines, `rest`
+    rest, autoscale = list(range(n, len(fig.data))), {"yaxis.autorange": True}
+    buttons = [dict(label="Textbook only", method="update",
+                    args=[{"visible": [False] * len(owner)}, autoscale, rest])]
+    for label, members in groups.items():
+        visible = [o in set(members) for o in owner]
+        # leave out a group with no country in the data
+        if any(visible):
+            buttons.append(dict(label=f"+ {label} ({sum(visible)})", method="update",
+                                args=[{"visible": visible}, autoscale, rest]))
+    # Step 4: put the menu above the plot, at the right
+    menu = dict(type="dropdown", buttons=buttons, active=0, x=1, xanchor="right", y=1.02, yanchor="bottom")
+    fig.update_layout(updatemenus=list(fig.layout.updatemenus) + [menu], margin=dict(t=110))
+    # Step 5: make every slider step switch only the textbook traces, the first n
+    for slider in fig.layout.sliders:
+        for step in slider.steps:
+            step.args = [{"visible": list(step.args[0]["visible"])}, step.args[1], list(range(n))]
+    return fig
+```
+
+The last helper is like `slider_figure`, but with a dropdown menu, for the figures that show one country at a
+time.
+
+```{python}
+#| kind: folded
+# @title Helper for the website's one-country menus (run this cell; you do not need to read it)
+def dropdown_figure(make_figure, name, values, start):
+    """Like slider_figure, but with a dropdown menu: one precomputed figure per value.
+
+    Arguments
+        make_figure : the function that draws the figure, e.g. composition_chart
+        name        : the argument the menu sets, e.g. "country"
+        values      : the values of that argument to precompute (e.g. the countries)
+        start       : the value shown first
+    Returns
+        one Plotly figure with all versions and a menu that shows one at a time
+    """
+    # Step 1: draw the figure once for every value
+    figures = [make_figure(**{name: v}) for v in values]
+    fig = go.Figure(layout=figures[values.index(start)].layout)
+    # Step 2: copy every trace into one figure; only the start value's are visible
+    owner = []
+    for i, f in enumerate(figures):
+        for trace in f.data:
+            trace.visible = (values[i] == start)
+            fig.add_trace(trace)
+            owner.append(i)
+    # Step 3: one menu entry per value: its traces, title, labels, shapes and axes
+    buttons = []
+    for i, f in enumerate(figures):
+        layout = {"title": f.layout.title.to_plotly_json(),
+                  "annotations": [a.to_plotly_json() for a in f.layout.annotations],
+                  "shapes": [s.to_plotly_json() for s in f.layout.shapes],
+                  "yaxis": f.layout.yaxis.to_plotly_json(),
+                  "xaxis": f.layout.xaxis.to_plotly_json()}
+        # a second vertical axis (Fig. 2)
+        if "yaxis2" in f.layout.to_plotly_json():
+            layout["yaxis2"] = f.layout.yaxis2.to_plotly_json()
+        buttons.append(dict(label=str(values[i]), method="update",
+                            args=[{"visible": [o == i for o in owner]}, layout]))
+    # Step 4: put the menu above the plot, at the right
+    menu = dict(type="dropdown", buttons=buttons, active=values.index(start), x=1, xanchor="right", y=1.02,
+                yanchor="bottom")
+    fig.update_layout(updatemenus=[menu], margin=dict(t=110))
+    return fig
+```
+
+:::
+
+<!-- cell -->
+
+### The model as functions
+
+This chapter has no behavior to model, but its measurement rules are formulas, and we write each one as a Python
+*function*: a named recipe that takes inputs and gives back a result. The first three are shares, the value of
+production, and chain-weighted growth, equation (6).
+
+```{python}
+# `def` creates a function. Its inputs are the arguments in parentheses, and
+# `return` gives back the result. The text in triple quotes describes the function.
 def share(part, total):
-    """Share of a part in a total, in percent (Tables 2.1 and 2.2; the shares of equation 2)."""
+    """Share of a part in a total, in percent.
+
+    Tables 2.1 and 2.2, and the shares of equation (2):  share = 100 * part / total
+
+    Arguments
+        part  : the part, e.g. consumption or compensation
+        total : the total, e.g. GDP
+    Returns
+        the share of the part in the total, in percent
+    """
     return 100 * part / total
 
 
 def gdp_value(prices, quantities):
-    """Value of production: price times quantity, added over all goods (nominal or real GDP)."""
+    """Value of production: price times quantity, added over all goods.
+
+    Equation (4) and the indexes of equation (5) use it:  value = sum over i of p_i * q_i
+    With each year's own prices it is nominal GDP; with fixed prices, real GDP.
+
+    Arguments
+        prices     : the price of each good, p_i
+        quantities : the quantity of each good, q_i
+    Returns
+        the value of production, in dollars
+    """
+    # multiply good by good; `.sum()` adds up all the values of a column or a row
     return (prices * quantities).sum()
 
 
 def chain_growth(g_laspeyres, g_paasche):
-    """Chain-weighted growth: the average of the Laspeyres and Paasche growth rates (equation 6)."""
+    """Chain-weighted growth of real GDP.
+
+    Equation (6):  g_chain = (g_L + g_P) / 2
+
+    Arguments
+        g_laspeyres : the Laspeyres growth rate, g_L (at the starting prices)
+        g_paasche   : the Paasche growth rate, g_P (at the ending prices)
+    Returns
+        the chain-weighted growth rate, g_chain
+    """
+    # the simple average of the two growth rates
     return (g_laspeyres + g_paasche) / 2
+```
 
+The last two functions compare countries. One converts GDP into dollars at the market exchange rate, and the
+other values it at U.S. prices, equation (8).
 
+```{python}
 def to_dollars(gdp_local, exchange_rate):
-    """Convert GDP in local currency into dollars at the market exchange rate."""
+    """GDP in dollars at the market exchange rate.
+
+    The first step of equation (8):  GDP in dollars = GDP in local currency / e
+
+    Arguments
+        gdp_local     : GDP in the local currency, e.g. trillions of yuan
+        exchange_rate : the exchange rate e, units of local currency per dollar
+    Returns
+        GDP in dollars
+    """
     return gdp_local / exchange_rate
 
 
 def at_common_prices(gdp_dollars, relative_price_level):
-    """Real GDP at U.S. prices: dollar GDP divided by the price level relative to the U.S. (equation 8)."""
+    """Real GDP at U.S. prices.
+
+    Equation (8):  real GDP at U.S. prices = GDP in dollars / (price level / U.S. price level)
+
+    Arguments
+        gdp_dollars          : GDP in dollars, from to_dollars
+        relative_price_level : the country's price level relative to the U.S. (U.S. = 1)
+    Returns
+        real GDP at U.S. prices, in dollars
+    """
+    # where goods are cheap (a relative price level below 1), the same dollars buy more
     return gdp_dollars / relative_price_level
 ```
+
+<!-- cell -->
+
+### Checking the key results
+
+The rules came from algebra. Now we check them with numbers, one Key result at a time, mostly with small
+made-up examples from Islandia.
 
 **Check 1: value added adds up to final sales (equation 1).** Islandia's chain of three producers: a farm
 grows grain worth \$40 and sells it to a mill; the mill turns it into flour worth \$70 and sells it to a bakery;
 the bakery sells bread worth \$120 to islanders.
 
-> **Python note.** `pd.Series({...})` builds one labeled column from a dictionary: the keys become the
-> labels. Subtracting two Series subtracts the values with the same label.
-
 ```{python}
+# Step 1: each producer's sales and purchases. `pd.Series({...})` builds one
+# labeled column from a dictionary: the keys become the labels.
 revenue = pd.Series({"farm": 40, "mill": 70, "bakery": 120})
-inputs = pd.Series({"farm": 0, "mill": 40, "bakery": 70})     # each buys the output of the one before
+# each buys the output of the one before
+inputs = pd.Series({"farm": 0, "mill": 40, "bakery": 70})
+# Step 2: value added; subtracting two Series subtracts the values with the same label
 value_added = revenue - inputs
 print(value_added)
+# Step 3: equation (1): the sum of value added equals the final sales
 print(f"Sum of value added:   ${value_added.sum()}")
 print(f"Final sales (bread):  ${revenue['bakery']}")
 print(f"Sum of all revenues:  ${revenue.sum()}   (counts the grain three times and the flour twice)")
 ```
 
-**Check 2: the labor share (equation 3).** Take made-up round numbers for one year's income (in billions)
-on Islandia and check the algebra of Step 5: splitting proprietors' income in the economy-wide proportion gives the same
-labor share as leaving it out of the fraction.
+**Check 2: the labor share (equation 3).** We take made-up round numbers for one year's income on Islandia (in
+billions) and check the algebra of Step 5: splitting proprietors' income in the economy-wide proportion gives
+the same labor share as leaving it out of the fraction.
 
 ```{python}
+# Step 1: Islandia's income in one year, in billions
 gdi, taxes, proprietors, compensation = 100.0, 7.0, 9.0, 54.0
+# Step 2: the labor share in two ways
 theta = compensation / (gdi - taxes - proprietors)                  # equation (3)
-split = (compensation + theta * proprietors) / (gdi - taxes)        # proprietors' income split by theta
+# proprietors' income split by theta
+split = (compensation + theta * proprietors) / (gdi - taxes)
+# Step 3: both give the same share; compensation / GDI alone is too low
 print(f"Labor share, equation (3):                 {theta:.4f}")
 print(f"Labor share with proprietors split:        {split:.4f}")
 print(f"Simple share, compensation / GDI:          {compensation / gdi:.4f}   (lower)")
 ```
 
-**Check 3: real GDP in the economy of Table 2.4.** In this example Islandia produces only apples
-and computers, as in the textbook's Table 2.4. We store its prices and quantities in two small tables, one row per year.
-
-> **Python note.** `pd.DataFrame({...}, index=[...])` builds a table from a dictionary: each key
-> becomes a column and the `index` gives the row labels. `prices.loc[2026]` picks the row for 2026.
-> Multiplying two rows, `prices.loc[2026] * quantities.loc[2027]`, multiplies the matching columns.
+**Check 3: real GDP in the economy of Table 2.4.** In this example Islandia produces only apples and computers,
+as in the textbook's Table 2.4. We store its prices and quantities in two small tables, one row per year.
 
 ```{python}
+# Prices and quantities of the two goods, one row per year.
+# `pd.DataFrame({...}, index=[...])` builds a table from a dictionary: each key
+# becomes a column, and the `index` gives the row labels.
 prices = pd.DataFrame({"apples": [1, 2, 3], "computers": [900, 1000, 1000]}, index=[2025, 2026, 2027])
 quantities = pd.DataFrame({"apples": [500, 500, 550], "computers": [5, 5, 6]}, index=[2025, 2026, 2027])
 prices
 ```
 
-Nominal GDP uses each year's own prices. Real GDP holds the prices fixed. The **Laspeyres** index
-measures the change from 2026 to 2027 with the *initial* (2026) prices, and the **Paasche** index with
-the *final* (2027) prices. **Chain weighting** averages the two growth rates (equation 6).
-
-> **Python note.** An *f-string* such as `f"{x:,.0f}"` inserts the value of a variable into a piece
-> of text: `,` adds thousands separators, `.0f` shows no decimals and `.1%` shows a share as a
-> percentage with one decimal.
+Nominal GDP uses each year's own prices. Real GDP holds the prices fixed. The **Laspeyres** index measures the
+change from 2026 to 2027 with the *initial* (2026) prices, and the **Paasche** index with the *final* (2027)
+prices. **Chain weighting** averages the two growth rates (equation 6).
 
 ```{python}
+# Step 1: nominal GDP, each year at its own prices. `prices.loc[2026]` picks the
+# row for 2026. An f-string, f"... {x:,.0f}", puts a value into the text: ","
+# adds thousands separators, ".0f" shows no decimals, ".1%" a percentage.
 for year in [2025, 2026, 2027]:
     print(f"Nominal GDP in {year}: ${gdp_value(prices.loc[year], quantities.loc[year]):,.0f}")
 
+# Step 2: growth 2026-2027, nominal and at fixed prices; multiplying two rows,
+# `prices.loc[2026] * quantities.loc[2027]`, multiplies the matching columns
 g_nominal = gdp_value(prices.loc[2027], quantities.loc[2027]) / gdp_value(prices.loc[2026], quantities.loc[2026]) - 1
+# Laspeyres: at the 2026 prices; Paasche: at the 2027 prices
 g_laspeyres = gdp_value(prices.loc[2026], quantities.loc[2027]) / gdp_value(prices.loc[2026], quantities.loc[2026]) - 1
 g_paasche = gdp_value(prices.loc[2027], quantities.loc[2027]) / gdp_value(prices.loc[2027], quantities.loc[2026]) - 1
-g_chain = chain_growth(g_laspeyres, g_paasche)
+g_chain = chain_growth(g_laspeyres, g_paasche)              # equation (6)
+# Step 3: the numbers of Table 2.4
 print(f"Real GDP in 2027 at 2026 prices: ${gdp_value(prices.loc[2026], quantities.loc[2027]):,.0f}")
 print(f"Real GDP in 2026 at 2027 prices: ${gdp_value(prices.loc[2027], quantities.loc[2026]):,.0f}")
 print(f"Growth 2026-2027: nominal {g_nominal:.1%}, Laspeyres {g_laspeyres:.1%}, "
       f"Paasche {g_paasche:.1%}, chain-weighted {g_chain:.1%}")
+# Step 4: chained real GDP in 2026, going back one year from 2027 (nominal GDP $7,650)
 print(f"Chained real GDP in 2026, benchmarked to 2027: ${7650 / (1 + g_chain):,.0f}")
+# the rule of thumb of equation (7)
 print(f"Inflation (nominal growth minus real growth):  {g_nominal - g_chain:.1%}")
 ```
 
-These are the numbers of Table 2.4: real growth is 18.3 percent at 2026 prices, 17.7 percent at
-2027 prices, and 18.0 percent chain-weighted. Nominal GDP grew 27.5 percent, so by the rule of thumb in
-equation (7) prices rose by about $27.5 - 18.0 = 9.5$ percent. (The textbook gets \$6,483 for chained real
-GDP in 2026, because it rounds the growth rate to 18.0 percent first; with the unrounded rate we get \$6,482.)
+These are the numbers of Table 2.4: real growth is 18.3 percent at 2026 prices, 17.7 percent at 2027 prices,
+and 18.0 percent chain-weighted. Nominal GDP grew 27.5 percent, so by the rule of thumb in equation (7) prices
+rose by about $27.5 - 18.0 = 9.5$ percent. (The textbook gets \$6,483 for chained real GDP in 2026, because it
+rounds the growth rate to 18.0 percent first; with the unrounded rate we get \$6,482.)
 
 **Check 4: the two indexes as weighted averages (equation 5).** Apples grew 10 percent and computers 20
 percent. Weighting these rates with the 2026 spending shares must give the Laspeyres rate, and the harmonic
-form with the 2027 shares must give the Paasche rate. If every price rises by the same factor, the two
-indexes must agree.
+form with the 2027 shares must give the Paasche rate. If every price rises by the same factor, the two indexes
+must agree.
 
 ```{python}
+# Step 1: prices and quantities of the two years, and the spending shares
 p0, p1 = prices.loc[2026], prices.loc[2027]
 q0, q1 = quantities.loc[2026], quantities.loc[2027]
 s0 = p0 * q0 / gdp_value(p0, q0)                 # spending shares in 2026
 s1 = p1 * q1 / gdp_value(p1, q1)                 # spending shares in 2027
 growth_i = q1 / q0 - 1                           # growth of each good's quantity
+# Step 2: equation (5), both sides for each index
 print(f"Shares of computers: {s0['computers']:.3f} in 2026, {s1['computers']:.3f} in 2027")
 print(f"Laspeyres: direct {g_laspeyres:.4%}   share-weighted average {(s0 * growth_i).sum():.4%}")
 print(f"Paasche:   direct {g_paasche:.4%}   harmonic form          {1 / (s1 / (1 + growth_i)).sum() - 1:.4%}")
-p_scaled = 1.5 * p0                              # every price 50% higher: relative prices unchanged
+# Step 3: every price 50% higher, so relative prices are unchanged
+p_scaled = 1.5 * p0
 g_scaled = gdp_value(p_scaled, q1) / gdp_value(p_scaled, q0) - 1
 print(f"Paasche when all prices rise by the same factor: {g_scaled:.4%} (= Laspeyres)")
 ```
 
-The price of apples rose by half while computers kept their price, so computers became relatively cheaper,
-and their quantity grew faster. At the 2026 prices computers carry more weight, which is why the
-Laspeyres rate is the higher one.
+The price of apples rose by half while computers kept their price, so computers became relatively cheaper, and
+their quantity grew faster. At the 2026 prices computers carry more weight, which is why the Laspeyres rate is
+the higher one.
 
 **Check 5: the exact split of nominal growth, and the Fisher index.** Step 1 of the price block says that a
-price index times the matching quantity index gives the growth factor of nominal GDP exactly. Step 2 says
-that the rule of thumb in equation (7) misses the cross term $\pi\,g$.
-
-> **Python note.** `x ** 0.5` is the square root of `x`.
+price index times the matching quantity index gives the growth factor of nominal GDP exactly. Step 2 says that
+the rule of thumb in equation (7) misses the cross term $\pi\,g$.
 
 ```{python}
+# Step 1: the price indexes; `x ** 0.5` is the square root of x (Fisher)
 price_laspeyres = gdp_value(p1, q0) / gdp_value(p0, q0)
 price_paasche = gdp_value(p1, q1) / gdp_value(p0, q1)
 price_fisher = (price_laspeyres * price_paasche) ** 0.5
 g_fisher = ((1 + g_laspeyres) * (1 + g_paasche)) ** 0.5 - 1
+# Step 2: each price index times the matching quantity index gives nominal growth
 print(f"Nominal growth factor:                     {1 + g_nominal:.5f}")
 print(f"Paasche price x Laspeyres quantity:        {price_paasche * (1 + g_laspeyres):.5f}")
 print(f"Laspeyres price x Paasche quantity:        {price_laspeyres * (1 + g_paasche):.5f}")
 print(f"Fisher price x Fisher quantity:            {price_fisher * (1 + g_fisher):.5f}")
 print(f"Real growth: chain-weighted {g_chain:.4%}, Fisher {g_fisher:.4%}")
+# Step 3: exact inflation, (1 + pi) = (1 + nominal growth) / (1 + real growth)
 exact = (1 + g_nominal) / (1 + g_chain) - 1
 print(f"Inflation: rule of thumb {g_nominal - g_chain:.2%}, exact {exact:.2%}, "
       f"Fisher price index {price_fisher - 1:.2%}")
+# Step 4: the cross term pi * g that equation (7) leaves out
 print(f"Cross term pi x g: {exact * g_chain:.2%}  ->  {exact:.2%} + {g_chain:.2%} + {exact * g_chain:.2%} "
       f"= {exact + g_chain + exact * g_chain:.2%}")
 ```
 
-The four products agree to the last digit, and the arithmetic and geometric averages of the two growth
-rates differ only in the third decimal. But with rates this large, the rule of thumb is off: prices in this
-economy rose by about 8.0 percent, not 9.5. The missing 1.5 points are the cross term.
+The four products agree to the last digit, and the arithmetic and geometric averages of the two growth rates
+differ only in the third decimal. But with rates this large, the rule of thumb is off: prices in this economy
+rose by about 8.0 percent, not 9.5. The missing 1.5 points are the cross term.
 
-**Check 6: rates over different periods.** A price level that rises 1 percent every quarter rises by more
-than 4 percent a year, because the increases compound. And a price level that doubles in 10 years grows at
-an average annual rate of $2^{1/10} - 1$.
+**Check 6: rates over different periods.** A price level that rises 1 percent every quarter rises by more than
+4 percent a year, because the increases compound. And a price level that doubles in 10 years grows at an
+average annual rate of $2^{1/10} - 1$.
 
 ```{python}
+# Step 1: 1% a quarter, compounded over four quarters
 quarterly = 0.01
 print(f"1% a quarter, compounded: {(1 + quarterly) ** 4 - 1:.4%} a year (simple rule: {4 * quarterly:.0%})")
+# Step 2: the average annual growth rate when prices double in 10 years
 g_bar = 2 ** (1 / 10) - 1
 print(f"Prices double in 10 years: average growth {g_bar:.3%} a year")
 print(f"Check: (1 + {g_bar:.5f})^10 = {(1 + g_bar) ** 10:.4f}")
@@ -787,34 +952,40 @@ U.S. GDP of \$20.6 trillion, China's GDP of 95.1 trillion yuan, 6.91 yuan per do
 68.4 percent of U.S. prices.
 
 ```{python}
-china_dollars = to_dollars(95.1, 6.91)                  # 95.1 trillion yuan, 6.91 yuan per dollar (2019)
-china_ppp = at_common_prices(china_dollars, 0.684)      # goods in China cost 68.4% of U.S. prices
+# China's GDP in dollars, then at U.S. prices, equation (8)
+# 95.1 trillion yuan, 6.91 yuan per dollar (2019)
+china_dollars = to_dollars(95.1, 6.91)
+# goods in China cost 68.4% of U.S. prices
+china_ppp = at_common_prices(china_dollars, 0.684)
+# both as a share of U.S. GDP, $20.6 trillion
 print(f"China at the exchange rate: ${china_dollars:.1f} trillion, {china_dollars / 20.6:.0%} of U.S. GDP")
 print(f"China at common prices:     ${china_ppp:.1f} trillion, {china_ppp / 20.6:.0%} of U.S. GDP")
 ```
 
-With these numbers, China's economy looks like two-thirds of the U.S. economy at the exchange rate, but
-almost exactly as large at common prices. The next cell checks Steps 4 and 5 and the first row of the table
-of predictions: the PPP shortcut, the log split of the gap, and a 1 percent weaker yuan.
-
-> **Python note.** `np.log` is the natural logarithm.
+With these numbers, China's economy looks like two-thirds of the U.S. economy at the exchange rate, but almost
+exactly as large at common prices. The next cell checks Steps 4 and 5 and the first row of the table of
+predictions: the PPP shortcut, the log split of the gap, and a 1 percent weaker yuan.
 
 ```{python}
-ppp = 6.91 * 0.684                                      # yuan that buy what one dollar buys in the U.S.
+# Step 1: the PPP shortcut, yuan that buy what one dollar buys in the U.S.
+ppp = 6.91 * 0.684
 print(f"PPP factor: {ppp:.3f} yuan per dollar; 95.1 / PPP = ${95.1 / ppp:.2f} trillion (= {china_ppp:.2f})")
+# Step 2: the log split of the gap; `np.log` is the natural logarithm
 gap_exchange, gap_prices = np.log(china_dollars / 20.6), np.log(0.684)
 print(f"Log gap at the exchange rate {gap_exchange:.4f} - log relative price level {gap_prices:.4f} "
       f"= {gap_exchange - gap_prices:.4f};  log gap at common prices {np.log(china_ppp / 20.6):.4f}")
-e_new = 6.91 * 1.01                                     # the yuan weakens by 1 percent
+# Step 3: the yuan weakens by 1 percent
+e_new = 6.91 * 1.01
 dollars_new = to_dollars(95.1, e_new)
-ppp_new = at_common_prices(dollars_new, ppp / e_new)    # China's relative price level falls with e
+# China's relative price level falls with e
+ppp_new = at_common_prices(dollars_new, ppp / e_new)
 print(f"1% weaker yuan: GDP in dollars {dollars_new / china_dollars - 1:+.2%}, "
       f"at common prices {ppp_new / china_ppp - 1:+.2%}")
 ```
 
-The log gap at common prices is close to zero, so China and the United States had almost the same GDP. A
-weaker yuan makes China's GDP look about 1 percent smaller in dollars, while the comparison at common prices
-does not move at all.
+The log gap at common prices is close to zero, so China and the United States had almost the same GDP. A weaker
+yuan makes China's GDP look about 1 percent smaller in dollars, while the comparison at common prices does not
+move at all.
 
 <!-- cell -->
 

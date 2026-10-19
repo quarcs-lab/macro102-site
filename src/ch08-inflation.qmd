@@ -28,110 +28,6 @@ Inflation is the growth rate of the overall price level. By the end of this chap
 
 <!-- cell -->
 
-## Setup
-
-We first load the Python libraries we need. You only have to run this cell once.
-
-> **Python note.** `import` loads a *library*, a toolbox written by other people. We give each
-> library a short nickname, for example `pd` for pandas, so that the code stays short. Text after
-> a `#` is a *comment*: Python ignores it, and it is there for human readers. The `try ... except`
-> block runs one Colab-only line and simply skips it anywhere else.
-
-```{python}
-# Libraries used in this chapter
-import numpy as np                    # numbers and arrays
-import pandas as pd                   # data tables
-import plotly.express as px           # quick charts from data tables
-import plotly.graph_objects as go     # charts built piece by piece
-import plotly.io as pio
-from ipywidgets import interact, FloatSlider, ToggleButtons, Dropdown, SelectMultiple
-
-# One light blue/green look for every chart
-BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
-ORANGE = "#e0a33b"                              # a fourth color for the country comparisons
-pio.templates.default = "plotly_white"
-pio.templates["plotly_white"].layout.update(width=860, height=480)   # same size in Colab and on the website
-px.defaults.color_discrete_sequence = [BLUE, TEAL, GREEN, "#5aa0d8", "#0b4f47"]
-WIDE = {"description_width": "initial"}         # show the full slider labels
-
-# Colab only: let Plotly charts appear inside the interactive widgets
-try:
-    import google.colab
-    google.colab.output.enable_custom_widget_manager()
-except ImportError:
-    pass                                        # not running in Colab: nothing to do
-
-# The data files of this chapter live in the book's GitHub repository
-DATA_URL = "https://raw.githubusercontent.com/quarcs-lab/macro102-site/main/data/ch08/"
-```
-
-The next cell defines a helper that only the book website needs. Run it and move on.
-
-```{python}
-#| kind: helper
-# @title Helper for the website versions (run this cell; you do not need to read it)
-def slider_figure(make_figure, name, values, start, label=None):
-    """Precompute make_figure(name=value) for every value and join the results with one slider.
-
-    The website cannot run Python, so each model figure gets this precomputed version.
-    """
-    figures = [make_figure(**{name: v}) for v in values]
-    first = values.index(start)
-    fig = go.Figure(layout=figures[first].layout)
-    owner = []                                  # which figure each trace comes from
-    for i, f in enumerate(figures):
-        for trace in f.data:
-            trace.visible = (i == first)
-            fig.add_trace(trace)
-            owner.append(i)
-    steps = []
-    for i, f in enumerate(figures):
-        layout = {"title": f.layout.title.to_plotly_json(),
-                  "annotations": [a.to_plotly_json() for a in f.layout.annotations],
-                  "shapes": [s.to_plotly_json() for s in f.layout.shapes]}
-        visible = [o == i for o in owner]
-        steps.append(dict(method="update", label=str(values[i]), args=[{"visible": visible}, layout]))
-    fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
-                                    currentvalue=dict(prefix=(label or name) + " = "))])
-    return fig
-```
-
-```{python}
-#| kind: helper
-# @title Helpers for the website's country legends (run this cell; you do not need to read it)
-def legend_only(fig, keep):
-    """Website: every trace not named in keep starts hidden but stays in the legend (click to show it).
-
-    Slider steps keep the choice, so a slider never switches on all countries at once.
-    """
-    names = [t.name for t in fig.data]
-    for t in fig.data:
-        if t.visible is not False and t.name not in keep:
-            t.visible = "legendonly"
-    for slider in fig.layout.sliders:
-        steps = []
-        for step in slider.steps:
-            shown = []
-            for name, v in zip(names, step.args[0]["visible"]):
-                shown.append(v if (v is False or name in keep) else "legendonly")
-            steps.append(dict(method=step.method, label=step.label, args=[{"visible": shown}, step.args[1]]))
-        slider.steps = steps
-    return fig
-
-
-def scale_buttons(fig, ratio_ticks, start="linear"):
-    """Website: linear/ratio buttons; the vertical axis then fits whatever countries are shown."""
-    linear = dict(label="linear scale", method="relayout",
-                  args=[{"yaxis.type": "linear", "yaxis.autorange": True, "yaxis.tickvals": None}])
-    ratio = dict(label="ratio scale", method="relayout",
-                 args=[{"yaxis.type": "log", "yaxis.autorange": True, "yaxis.tickvals": ratio_ticks}])
-    buttons = [linear, ratio] if start == "linear" else [ratio, linear]
-    fig.update_layout(updatemenus=[dict(type="buttons", direction="right", x=0.01, y=0.98, xanchor="left",
-                                        yanchor="top", buttons=buttons)])
-    fig.update_yaxes(autorange=True)
-    return fig
-```
-
 ## Model overview
 
 Back on **Islandia**, the small island country of the earlier chapters, people pay for fish, bread and boat repairs with paper dollars. Only one institution may print those dollars: the **Bank of Islandia**, the island's central bank. Year after year the shop prices creep up a little. Why do they rise, and what decides how fast? And why would a government ever let prices run away? This section answers these questions with a few simple models, and we follow Islandia's dollars through every step.
@@ -150,7 +46,7 @@ Back on **Islandia**, the small island country of the earlier chapters, people p
 3. [The Fisher equation](#real-and-nominal-interest-rates-the-fisher-equation): from the nominal to the real interest rate.
 4. [Who gains and who loses from inflation](#who-gains-and-who-loses-from-inflation): surprises and taxes on nominal interest.
 5. [Seigniorage](#seigniorage-and-the-fiscal-causes-of-high-inflation): the budget constraint, and why very high inflation is fiscal.
-6. [The model in code](#the-model-in-code): the key results as Python functions, checked with numbers.
+6. [Model in code](#model-in-code): the key results as Python functions, checked with numbers.
 
 **Notation.** A bar over a letter marks a **parameter**: a number we take as given from outside the model, such as $\bar{M}_t$ or $\bar{V}$. Letters without a bar are **endogenous variables**: the model determines them. In the text rates are in percent; in the algebra they are decimals (2 percent is 0.02).
 
@@ -617,48 +513,308 @@ No. By equation (10), seigniorage stays below $1/\bar{V} = 1/12 \approx 8.3$ per
 
 <!-- cell -->
 
-### The model in code
+## Model in code
 
-We now turn the key results into Python functions. Each function's description names the equation it computes. The cells after it check the algebra above with numbers.
+Now we turn the Key results into Python. The section has four parts: the setup (folded, because it is the
+same in every chapter), the model as functions, numerical checks of the Key results, and the data tools that give
+every country its color in the figures (folded too). Run its cells once, in order. Every later section of the
+notebook reuses them.
 
-> **Python note.** `def` creates a *function*: a named recipe that takes inputs (the *arguments*) and
-> gives back a result with `return`. Writing `g_V=0.0` gives an argument a *default value*, used
-> whenever we do not pass one. All rates here are in percent.
+<!-- cell -->
+
+### Setup
+
+Run the setup cells once, before anything else. They load the Python libraries, give every chart the same look,
+store the address of the chapter's data and define three helpers that only the book website needs. You can use
+the notebook without reading them; open the box if you are curious.
+
+<!-- cell -->
+
+::: {.callout-note .mic-fold collapse="true" title="Show the setup code"}
+
+The first cell loads the libraries and sets the look of the charts. Its comments explain each step.
 
 ```{python}
+#| kind: folded
+# @title Setup: libraries, chart colors and the data location
+# Text after a "#" is a comment: Python ignores it, it is there for human readers.
+
+# Step 1: load the libraries. `import` loads a library, a toolbox written by
+# other people, and `as pd` gives it a short nickname, so the code stays short.
+import numpy as np                    # numbers and arrays
+import pandas as pd                   # data tables
+import plotly.express as px           # quick charts from data tables
+import plotly.graph_objects as go     # charts built piece by piece
+import plotly.io as pio               # settings shared by every chart
+# sliders, buttons and lists for the interactive figures
+from ipywidgets import interact, FloatSlider, ToggleButtons, Dropdown, SelectMultiple
+
+# Step 2: one light blue/green look for every chart
+BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
+ORANGE = "#e0a33b"                    # a fourth color for the country comparisons
+pio.templates.default = "plotly_white"
+# the same chart size in Colab and on the website
+pio.templates["plotly_white"].layout.update(width=860, height=480)
+px.defaults.color_discrete_sequence = [BLUE, TEAL, GREEN, "#5aa0d8", "#0b4f47"]
+WIDE = {"description_width": "initial"}         # show the full slider labels
+
+# Step 3, Colab only: let Plotly charts appear inside the interactive widgets.
+# `try` runs the indented lines; if the import fails (we are not in Colab),
+# `except` skips them.
+try:
+    import google.colab
+    google.colab.output.enable_custom_widget_manager()
+except ImportError:
+    pass                                        # not running in Colab: nothing to do
+
+# Step 4: the data files of this chapter live in the book's GitHub repository
+DATA_URL = "https://raw.githubusercontent.com/quarcs-lab/macro102-site/main/data/ch08/"
+```
+
+The website cannot run Python, so each interactive figure also gets a version with a precomputed slider. The next
+helper builds those versions. Run it and move on.
+
+```{python}
+#| kind: folded
+# @title Helper for the website versions (run this cell; you do not need to read it)
+def slider_figure(make_figure, name, values, start, label=None):
+    """Join precomputed versions of a figure with one slider (the website cannot run Python).
+
+    Arguments
+        make_figure : the function that draws the figure
+        name        : the argument the slider moves
+        values      : the values of that argument to precompute
+        start       : the value shown first
+        label       : the slider's label (the argument name if None)
+    Returns
+        one Plotly figure with all versions and a slider that shows one at a time
+    """
+    # Step 1: draw the figure once for every value
+    figures = [make_figure(**{name: v}) for v in values]
+    first = values.index(start)
+    # Step 2: copy every curve into one figure; only the start value's are visible
+    fig = go.Figure(layout=figures[first].layout)
+    owner = []                                  # which figure each trace comes from
+    for i, f in enumerate(figures):
+        for trace in f.data:
+            trace.visible = (i == first)
+            fig.add_trace(trace)
+            owner.append(i)
+    # Step 3: one slider step per value: its curves, title, labels and shapes
+    steps = []
+    for i, f in enumerate(figures):
+        layout = {"title": f.layout.title.to_plotly_json(),
+                  "annotations": [a.to_plotly_json() for a in f.layout.annotations],
+                  "shapes": [s.to_plotly_json() for s in f.layout.shapes]}
+        visible = [o == i for o in owner]
+        steps.append(dict(method="update", label=str(values[i]), args=[{"visible": visible}, layout]))
+    fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
+                                    currentvalue=dict(prefix=(label or name) + " = "))])
+    return fig
+```
+
+The data figures show many countries. On the website, the next two helpers draw the textbook's countries, keep
+every other country one click away in the legend, and add buttons for a linear or a ratio scale.
+
+```{python}
+#| kind: folded
+# @title Helpers for the website's country legends (run this cell; you do not need to read it)
+def legend_only(fig, keep):
+    """Start every trace not named in `keep` hidden, but in the legend: one click shows it.
+
+    Slider steps keep the choice, so a slider never switches on all countries at once.
+
+    Arguments
+        fig  : a Plotly figure with one trace per country (and perhaps a slider)
+        keep : the names of the traces drawn at the start
+    Returns
+        the same figure, with the visibility set in the figure and in every slider step
+    """
+    # Step 1: hide every trace that is not kept, but leave it in the legend
+    names = [t.name for t in fig.data]
+    for t in fig.data:
+        if t.visible is not False and t.name not in keep:
+            t.visible = "legendonly"
+    # Step 2: make every slider step keep the same choice
+    for slider in fig.layout.sliders:
+        steps = []
+        for step in slider.steps:
+            # a trace the step hides stays hidden; one it shows is drawn only if kept
+            shown = []
+            for name, v in zip(names, step.args[0]["visible"]):
+                shown.append(v if (v is False or name in keep) else "legendonly")
+            steps.append(dict(method=step.method, label=step.label, args=[{"visible": shown}, step.args[1]]))
+        # replace the old steps by the new ones
+        slider.steps = steps
+    return fig
+
+
+def scale_buttons(fig, ratio_ticks, start="linear"):
+    """Add buttons that switch the vertical axis between a linear and a ratio scale.
+
+    The axis then fits whatever countries are shown.
+
+    Arguments
+        fig         : the figure to add the buttons to
+        ratio_ticks : the tick values of the ratio (log) scale
+        start       : the scale shown first, "linear" or "ratio"
+    Returns
+        the same figure, with the two buttons
+    """
+    # Step 1: the two buttons; each sets the axis type and refits the axis
+    linear = dict(label="linear scale", method="relayout",
+                  args=[{"yaxis.type": "linear", "yaxis.autorange": True, "yaxis.tickvals": None}])
+    ratio = dict(label="ratio scale", method="relayout",
+                 args=[{"yaxis.type": "log", "yaxis.autorange": True, "yaxis.tickvals": ratio_ticks}])
+    # Step 2: the starting scale comes first, then the buttons go in the top left corner
+    buttons = [linear, ratio] if start == "linear" else [ratio, linear]
+    fig.update_layout(updatemenus=[dict(type="buttons", direction="right", x=0.01, y=0.98, xanchor="left",
+                                        yanchor="top", buttons=buttons)])
+    fig.update_yaxes(autorange=True)
+    return fig
+```
+
+:::
+
+<!-- cell -->
+
+### The model as functions
+
+The Key results of this chapter are short formulas: the price level of the quantity theory, equation (4),
+inflation in growth rates, equations (5) and (6), and the Fisher equation in its two forms, equations (7) and
+(8). We write each one as a Python *function*: a named recipe that takes inputs and gives back a result. All rates
+here are in percent. The first two functions are the quantity theory.
+
+```{python}
+# `def` creates a function. Its inputs are the arguments in parentheses.
+# The text in triple quotes describes the function.
 def price_level(M, V, Y):
-    """Equation (4): the price level that solves the quantity equation M V = P Y."""
+    """The price level that solves the quantity equation M V = P Y.
+
+    Equation (4):  P* = M V / Y
+
+    Arguments
+        M : the money supply, M-bar
+        V : the velocity of money, V-bar
+        Y : real GDP, Y-bar
+    Returns
+        the price level, P*
+    """
+    # `return` gives back the result: the quantity equation solved for P
     return M * V / Y
 
 
+# `g_V=0.0` gives g_V a default value, used whenever we do not pass one:
+# velocity is constant unless we say otherwise
 def qt_inflation(g_M, g_Y, g_V=0.0):
-    """Equations (5)-(6): inflation = money growth + velocity growth - real GDP growth (percent)."""
+    """Inflation from the quantity theory, in growth rates (percent).
+
+    Equations (5) and (6):  pi* = g_M + g_V - g_Y, and pi* = g_M - g_Y when g_V = 0
+
+    Arguments
+        g_M : the growth rate of money, g-bar_M (percent)
+        g_Y : the growth rate of real GDP, g-bar_Y (percent)
+        g_V : the growth rate of velocity (percent; 0 when velocity is constant)
+    Returns
+        the inflation rate, pi* (percent)
+    """
+    # money growth beyond the growth of the goods it buys becomes inflation
     return g_M + g_V - g_Y
+```
 
+The Fisher equation links the nominal interest rate $i$, the real interest rate $R$ and inflation $\pi$. Equation
+(7) gives the nominal rate, and equation (8), the same equation solved for $R$, gives the real rate.
 
+```{python}
 def nominal_rate(R, pi):
-    """Equation (7), the Fisher equation: the nominal interest rate i = R + pi (percent)."""
+    """The nominal interest rate, from the Fisher equation (percent).
+
+    Equation (7):  i = R + pi
+
+    Arguments
+        R  : the real interest rate (percent)
+        pi : the inflation rate (percent)
+    Returns
+        the nominal interest rate, i (percent)
+    """
+    # lenders ask for the real return plus compensation for inflation
     return R + pi
 
 
 def real_rate(i, pi):
-    """Equation (8): the real interest rate R = i - pi (percent)."""
+    """The real interest rate, from the Fisher equation (percent).
+
+    Equation (8):  R = i - pi
+
+    Arguments
+        i  : the nominal interest rate (percent)
+        pi : the inflation rate (percent)
+    Returns
+        the real interest rate, R (percent)
+    """
+    # the nominal return minus what inflation takes away
     return i - pi
 ```
 
-**Check 1: measuring inflation.** Start a price index at 100 and let it grow by 2 percent a year for 35 years, using $P_{t+1} = (1+\pi)P_t$ from equation (1). The rule of 70 says it should about double. Then we recover the average rate from the two ends, and use equation (2) to convert a price and a fixed pension.
-
-> **Python note.** An *f-string* such as `f"P = {P:.1f}"` inserts the value of a variable into a piece of
-> text; `:.1f` means "one decimal" and `:+.1f` also prints the sign. `np.log` is the natural logarithm. `range(35)` counts 0, 1, ..., 34, so the
-> `for` loop runs its indented line 35 times, and `P = P * 1.02` replaces the old value of `P` by the new one.
+The last function makes the quantity theory move through time. Money and real GDP grow year by year, and in
+every year equation (4) gives the price level. A table with one row per year holds the path.
 
 ```{python}
+def simulate_prices(g_M=5.0, g_Y=3.0, V=2.0, years=5):
+    """Money, real GDP and the price level year by year, with constant growth rates.
+
+    Equation (4) in every year:  P_t = M_t V / Y_t, and inflation is the growth rate of P_t
+
+    Arguments
+        g_M   : the growth rate of money, g-bar_M (percent)
+        g_Y   : the growth rate of real GDP, g-bar_Y (percent)
+        V     : the velocity of money, V-bar
+        years : the number of years after the starting year
+    Returns
+        a table with the columns year, M, Y, P and inflation (percent)
+    """
+    # Step 1: Islandia's starting year
+    M, Y = 100.0, 200.0
+    # Step 2: one row per year. `rows.append([...])` adds one row to the list,
+    # then money and real GDP grow for the next year
+    rows = []
+    for t in range(years + 1):
+        rows.append([t, M, Y, price_level(M, V, Y)])
+        M = M * (1 + g_M / 100)
+        Y = Y * (1 + g_Y / 100)
+    # Step 3: `pd.DataFrame(rows, columns=[...])` turns the list into a table;
+    # `.pct_change()` is the change from the previous row, as a fraction
+    path = pd.DataFrame(rows, columns=["year", "M", "Y", "P"])
+    path["inflation"] = 100 * path.P.pct_change()
+    return path
+```
+
+<!-- cell -->
+
+### Checking the key results
+
+The formulas came from algebra. Now we check them with numbers, one Key result at a time, using Islandia's
+baseline: $\bar{M} = 100$, $\bar{V} = 2$, $\bar{Y} = 200$, money growth of 5 percent and real GDP growth of
+3 percent.
+
+**Check 1: measuring inflation.** Start a price index at 100 and let it grow by 2 percent a year for 35 years,
+using $P_{t+1} = (1+\pi)P_t$ from equation (1). The rule of 70 says it should about double. Then we recover the
+average rate from the two ends, and use equation (2) to convert a price and a fixed pension.
+
+```{python}
+# Step 1: 35 years of 2% inflation. `range(35)` counts 0, 1, ..., 34, so the `for`
+# loop runs its indented line 35 times; `P = P * 1.02` replaces the old P by the new
 P = 100.0
 for year in range(35):
     P = P * 1.02                                  # one more year of 2% inflation
+# Step 2: the price level and the rule of 70. An f-string, f"... {P:.1f}", puts
+# a value into the text; ":.1f" means "one decimal"
 print(f"Price level after 35 years at 2%: {P:.1f}  (rule of 70: doubling in 70 / 2 = {70 / 2:.0f} years)")
+# Step 3: average inflation from the two ends, exactly and with logs
+# (`np.log` is the natural logarithm)
 print(f"Average inflation from the two ends: {100 * ((P / 100) ** (1 / 35) - 1):.3f}%")
 print(f"Log shortcut, (ln P_T - ln P_0) / T:  {100 * (np.log(P) - np.log(100)) / 35:.3f}%")
+# Step 4: equation (2), a price and a fixed pension in the dollars of another year
 print(f"A 50-dollar item at P = 100 costs {50 * 200 / 100:.0f} dollars at P = 200   (equation 2)")
 print(f"A fixed pension of 1,000 dollars buys what {1000 * 100 / P:.0f} dollars bought 35 years earlier")
 ```
@@ -670,14 +826,18 @@ $\bar{M}$, $\bar{V}$ or $\bar{Y}$ by 1 percent should move $P^*$ by $+1$, $+1$ a
 should double every nominal value but leave the real wage alone.
 
 ```{python}
+# Step 1: the baseline price level, and with money doubled (equation 4)
 P_base = price_level(M=100, V=2, Y=200)
 print(f"Baseline: P* = {P_base:.2f};  money doubled to 200: P* = {price_level(200, 2, 200):.2f}")
+# Step 2: P* with one parameter 1% higher, relative to the baseline
 change_M = price_level(100 * 1.01, 2, 200) / P_base - 1
 change_V = price_level(100, 2 * 1.01, 200) / P_base - 1
 change_Y = price_level(100, 2, 200 * 1.01) / P_base - 1
+# ":+.3f" also shows the sign
 print(f"1% more money:    P* changes by {100 * change_M:+.3f}%")
 print(f"1% more velocity: P* changes by {100 * change_V:+.3f}%")
 print(f"1% more real GDP: P* changes by {100 * change_Y:+.3f}%")
+# Step 3: neutrality: doubling money doubles the wage and the price of bread
 wage, bread = 30.0, 3.0                           # dollars per hour, dollars per loaf
 print(f"Real wage before: {wage / bread:.0f} loaves an hour;  after doubling: {2 * wage / (2 * bread):.0f} loaves an hour")
 ```
@@ -686,34 +846,24 @@ The effect of real GDP is $-0.990$ rather than exactly $-1$ percent, because $1/
 describes very small changes.
 
 **Check 3: the growth-rate version.** We let money and real GDP grow year by year and solve equation (4) in
-every year. Inflation should be the exact rate $1.05/1.03 - 1$, close to the shortcut of equation (6).
-
-> **Python note.** `rows.append([...])` adds one row to a list, and `pd.DataFrame(rows, columns=[...])` turns
-> the list into a table. `.pct_change()` gives the change from the previous row as a fraction, and
-> `.iloc[-1]` picks the last row.
+every year. Inflation should be the exact rate $1.05/1.03 - 1$, close to the shortcut of equation (6). First the
+path itself, with the baseline growth rates:
 
 ```{python}
-def simulate_prices(g_M=5.0, g_Y=3.0, V=2.0, years=5):
-    """Equation (4) year by year: money grows at g_M percent and real GDP at g_Y percent."""
-    M, Y = 100.0, 200.0
-    rows = []
-    for t in range(years + 1):
-        rows.append([t, M, Y, price_level(M, V, Y)])
-        M = M * (1 + g_M / 100)
-        Y = Y * (1 + g_Y / 100)
-    path = pd.DataFrame(rows, columns=["year", "M", "Y", "P"])
-    path["inflation"] = 100 * path.P.pct_change()
-    return path
-
-
+# five years of 5% money growth and 3% real GDP growth, rounded to three decimals
 simulate_prices().round(3)
 ```
 
+Then the same path with faster money growth, compared with the exact rate and with equation (6).
+
 ```{python}
+# Step 1: for each rate of money growth, the inflation of the last simulated year
+# (`.iloc[-1]` picks the last row), the exact rate and the shortcut of equation (6)
 for g_M in (5, 6, 100):
     simulated = simulate_prices(g_M=g_M).inflation.iloc[-1]
     exact = 100 * ((1 + g_M / 100) / 1.03 - 1)
     print(f"Money growth {g_M:3d}%: simulated {simulated:7.3f}%, exact {exact:7.3f}%, equation (6) {qt_inflation(g_M, 3):5.1f}%")
+# Step 2: equation (5), with velocity falling 1% a year
 print(f"Velocity falling 1% a year, equation (5): inflation {qt_inflation(5, 3, g_V=-1):.1f}%")
 ```
 
@@ -725,17 +875,19 @@ more inflation.
 **Check 4: the Fisher equation.** Follow one dollar as in step 1, and compare the shortcut of equations (7) and
 (8) with the exact formula, at low and at very high inflation.
 
-> **Python note.** `for i, pi in ((4, 2), (14, 72)):` walks through pairs of numbers: in the first round
-> `i = 4` and `pi = 2`, in the second `i = 14` and `pi = 72`.
-
 ```{python}
+# Step 1: one saved dollar's return in goods, exactly
 goods_today = 100 / 1.00                          # 100 dollars at P = 1
 goods_next_year = 100 * 1.04 / 1.02               # 104 dollars at P = 1.02
 print(f"Exact real return on a 4% deposit with 2% inflation: {100 * (goods_next_year / goods_today - 1):.2f}%")
+# Step 2: equation (7) against the exact (1 + R)(1 + pi) - 1
 print(f"Equation (7), R = 2%, pi = 2%: i = {nominal_rate(2, 2):.1f}%;  exact (1+R)(1+pi) - 1 = {100 * (1.02 * 1.02 - 1):.2f}%")
+# Step 3: equation (8) at low and at very high inflation. The loop walks through
+# pairs: first i = 4 and pi = 2, then i = 14 and pi = 72
 for i, pi in ((4, 2), (14, 72)):
     exact = 100 * ((1 + i / 100) / (1 + pi / 100) - 1)
     print(f"i = {i}%, pi = {pi}%: R = {real_rate(i, pi):+.2f}% by equation (8), {exact:+.2f}% exact")
+# Step 4: the long run, equation (7) with the inflation of equation (6)
 print(f"Long run, R = 2%: i* = {nominal_rate(2, qt_inflation(5, 3)):.0f}% with 5% money growth, "
       f"{nominal_rate(2, qt_inflation(6, 3)):.0f}% with 6%")
 ```
@@ -744,12 +896,17 @@ print(f"Long run, R = 2%: i* = {nominal_rate(2, qt_inflation(5, 3)):.0f}% with 5
 percent tax on nominal interest, the after-tax real return computed directly must equal $(1-\tau)R - \tau\pi$.
 
 ```{python}
-contract = nominal_rate(R=2, pi=2)                # set when everyone expects 2% inflation
+# Step 1: a surprise. The loan's rate is fixed before inflation is known
+# the rate is set when everyone expects 2% inflation
+contract = nominal_rate(R=2, pi=2)
 for pi in (2, 8):
     print(f"Loan at {contract:.0f}%, inflation turns out {pi}%: real return {real_rate(contract, pi):+.1f}%")
+# Step 2: a 25% tax on nominal interest, with inflation expected
 tau, R = 0.25, 2
 for pi in (2, 8):
-    i = nominal_rate(R, pi)                       # expected inflation: i moves one for one
+    # expected inflation: i moves one for one with pi
+    i = nominal_rate(R, pi)
+    # tax on all of i, then subtract inflation; the formula must give the same
     after_tax = (1 - tau) * i - pi
     formula = (1 - tau) * R - tau * pi
     print(f"pi = {pi}%: i = {i}%, after-tax real return {after_tax:+.2f}% (formula {formula:+.2f}%), "
@@ -760,10 +917,14 @@ for pi in (2, 8):
 money as a share of GDP must match the exact formula in equation (10), and the shortcut should be close.
 
 ```{python}
+# Step 1: one year of Islandia with currency as the money
 V_cash = 12                                       # nominal GDP / currency
-M, Y = 100.0, 1200.0                              # currency and real GDP: P = 100 x 12 / 1200 = 1
-M_next, Y_next = M * 1.05, Y * 1.03               # one year of 5% money growth and 3% real growth
+# currency and real GDP: P = 100 x 12 / 1200 = 1
+M, Y = 100.0, 1200.0
+# one year of 5% money growth and 3% real growth
+M_next, Y_next = M * 1.05, Y * 1.03
 P_next = price_level(M_next, V_cash, Y_next)
+# Step 2: the new money as a share of GDP: directly, by equation (10), and its shortcut
 direct = 100 * (M_next - M) / (P_next * Y_next)
 exact = 100 * 0.05 / (1.05 * V_cash)
 shortcut = (qt_inflation(5, 3) + 3) / V_cash
@@ -776,12 +937,16 @@ percent of GDP. Putting that money growth back into equation (10) must return 5 
 the ceiling $1/\bar{V}$.
 
 ```{python}
-sigma = 0.05                                      # deficit to be paid with new money, share of GDP
+# Step 1: the money growth that pays for the deficit (step 4), and its inflation
+# the deficit to be paid with new money, as a share of GDP
+sigma = 0.05
 g_M = sigma * V_cash / (1 - sigma * V_cash)
 pi = (1 + g_M) / 1.03 - 1
 print(f"Money growth needed: {100 * g_M:.0f}%;  inflation: {100 * pi:.0f}%")
 print(f"Check, equation (10): new money = {100 * g_M / ((1 + g_M) * V_cash):.2f}% of GDP")
-for growth_rate in (1.0, 10.0, 100.0):            # money growth of 100%, 1,000% and 10,000% a year
+# Step 2: seigniorage at ever faster money growth, and the ceiling 1 / V
+# money growth of 100%, 1,000% and 10,000% a year
+for growth_rate in (1.0, 10.0, 100.0):
     share = 100 * growth_rate / ((1 + growth_rate) * V_cash)
     print(f"Money growth {100 * growth_rate:7,.0f}%: seigniorage {share:.2f}% of GDP")
 print(f"Ceiling 1 / V: {100 / V_cash:.2f}% of GDP")
@@ -792,13 +957,22 @@ at 12. In a real hyperinflation people flee from money, velocity rises, and the 
 
 <!-- cell -->
 
-### A color for every country
+### Drawing and data tools
 
-The textbook's figures show the United States and a few other countries. Every data figure of this notebook
-lets you add more. A small file lists the World Bank's 217 economies, with their region, income group and
-OECD membership:
+The textbook's figures show the United States and a few other countries, and every data figure of this notebook
+lets you add more. The tools here load the list of countries and give each one a color that it keeps from chart
+to chart. Run them and move on, or open the box to see how they work.
+
+<!-- cell -->
+
+::: {.callout-note .mic-fold collapse="true" title="Show the drawing and data tools"}
+
+A small file lists the World Bank's 217 economies, with their region, income group and OECD membership:
 
 ```{python}
+#| kind: folded
+# @title Data tool: the list of countries
+# read the file into a table and show its first five rows
 countries = pd.read_csv(DATA_URL + "countries.csv")
 countries.head()
 ```
@@ -807,54 +981,86 @@ So that a country keeps its color from chart to chart, and two countries shown t
 the colors with a small tool. Its palette has 44 colors: Plotly's 24 dark ones, and the 20 darker ones of its 26
 "Alphabet" colors.
 
-> **Python note.** `PALETTE = []` starts an empty list, and `.append` adds one color at a time. In `first_free`,
-> `return` inside a loop stops the function at the first color that fits, `used.count(c)` counts how often `c`
-> appears in the list `used`, and `reversed(PALETTE)` walks through the palette from its last color.
-
 ```{python}
-LIGHT = ["#F7E1A0", "#E2E2E2", "#FBE426", "#16FF32", "#1CFFCE", "#2ED9FF"]   # too pale on white
+#| kind: folded
+# @title Drawing tool: the palette of 44 country colors
+# Step 1: `PALETTE = []` starts an empty list, and `.append` adds one color at a time
+# the colors too pale on white
+LIGHT = ["#F7E1A0", "#E2E2E2", "#FBE426", "#16FF32", "#1CFFCE", "#2ED9FF"]
 PALETTE = []
-for c in px.colors.qualitative.Dark24:                                       # 24 dark colors ...
+# Plotly's 24 dark colors, all but one medium blue
+for c in px.colors.qualitative.Dark24:
     if c != "#2E91E5":
         PALETTE.append(c)
+# Step 2: the 20 Alphabet colors that are not too pale: 44 in all
 for c in px.colors.qualitative.Alphabet:
     if c not in LIGHT:
-        PALETTE.append(c)                                                     # ... and 20 more: 44 in all
-PALETTE.append("#2E91E5")                    # a medium blue, too close to the U.S. navy: used last
+        PALETTE.append(c)
+# Step 3: the medium blue, too close to the U.S. navy, is used last
+PALETTE.append("#2E91E5")
+```
 
+`first_free` picks one color: the first one nobody uses yet, or, when every color is taken, the one the
+country's group-mates use least.
 
+```{python}
+#| kind: folded
+# @title Drawing tool: the first free color
 def first_free(used, taken):
-    """The palette color least used in `used` (the group-mates' colors), preferring one no country has `taken` yet."""
+    """The palette color least used in `used`, preferring one that no country has taken yet.
+
+    Arguments
+        used  : the colors of the countries shown together with this one (the group-mates)
+        taken : the colors of all countries that already have one
+    Returns
+        one color of PALETTE
+    """
+    # Step 1: the first color that is free everywhere. `return` inside a loop
+    # stops the function at the first color that fits
     for c in PALETTE:
         if c not in used and c not in taken:
             return c
+    # Step 2: none is free: the color least used by the group-mates.
+    # `used.count(c)` counts how often c appears in the list `used`, and
+    # `reversed(PALETTE)` walks through the palette from its last color
     best = PALETTE[-1]
-    for c in reversed(PALETTE):                  # from the end, far from the colors always on show
+    # from the end, far from the colors always on show
+    for c in reversed(PALETTE):
         if used.count(c) < used.count(best):
-            best = c                             # a big group shares out the colors evenly
+            best = c                    # a big group shares out the colors evenly
     return best
 ```
 
-> **Python note.** `group_colors` walks through the countries one by one. `dict(fixed or {})` starts from a copy of
-> the fixed colors (an empty dictionary when there are none), `continue` skips a country that already has a color,
-> and `used` collects the colors of the countries that are shown together with this one.
+`group_colors` gives every country its color, one country at a time.
 
 ```{python}
+#| kind: folded
+# @title Drawing tool: a color for every country
 def group_colors(names, groups, fixed=None):
     """Give each country a color that no other country in its groups uses, as far as the palette allows.
 
-    names: every country; groups: the lists of countries shown together (menu views); fixed: {country: color}
-    for the textbook's countries, so the default view keeps the book's colors."""
+    Arguments
+        names  : every country
+        groups : the lists of countries shown together (the menu views)
+        fixed  : {country: color} for the textbook's countries, so the default view keeps the book's colors
+    Returns
+        a dictionary {country: color}
+    """
+    # Step 1: `dict(fixed or {})` starts from a copy of the fixed colors
+    # (an empty dictionary when there are none)
     colors = dict(fixed or {})
     for name in names:
+        # `continue` skips a country that already has a color
         if name in colors:
             continue
+        # Step 2: `used` collects the colors of the countries shown with this one
         used = []
         for group in groups:
             if name in group:
                 for other in group:
                     if other in colors:
                         used.append(colors[other])
+        # Step 3: the first free color for this country
         colors[name] = first_free(used, list(colors.values()))
     return colors
 ```
@@ -863,14 +1069,24 @@ Fig. 1's website version lists the G20 economies together, so no two of them sha
 countries keep the chapter's own colors in every figure.
 
 ```{python}
-BOOK_COLORS = {"United States": BLUE, "Argentina": TEAL, "Brazil": GREEN, "Russia": ORANGE, "Mexico": "#5aa0d8",
-               "Nigeria": "#0b4f47", "Venezuela": "#b5651d"}
+#| kind: folded
+# @title Drawing tool: the colors of the inflation figures
+# Step 1: the textbook's countries keep the chapter's colors
+BOOK_COLORS = {"United States": BLUE, "Argentina": TEAL, "Brazil": GREEN, "Russia": ORANGE,
+               "Mexico": "#5aa0d8", "Nigeria": "#0b4f47", "Venezuela": "#b5651d"}
+# Step 2: the G20 economies, shown together in Fig. 1: these 18,
+# the United States and the European Union
 G20 = ["Argentina", "Australia", "Brazil", "Canada", "China", "France", "Germany", "India",
-       "Indonesia", "Italy", "Japan", "Mexico", "Russia", "Saudi Arabia", "South Africa", "South Korea", "Turkey",
-       "United Kingdom"]                          # with the United States and the European Union: the G20
+       "Indonesia", "Italy", "Japan", "Mexico", "Russia", "Saudi Arabia", "South Africa", "South Korea",
+       "Turkey", "United Kingdom"]
+# Step 3: a color for every country, and three of them as a test
 INFLATION_COLORS = group_colors(sorted(countries.country), [G20 + ["United States"]], BOOK_COLORS)
 print(INFLATION_COLORS["United States"], INFLATION_COLORS["Argentina"], INFLATION_COLORS["Japan"])
 ```
+
+:::
+
+<!-- cell -->
 
 ## Measuring inflation
 
@@ -1748,7 +1964,7 @@ rates = pd.read_csv(DATA_URL + "fig8-5.csv")
 rates.head()
 ```
 
-The file already has a `real_rate` column. Let us check it with our function `real_rate` from "Model overview".
+The file already has a `real_rate` column. Let us check it with our function `real_rate` from "Model in code".
 
 ```{python}
 R = real_rate(rates.nominal_tbill_3m, rates.inflation_cpi)

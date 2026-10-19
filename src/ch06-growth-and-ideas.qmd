@@ -28,131 +28,6 @@ engine: new **ideas**. By the end of the chapter you will be able to:
 
 <!-- cell -->
 
-## Setup
-
-We first load the Python libraries we need. You only have to run this cell once.
-
-> **Python note.** `import` loads a *library*, a toolbox written by other people. We give each
-> library a short nickname, for example `np` for NumPy, so that the code stays short. Text after
-> a `#` is a *comment*: Python ignores it, and it is there for human readers. The `try ... except`
-> block runs one Colab-only line and simply skips it anywhere else.
-
-```{python}
-# Libraries used in this chapter
-import numpy as np                              # numbers and arrays
-import pandas as pd                             # data tables
-import plotly.express as px                     # quick charts from data tables
-import plotly.graph_objects as go               # charts built piece by piece (model figures)
-import plotly.io as pio
-from plotly.subplots import make_subplots       # several panels in one figure
-from ipywidgets import interact, fixed, FloatSlider, ToggleButtons, Dropdown, SelectMultiple
-
-# One light blue/green look for every chart
-BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
-pio.templates.default = "plotly_white"
-pio.templates["plotly_white"].layout.update(width=860, height=480)   # same size in Colab and on the website
-px.defaults.color_discrete_sequence = [BLUE, TEAL, GREEN, "#5aa0d8", "#0b4f47"]
-WIDE = {"description_width": "initial"}         # show the full slider labels
-
-# Colab only: let Plotly charts appear inside the interactive widgets
-try:
-    import google.colab
-    google.colab.output.enable_custom_widget_manager()
-except ImportError:
-    pass                                        # not running in Colab: nothing to do
-
-# The data files of this chapter live in the book's GitHub repository
-DATA_URL = "https://raw.githubusercontent.com/quarcs-lab/macro102-site/main/data/ch06/"
-```
-
-The next cell defines a helper that only the book website needs. Run it and move on.
-
-```{python}
-#| kind: helper
-# @title Helper for the website versions (run this cell; you do not need to read it)
-def slider_figure(make_figure, name, values, start, label=None):
-    """Precompute make_figure(name=value) for every value and join the results with one slider.
-
-    The website cannot run Python, so each interactive figure also gets this precomputed version.
-    """
-    figures = [make_figure(**{name: v}) for v in values]
-    first = values.index(start)
-    fig = go.Figure(layout=figures[first].layout)
-    owner = []                                  # which precomputed figure each trace comes from
-    for i, f in enumerate(figures):
-        for trace in f.data:
-            trace.visible = (i == first)
-            fig.add_trace(trace)
-            owner.append(i)
-    steps = []
-    for i, f in enumerate(figures):
-        layout = {"title": f.layout.title.to_plotly_json(),
-                  "annotations": [a.to_plotly_json() for a in f.layout.annotations],
-                  "shapes": [s.to_plotly_json() for s in f.layout.shapes]}
-        visible = [o == i for o in owner]
-        steps.append(dict(method="update", label=str(values[i]), args=[{"visible": visible}, layout]))
-    fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
-                                    currentvalue=dict(prefix=(label or name) + " = "))])
-    return fig
-```
-
-The multi-country charts have three more website helpers. `region_menu` adds a menu of world regions to a
-chart that holds many countries, because a legend with 180 names would be unreadable. `region_groups` lists
-the countries that each view of that menu shows together, so that we can give them different colors.
-`legend_menu` keeps the textbook's lines on, puts the others in the legend, and adds two reset buttons.
-
-```{python}
-#| kind: helper
-# @title Helper for the website versions of the multi-country charts (run this cell; you do not need to read it)
-def region_menu(fig, regions, shown, label=None):
-    """Add a region menu: the countries in `shown` stay on, the chosen region's countries go into the legend.
-
-    `regions` maps each country (trace name) to its region. The website cannot run Python, so this menu
-    replaces the Colab country picker: pick a region, then click a country in the legend to add it.
-    """
-    names = [trace.name for trace in fig.data]
-    groups = sorted(set(regions[n] for n in names if n in regions))
-    buttons = []
-    for group in [label or "Textbook: " + ", ".join(shown)] + groups:
-        visible = []
-        for n in names:
-            if n in shown:
-                visible.append(True)
-            elif regions.get(n) == group:
-                visible.append("legendonly")
-            else:
-                visible.append(False)
-        buttons.append(dict(label=group, method="restyle", args=[{"visible": visible}]))
-    for trace in fig.data:
-        trace.visible = True if trace.name in shown else False
-    fig.update_layout(updatemenus=[dict(buttons=buttons, active=0, direction="down", showactive=True,
-                                        x=0, xanchor="left", y=1.02, yanchor="bottom")],
-                      margin=dict(t=120), legend_title_text="")
-    return fig
-
-
-def region_groups(regions, shown):
-    """The views of `region_menu`, for `group_colors`: `shown` alone, then `shown` plus each region's countries."""
-    groups = [list(shown)]
-    for region in sorted(set(regions.values())):
-        groups.append(list(shown) + [n for n in regions if regions[n] == region])
-    return groups
-
-
-def legend_menu(fig, shown, label="Textbook view"):
-    """For a chart with up to 40 lines: `shown` stay on, the others wait in the legend; two reset buttons."""
-    book = [True if t.name in shown else "legendonly" for t in fig.data]
-    everything = [True for t in fig.data]
-    for trace, v in zip(fig.data, book):
-        trace.visible = v
-    fig.update_layout(updatemenus=[dict(type="buttons", direction="right", x=0, xanchor="left", y=1.02,
-                                        yanchor="bottom", buttons=[
-                                            dict(label=label, method="restyle", args=[{"visible": book}]),
-                                            dict(label="All lines", method="restyle", args=[{"visible": everything}])])],
-                      margin=dict(t=120), legend_title_text="")
-    return fig
-```
-
 ## Model overview
 
 In [Chapter 5](https://quarcs-lab.github.io/macro102-site/notebooks/ch05-the-solow-growth-model.html), **Islandia** got richer by building tools, but each extra boat added less than the one before, so tool building alone ran out of steam. Now an islander draws a better hull design. Harbor Boatworks can use that one drawing in every yard on the island at the same time, and the drawing never wears out. Can a steady stream of new ideas like this one keep Islandia getting richer year after year? This section answers with Paul Romer's model of ideas, and we follow Islandia through every step.
@@ -170,7 +45,7 @@ In [Chapter 5](https://quarcs-lab.github.io/macro102-site/notebooks/ch05-the-sol
 2. [The Romer model](#the-romer-model): the [assumptions](#assumptions-1), the [solution](#solving-the-model-1) for the stock of ideas and long-run growth, and [what the model predicts](#what-the-model-predicts-1) when research changes.
 3. [Combining Solow and Romer](#combining-solow-and-romer): capital comes back and amplifies the growth that ideas create.
 4. [Growth accounting](#growth-accounting): splitting measured growth into capital, labor composition and productivity.
-5. [The model in code](#the-model-in-code): the key results as Python functions, checked with numbers.
+5. [Model in code](#model-in-code): the key results as Python functions, checked with numbers.
 
 **Notation.** A bar over a letter marks a **parameter**, a number we choose from outside the model; the exponent $\gamma$ (gamma) is a parameter too, written without a bar. Letters without a bar are **endogenous variables**, which the model determines. In the code we write `z`, `l`, `n`, `gamma`, `s` and `d`.
 
@@ -697,76 +572,322 @@ TFP is the growth left unexplained by measured inputs, and much of what capital 
 
 <!-- cell -->
 
-### The model in code
+## Model in code
 
-We now write the model as Python functions and check the algebra above with numbers. Each function's description names the equation it computes.
+Now we turn the Key results into Python. The section has four parts: the setup (folded, because it is the
+same in every chapter), the model as functions, numerical checks of the Key results, and the drawing and data
+tools that the figures use (folded too). Run its cells once, in order. Every later section of the notebook
+reuses them.
 
-> **Python note.** `def` creates a *function*: a named recipe that takes inputs (the
-> *arguments*) and gives back a result with `return`. The text in triple quotes is a short
-> description of what the function does. `**` means "to the power of". An *f-string* such as
-> `f"{ratio:.2f}"` inserts the value of a variable into a piece of text; `:.2f` means "two decimals".
+<!-- cell -->
+
+### Setup
+
+Run the setup cells once, before anything else. They load the Python libraries, give every chart the same look,
+store the address of the chapter's data and define four helpers that only the book website needs. You can use
+the notebook without reading them; open the box if you are curious.
+
+<!-- cell -->
+
+::: {.callout-note .mic-fold collapse="true" title="Show the setup code"}
+
+The first cell loads the libraries and sets the look of the charts. Its comments explain each step.
 
 ```{python}
+#| kind: folded
+# @title Setup: libraries, chart colors and the data location
+# Text after a "#" is a comment: Python ignores it, it is there for human readers.
+
+# Step 1: load the libraries. `import` loads a library, a toolbox written by
+# other people, and `as np` gives it a short nickname, so the code stays short.
+import numpy as np                              # numbers and arrays
+import pandas as pd                             # data tables
+import plotly.express as px                     # quick charts from data tables
+import plotly.graph_objects as go               # charts built piece by piece
+import plotly.io as pio                         # settings shared by every chart
+from plotly.subplots import make_subplots       # several panels in one figure
+# sliders, buttons and menus for the interactive figures
+from ipywidgets import interact, fixed, FloatSlider, ToggleButtons, Dropdown, SelectMultiple
+
+# Step 2: one light blue/green look for every chart
+BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
+pio.templates.default = "plotly_white"
+# the same chart size in Colab and on the website
+pio.templates["plotly_white"].layout.update(width=860, height=480)
+px.defaults.color_discrete_sequence = [BLUE, TEAL, GREEN, "#5aa0d8", "#0b4f47"]
+WIDE = {"description_width": "initial"}         # show the full slider labels
+
+# Step 3, Colab only: let Plotly charts appear inside the interactive widgets.
+# `try` runs the indented lines; if the import fails (we are not in Colab),
+# `except` skips them.
+try:
+    import google.colab
+    google.colab.output.enable_custom_widget_manager()
+except ImportError:
+    pass                                        # not running in Colab: nothing to do
+
+# Step 4: the data files of this chapter live in the book's GitHub repository
+DATA_URL = "https://raw.githubusercontent.com/quarcs-lab/macro102-site/main/data/ch06/"
+```
+
+The website cannot run Python, so each interactive figure also gets a version with a precomputed slider. The next
+helper builds those versions. Run it and move on.
+
+```{python}
+#| kind: folded
+# @title Helper for the website versions (run this cell; you do not need to read it)
+def slider_figure(make_figure, name, values, start, label=None):
+    """Join precomputed versions of a figure with one slider (the website cannot run Python).
+
+    Arguments
+        make_figure : the function that draws the figure, e.g. romer_bgp
+        name        : the argument the slider moves, e.g. "gamma"
+        values      : the values of that argument to precompute
+        start       : the value shown first
+        label       : the slider's label (the argument name if None)
+    Returns
+        one Plotly figure with all versions and a slider that shows one at a time
+    """
+    # Step 1: draw the figure once for every value
+    figures = [make_figure(**{name: v}) for v in values]
+    first = values.index(start)
+    # Step 2: copy every curve into one figure; only the start value's are visible
+    fig = go.Figure(layout=figures[first].layout)
+    owner = []                                  # which figure each trace comes from
+    for i, f in enumerate(figures):
+        for trace in f.data:
+            trace.visible = (i == first)
+            fig.add_trace(trace)
+            owner.append(i)
+    # Step 3: one slider step per value: its curves, title, labels and shapes
+    steps = []
+    for i, f in enumerate(figures):
+        layout = {"title": f.layout.title.to_plotly_json(),
+                  "annotations": [a.to_plotly_json() for a in f.layout.annotations],
+                  "shapes": [s.to_plotly_json() for s in f.layout.shapes]}
+        visible = [o == i for o in owner]
+        steps.append(dict(method="update", label=str(values[i]), args=[{"visible": visible}, layout]))
+    fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
+                                    currentvalue=dict(prefix=(label or name) + " = "))])
+    return fig
+```
+
+The multi-country charts have three more website helpers. `region_menu` adds a menu of world regions to a
+chart that holds many countries, because a legend with 180 names would be unreadable. `region_groups` lists
+the countries that each view of that menu shows together, so that we can give them different colors.
+`legend_menu` keeps the textbook's lines on, puts the others in the legend, and adds two reset buttons.
+
+```{python}
+#| kind: folded
+# @title Helpers for the website versions with many countries (run this cell; you do not need to read it)
+def region_menu(fig, regions, shown, label=None):
+    """Add a region menu: the countries in `shown` stay on, the chosen region's go into the legend.
+
+    The website cannot run Python, so this menu replaces the Colab country picker: pick a region,
+    then click a country in the legend to add it.
+
+    Arguments
+        fig     : a Plotly figure with one trace per country
+        regions : maps each country (trace name) to its region
+        shown   : the countries that stay drawn in every view
+        label   : the name of the first menu entry (the textbook countries if None)
+    Returns
+        the same figure, with only `shown` drawn and the region menu above the plot
+    """
+    # Step 1: the trace names, and each region once, A to Z
+    names = [trace.name for trace in fig.data]
+    groups = sorted(set(regions[n] for n in names if n in regions))
+    # Step 2: for each menu entry, which traces are drawn, in the legend only, or hidden
+    buttons = []
+    for group in [label or "Textbook: " + ", ".join(shown)] + groups:
+        visible = []
+        for n in names:
+            if n in shown:
+                visible.append(True)                    # a textbook country: drawn
+            elif regions.get(n) == group:
+                visible.append("legendonly")            # in this region: a click away
+            else:
+                visible.append(False)                   # another region: hidden
+        buttons.append(dict(label=group, method="restyle", args=[{"visible": visible}]))
+    # Step 3: start with the textbook countries only, and add the menu
+    for trace in fig.data:
+        trace.visible = True if trace.name in shown else False
+    fig.update_layout(updatemenus=[dict(buttons=buttons, active=0, direction="down", showactive=True,
+                                        x=0, xanchor="left", y=1.02, yanchor="bottom")],
+                      margin=dict(t=120), legend_title_text="")
+    return fig
+
+
+def region_groups(regions, shown):
+    """The views of `region_menu`, for `group_colors`.
+
+    Arguments
+        regions : maps each country to its region
+        shown   : the countries drawn in every view
+    Returns
+        a list of views: `shown` alone, then `shown` plus each region's countries
+    """
+    # the first view, then one view per region, A to Z
+    groups = [list(shown)]
+    for region in sorted(set(regions.values())):
+        groups.append(list(shown) + [n for n in regions if regions[n] == region])
+    return groups
+
+
+def legend_menu(fig, shown, label="Textbook view"):
+    """For a chart with up to 40 lines: `shown` stay on, the others wait in the legend.
+
+    Two buttons above the plot go back to the textbook view or draw every line.
+
+    Arguments
+        fig   : a Plotly figure with one trace per line
+        shown : the lines drawn at the start
+        label : the name of the first button
+    Returns
+        the same figure, with the visibility set and the two buttons
+    """
+    # Step 1: the two views, the textbook lines (others in the legend) and every line
+    book = [True if t.name in shown else "legendonly" for t in fig.data]
+    everything = [True for t in fig.data]
+    # Step 2: start with the textbook view, and add the two buttons
+    for trace, v in zip(fig.data, book):
+        trace.visible = v
+    fig.update_layout(updatemenus=[dict(type="buttons", direction="right", x=0, xanchor="left", y=1.02,
+                                        yanchor="bottom", buttons=[
+                                            dict(label=label, method="restyle", args=[{"visible": book}]),
+                                            dict(label="All lines", method="restyle",
+                                                 args=[{"visible": everything}])])],
+                      margin=dict(t=120), legend_title_text="")
+    return fig
+```
+
+:::
+
+<!-- cell -->
+
+### The model as functions
+
+The Key results rest on two pieces of the model: production with objects and ideas, equation (1), and the
+Romer model's five equations, simulated one year at a time. We write each one as a Python *function*: a named
+recipe that takes inputs and gives back a result. The first function is total output, which shows why ideas
+bring increasing returns.
+
+```{python}
+# `def` creates a function. Its inputs are the arguments in parentheses.
+# The text in triple quotes describes the function.
 def output_with_ideas(K, L, A):
-    """Production with objects and ideas: Y = A K^(1/3) L^(2/3); scaling every input gives equation (1)."""
+    """Total output, produced with objects (capital and labor) and ideas.
+
+    Equation (1):  Y = A K^(1/3) L^(2/3); scaling K, L and A by the same factor
+    scales Y by that factor squared
+
+    Arguments
+        K : capital
+        L : labor
+        A : the stock of ideas
+    Returns
+        total output, Y
+    """
+    # `return` gives back the result; `**` means "to the power of"
     return A * K ** (1 / 3) * L ** (2 / 3)
-
-
-base = output_with_ideas(K=1, L=1, A=1)
-print(f"Double K and L only:       output x {output_with_ideas(K=2, L=2, A=1) / base:.2f}")
-print(f"Double K, L and A:         output x {output_with_ideas(K=2, L=2, A=2) / base:.2f}")
-print(f"Triple K, L and A:         output x {output_with_ideas(K=3, L=3, A=3) / base:.2f}   (equation 1: 3^2 = 9)")
-# How many 100-word paragraphs can be written with 20,000 words? 20,000^100 = 10^(100 log10 20,000)
-print(f"Possible idea paragraphs:  10 to the power {100 * np.log10(20000):.1f}")
 ```
 
-**Check 1: the fixed cost.** With $\bar{F} = 2{,}500$ million dollars and $c = \$10$ a dose, output per dollar should rise with spending, and the break-even price should be $c + \bar{F}/Y$.
-
-> **Python note.** `for X in (3600, 7200):` runs the indented lines once for each number in the brackets,
-> first with `X = 3600` and then with `X = 7200`.
-
-```{python}
-F, c = 2500, 10                                  # millions of dollars, dollars per dose
-for X in (3600, 7200):                           # spending in millions of dollars
-    Y = (X - F) / c                              # millions of doses
-    profit_at_cost = c * Y - X                   # revenue at a price equal to marginal cost
-    print(f"X = {X}: {Y:.0f} million doses, {1000 * Y / X:.1f} million per billion dollars, "
-          f"profit at p = c: {profit_at_cost:.0f} million")
-print(f"Break-even price at X = 7200: {c + F / ((7200 - F) / c):.2f} dollars a dose")
-```
-
-**Simulating the Romer model.** To draw the experiments of the chapter, we let a computer apply the five equations one year at a time. The function below starts on the BGP in 2025, with the stock of ideas of equation (3), and changes $\bar{z}$ and $\bar{\ell}$ in `change_year` (2050 unless we say otherwise). It returns output per person and, for comparison, the BGP level of equation (4) for the parameters in force in each year. Both are scaled so that $y_{2025} = 1$: every number on the charts is a multiple of output per person in 2025.
-
-> **Python note.** `np.arange(2025, 2101)` gives the years 2025, 2026, ..., 2100. A `for` loop
-> repeats the indented lines once for each year, and `if ... else` chooses between two cases.
-> `y_path.append(...)` adds a number to the end of a list. Writing `gamma=0.6` gives the argument a
-> *default value*, used whenever we do not pass one.
+To draw the experiments of the chapter, we let a computer apply the five equations one year at a time.
+`simulate_romer` starts on the BGP in 2025, with the stock of ideas of equation (3), and changes $\bar{z}$ and
+$\bar{\ell}$ in `change_year` (2050 unless we say otherwise). It returns output per person and, for comparison,
+the BGP level of equation (4) for the parameters in force in each year. Both are scaled so that $y_{2025} = 1$:
+every number on the charts is a multiple of output per person in 2025.
 
 ```{python}
+# `gamma=0.6` gives gamma a default value, used whenever we do not pass one.
 def simulate_romer(z_old=1.0, z_new=1.0, l_old=0.1, l_new=0.1, gamma=0.6, n=0.05,
                    change_year=2050, first_year=2025, last_year=2100):
-    """Romer model year by year (equations 2 to 6); z and l change to z_new, l_new in change_year."""
+    """The Romer model, year by year; z and l change to z_new and l_new in change_year.
+
+    Equations (2) to (6): y = A^gamma (1 - l), new A = A + z l N, new N = (1 + n) N;
+    the BGP level is equation (4), y* = (1 - l) (z l N / n)^gamma
+
+    Arguments
+        z_old, z_new : research productivity, z-bar, before and from change_year
+        l_old, l_new : research share, l-bar, before and from change_year
+        gamma        : the strength of ideas in production, gamma
+        n            : population growth rate, n-bar
+        change_year  : the year in which z and l change
+        first_year, last_year : the first and last years of the simulation
+    Returns
+        the years, output per person y and its BGP level (both with y = 1 in first_year)
+    """
+    # Step 1: the years, and the starting point on the BGP.
+    # `np.arange(2025, 2101)` gives the years 2025, 2026, ..., 2100.
     years = np.arange(first_year, last_year + 1)
     N = 1.0                                         # population in the first year
-    A = z_old * l_old * N / n                       # start with the BGP stock of ideas, equation (3)
+    A = z_old * l_old * N / n                       # BGP stock of ideas, equation (3)
     y_path, bgp_path = [], []
+    # Step 2: one year at a time. The `for` loop runs its indented lines once per
+    # year; `if ... else` chooses the old or the new parameters.
     for year in years:
         if year < change_year:
             z, l = z_old, l_old
         else:
             z, l = z_new, l_new
-        y_path.append(A ** gamma * (1 - l))                  # output per person, equation (2)
+        # `.append(...)` adds a number to the end of a list
+        y_path.append(A ** gamma * (1 - l))                  # y, equation (2)
         bgp_path.append((1 - l) * (z * l * N / n) ** gamma)  # BGP level, equation (4)
         A = A + z * l * N                           # new ideas from the researchers
         N = N * (1 + n)                             # population growth
-    scale = 1 / y_path[0]                           # normalization: y = 1 in the first year
+    # Step 3: scale both paths so that y = 1 in the first year
+    scale = 1 / y_path[0]
     return years, scale * np.array(y_path), scale * np.array(bgp_path)
 ```
 
-**Check 2: the long-run growth rate.** With yearly steps, output per person on the BGP grows by the factor $(1+\bar{n})^{\gamma}$ each year, very close to $1 + \gamma\bar{n}$ from equation (5). It should be the same in the first year and in the last one.
+<!-- cell -->
+
+### Checking the key results
+
+The formulas came from algebra. Now we check them with numbers, one Key result at a time. First, equation (1):
+doubling objects alone doubles output, but doubling objects and ideas together quadruples it. The last line
+counts how many ideas a few words can hold.
 
 ```{python}
+# Output at K = L = A = 1, the base for the ratios below
+base = output_with_ideas(K=1, L=1, A=1)
+
+# An f-string, f"... {value:.2f}", puts a value into the text;
+# ":.2f" means "two decimals".
+print(f"Double K and L only:       output x {output_with_ideas(K=2, L=2, A=1) / base:.2f}")
+print(f"Double K, L and A:         output x {output_with_ideas(K=2, L=2, A=2) / base:.2f}")
+print(f"Triple K, L and A:         output x {output_with_ideas(K=3, L=3, A=3) / base:.2f}   (equation 1: 3^2 = 9)")
+# How many 100-word paragraphs can be written with 20,000 words?
+# 20,000^100 = 10^(100 log10 20,000); `np.log10` is the logarithm with base 10
+print(f"Possible idea paragraphs:  10 to the power {100 * np.log10(20000):.1f}")
+```
+
+**Check 1: the fixed cost.** With $\bar{F} = 2{,}500$ million dollars and $c = \$10$ a dose, output per dollar
+should rise with spending, and the break-even price should be $c + \bar{F}/Y$.
+
+```{python}
+# Check 1: output per dollar and profit at two levels of research spending X
+F, c = 2500, 10                                  # millions of dollars, dollars per dose
+# `for X in (3600, 7200):` runs the indented lines once for each number,
+# first with X = 3600 and then with X = 7200 (spending in millions of dollars)
+for X in (3600, 7200):
+    Y = (X - F) / c                              # millions of doses
+    profit_at_cost = c * Y - X                   # profit when p = marginal cost c
+    print(f"X = {X}: {Y:.0f} million doses, {1000 * Y / X:.1f} million per billion dollars, "
+          f"profit at p = c: {profit_at_cost:.0f} million")
+# break-even price: marginal cost plus the fixed cost per dose
+print(f"Break-even price at X = 7200: {c + F / ((7200 - F) / c):.2f} dollars a dose")
+```
+
+**Check 2: the long-run growth rate.** With yearly steps, output per person on the BGP grows by the factor
+$(1+\bar{n})^{\gamma}$ each year, very close to $1 + \gamma\bar{n}$ from equation (5). It should be the same in
+the first year and in the last one.
+
+```{python}
+# Step 1: simulate the BGP with gamma = 0.7 and n = 5%
 years, y, y_bgp = simulate_romer(gamma=0.7, n=0.05)
+# Step 2: growth in the first and last years ([-1] is the last element),
+# the exact yearly factor, and equation (5)
 print(f"Simulated growth of y in 2026:  {100 * (y[1] / y[0] - 1):.2f}% a year")
 print(f"Simulated growth of y in 2100:  {100 * (y[-1] / y[-2] - 1):.2f}% a year")
 print(f"Exact yearly factor (1+n)^gamma: {100 * (1.05 ** 0.7 - 1):.2f}% a year")
@@ -774,209 +895,298 @@ print(f"Equation (5), gamma * n:        {100 * 0.7 * 0.05:.2f}% a year")
 print(f"Two textbook cases: gamma = 2, n = 1%: {2 * 1}%;  gamma = 1/2, n = 4%: {0.5 * 4:.0f}%")
 ```
 
-**Check 3: transition dynamics and level effects.** After $\bar{z}$ rises from 1 to 8 in 2050, equation (6) predicts growth of $(1 + 0.05\times8)^{0.6} - 1$ in the first year, and equation (4) a new BGP $8^{0.6}$ times the old one. After $\bar{\ell}$ rises from 0.03 to 0.35, equation (2) predicts an impact factor $0.65/0.97$. In the arrays, `y[25]` is 2050 and `y[26]` is 2051.
+**Check 3: transition dynamics and level effects.** After $\bar{z}$ rises from 1 to 8 in 2050, equation (6)
+predicts growth of $(1 + 0.05\times8)^{0.6} - 1$ in the first year, and equation (4) a new BGP $8^{0.6}$ times
+the old one. After $\bar{\ell}$ rises from 0.03 to 0.35, equation (2) predicts an impact factor $0.65/0.97$. In
+the arrays, `y[25]` is 2050 and `y[26]` is 2051.
 
 ```{python}
+# Step 1: a rise in z from 1 to 8 in 2050, against no change at all
 years, y, y_bgp = simulate_romer(z_new=8.0)
 years, y_old, y_old_bgp = simulate_romer()
 print(f"Rise in z, growth in 2051: {100 * (y[26] / y[25] - 1):.2f}% (simulated), "
       f"{100 * (1.4 ** 0.6 - 1):.2f}% (equation 6)")
 print(f"Rise in z, new BGP / old:  {y_bgp[-1] / y_old[-1]:.3f} (simulated), {8 ** 0.6:.3f} (equation 4)")
+# Step 2: a rise in l from 0.03 to 0.35 in 2050, against l = 0.03 throughout
 years, y, y_bgp = simulate_romer(l_old=0.03, l_new=0.35)
 years, y_old, y_old_bgp = simulate_romer(l_old=0.03, l_new=0.03)
 print(f"Rise in l, impact in 2050: {y[25] / y_old[25]:.3f} (simulated), {0.65 / 0.97:.3f} (equation 2)")
+# the ratio of the two BGP levels, equation (4)
 formula = (0.65 * 0.35 ** 0.6) / (0.97 * 0.03 ** 0.6)
 print(f"Rise in l, new BGP / old:  {y_bgp[-1] / y_old[-1]:.3f} (simulated), {formula:.3f} (equation 4)")
 ```
 
-**Check 4: the elasticities and the best research share.** Raise $\bar{z}$ by 1 percent and the BGP level should rise by about $\gamma = 0.6$ percent. The research-share part of equation (4), $(1-\bar{\ell})\bar{\ell}^{\gamma}$, should peak at $\bar{\ell} = \gamma/(1+\gamma) = 0.375$.
-
-> **Python note.** `np.linspace(0.01, 0.99, 981)` gives 981 evenly spaced shares from 0.01 to 0.99, 0.001 apart.
-> `np.argmax(level)` is the position of the largest value in the array, and `shares[...]` picks the share at that position.
+**Check 4: the elasticities and the best research share.** Raise $\bar{z}$ by 1 percent and the BGP level should
+rise by about $\gamma = 0.6$ percent. The research-share part of equation (4), $(1-\bar{\ell})\bar{\ell}^{\gamma}$,
+should peak at $\bar{\ell} = \gamma/(1+\gamma) = 0.375$.
 
 ```{python}
+# Step 1: the BGP level with z 1% higher, relative to no change
 years, y, y_bgp = simulate_romer(z_old=1.0, z_new=1.01)
 years, y_old, y_old_bgp = simulate_romer()
 print(f"1% higher z: BGP level changes by {100 * (y_bgp[-1] / y_old[-1] - 1):+.3f}%   (elasticity gamma = 0.6)")
+# Step 2: the research-share part of equation (4) on a fine grid of shares.
+# `np.linspace(0.01, 0.99, 981)` gives 981 evenly spaced shares, 0.001 apart.
 shares = np.linspace(0.01, 0.99, 981)
 level = (1 - shares) * shares ** 0.6
+# `np.argmax(level)` is the position of the largest value; `shares[...]` picks
+# the share at that position
 print(f"Best research share: {shares[np.argmax(level)]:.3f}   (formula gamma / (1 + gamma) = {0.6 / 1.6:.3f})")
 ```
 
-**Check 5: the combined model converges to its BGP.** We start with ideas on their BGP but with very little capital, apply the six equations for 300 years, and compare with equations (7), (8) and (9). The values are those of Fig. 8.
-
-> **Python note.** `gamma, n, d = 2 / 3, 0.03, 0.02` gives three variables their values in one line, in order.
-> `range(301)` counts 0, 1, ..., 300, and `if year in (0, 50, 100, 300)` is true only in those years.
+**Check 5: the combined model converges to its BGP.** We start with ideas on their BGP but with very little
+capital, apply the six equations for 300 years, and compare with equations (7), (8) and (9). The values are
+those of Fig. 8.
 
 ```{python}
+# Step 1: the parameters of Fig. 8. One line gives several variables their
+# values, in order: gamma = 2/3, n = 0.03, and so on.
 gamma, n, d, s, z, l = 2 / 3, 0.03, 0.02, 0.05, 1.0, 0.1
 g_y = (1 + n) ** (1.5 * gamma) - 1               # equation (7) in yearly steps
 g_Y = (1 + g_y) * (1 + n) - 1                    # growth of total output
-N, A, K = 1.0, z * l / n, 0.01                   # ideas on their BGP, capital far below it
+N, A, K = 1.0, z * l / n, 0.01                   # ideas on the BGP, K far below it
+# Step 2: apply the six equations once a year. `range(301)` counts 0, 1, ..., 300,
+# and `if year in (0, 50, 100, 300)` is true only in those years.
 for year in range(301):
     Y = A ** gamma * K ** (1 / 3) * ((1 - l) * N) ** (2 / 3)
     y_star = (s / (g_Y + d)) ** 0.5 * A ** (1.5 * gamma) * (1 - l)       # equation (9)
     if year in (0, 50, 100, 300):
         print(f"Year {year:3d}: y / y* = {Y / N / y_star:.3f},  K/Y = {K / Y:.3f}")
     y_before = Y / N
-    K = K + s * Y - d * K
-    A = A + z * l * N
-    N = N * (1 + n)
+    K = K + s * Y - d * K                        # investment minus depreciation
+    A = A + z * l * N                            # new ideas from the researchers
+    N = N * (1 + n)                              # population growth
+# Step 3: compare the end point with equations (8) and (7)
 y_next = A ** gamma * K ** (1 / 3) * ((1 - l) * N) ** (2 / 3) / N
 print(f"Equation (8): K*/Y* = {s / (g_Y + d):.3f}")
 print(f"Growth of y after 300 years: {100 * (y_next / y_before - 1):.3f}%  (equation 7: {100 * g_y:.3f}%)")
 ```
 
-**Check 6: the first year after a rise in the investment rate.** Start on the BGP with $\bar{s} = 0.05$, raise it to 0.6, and apply the equations once. The transition formula for $g_{Kt}$ predicts about 95 percent growth of capital.
+**Check 6: the first year after a rise in the investment rate.** Start on the BGP with $\bar{s} = 0.05$, raise it
+to 0.6, and apply the equations once. The transition formula for $g_{Kt}$ predicts about 95 percent growth of
+capital.
 
 ```{python}
-K_over_Y = 0.05 / (g_Y + d)                      # old BGP capital-output ratio, equation (8)
+# Step 1: start on the old BGP, with s = 0.05
+K_over_Y = 0.05 / (g_Y + d)                      # old BGP K/Y, equation (8)
 ratio = (0.6 / (g_Y + d)) / K_over_Y             # new BGP ratio over the actual ratio
 N, A = 1.0, z * l / n
 Y = A ** gamma * ((1 - l) * N) ** (2 / 3)        # output with K = 1 ...
-K = (K_over_Y * Y) ** 1.5                        # ... rescaled so that K/Y is on the old BGP
+K = (K_over_Y * Y) ** 1.5                        # ... rescaled: K/Y on the old BGP
 Y = A ** gamma * K ** (1 / 3) * ((1 - l) * N) ** (2 / 3)
+# Step 2: one year with s = 0.6
 K_next = K + 0.6 * Y - d * K
 A_next, N_next = A + z * l * N, N * (1 + n)
 Y_next = A_next ** gamma * K_next ** (1 / 3) * ((1 - l) * N_next) ** (2 / 3)
+# Step 3: compare with equation (8) and the transition formula
 print(f"K/Y before the change: {K / Y:.4f}   (equation 8: {K_over_Y:.4f})")
 print(f"Growth of K: {100 * (K_next / K - 1):.1f}% (simulated), {100 * ((g_Y + d) * ratio - d):.1f}% (formula)")
 print(f"Growth of y: {100 * ((Y_next / N_next) / (Y / N) - 1):.1f}%")
 print(f"Long-run level effect: {(0.6 / 0.05) ** 0.5:.2f}")
 ```
 
-**Check 7: growth accounting.** Plug the worked example into equation (10) and confirm that the contributions add up. Then check the BGP claim: with $\gamma = 1$, capital per hour accounts for one third of growth.
+**Check 7: growth accounting.** Plug the worked example into equation (10) and confirm that the contributions add
+up. Then check the BGP claim: with $\gamma = 1$, capital per hour accounts for one third of growth.
 
 ```{python}
-output_per_hour, capital_per_hour, composition = 2.0, 2.4, 0.2      # percent a year
+# Step 1: the worked example of equation (10), in percent a year
+output_per_hour, capital_per_hour, composition = 2.0, 2.4, 0.2
 tfp = output_per_hour - capital_per_hour / 3 - composition           # the residual
 print(f"TFP growth: {tfp:.1f} points, {100 * tfp / output_per_hour:.0f}% of growth")
 print(f"Sum of the three contributions: {capital_per_hour / 3 + composition + tfp:.1f}% = output per hour")
+# Step 2: the BGP of the combined model with gamma = 1
 g_A = 1.0                                         # TFP growth on a BGP, percent a year
 g_y_bgp = 1.5 * g_A                               # equation (7) with gamma = 1
-capital_part = g_y_bgp / 3                        # capital per hour grows as fast as output per hour
+capital_part = g_y_bgp / 3                        # capital per hour grows as fast as y
 print(f"BGP: output per hour {g_y_bgp:.1f}%, credited to capital {capital_part:.1f}, "
       f"residual {g_y_bgp - capital_part:.1f} = TFP growth {g_A:.1f}")
 ```
 
 <!-- cell -->
 
-### Drawing the paths
+### Drawing and data tools
 
-Figs. 2, 3, 4 and 8 all plot output per person over time, so they share the same axes and the same way of
-drawing an experiment. We write both once here. On a **ratio scale** (a logarithmic axis), equal distances
-mean equal *percentage* changes, so a variable that grows at a constant rate is a straight line.
+Figs. 2, 3, 4 and 8 share the same axes and the same way of drawing an experiment, and Figs. 5 and 6 give every
+commodity or country a fixed color. Run these tools and move on, or open the box to see how they work.
 
-> **Python note.** On a log axis Plotly wants the axis limits as powers of ten, which is why we write
-> `np.log10(...)`. `tickvals` sets the numbers printed on the axis: on the ratio scale each one is twice the
-> one below, starting from 1, the 2025 level. A trace with `mode="text"` writes words at a point of the
-> chart, which is how we label each line at its end.
+<!-- cell -->
+
+::: {.callout-note .mic-fold collapse="true" title="Show the drawing and data tools"}
+
+Figs. 2, 3, 4 and 8 all plot output per person over time, so they share the same axes. On a **ratio scale** (a
+logarithmic axis), equal distances mean equal *percentage* changes, so a variable that grows at a constant rate
+is a straight line. `vertical_axis` sets up the axes and `add_label` writes a label at the end of a line.
 
 ```{python}
-Y_LOW, Y_HIGH = 0.4, 64                                  # vertical range: y as a multiple of its 2025 level
-TICKS = [1, 2, 4, 8, 16, 32, 64]                         # ratio scale: no label at the bottom corner
-LINEAR_TICKS = [10, 20, 30, 40, 50, 60]                  # linear scale: no label at the bottom corner
+#| kind: folded
+# @title Drawing tools: the axes of the growth paths and a label at the end of a line
+# Step 1: the fixed ranges and ticks of the vertical axis
+Y_LOW, Y_HIGH = 0.4, 64                  # y as a multiple of its 2025 level
+# ratio scale: each tick twice the one below, from 1, the 2025 level;
+# no label at the bottom corner
+TICKS = [1, 2, 4, 8, 16, 32, 64]
+LINEAR_TICKS = [10, 20, 30, 40, 50, 60]  # linear scale: none at the corner
 
 
 def vertical_axis(fig, scale):
-    """Output per person on a ratio (log) or linear vertical axis, with fixed ranges."""
+    """Output per person on a ratio (log) or linear vertical axis, with fixed ranges.
+
+    Arguments
+        fig   : the figure to set up
+        scale : "ratio" or "linear"
+    """
+    # Step 2: on a log axis Plotly wants the limits as powers of ten, hence
+    # `np.log10`; `tickvals` sets the numbers printed on the axis
     if scale == "ratio":
         fig.update_yaxes(type="log", range=[np.log10(Y_LOW), np.log10(Y_HIGH)], tickvals=TICKS)
     else:
         fig.update_yaxes(type="linear", range=[0, Y_HIGH], tickvals=LINEAR_TICKS)
+    # Step 3: the axis titles, and the years on the horizontal axis
     fig.update_yaxes(title_text=f"Output per person, y ({scale} scale, 2025 = 1)")
     fig.update_xaxes(title_text="Year", range=[2025, 2125], tickvals=[2025, 2050, 2075, 2100, 2125])
 
 
 def add_label(fig, x, y, text):
-    """Write a label just to the right of the point (x, y)."""
+    """Write a label just to the right of the point (x, y).
+
+    Arguments
+        fig  : the figure to draw on
+        x, y : the point, e.g. the last year of a line and its value
+        text : the label
+    """
+    # a trace with `mode="text"` writes words at a point of the chart
     fig.add_trace(go.Scatter(x=[x], y=[y], mode="text", text=[text], textposition="middle right",
                              cliponaxis=False, hoverinfo="skip"))
 ```
 
+`experiment_chart` draws one experiment: the path of output per person, the old and the new BGPs after 2050,
+and a bar for the level effect between them.
+
 ```{python}
+#| kind: folded
+# @title Drawing tool: an experiment, the path of y between the old and new BGPs
 def experiment_chart(years, y, y_old, y_new, scale):
-    """Figs. 6.3, 6.4 and 6.8: the path of y, the old and new BGPs after 2050 and the level effect."""
+    """Figs. 3, 4 and 8: the path of y, the old and new BGPs after 2050 and the level effect.
+
+    Arguments
+        years : the years of the simulation
+        y     : output per person
+        y_old : the old BGP (the path without the change)
+        y_new : the new BGP
+        scale : "ratio" or "linear"
+    Returns
+        the Plotly figure
+    """
+    # Step 1: the two BGPs from 2050 on, the path of y and the level-effect bar
     after = years >= 2050                                  # True for 2050 and later
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=years[after], y=y_old[after], name="Old BGP", line=dict(color=GRAY, width=3, dash="dash")))
-    fig.add_trace(go.Scatter(x=years[after], y=y_new[after], name="New BGP", line=dict(color=GREEN, width=3, dash="dash")))
+    fig.add_trace(go.Scatter(x=years[after], y=y_old[after], name="Old BGP",
+                             line=dict(color=GRAY, width=3, dash="dash")))
+    fig.add_trace(go.Scatter(x=years[after], y=y_new[after], name="New BGP",
+                             line=dict(color=GREEN, width=3, dash="dash")))
     fig.add_trace(go.Scatter(x=years, y=y, name="Output per person, y", line=dict(color=BLUE, width=3)))
     fig.add_trace(go.Scatter(x=[2103, 2103], y=[y_old[-1], y_new[-1]], name="Level effect",
                              mode="lines+markers", line=dict(color="black", width=2)))
-    if scale == "ratio":                                   # distance between the two BGPs, as a share of the axis
+    # Step 2: the distance between the two BGPs, as a share of the axis
+    if scale == "ratio":
         gap = abs(np.log10(y_new[-1] / y_old[-1])) / np.log10(Y_HIGH / Y_LOW)
         middle = (y_old[-1] * y_new[-1]) ** 0.5
     else:
         gap = abs(y_new[-1] - y_old[-1]) / Y_HIGH
         middle = (y_old[-1] + y_new[-1]) / 2
+    # Step 3: the labels at the right end, only those that do not overlap
     add_label(fig, 2105, y_old[-1], "Old BGP")
-    if gap > 0.06:                                         # hide the label when it would overlap "Old BGP"
+    if gap > 0.06:                      # else it would overlap the Old BGP label
         add_label(fig, 2105, y_new[-1], "New BGP")
-    if gap > 0.2:                                          # enough room between the two labels
+    if gap > 0.2:                       # enough room between the two labels
         add_label(fig, 2105, middle, "Level effect")
     vertical_axis(fig, scale)
     fig.update_layout(showlegend=False)
     return fig
 ```
 
-<!-- cell -->
-
-### Fixed colors for many lines
-
-Figs. 5 and 6 let you add commodities or countries to a chart. A line should keep its color when you add
-or remove others, so we give every name one fixed color, once. Two lines that can appear together (in the
-same menu view) should not share a color, so each name takes the first color that its neighbors do not use.
-
-> **Python note.** `PALETTE` starts as a list of Plotly's 24 dark colors, and the loop appends the colors of a
-> second palette that are dark enough to read on white. `first_free` returns as soon as it finds a color. If every
-> color is already used next to this name, the second loop picks the one used least often (`.count`).
+Figs. 5 and 6 let you add commodities or countries to a chart. A line should keep its color when you add or
+remove others, so we give every name one fixed color, once. Two lines that can appear together (in the same menu
+view) should not share a color, so each name takes the first color that its neighbors do not use.
 
 ```{python}
-LIGHT = {"#F7E1A0", "#E2E2E2", "#FBE426", "#16FF32", "#1CFFCE", "#2ED9FF"}      # too pale on white
+#| kind: folded
+# @title Data tools: a palette of 44 colors and the first free color
+# Step 1: `PALETTE` starts as Plotly's 24 dark colors; the loop appends the colors
+# of a second palette that are dark enough to read on white (not in `LIGHT`)
+LIGHT = {"#F7E1A0", "#E2E2E2", "#FBE426", "#16FF32", "#1CFFCE", "#2ED9FF"}
 PALETTE = list(px.colors.qualitative.Dark24)
 for color in px.colors.qualitative.Alphabet:
     if color not in LIGHT:
         PALETTE.append(color)                       # 24 + 20 = 44 distinct colors
+# Step 2: this blue is close to the U.S. navy: move it to the end, so it is used last
 PALETTE.remove("#2E91E5")
-PALETTE.append("#2E91E5")                          # this blue is close to the U.S. navy: use it last
+PALETTE.append("#2E91E5")
 
 
 def first_free(used, taken):
-    """The first PALETTE color not in `used`, if possible one that no name has `taken` yet."""
+    """The first PALETTE color not in `used`, if possible one that no name has `taken` yet.
+
+    Arguments
+        used  : the colors of the names shown together with this one
+        taken : the colors that any name has already
+    Returns
+        a color, e.g. "#2E91E5"
+    """
+    # Step 1: the first color that is free; `return` leaves as soon as it finds one
     for color in PALETTE:
         if color not in used and color not in taken:
             return color
-    best = PALETTE[0]                               # every color is used: share the least-used one,
-    for color in PALETTE:                           # from the end of the palette (far from the default view)
+    # Step 2: every color is used next to this name: share the least-used one
+    # (`.count`), from the end of the palette (far from the default view)
+    best = PALETTE[0]
+    for color in PALETTE:
         if used.count(color) <= used.count(best):
             best = color
     return best
 ```
 
-> **Python note.** `fixed or {}` is `fixed` when it is given and an empty dictionary when it is `None`, and
-> `dict(...)` copies it, so the original stays unchanged. `continue` skips to the next name. The inner loops
-> collect `used`, the colors of every name that shares a group with `name`.
+`group_colors` gives the colors, name by name, so that the names of a group never share one when the palette
+allows it.
 
 ```{python}
+#| kind: folded
+# @title Data tools: one fixed color for every country or commodity
 def group_colors(names, groups, fixed=None):
-    """Give each country a color that no other country in its groups uses, as far as the palette allows.
+    """Give each name a color that no other name in its groups uses, as far as the palette allows.
 
-    names: every country; groups: the lists of countries shown together (menu views); fixed: {country: color}
-    for the textbook's countries, so the default view keeps the book's colors."""
+    Arguments
+        names  : every country (or commodity)
+        groups : the lists of names shown together (the menu views)
+        fixed  : {name: color} for the textbook's countries, so the default view keeps
+                 the book's colors (None for none)
+    Returns
+        a dictionary {name: color}
+    """
+    # Step 1: start from the fixed colors. `fixed or {}` is `fixed` when it is given
+    # and an empty dictionary when it is None; `dict(...)` copies it, so the
+    # original stays unchanged.
     colors = dict(fixed or {})
     for name in names:
+        # `continue` skips to the next name: this one has its color already
         if name in colors:
             continue
-        used = []                                   # colors of the names shown together with `name`
+        # Step 2: `used` collects the colors of every name that shares a group
+        # with `name`
+        used = []
         for group in groups:
             if name in group:
                 for other in group:
                     if other in colors:
                         used.append(colors[other])
+        # Step 3: the first color that none of them uses
         colors[name] = first_free(used, list(colors.values()))
     return colors
 ```
+
+:::
+
+<!-- cell -->
 
 ## Why ideas are different
 
@@ -1121,7 +1331,7 @@ every new idea raises the income of *everyone*. So as long as the population gro
 grows too, at a constant rate.
 
 On a **ratio scale** a variable that grows at a constant rate is a straight line, and the slope of the
-line is the growth rate. The chart uses `vertical_axis` and `add_label` from "Model overview".
+line is the growth rate. The chart uses `vertical_axis` and `add_label` from "Model in code".
 
 ```{python}
 def romer_bgp(gamma=0.7, n=0.05, scale="ratio"):
@@ -1204,7 +1414,7 @@ suddenly *below* its new BGP. By the **principle of transition dynamics**, it gr
 and then more and more slowly as it gets close to the new path.
 
 We reuse `simulate_romer`. The old BGP is simply a simulation in which nothing changes, and
-`experiment_chart` from "Model overview" draws the three paths.
+`experiment_chart` from "Model in code" draws the three paths.
 
 ```{python}
 def rise_in_z(z_new=8.0, scale="ratio"):

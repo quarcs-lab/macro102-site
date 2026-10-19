@@ -29,65 +29,6 @@ By the end of this notebook you will be able to:
 
 <!-- cell -->
 
-## Setup
-
-We first load the Python libraries we need. You only have to run this cell once.
-
-> **Python note.** `import` loads a library, a toolbox written by other people, and gives it a short nickname
-> such as `np` for NumPy. The `try ... except` block runs a Colab-only line and simply skips it anywhere else.
-> This recap has one interactive chart, a country picker in Lesson 2, so it imports two tools from `ipywidgets`.
-
-```{python}
-# Libraries used in this chapter
-import numpy as np                    # numbers and arrays
-import pandas as pd                   # data tables
-import plotly.express as px           # quick charts from data tables
-import plotly.graph_objects as go     # charts built piece by piece
-import plotly.io as pio
-from ipywidgets import interact, SelectMultiple
-
-# One light blue/green look for every chart
-BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
-pio.templates.default = "plotly_white"
-pio.templates["plotly_white"].layout.update(width=860, height=480)   # same size in Colab and on the website
-px.defaults.color_discrete_sequence = [BLUE, TEAL, GREEN, "#5aa0d8", "#0b4f47"]
-WIDE = {"description_width": "initial"}         # show the full widget labels
-
-# Colab only: let Plotly charts appear inside the interactive widgets
-try:
-    import google.colab
-    google.colab.output.enable_custom_widget_manager()
-except ImportError:
-    pass                                        # not running in Colab: nothing to do
-
-# The data files of this chapter live in the book's GitHub repository
-DATA_URL = "https://raw.githubusercontent.com/quarcs-lab/macro102-site/main/data/ch21/"
-```
-
-Every data file of this notebook is a copy of a file from an earlier chapter. The data README of this chapter
-says where each one comes from. The next cell defines a helper that only the book website needs. Run it and move on.
-
-```{python}
-#| kind: helper
-# @title Helper for the website version of Lesson 2 (run this cell; you do not need to read it)
-def group_menu(fig, groups, start, title):
-    """Show one group of countries at a time: a menu of buttons sets which traces (one per country) are visible."""
-    buttons = []
-    for name, members in groups.items():
-        visible = [t.legendgroup in members for t in fig.data]
-        ys = np.concatenate([np.asarray(t.y, dtype=float) for t, v in zip(fig.data, visible) if v] or [np.zeros(1)])
-        top = np.nanmax(ys) if np.isfinite(ys).any() else 1.0
-        buttons.append(dict(label=name, method="update",
-                            args=[{"visible": visible}, {"yaxis.range": [0, max(1.05, 1.05 * top)]}]))
-    first = list(groups).index(start)
-    for t, v in zip(fig.data, buttons[first]["args"][0]["visible"]):
-        t.visible = v
-    fig.update_layout(title=title, yaxis_range=buttons[first]["args"][1]["yaxis.range"], margin=dict(t=115),
-                      updatemenus=[dict(buttons=buttons, active=first, direction="down", x=0, y=1.02,
-                                        xanchor="left", yanchor="bottom")])
-    return fig
-```
-
 ## Model overview
 
 For twenty chapters we have followed **Islandia**, our small imaginary island country. We watched its tools pile up and wear out and new ideas spread, and we followed its jobs, money, booms and slumps, its households, Harbor Boatworks, its Treasury and its trade with Mainland. This overview builds no new model. It lays the book's models side by side, so that we can look back at Islandia's whole story before five lessons test it with data.
@@ -109,7 +50,7 @@ For twenty chapters we have followed **Islandia**, our small imaginary island co
 6. [Short run: stabilization and the AS/AD framework](#short-run-stabilization-and-the-asad-framework).
 7. [Behind the curves: consumption and investment](#behind-the-curves-consumption-and-investment).
 8. [The government and the open economy](#the-government-and-the-open-economy).
-9. [The model in code](#the-model-in-code): each headline result checked a second way in Python.
+9. [Model in code](#model-in-code): each headline result checked a second way in Python.
 
 **Notation.** As everywhere in the book, a bar marks a **parameter**, a number taken as given; letters without a bar are **endogenous variables**, which the models determine.
 
@@ -838,33 +779,158 @@ Old debt is now multiplied by $(1+i)/(1+g_Y) > 1$ each year, and the deficit add
 
 <!-- cell -->
 
-### The model in code
+## Model in code
 
-Now we put numbers on the headline results. Each check rebuilds a result in a second, independent way, by
-simulating the model year by year or by searching for the best choice, and compares it with the formula. The
-parameter values are simple illustrative numbers, the same ones as in the "Islandia in numbers" lines of the Key
-results.
+Now we put numbers on the headline results. The section has three parts: the setup (folded, because it is the
+same in every chapter), the one model function that the checks share, and nine checks that rebuild each Key result
+in a second way. Run its cells once, in order. Every later section of the notebook reuses them.
+
+<!-- cell -->
+
+### Setup
+
+Run the setup cells once, before anything else. They load the Python libraries, give every chart the same look,
+store the address of the chapter's data and define one helper that only the book website needs. You can use the
+notebook without reading them; open the box if you are curious.
+
+<!-- cell -->
+
+::: {.callout-note .mic-fold collapse="true" title="Show the setup code"}
+
+The first cell loads the libraries and sets the look of the charts. This recap has one interactive chart, a
+country picker in Lesson 2, so it imports only two tools from `ipywidgets`. Its comments explain each step.
+
+```{python}
+#| kind: folded
+# @title Setup: libraries, chart colors and the data location
+# Text after a "#" is a comment: Python ignores it, it is there for human readers.
+
+# Step 1: load the libraries. `import` loads a library, a toolbox written by
+# other people, and `as np` gives it a short nickname, so the code stays short.
+import numpy as np                    # numbers and arrays
+import pandas as pd                   # data tables
+import plotly.express as px           # quick charts from data tables
+import plotly.graph_objects as go     # charts built piece by piece
+import plotly.io as pio               # settings shared by every chart
+# two tools from ipywidgets for the country picker of Lesson 2
+from ipywidgets import interact, SelectMultiple
+
+# Step 2: one light blue/green look for every chart
+BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
+pio.templates.default = "plotly_white"
+# the same chart size in Colab and on the website
+pio.templates["plotly_white"].layout.update(width=860, height=480)
+px.defaults.color_discrete_sequence = [BLUE, TEAL, GREEN, "#5aa0d8", "#0b4f47"]
+WIDE = {"description_width": "initial"}         # show the full widget labels
+
+# Step 3, Colab only: let Plotly charts appear inside the interactive widgets.
+# `try` runs the indented lines; if the import fails (we are not in Colab),
+# `except` skips them.
+try:
+    import google.colab
+    google.colab.output.enable_custom_widget_manager()
+except ImportError:
+    pass                                        # not running in Colab: nothing to do
+
+# Step 4: the data files of this chapter live in the book's GitHub repository
+DATA_URL = "https://raw.githubusercontent.com/quarcs-lab/macro102-site/main/data/ch21/"
+```
+
+Every data file of this notebook is a copy of a file from an earlier chapter. The data README of this chapter
+says where each one comes from. The website cannot run Python, so the country picker of Lesson 2 also gets a
+version with a menu of buttons. The next helper builds it. Run it and move on.
+
+```{python}
+#| kind: folded
+# @title Helper for the website version of Lesson 2 (run this cell; you do not need to read it)
+def group_menu(fig, groups, start, title):
+    """Show one group of countries at a time, chosen from a menu of buttons (the website cannot run Python).
+
+    Arguments
+        fig    : a Plotly figure with one trace per country (its legendgroup is the country)
+        groups : maps each menu label to the countries it shows
+        start  : the label of the group shown first
+        title  : the figure's title
+    Returns
+        the same figure, with the first group visible and the menu above the plot
+    """
+    # Step 1: one button per group: the traces it shows, and an axis that fits them
+    buttons = []
+    for name, members in groups.items():
+        visible = [t.legendgroup in members for t in fig.data]
+        # every y-value of the visible traces (a zero if none), and the highest
+        ys = np.concatenate([np.asarray(t.y, dtype=float) for t, v in zip(fig.data, visible) if v]
+                            or [np.zeros(1)])
+        top = np.nanmax(ys) if np.isfinite(ys).any() else 1.0
+        buttons.append(dict(label=name, method="update",
+                            args=[{"visible": visible}, {"yaxis.range": [0, max(1.05, 1.05 * top)]}]))
+    # Step 2: start with the group `start` visible
+    first = list(groups).index(start)
+    for t, v in zip(fig.data, buttons[first]["args"][0]["visible"]):
+        t.visible = v
+    # Step 3: the title, the axis of the first group, and the menu above the plot
+    fig.update_layout(title=title, yaxis_range=buttons[first]["args"][1]["yaxis.range"], margin=dict(t=115),
+                      updatemenus=[dict(buttons=buttons, active=first, direction="down", x=0, y=1.02,
+                                        xanchor="left", yanchor="bottom")])
+    return fig
+```
+
+:::
+
+<!-- cell -->
+
+### The model as functions
+
+Most checks rebuild their result from scratch inside one cell, so the chapter needs only one shared function: the
+production function of the production model, $Y = \bar{A}K^{1/3}L^{2/3}$. Per person it is equation (1). We write
+it as a Python *function*: a named recipe that takes inputs and gives back a result. Checks 1 and 8 use it.
+
+```{python}
+# `def` creates a function. Its inputs are the arguments in parentheses.
+# The text in triple quotes describes the function.
+def production(A, K, L):
+    """Output of the production model.
+
+    Equation (1) for the whole economy:  Y = A K^(1/3) L^(2/3)
+
+    Arguments
+        A : total factor productivity, A-bar
+        K : capital
+        L : labor
+    Returns
+        output, Y
+    """
+    # `return` gives back the result; `**` means "to the power of"
+    return A * K ** (1 / 3) * L ** (2 / 3)
+```
+
+<!-- cell -->
+
+### Checking the key results
+
+Each check rebuilds a headline result in a second, independent way, by simulating the model year by year or by
+searching for the best choice, and compares it with the formula. The parameter values are simple illustrative
+numbers, the same ones as in the "Islandia in numbers" lines of the Key results.
 
 **Check 1: the production model.** Factor shares come from marginal products, which we approximate by adding a tiny
 amount of one input and measuring the extra output. Then we split a made-up income gap with equation (2).
 
-> **Python note.** A derivative is the extra output from a tiny extra input, divided by that input. With
-> `step = 1e-6` (that is, 0.000001) the ratio `(Y_more - Y) / step` is very close to the exact derivative.
-
 ```{python}
-def production(A, K, L):
-    """Output of the production model: Y = A K^(1/3) L^(2/3)."""
-    return A * K ** (1 / 3) * L ** (2 / 3)
-
+# Step 1: the factor shares, from marginal products. A marginal product is the
+# extra output from a tiny extra input, divided by that input. With `step = 1e-6`
+# (0.000001) the ratio `(Y_more - Y) / step` is very close to the exact derivative.
 A, K, L, step = 1.0, 8.0, 1.0, 1e-6
 Y = production(A, K, L)
-MPK = (production(A, K + step, L) - Y) / step      # extra output from a tiny bit more capital
-MPL = (production(A, K, L + step) - Y) / step      # extra output from a tiny bit more labor
+MPK = (production(A, K + step, L) - Y) / step   # extra output from a bit more capital
+MPL = (production(A, K, L + step) - Y) / step   # extra output from a bit more labor
+# An f-string, f"... {value:.4f}", puts a value into the text;
+# ":.4f" means "four decimals".
 print(f"Capital share r K / Y = {MPK * K / Y:.4f}   (theory: 1/3 = {1 / 3:.4f})")
 print(f"Labor share   w L / Y = {MPL * L / Y:.4f}   (theory: 2/3 = {2 / 3:.4f})")
 
-# A made-up poor country: TFP half of the rich one, capital per person 1/27 of it
+# Step 2: a made-up poor country: TFP half of the rich one, capital per person 1/27
 ratio_tfp, ratio_k = 0.5, 1 / 27
+# the income ratio from equation (2), and then directly from the production function
 print(f"Equation (2): y1/y2 = {ratio_tfp:.2f} x {ratio_k ** (1 / 3):.3f} = {ratio_tfp * ratio_k ** (1 / 3):.3f}")
 print(f"Direct:       y1/y2 = {production(0.5, 1 / 27, 1) / production(1, 1, 1):.3f}")
 ```
@@ -873,17 +939,23 @@ print(f"Direct:       y1/y2 = {production(0.5, 1 / 27, 1) / production(1, 1, 1):
 with the steady state of equation (3), then compare the growth rate of capital with equation (4).
 
 ```{python}
+# Step 1: Islandia's investment rate, depreciation rate and TFP
 s, d, A = 0.25, 0.05, 1.0
 k = 1.0                                            # start far below the steady state
+
+# Step 2: apply the capital equation once a year. `range(300)` counts 0, 1, ..., 299,
+# so the `for` loop runs its indented lines 300 times.
 for year in range(300):
-    k = k + s * A * k ** (1 / 3) - d * k           # the capital equation, one year at a time
+    k = k + s * A * k ** (1 / 3) - d * k   # new k = old k + investment - depreciation
 y_star = (s / d) ** (1 / 2) * A ** (3 / 2)         # equation (3)
 print(f"After 300 years: y = {A * k ** (1 / 3):.4f};   equation (3): y* = {y_star:.4f}")
 
+# Step 3: the growth rate of k in two ways, with capital at 50%, 90% and 120% of k*;
+# ":.0%" shows a share as a percentage, ":+.2f" adds the sign
 k_star = (s * A / d) ** (3 / 2)
-for share in (0.5, 0.9, 1.2):                      # capital at 50%, 90% and 120% of the steady state
+for share in (0.5, 0.9, 1.2):
     k = share * k_star
-    direct = (s * A * k ** (1 / 3) - d * k) / k
+    direct = (s * A * k ** (1 / 3) - d * k) / k    # net investment / k
     formula = d * ((k_star / k) ** (2 / 3) - 1)    # equation (4)
     print(f"k = {share:.0%} of k*: growth of k {100 * direct:+.2f}% (direct), {100 * formula:+.2f}% (equation 4)")
 ```
@@ -892,21 +964,25 @@ for share in (0.5, 0.9, 1.2):                      # capital at 50%, 90% and 120
 ideas year by year. The growth rate of ideas should move to $\bar{n}$ and the growth rate of income per person to
 $\gamma\bar{n}$, equation (6).
 
-> **Python note.** `np.log(a / b)` is the natural logarithm. `100 * np.log(y_next / y)` is the growth rate in
-> percent, measured as in Chapter 3. Yearly growth rates and the growth rules agree only approximately, so the last
-> digit can differ.
-
 ```{python}
+# Step 1: the parameters, and a stock of ideas twice its long-run stock A* = z ell N / n
 gamma, z, ell, n = 0.5, 0.01, 0.1, 0.02
 N = 100.0
-A = 2 * z * ell * N / n                            # twice the long-run stock A* = z ell N / n
+A = 2 * z * ell * N / n
+
+# Step 2: 400 years of research. `np.log(a / b)` is the natural logarithm, so
+# `100 * np.log(y_next / y)` is the growth rate in percent, measured as in Chapter 3.
+# `if year in (1, 50, 400)` is true only in those years, so we print three of them.
 for year in range(1, 401):
     A_next = A + z * ell * N                       # each researcher adds z new ideas
     y, y_next = A ** gamma * (1 - ell), A_next ** gamma * (1 - ell)     # equation (5)
     if year in (1, 50, 400):
         print(f"Year {year:3d}: growth of A {100 * np.log(A_next / A):.2f}%, "
               f"growth of y {100 * np.log(y_next / y):.2f}%")
-    A, N = A_next, (1 + n) * N
+    A, N = A_next, (1 + n) * N                     # next year: more ideas, more people
+
+# Step 3: the growth rules of equation (6). Yearly growth rates and the growth
+# rules agree only approximately, so the last digit can differ.
 print(f"Theory: g_A* = n = {100 * n:.2f}%,  g_y* = gamma n = {100 * gamma * n:.2f}%   (equation 6)")
 ```
 
@@ -916,18 +992,26 @@ then slow down to it, equation (7), while the capital-output ratio rises to $\ba
 ratio inside equation (8).
 
 ```{python}
+# Step 1: the parameters; K/Y starts near 1, below its long-run value
 gamma, z, ell, n, s, d = 0.5, 0.01, 0.1, 0.02, 0.2, 0.05
-N, K = 100.0, 300.0                                # K/Y starts near 1, below its long-run value
+N, K = 100.0, 300.0
 A = z * ell * N / n                                # ideas start on their long-run path
+
+# Step 2: 500 years of the combined model, one year at a time
 for year in range(1, 501):
+    # output this year, and next year's capital, ideas and population
     Y = A ** gamma * K ** (1 / 3) * ((1 - ell) * N) ** (2 / 3)
     K_next, A_next, N_next = K + s * Y - d * K, A + z * ell * N, (1 + n) * N
     Y_next = A_next ** gamma * K_next ** (1 / 3) * ((1 - ell) * N_next) ** (2 / 3)
+    # the growth rate of income per person, Y / N, in percent
     g_y = 100 * np.log((Y_next / N_next) / (Y / N))
     if year in (1, 20, 100, 500):
         print(f"Year {year:3d}: growth of y {g_y:.3f}%,  K/Y = {K / Y:.3f}")
     K, A, N = K_next, A_next, N_next
-g_Y = Y_next / Y - 1                               # growth of total output in the last year
+
+# Step 3: compare with equation (7) and the ratio inside equation (8);
+# g_Y is the growth of total output in the last year
+g_Y = Y_next / Y - 1
 print(f"Theory: g_y* = 1.5 gamma n = {100 * 1.5 * gamma * n:.3f}%   (equation 7),  "
       f"K/Y = s / (g_Y + d) = {s / (g_Y + d):.3f}")
 ```
@@ -940,14 +1024,16 @@ year, which is 1.485 percent in logs.
 reach equation (10). Then build a price level from the quantity equation and compare its growth with equation (11).
 
 ```{python}
+# Step 1: the labor market, starting with high unemployment
 s_job, f_job, L = 0.02, 0.3, 100.0                 # job-losing and job-finding rates
 U = 20.0                                           # start with 20 percent unemployment
 for year in range(100):
     E = L - U
-    U = U + s_job * E - f_job * U                  # the flows into and out of unemployment
+    U = U + s_job * E - f_job * U                  # the flows into and out of the pool
 print(f"Simulated unemployment rate {100 * U / L:.3f}%;  equation (10): {100 * s_job / (s_job + f_job):.3f}%")
 
-g_M, g_Y, V = 0.07, 0.03, 2.0                      # money grows 7%, real GDP 3%, velocity constant
+# Step 2: money grows 7%, real GDP 3%, and velocity stays constant
+g_M, g_Y, V = 0.07, 0.03, 2.0
 M0, Y0 = 100.0, 200.0
 P_now = M0 * V / Y0                                # quantity equation, this year
 P_next = M0 * (1 + g_M) * V / (Y0 * (1 + g_Y))     # and next year
@@ -959,13 +1045,16 @@ print(f"Inflation: {100 * np.log(P_next / P_now):.2f}% (log growth of P);  "
 directly, then compare with equation (13).
 
 ```{python}
-a_c, a_i, a_g, a_ex, a_im = 0.60, 0.17, 0.20, 0.12, 0.09    # the shares add up to exactly 1, so a = 0
+# Step 1: the spending shares; they add up to exactly 1, so a = 0
+a_c, a_i, a_g, a_ex, a_im = 0.60, 0.17, 0.20, 0.12, 0.09
 b, r_bar, Y_bar = 2.0, 0.02, 100.0
+
+# Step 2: for three real interest rates, add up the spending parts and compare
 for R in (0.01, 0.03, 0.05):
     C, G, EX, IM = a_c * Y_bar, a_g * Y_bar, a_ex * Y_bar, a_im * Y_bar
-    I = (a_i - b * (R - r_bar)) * Y_bar
-    Y = C + I + G + EX - IM
-    a = a_c + a_i + a_g + a_ex - a_im - 1
+    I = (a_i - b * (R - r_bar)) * Y_bar            # investment falls when R rises
+    Y = C + I + G + EX - IM                        # GDP = C + I + G + EX - IM
+    a = a_c + a_i + a_g + a_ex - a_im - 1          # a-bar of equation (13)
     print(f"R = {100 * R:.0f}%: direct Y~ = {100 * (Y - Y_bar) / Y_bar:+.1f}%,  "
           f"equation (13): {100 * (a - b * (R - r_bar)):+.1f}%")
 ```
@@ -975,12 +1064,13 @@ we find the inflation rate at which the AS and AD curves cross by trial and erro
 from AD, compute inflation from AS, and repeat. The result should follow equation (16), and the total output lost
 per point of disinflation should be $1/\bar{\nu}$.
 
-> **Python note.** A loop inside a loop: for every year, the inner `for` repeats the guess 100 times, and each
-> round brings the guess closer to the point where AS and AD cross.
-
 ```{python}
-nu, b, m, target = 0.5, 1.0, 0.5, 2.0              # inflation and output in percent
-pi_last, lost = 6.0, 0.0                           # inflation was 6% under the old target
+# Step 1: the parameters, with inflation and output in percent
+nu, b, m, target = 0.5, 1.0, 0.5, 2.0
+pi_last, lost = 6.0, 0.0                           # 6% inflation under the old target
+
+# Step 2: a loop inside a loop. For every year, the inner `for` repeats the guess
+# 100 times, and each round brings it closer to the point where AS and AD cross.
 for year in range(1, 41):
     guess = pi_last
     for round_ in range(100):
@@ -989,8 +1079,11 @@ for year in range(1, 41):
     formula = target + (pi_last - target) / (1 + nu * b * m)    # equation (16)
     if year <= 3:
         print(f"Year {year}: inflation {guess:.4f}% (AS = AD),  {formula:.4f}% (equation 16),  Y~ = {Y_tilde:.2f}%")
+    # add up the output lost, and move on to next year
     lost = lost - Y_tilde
     pi_last = guess
+
+# Step 3: the sacrifice ratio, compared with 1/nu
 print(f"Output lost per point of disinflation: {lost / (6.0 - target):.3f};  1/nu = {1 / nu:.3f}")
 ```
 
@@ -998,19 +1091,20 @@ print(f"Output lost per point of disinflation: {lost / (6.0 - target):.3f};  1/n
 compare it with the Euler equation (17). Then find the capital stock at which the marginal product equals the user
 cost, equation (18).
 
-> **Python note.** `np.linspace(a, b, n)` makes `n` evenly spaced numbers from `a` to `b`. Arithmetic on an array
-> works on every element at once, and `np.argmax` gives the position of the largest element.
-
 ```{python}
+# Step 1: the household's plans. `np.linspace(a, b, n)` makes n evenly spaced
+# numbers from a to b; arithmetic on an array works on every element at once.
 beta, R, y_today, y_future = 0.95, 0.04, 10.0, 5.0
 X = y_today + y_future / (1 + R)                    # lifetime wealth
 c_today = np.linspace(0.01, X - 0.01, 100001)       # every plan the budget allows
 c_future = (X - c_today) * (1 + R)
 utility = np.log(c_today) + beta * np.log(c_future)
+# `np.argmax` gives the position of the largest element: the best plan
 best = np.argmax(utility)
 print(f"Best plan found: c_today = {c_today[best]:.3f};  formula X/(1+beta) = {X / (1 + beta):.3f}")
 print(f"c_future / c_today = {c_future[best] / c_today[best]:.4f};  equation (17): beta(1+R) = {beta * (1 + R):.4f}")
 
+# Step 2: the firm's capital stock, where the marginal product equals the user cost
 R, d, gain, A, L = 0.02, 0.08, 0.0, 1.0, 1.0
 uc = R + d - gain                                   # user cost, equation (18)
 K = L * (A / (3 * uc)) ** (3 / 2)                   # solves (1/3) A (L/K)^(2/3) = uc
@@ -1023,24 +1117,31 @@ deficit, check the intertemporal budget constraint (19) and $NX = S - I$ (20) wi
 purchasing-power-parity exchange rate for one year.
 
 ```{python}
-i, g_Y, deficit = 0.03, 0.05, 0.02                  # interest rate, nominal GDP growth, deficit share of GDP
+# Step 1: the debt-GDP ratio, with the interest rate, nominal GDP growth and the
+# deficit as a share of GDP
+i, g_Y, deficit = 0.03, 0.05, 0.02
 b = 0.4                                             # debt starts at 40% of GDP
 for year in range(400):
+    # old debt grows with interest, GDP grows with g_Y, and the deficit adds new debt
     b = (1 + i) / (1 + g_Y) * b + deficit / (1 + g_Y)
 print(f"Debt-GDP ratio after 400 years: {b:.3f};  b* = deficit / (g_Y - i) = {deficit / (g_Y - i):.3f}")
 
+# Step 2: the budget constraint (19); T2 is the tax that repays all debt in period 2
 B1, G1, T1, G2 = 10.0, 20.0, 18.0, 20.0
-T2 = (1 + i) * ((1 + i) * B1 + G1 - T1) + G2        # the taxes that repay all debt in period 2
+T2 = (1 + i) * ((1 + i) * B1 + G1 - T1) + G2
 print(f"Equation (19): left {G1 + G2 / (1 + i) + (1 + i) * B1:.3f},  right {T1 + T2 / (1 + i):.3f}")
 
+# Step 3: net exports equal saving minus investment, equation (20)
 Y, C, I, G, T = 100.0, 65.0, 20.0, 18.0, 16.0
 NX = Y - C - I - G
 S = (Y - T - C) + (T - G)                           # private plus government saving
 print(f"Equation (20): NX = {NX:.1f},  S - I = {S - I:.1f}")
 
+# Step 4: purchasing power parity. E = P^w / P, with both prices starting at 1;
+# then one year of inflation at home and abroad
 pi_home, pi_world = 0.05, 0.02
-E_now = 1.0                                         # E = P^w / P, with both prices starting at 1
-E_next = (1 + pi_world) / (1 + pi_home)             # one year of inflation at home and abroad
+E_now = 1.0
+E_next = (1 + pi_world) / (1 + pi_home)
 print(f"Change in E: {100 * np.log(E_next / E_now):.2f}% (log);  pi^w - pi = {100 * (pi_world - pi_home):.2f}%")
 ```
 

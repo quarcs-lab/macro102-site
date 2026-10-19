@@ -29,74 +29,6 @@ you will be able to:
 
 <!-- cell -->
 
-## Setup
-
-We first load the Python libraries we need. You only have to run this cell once.
-
-> **Python note.** `import` loads a *library*, a toolbox written by other people. We give each
-> library a short nickname, for example `np` for NumPy, so that the code stays short. Text after
-> a `#` is a *comment*: Python ignores it, and it is there for human readers. The `try ... except`
-> block runs one Colab-only line and simply skips it anywhere else.
-
-```{python}
-# Libraries used in this chapter
-import numpy as np                              # numbers and arrays
-import pandas as pd                             # data tables
-import plotly.express as px                     # quick charts from data tables
-import plotly.graph_objects as go               # charts built piece by piece (model figures)
-import plotly.io as pio
-from plotly.subplots import make_subplots       # several panels in one figure
-from ipywidgets import interact, fixed, FloatSlider, IntSlider, ToggleButtons, Dropdown, SelectMultiple
-
-# One light blue/green look for every chart
-BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
-pio.templates.default = "plotly_white"
-pio.templates["plotly_white"].layout.update(width=860, height=480)   # same size in Colab and on the website
-px.defaults.color_discrete_sequence = [BLUE, TEAL, GREEN, "#5aa0d8", "#0b4f47"]
-WIDE = {"description_width": "initial"}         # show the full slider labels
-
-# Colab only: let Plotly charts appear inside the interactive widgets
-try:
-    import google.colab
-    google.colab.output.enable_custom_widget_manager()
-except ImportError:
-    pass                                        # not running in Colab: nothing to do
-
-# The data files of this chapter live in the book's GitHub repository
-DATA_URL = "https://raw.githubusercontent.com/quarcs-lab/macro102-site/main/data/ch13/"
-```
-
-The next cell defines a helper that only the book website needs. Run it and move on.
-
-```{python}
-#| kind: helper
-# @title Helper for the website versions (run this cell; you do not need to read it)
-def slider_figure(make_figure, name, values, start, label=None):
-    """Precompute make_figure(name=value) for every value and join the results with one slider.
-
-    The website cannot run Python, so each interactive figure also gets this precomputed version.
-    """
-    figures = [make_figure(**{name: v}) for v in values]
-    first = values.index(start)
-    fig = go.Figure(layout=figures[first].layout)
-    owner = []                                  # which precomputed figure each trace comes from
-    for i, f in enumerate(figures):
-        for trace in f.data:
-            trace.visible = (i == first)
-            fig.add_trace(trace)
-            owner.append(i)
-    steps = []
-    for i, f in enumerate(figures):
-        layout = {"title": f.layout.title.to_plotly_json(),
-                  "annotations": [a.to_plotly_json() for a in f.layout.annotations],
-                  "shapes": [s.to_plotly_json() for s in f.layout.shapes]}
-        visible = [o == i for o in owner]
-        steps.append(dict(method="update", label=str(values[i]), args=[{"visible": visible}, layout]))
-    fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
-                                    currentvalue=dict(prefix=(label or name) + " = "))])
-    return fig
-```
-
 ## Model overview
 
 Picture **Islandia** again, the small island country of the earlier chapters. Its central bank, the Bank of Islandia, no longer decides the interest rate meeting by meeting. It has published a rule instead: when inflation runs above its target the real interest rate goes up, and when inflation runs below it the rate goes down. What does such a rule do when the price of fuel for Islandia's boats jumps, when islanders go on a spending spree, or when the Bank wants lower inflation for good? This section builds the **AS/AD model** to answer, and we follow Islandia through every step.
@@ -115,7 +47,7 @@ Picture **Islandia** again, the small island country of the earlier chapters. It
 3. [The AS/AD model: steady state and dynamics](#the-asad-model-steady-state-and-dynamics): the steady state, one period, the path over time, the total output cost, and the chapter's three events (an inflation shock, a disinflation and a demand shock).
 4. [The rule for the nominal interest rate, and richer rules](#the-rule-for-the-nominal-interest-rate-and-richer-rules): the rate central banks actually set, and a rule that also watches output.
 5. [Expectations and credibility](#expectations-and-credibility): expectations that look ahead, and why being believed saves output.
-6. [The model in code](#the-model-in-code): the key results as Python functions, each checked with numbers. Every later section reuses them.
+6. [Model in code](#model-in-code): the key results as Python functions, each checked with numbers. Every later section reuses them.
 
 **Notation.** A bar over a letter marks a **parameter**: a number we take from outside the model. Letters without a bar are **endogenous variables**, which the model determines. The subscript $t$ counts periods (years).
 
@@ -585,62 +517,292 @@ Firms know that, once prices are set, the Bank might be tempted to cut rates for
 
 <!-- cell -->
 
-### The model in code
+## Model in code
 
-We now turn the key results into Python functions: the AD curve (equation 2), the AS curve (equations 3 and 11) and the solution for one period (equations 5 and 6). The cell also stores the baseline numbers. The cells after it check the algebra above with numbers. Every later section reuses these functions.
+Now we turn the Key results into Python. The section has four parts: the setup (folded, because it is the
+same in every chapter), the model as functions, numerical checks of the Key results, and the drawing and data
+tools that the figures use (folded too). Run its cells once, in order. Every later section of the notebook reuses
+them.
 
-> **Python note.** `def` creates a *function*: a named recipe that takes inputs (the *arguments*) and gives
-> back a result with `return`. Writing `m=M_BAR` gives an argument a *default value*, used whenever we do not
-> pass one. A function can return two results at once, separated by a comma.
+<!-- cell -->
+
+### Setup
+
+Run the setup cells once, before anything else. They load the Python libraries, give every chart the same look,
+store the address of the chapter's data and define a helper that only the book website needs. You can use the
+notebook without reading them; open the box if you are curious.
+
+<!-- cell -->
+
+::: {.callout-note .mic-fold collapse="true" title="Show the setup code"}
+
+The first cell loads the libraries and sets the look of the charts. Its comments explain each step.
 
 ```{python}
-PI_BAR, M_BAR, B_BAR, NU_BAR = 2.0, 0.5, 2.0, 1.0   # the baseline: target 2%, m = 1/2, b = 2, nu = 1
-PI_OLD = 4.0                                         # the inflation target before the disinflation
-A_LAST = 9                                           # the demand shock lasts from period 1 to period 9
-T_MAX = 20                                           # number of periods simulated after each event
+#| kind: folded
+# @title Setup: libraries, chart colors and the data location
+# Text after a "#" is a comment: Python ignores it, it is there for human readers.
+
+# Step 1: load the libraries. `import` loads a library, a toolbox written by
+# other people, and `as np` gives it a short nickname, so the code stays short.
+import numpy as np                              # numbers and arrays
+import pandas as pd                             # data tables
+import plotly.express as px                     # quick charts from data tables
+import plotly.graph_objects as go               # charts built piece by piece
+import plotly.io as pio                         # settings shared by every chart
+from plotly.subplots import make_subplots       # several panels in one figure
+# sliders, buttons and menus for the interactive figures
+from ipywidgets import interact, fixed, FloatSlider, IntSlider, ToggleButtons, Dropdown, SelectMultiple
+
+# Step 2: one light blue/green look for every chart
+BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
+pio.templates.default = "plotly_white"
+# the same chart size in Colab and on the website
+pio.templates["plotly_white"].layout.update(width=860, height=480)
+px.defaults.color_discrete_sequence = [BLUE, TEAL, GREEN, "#5aa0d8", "#0b4f47"]
+WIDE = {"description_width": "initial"}         # show the full slider labels
+
+# Step 3, Colab only: let Plotly charts appear inside the interactive widgets.
+# `try` runs the indented lines; if the import fails (we are not in Colab),
+# `except` skips them.
+try:
+    import google.colab
+    google.colab.output.enable_custom_widget_manager()
+except ImportError:
+    pass                                        # not running in Colab: nothing to do
+
+# Step 4: the data files of this chapter live in the book's GitHub repository
+DATA_URL = "https://raw.githubusercontent.com/quarcs-lab/macro102-site/main/data/ch13/"
+```
+
+The website cannot run Python, so each interactive figure also gets a version with a precomputed slider. The next
+helper builds those versions. Run it and move on.
+
+```{python}
+#| kind: folded
+# @title Helper for the website versions (run this cell; you do not need to read it)
+def slider_figure(make_figure, name, values, start, label=None):
+    """Join precomputed versions of a figure with one slider (the website cannot run Python).
+
+    Arguments
+        make_figure : the function that draws the figure, e.g. a function of Fig. 1
+        name        : the argument the slider moves, e.g. "m"
+        values      : the values of that argument to precompute
+        start       : the value shown first
+        label       : the slider's label (the argument name if None)
+    Returns
+        one Plotly figure with all versions and a slider that shows one at a time
+    """
+    # Step 1: draw the figure once for every value
+    figures = [make_figure(**{name: v}) for v in values]
+    first = values.index(start)
+    # Step 2: copy every curve into one figure; only the start value's are visible
+    fig = go.Figure(layout=figures[first].layout)
+    owner = []                          # which precomputed figure each trace is from
+    for i, f in enumerate(figures):
+        for trace in f.data:
+            trace.visible = (i == first)
+            fig.add_trace(trace)
+            owner.append(i)
+    # Step 3: one slider step per value: its curves, title, labels and shapes
+    steps = []
+    for i, f in enumerate(figures):
+        layout = {"title": f.layout.title.to_plotly_json(),
+                  "annotations": [a.to_plotly_json() for a in f.layout.annotations],
+                  "shapes": [s.to_plotly_json() for s in f.layout.shapes]}
+        visible = [o == i for o in owner]
+        steps.append(dict(method="update", label=str(values[i]), args=[{"visible": visible}, layout]))
+    fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
+                                    currentvalue=dict(prefix=(label or name) + " = "))])
+    return fig
+```
+
+:::
+
+<!-- cell -->
+
+### The model as functions
+
+Three Key results hold the whole model: the AD curve, equation (2), the AS curve, equations (3) and (11), and the
+solution for one period, equations (5) and (6). We write each one as a Python *function*: a named recipe that
+takes inputs and gives back a result. The cell also stores Islandia's baseline numbers, which the functions use
+whenever we do not pass other values.
+
+```{python}
+# Step 1: Islandia's baseline numbers.
+# target pi-bar = 2%, policy response m-bar = 1/2, b-bar = 2, Phillips slope nu-bar = 1
+PI_BAR, M_BAR, B_BAR, NU_BAR = 2.0, 0.5, 2.0, 1.0
+PI_OLD = 4.0            # the inflation target before the disinflation
+A_LAST = 9              # the demand shock lasts from period 1 to period 9
+T_MAX = 20              # number of periods simulated after each event
 
 
+# Step 2: the AD curve.
+# `def` creates a function. Its inputs are the arguments in parentheses.
+# `m=M_BAR` gives m a default value, used whenever we do not pass one.
+# The text in triple quotes describes the function.
 def ad_output(pi, pi_bar=PI_BAR, m=M_BAR, a=0.0, b=B_BAR):
-    """Equation 2, the AD curve: Y~ = a - b m (pi - pi_bar), in percent."""
+    """Output on the AD curve at a given rate of inflation.
+
+    Equation (2):  Y~ = a - b m (pi - pi_bar), in percent
+
+    Arguments
+        pi     : inflation, in percent (one number or a whole array)
+        pi_bar : the inflation target, pi-bar
+        m      : the policy response, m-bar
+        a      : the aggregate demand shock, a-bar
+        b      : the interest sensitivity of spending, b-bar
+    Returns
+        short-run output Y~, in percent
+    """
+    # `return` gives back the result
     return a - b * m * (pi - pi_bar)
 
 
+# Step 3: the AS curve
 def as_inflation(Y, pi_e=PI_BAR, nu=NU_BAR, o=0.0):
-    """Equations 3 and 11, the AS curve: pi = pi_e + nu Y~ + o, with expected inflation pi_e (= pi_{t-1})."""
+    """Inflation on the AS curve at a given level of output.
+
+    Equations (3) and (11):  pi = pi_e + nu Y~ + o, with expected inflation pi_e
+    (pi_e = pi_{t-1}, last period's inflation, in equation (3))
+
+    Arguments
+        Y    : short-run output Y~, in percent (one number or a whole array)
+        pi_e : expected inflation, in percent
+        nu   : the slope of the Phillips curve, nu-bar
+        o    : the inflation shock, o-bar
+    Returns
+        inflation pi, in percent
+    """
+    # the height of the curve at Y~ = 0 is expected inflation plus the shock
     return pi_e + nu * Y + o
 
 
+# Step 4: the solution for one period, where the two curves cross
 def solve_asad(pi_e, a=0.0, o=0.0, pi_bar=PI_BAR, m=M_BAR, nu=NU_BAR):
-    """Equations 5 and 6: the point where the AD and AS curves cross, output and inflation in one period."""
+    """Output and inflation in one period: the point where the AD and AS curves cross.
+
+    Equations (5) and (6), with expected inflation pi_e in place of pi_{t-1}:
+    Y~ = (a - b m (pi_e + o - pi_bar)) / (1 + b m nu), and pi from the AS curve
+
+    Arguments
+        pi_e   : expected inflation, in percent
+        a, o   : the demand shock a-bar and the inflation shock o-bar
+        pi_bar : the inflation target, pi-bar
+        m      : the policy response, m-bar
+        nu     : the slope of the Phillips curve, nu-bar
+    Returns
+        two numbers: output Y~ and inflation pi, in percent
+    """
+    # equation (5): output where the curves cross (b-bar is always B_BAR here)
     Y = (a - B_BAR * m * (pi_e + o - pi_bar)) / (1 + B_BAR * m * nu)
+    # put that output into the AS curve; a comma returns two results at once
     return Y, as_inflation(Y, pi_e, nu, o)
 ```
 
-Let us try `solve_asad` on two cases: the steady state, and the first period of an inflation shock.
-
-> **Python note.** `Y, pi = solve_asad(...)` *unpacks* the two results into two variables. An *f-string* such
-> as `f"Y~ = {Y:.2f}"` inserts a value into text; `:.2f` means "show two decimals".
+The events of this chapter play out over many periods. Each period, firms expect last period's inflation, and
+the economy jumps to the point where that period's AD and AS curves cross. The simulation below takes one list of
+demand shocks $\bar{a}$ and one list of inflation shocks $\bar{o}$, one value per period. `shock_list` builds
+those lists.
 
 ```{python}
+def shock_list(size, last):
+    """A list of shocks, one per period: `size` in periods 1 to `last`, zero afterwards.
+
+    The shocks of the chapter's events: o-bar for one period from Fig. 6 on,
+    a-bar for nine periods from Fig. 12 on.
+
+    Arguments
+        size : the size of the shock, in percentage points
+        last : the last period with the shock (0: no shock at all)
+    Returns
+        a list of T_MAX numbers, one for each period 1, 2, ..., T_MAX
+    """
+    # Step 1: start with an empty list
+    values = []
+    # Step 2: `range(1, T_MAX + 1)` counts 1, 2, ..., T_MAX, so the `for` loop runs its
+    # indented lines once per period t. `if` runs its lines only when its condition
+    # is true, and `else` runs the others otherwise.
+    for t in range(1, T_MAX + 1):
+        if t <= last:
+            # `values.append(x)` adds x at the end of the list `values`
+            values.append(size)
+        else:
+            values.append(0.0)
+    return values
+
+
+NO_SHOCK = shock_list(0.0, 0)                   # T_MAX zeros
+```
+
+`simulate` repeats the solution for one period, period by period, and returns a table with one row per period.
+
+```{python}
+def simulate(a_list, o_list, pi_start=PI_BAR, pi_bar=PI_BAR, m=M_BAR, nu=NU_BAR):
+    """Solve the AS/AD model period by period, with adaptive expectations.
+
+    Each period t, firms expect pi_{t-1}; equations (5) and (6) then give Y~ and pi.
+    Period 0 is the old steady state, with inflation pi_start.
+
+    Arguments
+        a_list   : the demand shock a-bar in periods 1, 2, ... (a list, e.g. from shock_list)
+        o_list   : the inflation shock o-bar in the same periods (a list)
+        pi_start : inflation in period 0, in percent
+        pi_bar   : the inflation target from period 1 on, pi-bar
+        m        : the policy response, m-bar
+        nu       : the slope of the Phillips curve, nu-bar
+    Returns
+        a table with one row per period and the columns period, a, o, target, pi_e, Y, pi
+    """
+    # Step 1: period 0. `dict(period=0, Y=0.0, ...)` is a dictionary: a set of named
+    # values. `rows` is a list of dictionaries, one per period.
+    rows = [dict(period=0, a=0.0, o=0.0, target=pi_start, pi_e=pi_start, Y=0.0, pi=pi_start)]
+    # Step 2: one pass of the loop per period
+    for t in range(1, len(a_list) + 1):
+        # adaptive expectations: `rows[-1]` is the last element of the list, and
+        # `rows[-1]["pi"]` its value named "pi", last period's inflation
+        pi_e = rows[-1]["pi"]
+        # `Y, pi = ...` unpacks the two results into two variables. The shocks of
+        # period t sit at position t - 1, because Python counts from 0.
+        Y, pi = solve_asad(pi_e, a_list[t - 1], o_list[t - 1], pi_bar, m, nu)
+        rows.append(dict(period=t, a=a_list[t - 1], o=o_list[t - 1], target=pi_bar, pi_e=pi_e, Y=Y, pi=pi))
+    # Step 3: `pd.DataFrame(rows)` turns the list of dictionaries into a table,
+    # one row per dictionary
+    return pd.DataFrame(rows)
+```
+
+<!-- cell -->
+
+### Checking the key results
+
+The formulas came from algebra. Now we check them with numbers, one Key result at a time, using Islandia's
+baseline. First we try `solve_asad` on two cases: the steady state, and the first period of an inflation shock.
+
+```{python}
+# Step 1: the steady state, with expected inflation equal to the 2% target
 Y, pi = solve_asad(pi_e=2.0)
+# An f-string, f"... {value:.2f}", puts a value into the text;
+# ":.2f" means "two decimals".
 print(f"Steady state (expected inflation = target = 2%):  Y~ = {Y:.2f}%,  pi = {pi:.2f}%")
+# Step 2: an inflation shock o = 2 hits that steady state
 Y, pi = solve_asad(pi_e=2.0, o=2.0)
 print(f"Inflation shock o = 2 hits the steady state:      Y~ = {Y:.2f}%,  pi = {pi:.2f}%")
 ```
 
-In the steady state output is at potential and inflation equals the target. The shock raises inflation by
-only 1 point, not 2, because the central bank answers with a recession of 1 percent: with $\lambda = 1/2$, half
-of the shock becomes inflation (equation 6).
+In the steady state output is at potential and inflation equals the target. The shock raises inflation by only
+1 point, not 2, because the central bank answers with a recession of 1 percent: with $\lambda = 1/2$, half of the
+shock becomes inflation (equation 6).
 
 **Check 1: the steady state does not depend on the parameters.** Equation (4) says that when expected inflation
 equals the target, output is at potential and inflation stays on target, whatever $\bar{m}$ and $\bar{\nu}$ are.
 
-> **Python note.** A `for` loop repeats its indented lines once for each element of a list. Here each element is a
-> pair of numbers in parentheses, and `for m, nu in ...` unpacks each pair into two variables, as `Y, pi = ...` did.
-
 ```{python}
+# Three pairs (m-bar, nu-bar), each with expected inflation on target.
+# `for m, nu in [...]` takes the pairs in parentheses one at a time and
+# unpacks each into two variables, as `Y, pi = ...` does.
 for m, nu in [(0.25, 0.5), (0.5, 1.0), (2.0, 2.0)]:
     Y, pi = solve_asad(pi_e=PI_BAR, m=m, nu=nu)
+    # equation (4) predicts Y~ = 0 and pi = pi-bar for every pair
     print(f"m = {m:.2f}, nu = {nu:.1f}:  Y~ = {Y:.2f}%,  pi = {pi:.2f}%   (equation 4: Y~ = 0, pi = {PI_BAR:.1f}%)")
 ```
 
@@ -649,22 +811,25 @@ for m, nu in [(0.25, 0.5), (0.5, 1.0), (2.0, 2.0)]:
 an inflation gap of $\lambda\bar{o}$ in period 1 and $\lambda^t\bar{o}$ in period $t$, with output $-\bar{b}\bar{m}$
 times the gap.
 
-> **Python note.** `range(1, 7)` counts 1, 2, ..., 6. `**` means "to the power of". The line `pi_e = pi` replaces
-> the old expectation by this period's inflation, ready for the next pass through the loop.
-
 ```{python}
-lam = 1 / (1 + B_BAR * M_BAR * NU_BAR)          # the share of the inflation gap left after each period
+# Step 1: `lam`, the share of the inflation gap left after each period
+lam = 1 / (1 + B_BAR * M_BAR * NU_BAR)
 print(f"Share of the gap left each period: 1 / (1 + b m nu) = {lam:.2f}")
-pi_e = PI_BAR                                    # period 0: the steady state
+# Step 2: period 0 is the steady state
+pi_e = PI_BAR
+# Step 3: periods 1 to 6, the simulation against the formula
 for t in range(1, 7):
     o = 0.0
     if t == 1:
-        o = 2.0                                  # the inflation shock hits in period 1 only
+        o = 2.0         # the inflation shock hits in period 1 only
     Y, pi = solve_asad(pi_e, o=o)
-    gap = lam ** t * 2.0                         # equations (6) and (7)
+    # equations (6) and (7): the gap is lam^t o; `**` means "to the power of"
+    gap = lam ** t * 2.0
     print(f"Period {t}: pi = {pi:.4f}% (formula {PI_BAR + gap:.4f}%),  "
           f"Y~ = {Y:+.4f}% (formula {-B_BAR * M_BAR * gap:+.4f}%)")
-    pi_e = pi                                    # adaptive expectations for the next period
+    # adaptive expectations: this period's inflation replaces the old
+    # expectation, ready for the next pass through the loop
+    pi_e = pi
 ```
 
 **Check 3: the total output cost.** Equation (8) says that the sum of output over a whole episode is
@@ -674,18 +839,34 @@ steady state.
 
 ```{python}
 def total_output(o_first=0.0, pi_start=PI_BAR, pi_bar=PI_BAR, m=M_BAR, nu=NU_BAR, periods=200):
-    """Sum of Y~ over many periods, after a shock o_first in period 1 or a new target pi_bar (equation 8)."""
+    """The sum of output Y~ over a whole episode, to check equation (8).
+
+    The episode is an inflation shock o_first in period 1, or a new target pi_bar.
+
+    Arguments
+        o_first  : the inflation shock o-bar in period 1
+        pi_start : inflation before the episode, in percent
+        pi_bar   : the inflation target during the episode, pi-bar
+        m        : the policy response, m-bar
+        nu       : the slope of the Phillips curve, nu-bar
+        periods  : the number of periods added up
+    Returns
+        the sum of Y~ over the periods, in percent
+    """
+    # Step 1: start in the old steady state, with nothing added up yet
     pi_e, total = pi_start, 0.0
+    # Step 2: solve each period and add its output to the total
     for t in range(1, periods + 1):
         o = 0.0
         if t == 1:
-            o = o_first
+            o = o_first                         # the shock hits in period 1 only
         Y, pi = solve_asad(pi_e, o=o, pi_bar=pi_bar, m=m, nu=nu)
-        total = total + Y
-        pi_e = pi
+        total = total + Y                       # add this period's output
+        pi_e = pi                               # adaptive expectations
     return total
 
 
+# Step 3: the shock for three slopes nu-bar, then the disinflation for three m-bar
 for nu in [0.5, 1.0, 2.0]:
     print(f"Inflation shock o = 2, nu = {nu:.1f}: sum of Y~ = {total_output(o_first=2.0, nu=nu):+.4f}"
           f"   equation (8): {-2.0 / nu:+.4f}")
@@ -699,42 +880,51 @@ predicts that inflation settles at $\bar{\pi} + \bar{a}/(\bar{b}\bar{m})$ with o
 in the baseline and 3 percent with $\bar{m} = 1$.
 
 ```{python}
+# For the baseline m-bar and for m-bar = 1: 60 periods of a demand shock a = 2
 for m in [0.5, 1.0]:
     pi_e = PI_BAR
-    for t in range(1, 61):                       # a demand shock a = 2 that does not end
+    for t in range(1, 61):                       # a shock a = 2 that does not end
         Y, pi = solve_asad(pi_e, a=2.0, m=m)
         pi_e = pi
+    # the last period against equation (9)
     print(f"m = {m:.1f}: after 60 periods pi = {pi:.4f}%, Y~ = {Y:+.4f}%"
           f"   equation (9): pi_c = {PI_BAR + 2.0 / (B_BAR * m):.4f}%")
 ```
 
 **Check 5: the nominal rule and why its slope must exceed one.** With Taylor's numbers, equation (10) should agree
-with $i = 1 + 1.5\,\pi$, and the real rate $i - \pi$ should rise by $\bar{m} = 0.5$ for each point of inflation. Then
-we give the central bank a wrong-signed response, $\bar{m} = -1/4$, start one point above the target, and watch the
-gap: with $\lambda = 2$ it should double every period.
+with $i = 1 + 1.5\,\pi$, and the real rate $i - \pi$ should rise by $\bar{m} = 0.5$ for each point of inflation.
+Then we give the central bank a wrong-signed response, $\bar{m} = -1/4$, start one point above the target, and
+watch the gap: with $\lambda = 2$ it should double every period.
 
 ```{python}
+# Step 1: the nominal rate of equation (10) at four inflation rates, with r-bar = 2%
 r_bar = 2.0
 for pi in [0.5, 2.0, 4.0, 6.0]:
     i = r_bar + pi + M_BAR * (pi - PI_BAR)       # equation (10)
     print(f"pi = {pi:.1f}%:  i = {i:.2f}%  (1 + 1.5 pi = {1 + 1.5 * pi:.2f}%),  real rate i - pi = {i - pi:.2f}%")
 
-pi_e = PI_BAR + 1.0                              # start one point above the target
+# Step 2: a wrong-signed response, starting one point above the target
+pi_e = PI_BAR + 1.0
 for t in range(1, 5):
-    Y, pi = solve_asad(pi_e, m=-0.25)            # the nominal rate rises by only 0.75 per point of inflation
+    # with m = -0.25 the nominal rate rises by only 0.75 per point of inflation
+    Y, pi = solve_asad(pi_e, m=-0.25)
     print(f"m = -0.25, period {t}: inflation gap = {pi - PI_BAR:.2f} points")
     pi_e = pi
 ```
 
-**Check 6: the richer rule.** With $\bar{x} = 1/2$, a demand shock $\bar{a} = 2$ and inflation on target, the formula
-above gives $\tilde{Y} = 2/(1 + 2 \times 0.5) = 1$ percent. We plug that output into the rule and the resulting interest
-rate into the IS curve: the IS curve must give back the same output.
+**Check 6: the richer rule.** With $\bar{x} = 1/2$, a demand shock $\bar{a} = 2$ and inflation on target, the
+formula above gives $\tilde{Y} = 2/(1 + 2 \times 0.5) = 1$ percent. We plug that output into the rule and the
+resulting interest rate into the IS curve: the IS curve must give back the same output.
 
 ```{python}
-a, x, pi = 2.0, 0.5, PI_BAR                      # demand shock, weight on output, inflation on target
-Y = (a - B_BAR * M_BAR * (pi - PI_BAR)) / (1 + B_BAR * x)   # the richer AD curve
-rate_gap = M_BAR * (pi - PI_BAR) + x * Y         # the richer rule: R - r_bar
+# Step 1: demand shock, weight on output, inflation on target
+a, x, pi = 2.0, 0.5, PI_BAR
+# Step 2: output on the richer AD curve
+Y = (a - B_BAR * M_BAR * (pi - PI_BAR)) / (1 + B_BAR * x)
+# Step 3: the richer rule gives the interest rate gap R - r_bar
+rate_gap = M_BAR * (pi - PI_BAR) + x * Y
 print(f"Richer AD curve at pi = target: Y~ = {Y:.2f}%   (simple rule: {ad_output(PI_BAR, a=a):.2f}%)")
+# Step 4: the IS curve with that interest rate must give back the same output
 print(f"IS curve with that interest rate: Y~ = a - b (R - r_bar) = {a - B_BAR * rate_gap:.2f}%")
 ```
 
@@ -742,240 +932,330 @@ print(f"IS curve with that interest rate: Y~ = a - b (R - r_bar) = {a - B_BAR * 
 $\tilde{Y}_1 = -\bar{b}\bar{m}\lambda(1 - c) \times 2$: −1, −0.5 and 0 percent for credibility 0, 1/2 and 1.
 
 ```{python}
+# For credibility c = 0, 1/2 and 1: period 1 of the cut in the target to 2%
 for c in [0.0, 0.5, 1.0]:
-    pi_e = c * 2.0 + (1 - c) * PI_OLD            # expected inflation after the announcement (equation 11)
+    # expected inflation after the announcement (equation 11)
+    pi_e = c * 2.0 + (1 - c) * PI_OLD
     Y, pi = solve_asad(pi_e, pi_bar=2.0)
-    formula = -B_BAR * M_BAR * lam * (1 - c) * (PI_OLD - 2.0) + 0.0   # + 0.0 turns -0.0 into 0.0
+    # the formula for period 1; + 0.0 turns -0.0 into 0.0
+    formula = -B_BAR * M_BAR * lam * (1 - c) * (PI_OLD - 2.0) + 0.0
     print(f"credibility {c:.1f}: expected pi = {pi_e:.1f}%  ->  pi = {pi:.2f}%, Y~ = {Y:+.2f}%  (formula {formula:+.2f}%)")
 ```
 
-<!-- cell -->
-
-### One loop for every event
-
-The events of this chapter play out over many periods. Each period, firms expect last period's inflation,
-and the economy jumps to the point where that period's AD and AS curves cross. `simulate` repeats this step
-period by period. It takes one list of demand shocks $\bar{a}$ and one list of inflation shocks $\bar{o}$, one
-value per period, and returns a table with one row per period. `shock_list` builds those lists.
-
-> **Python note.** `values.append(x)` adds `x` at the end of the list `values`, and `for t in range(1, 21)`
-> repeats the indented lines for t = 1, 2, ..., 20. `dict(period=0, Y=0.0)` is a *dictionary*: a set of named
-> values. `rows[-1]` is the last element of a list, and `rows[-1]["pi"]` its value named `"pi"`.
-> `pd.DataFrame(rows)` turns a list of dictionaries into a table, one row per dictionary.
+Last, we try `simulate` on the inflation shock of Figs. 6 to 9 and show its first six periods.
 
 ```{python}
-def shock_list(size, last):
-    """A shock of the given size in periods 1, ..., last and zero afterwards, for T_MAX periods."""
-    values = []
-    for t in range(1, T_MAX + 1):
-        if t <= last:
-            values.append(size)
-        else:
-            values.append(0.0)
-    return values
-
-
-NO_SHOCK = shock_list(0.0, 0)                   # T_MAX zeros
-
-
-def simulate(a_list, o_list, pi_start=PI_BAR, pi_bar=PI_BAR, m=M_BAR, nu=NU_BAR):
-    """Solve the AS/AD model period by period; period 0 is the old steady state with inflation pi_start."""
-    rows = [dict(period=0, a=0.0, o=0.0, target=pi_start, pi_e=pi_start, Y=0.0, pi=pi_start)]
-    for t in range(1, len(a_list) + 1):
-        pi_e = rows[-1]["pi"]                   # adaptive expectations: last period's inflation
-        Y, pi = solve_asad(pi_e, a_list[t - 1], o_list[t - 1], pi_bar, m, nu)
-        rows.append(dict(period=t, a=a_list[t - 1], o=o_list[t - 1], target=pi_bar, pi_e=pi_e, Y=Y, pi=pi))
-    return pd.DataFrame(rows)
-```
-
-```{python}
+# the inflation shock: o = 2 in period 1 only, no demand shock. `.head(6)` keeps the
+# first six rows of the table, and `.round(3)` rounds every number to three decimals.
 simulate(NO_SHOCK, shock_list(2.0, 1)).head(6).round(3)
 ```
 
-The table is the inflation shock of Figs. 6 to 9: inflation jumps to 3 percent in period 1, then falls to
-2.5, 2.25, 2.125, ...; the gap to the 2 percent target halves every period, and so does the recession.
-The column `target` is the inflation target behind each period's AD curve, and `pi_e` is expected inflation,
-the height of that period's AS curve at $\tilde{Y} = 0$.
+Inflation jumps to 3 percent in period 1, then falls to 2.5, 2.25, 2.125, ...; the gap to the 2 percent target
+halves every period, and so does the recession. The column `target` is the inflation target behind each period's
+AD curve, and `pi_e` is expected inflation, the height of that period's AS curve at $\tilde{Y} = 0$.
 
 <!-- cell -->
 
-### Drawing tools
+### Drawing and data tools
 
-Every diagram below uses the same axes and the same few drawing steps, so we write them once:
+The AS/AD diagrams share a few drawing tools, and the data figures at the end of the chapter share tools that give
+each country a fixed color and build the website's country menus. Run them and move on, or open the box to see
+how they work.
+
+<!-- cell -->
+
+::: {.callout-note .mic-fold collapse="true" title="Show the drawing and data tools"}
+
+Every diagram uses the same axes and the same few drawing steps, so we write them once:
 
 - `add_ad` and `add_as` draw one curve and write its name at its right end;
 - `add_point` marks a point with dashed guides to the axes, and `add_arrow` draws an arrow;
 - `asad_figure` starts a figure with one or two panels, and `asad_axes` fixes the axes and writes the title.
 
-> **Python note.** `np.linspace(-15, 15, 241)` creates 241 evenly spaced numbers from −15 to 15, one every
-> 0.125. Because our model functions work on a whole array at once, one call gives a whole curve.
-> `make_subplots(rows=1, cols=2)` creates a figure with two panels side by side, and
-> `add_trace(..., row=1, col=2)` draws in the second panel. `(x >= 0) & (y <= 8)` is true where *both* conditions hold, `x[inside]` keeps the values where
-> `inside` is true, and `[-1]` takes the last of them. Labels such as `"AS<sub>2</sub>"` use HTML to write
-> AS₂. `fig.data` is the list of traces already drawn, `min(a, b)` and `max(a, b)` give the smaller and the
-> larger of two numbers, and `tickvals=None` lets Plotly choose the tick marks itself. The axes stay fixed for
-> every slider setting except a few extreme ones, where `asad_axes` widens them so that no dot falls off the
-> chart. `fig.update_annotations(yshift=16)` moves every text already in the figure (here only the panel
-> titles) 16 pixels up.
+The first cell sets the grids and the fixed axes, and draws a curve with its name at its end.
 
 ```{python}
-Y_GRID = np.linspace(-15, 15, 241)          # output levels at which we draw the AS curves
-PI_GRID = np.linspace(12, -5, 137)          # inflation rates, high to low, at which we draw the AD curves
-X_RANGE, PI_RANGE = [-4, 4], [-1, 8]        # fixed axes, so that you can see the curves move
-FADED = "rgba(0,128,112,0.35)"              # light teal for the AS curves of earlier periods
+#| kind: folded
+# @title Drawing tools: grids, fixed axes and a curve with its name
+# Step 1: the grids. `np.linspace(-15, 15, 241)` creates 241 evenly spaced numbers
+# from -15 to 15, one every 0.125. Our model functions work on a whole array at
+# once, so one call gives a whole curve.
+Y_GRID = np.linspace(-15, 15, 241)          # output levels for the AS curves
+PI_GRID = np.linspace(12, -5, 137)          # inflation, high to low, for the AD curves
+# Step 2: fixed axes, so that you can see the curves move
+X_RANGE, PI_RANGE = [-4, 4], [-1, 8]
+FADED = "rgba(0,128,112,0.35)"              # light teal: AS curves of earlier periods
 
 
 def axis_names(col):
-    """The names Plotly gives the axes of panel col: x and y in panel 1, x2 and y2 in panel 2."""
+    """The names Plotly gives the axes of a panel: x and y in panel 1, x2 and y2 in panel 2.
+
+    Arguments
+        col : the panel, 1 or 2
+    Returns
+        the names of its horizontal and vertical axes
+    """
+    # `if` without `else`: the second `return` runs only for panels after the first
     if col == 1:
         return "x", "y"
     return f"x{col}", f"y{col}"
 
 
 def add_curve(fig, x, y, label, color, dash="solid", col=1):
-    """Draw one curve in panel col and write its label at its last point inside the axes."""
+    """Draw one curve in a panel and write its name at its last point inside the axes.
+
+    Arguments
+        fig   : the figure to draw on
+        x, y  : the points of the curve (arrays)
+        label : the curve's name, e.g. "AD" ("" for none); HTML such as "AS<sub>2</sub>" writes AS2
+        color : its color, e.g. TEAL
+        dash  : "solid" or "dash"
+        col   : the panel to draw in, 1 or 2
+    """
+    # Step 1: draw the curve; `add_trace(..., row=1, col=2)` draws in the second panel
     fig.add_trace(go.Scatter(x=x, y=y, mode="lines", name=label, showlegend=False,
                              line=dict(color=color, width=3, dash=dash)), row=1, col=col)
+    # Step 2: the points inside the axes; `&` is true where both conditions hold
     inside = (x >= X_RANGE[0]) & (x <= X_RANGE[1]) & (y >= PI_RANGE[0]) & (y <= PI_RANGE[1])
+    # Step 3: the name at the last point inside: `x[inside]` keeps the values where
+    # `inside` is true, and `[-1]` takes the last of them
     if inside.any() and label != "":
         xref, yref = axis_names(col)
-        fig.add_annotation(x=x[inside][-1], y=y[inside][-1], xref=xref, yref=yref, text=label, showarrow=False,
-                           xanchor="left", yanchor="bottom", font=dict(color=color, size=14))
+        fig.add_annotation(x=x[inside][-1], y=y[inside][-1], xref=xref, yref=yref, text=label,
+                           showarrow=False, xanchor="left", yanchor="bottom", font=dict(color=color, size=14))
 ```
 
+The next tools draw the two curves of the model, a point with its guides, and an arrow.
+
 ```{python}
+#| kind: folded
+# @title Drawing tools: the AD and AS curves, points and arrows
 def add_ad(fig, label, color, a=0.0, pi_bar=PI_BAR, m=M_BAR, b=B_BAR, dash="solid", col=1):
-    """Draw an AD curve (equation 2): output on the horizontal axis, inflation on the vertical axis."""
+    """Draw an AD curve: output on the horizontal axis, inflation on the vertical axis.
+
+    Equation (2), computed by ad_output
+
+    Arguments
+        fig, label, color : the figure, the curve's name and its color
+        a, pi_bar, m, b   : the demand shock and the parameters of the AD curve
+        dash, col         : the line style and the panel
+    """
+    # the AD curve gives output for each inflation rate of PI_GRID
     add_curve(fig, ad_output(PI_GRID, pi_bar, m, a, b), PI_GRID, label, color, dash, col)
 
 
 def add_as(fig, label, color, pi_e=PI_BAR, nu=NU_BAR, o=0.0, dash="solid", col=1):
-    """Draw an AS curve (equation 3)."""
+    """Draw an AS curve.
+
+    Equation (3), computed by as_inflation
+
+    Arguments
+        fig, label, color : the figure, the curve's name and its color
+        pi_e, nu, o       : expected inflation, the slope and the inflation shock
+        dash, col         : the line style and the panel
+    """
+    # the AS curve gives inflation for each output level of Y_GRID
     add_curve(fig, Y_GRID, as_inflation(Y_GRID, pi_e, nu, o), label, color, dash, col)
 
 
 def add_point(fig, Y, pi, label, col=1, guides=True):
-    """Mark the point (Y, pi) with a dot and a label, and (if guides) dashed lines to both axes."""
+    """Mark the point (Y, pi) with a dot and a label, and dashed lines to both axes.
+
+    Arguments
+        fig    : the figure to draw on
+        Y, pi  : output and inflation at the point
+        label  : the point's name, e.g. "A" ("" for none)
+        col    : the panel
+        guides : True draws the dashed guides to the axes
+    """
+    # Step 1: the guides start far outside the chart: the axes cut them off at
+    # their edges, wherever these are
     if guides:
-        # the guides start far outside the chart: the axes cut them off at their edges, wherever these are
         fig.add_trace(go.Scatter(x=[-100, Y, Y], y=[pi, pi, -100], mode="lines", showlegend=False,
-                                 hoverinfo="skip", line=dict(color="black", width=1, dash="dash")), row=1, col=col)
+                                 hoverinfo="skip", line=dict(color="black", width=1, dash="dash")),
+                      row=1, col=col)
+    # Step 2: the dot
     fig.add_trace(go.Scatter(x=[Y], y=[pi], mode="markers", name=label, showlegend=False,
                              marker=dict(color="black", size=10)), row=1, col=col)
+    # Step 3: the label, well above the dot and a little to the right: clear of the
+    # curves and the dashed guides through it
     if label != "":
         xref, yref = axis_names(col)
-        # well above the dot and a little to the right: clear of the curves and the dashed guides through it
         fig.add_annotation(x=Y, y=pi, xref=xref, yref=yref, text=label, showarrow=False, xanchor="left",
                            yanchor="bottom", xshift=4, yshift=8, font=dict(size=16))
 
 
 def add_arrow(fig, x0, y0, x1, y1, col=1):
-    """Draw an arrow from (x0, y0) to (x1, y1) in axis units; nothing if the two points almost coincide."""
+    """Draw an arrow from (x0, y0) to (x1, y1) in axis units; none if the two points almost coincide.
+
+    Arguments
+        fig    : the figure to draw on
+        x0, y0 : where the arrow starts
+        x1, y1 : where it points
+        col    : the panel
+    """
+    # draw it only if the two points are visibly apart
     if abs(x1 - x0) + abs(y1 - y0) > 0.15:
         xref, yref = axis_names(col)
         fig.add_annotation(x=x1, y=y1, ax=x0, ay=y0, xref=xref, yref=yref, axref=xref, ayref=yref, text="",
                            showarrow=True, arrowhead=3, arrowwidth=2, arrowcolor="black")
 ```
 
+The last two drawing tools start a figure and set its axes. The axes stay fixed for every slider setting except a
+few extreme ones, where `asad_axes` widens them so that no dot falls off the chart.
+
 ```{python}
+#| kind: folded
+# @title Drawing tools: an empty figure and fixed axes that widen only when needed
 def asad_figure(cols=1, titles=None):
-    """An empty figure with cols panels side by side (titles: one short title per panel)."""
+    """An empty figure with one or more panels side by side.
+
+    Arguments
+        cols   : the number of panels
+        titles : one short title per panel (None for none)
+    Returns
+        the empty Plotly figure
+    """
+    # `make_subplots(rows=1, cols=2)` creates a figure with two panels side by side
     fig = make_subplots(rows=1, cols=cols, subplot_titles=titles, horizontal_spacing=0.1)
-    fig.update_annotations(yshift=16)           # lift the panel titles clear of curve labels at the top edge
+    # `update_annotations(yshift=16)` moves every text already in the figure (here only
+    # the panel titles) 16 pixels up, clear of curve labels at the top edge
+    fig.update_annotations(yshift=16)
     return fig
 
 
 def asad_axes(fig, title, panels=1):
-    """Fixed AS/AD axes in the first panels (no tick in the bottom-left corner) and the title readout."""
+    """Fixed AS/AD axes in the first panels (no tick in the bottom-left corner) and the title.
+
+    Arguments
+        fig    : the figure
+        title  : the title, with the readout of the chosen values
+        panels : the number of panels that get the AS/AD axes
+    """
+    # Step 1: widen an axis only if a dot would fall off the chart. `fig.data` is the
+    # list of traces already drawn; `min` and `max` give the smaller and the larger
     x_range, pi_range = list(X_RANGE), list(PI_RANGE)
-    for trace in fig.data:                       # the dots: widen an axis only if a dot would fall off the chart
+    for trace in fig.data:
         if trace.mode == "markers":
             x_range = [min(x_range[0], trace.x[0] - 0.5), max(x_range[1], trace.x[0] + 0.5)]
             pi_range = [min(pi_range[0], trace.y[0] - 0.4), max(pi_range[1], trace.y[0] + 0.8)]
+    # Step 2: round ticks on the usual axes; on wider axes, `tickvals=None` lets
+    # Plotly choose the ticks itself
     x_ticks, pi_ticks = list(range(-3, 4)), list(range(0, 8))
     if x_range != X_RANGE or pi_range != PI_RANGE:
-        x_ticks, pi_ticks = None, None           # wider axes: let Plotly choose the ticks
+        x_ticks, pi_ticks = None, None
+    # Step 3: the same axes in every panel, then the title and the legend
     for col in range(1, panels + 1):
         fig.update_xaxes(title_text="Output, Ỹ (percent)", range=x_range, tickvals=x_ticks, zeroline=False,
                          row=1, col=col)
-        fig.update_yaxes(title_text="Inflation, π (percent)", range=pi_range, tickvals=pi_ticks, zeroline=False,
-                         row=1, col=col)
+        fig.update_yaxes(title_text="Inflation, π (percent)", range=pi_range, tickvals=pi_ticks,
+                         zeroline=False, row=1, col=col)
     fig.update_layout(title=title, legend=dict(x=0.99, y=0.99, xanchor="right", yanchor="top",
                                                bgcolor="rgba(255,255,255,0.8)"))
 ```
 
-<!-- cell -->
-
-### Countries and colors
-
 The data figures at the end of this chapter (Figs. 16–21) can go beyond the textbook's economies: the same series
-exist for many other countries. The file `countries.csv` lists every economy in the chapter's multi-country files, with
-its region and whether it belongs to the OECD. We give each country a fixed color, so that it keeps its color when you
-add or remove others, and two countries that are shown together never share a color. The function `missing_or_off`
-writes a short note for a chart title when a chosen country has no data or leaves the chart.
-
-> **Python note.** `PALETTE.index(c)` finds the position of color `c`, `.pop(i)` removes the item at that position and returns it, and `.append` puts it at the end.
-> `group_colors` walks through the countries one by one. `colors.get(other)` is the color of `other`,
-> or `None` if it has none yet. `new + free + PALETTE` joins three lists and `[0]` takes the first item: a color that
-> no country uses yet if there is one, else one that no country of the same groups uses.
+exist for many other countries. The file `countries.csv` lists every economy in the chapter's multi-country files,
+with its region and whether it belongs to the OECD. We give each country a fixed color, so that it keeps its color
+when you add or remove others, and two countries that are shown together never share a color. The next cell
+builds the palette.
 
 ```{python}
-LIGHT = ["#F7E1A0", "#E2E2E2", "#FBE426", "#16FF32", "#1CFFCE", "#2ED9FF"]      # too pale on a white page
-PALETTE = list(px.colors.qualitative.Dark24)                                     # 24 dark colors ...
-for color in px.colors.qualitative.Alphabet:                                     # ... and 20 more
+#| kind: folded
+# @title Data tools: the color palette
+# Step 1: 24 dark colors and 20 more, without the ones too pale on a white page
+LIGHT = ["#F7E1A0", "#E2E2E2", "#FBE426", "#16FF32", "#1CFFCE", "#2ED9FF"]
+PALETTE = list(px.colors.qualitative.Dark24)
+for color in px.colors.qualitative.Alphabet:
     if color not in LIGHT:
         PALETTE.append(color)
-PALETTE.append(PALETTE.pop(PALETTE.index("#2E91E5")))   # this blue is close to the U.S. navy: move it to the end
+# Step 2: this blue is close to the U.S. navy: move it to the end.
+# `PALETTE.index(c)` finds the position of color c, `.pop(i)` removes the item at
+# that position and returns it, and `.append` puts it at the end.
+PALETTE.append(PALETTE.pop(PALETTE.index("#2E91E5")))
 ```
 
+`group_colors` walks through the countries one by one and gives each the first color that suits it.
+
 ```{python}
+#| kind: folded
+# @title Data tools: a color for each country
 def group_colors(names, groups, fixed=None):
     """A color for each country that no other country of its groups uses, as far as the palette allows.
-    groups: lists of countries shown together (the website menus); fixed: {country: color} for the book's countries."""
+
+    Arguments
+        names  : the countries, in the order they get their colors
+        groups : lists of countries shown together (the website menus)
+        fixed  : {country: color} for the book's countries (None for none)
+    Returns
+        a dictionary {country: color}
+    """
     colors = dict(fixed or {})
     for name in names:
+        # Step 1: a country with a fixed color keeps it; `continue` goes on to the next
         if name in colors:
             continue
-        used = []                                    # colors of the countries already shown with this one
+        # Step 2: the colors of the countries already shown with this one.
+        # `colors.get(other)` is the color of `other`, or None if it has none yet.
+        used = []
         for group in groups:
             if name in group:
                 for other in group:
                     used.append(colors.get(other))
-        free, new = [], []                           # free: not used in its groups; new: not used by any country
+        # Step 3: free colors are not used in its groups; new colors by no country
+        free, new = [], []
         for color in PALETTE:
             if color not in used:
                 free.append(color)
                 if color not in colors.values():
                     new.append(color)
+        # Step 4: `new + free + PALETTE` joins three lists and `[0]` takes the first
+        # item: a color no country uses yet if there is one, else one free in its groups
         colors[name] = (new + free + PALETTE)[0]
     return colors
 ```
 
 The website shows the OECD members and eight large emerging economies, so those countries get their colors first.
 
-> **Python note.** `countries.groupby("region")` hands over each region's name with its rows, so `regions` becomes a
-> list of country lists, one per region.
-
 ```{python}
+#| kind: folded
+# @title Data tools: the countries and their colors
+# Step 1: the list of countries, and the groups the menus show
 countries = pd.read_csv(DATA_URL + "countries.csv")
 G7 = ["Canada", "France", "Germany", "Italy", "Japan", "United Kingdom", "United States"]
 EMERGING = ["Argentina", "Brazil", "China", "India", "Indonesia", "Russia", "Saudi Arabia", "South Africa"]
 BOOK_COLORS = {"United States": BLUE, "United Kingdom": TEAL, "Euro area": GREEN, "Japan": "#5aa0d8"}
 OECD_PLUS = list(BOOK_COLORS) + sorted(set(countries.country[countries.oecd]) - set(BOOK_COLORS)) + EMERGING
+# Step 2: `countries.groupby("region")` hands over each region's name with its rows,
+# so `regions` becomes a list of country lists, one per region
 regions = []
 for region, rows in countries.groupby("region"):
     regions.append(list(rows.country))
+# Step 3: the colors, first for the OECD and emerging economies, then for the rest
 rest = sorted(set(countries.country) - set(OECD_PLUS))
 INFLATION_COLORS = group_colors(OECD_PLUS + rest, [OECD_PLUS] + regions, BOOK_COLORS)
 countries.head()
 ```
 
-> **Python note.** `values.empty` is true when a selection has no rows. `", ".join(names)` glues a list of names into
-> one text, with a comma between them.
+`missing_or_off` writes a short note for a chart title when a chosen country has no data or leaves the chart.
 
 ```{python}
+#| kind: folded
+# @title Data tools: a title note for countries without data or off the chart
 def missing_or_off(part, column, countries, low, high):
-    """Title text naming the chosen countries with no data in `part`, and those whose values leave [low, high]."""
+    """Title text naming the chosen countries without data, and those whose values leave the chart.
+
+    Countries with no data in `part`, and countries whose values leave [low, high].
+
+    Arguments
+        part      : the data table shown in the chart
+        column    : the column on the vertical axis
+        countries : the chosen countries
+        low, high : the range of the vertical axis
+    Returns
+        the note, e.g. "; no data: Chile", or "" when every country fits
+    """
+    # Step 1: sort the countries; `values.empty` is true when a selection has no rows
     missing, off = [], []
     for name in countries:
         values = part[column][part.country == name]
@@ -983,6 +1263,8 @@ def missing_or_off(part, column, countries, low, high):
             missing.append(name)
         elif values.min() < low or values.max() > high:
             off.append(name)
+    # Step 2: the note; `", ".join(names)` glues the names into one text,
+    # with a comma between them
     note = ""
     if missing:
         note += "; no data: " + ", ".join(missing)
@@ -991,29 +1273,51 @@ def missing_or_off(part, column, countries, low, high):
     return note
 ```
 
-The website versions of the multi-country figures need two more helpers: a menu that switches between countries, and
-buttons that list one group of countries in the legend. Run the two cells and move on.
+The website versions of the multi-country figures need two more helpers: a menu that switches between countries,
+and buttons that list one group of countries in the legend. Run the two cells and move on.
 
 ```{python}
-#| kind: helper
+#| kind: folded
 # @title Helpers for the website country menus (run this cell; you do not need to read it)
 def compact(fig):
-    """Shrink a website figure (short dates, 4 significant digits, a short hover), so the saved notebook stays small."""
+    """Shrink a website figure, so that the saved notebook stays small.
+
+    Short dates, 4 significant digits and a short hover text.
+
+    Arguments
+        fig : a Plotly figure
+    Returns
+        the same figure, smaller
+    """
     for trace in fig.data:
+        # Step 1: dates as short text
         x = pd.Series(trace.x if trace.x is not None else [], dtype=object).infer_objects()
         if pd.api.types.is_datetime64_any_dtype(x):
             trace.x = x.dt.strftime("%Y-%m-%d").tolist()
+        # Step 2: numbers with 4 significant digits
         if trace.y is not None and np.asarray(trace.y).dtype.kind == "f":
             trace.y = [float(f"{v:.4g}") for v in trace.y]
+        # Step 3: a short hover text for the lines
         if "lines" in (trace.mode or "") and trace.hovertext is None:
             trace.hovertemplate = "%{fullData.name}<br>%{x}: %{y}<extra></extra>"
     return fig
 
 
 def menu_figure(make_figure, name, values, start):
-    """Precompute make_figure(name=value) for every value and join the results with one dropdown menu."""
+    """Join precomputed versions of a figure with one dropdown menu (the website cannot run Python).
+
+    Arguments
+        make_figure : the function that draws the figure
+        name        : the argument the menu chooses, e.g. "country"
+        values      : the values of that argument to precompute
+        start       : the value shown first
+    Returns
+        one Plotly figure with all versions and a menu that shows one at a time
+    """
+    # Step 1: draw the figure once for every value
     figures = [make_figure(**{name: v}) for v in values]
     first = values.index(start)
+    # Step 2: copy every trace into one figure; only the start value's are shown
     fig = go.Figure(layout=figures[first].layout)
     owner, shown = [], []
     for i, f in enumerate(figures):
@@ -1022,35 +1326,54 @@ def menu_figure(make_figure, name, values, start):
             trace.visible = shown[-1] if i == first else False
             fig.add_trace(trace)
             owner.append(i)
+    # Step 3: one menu entry per value: its traces, title, labels, shapes and axes
     buttons = []
     for i, f in enumerate(figures):
-        layout = {"title": f.layout.title.to_plotly_json(), "annotations": [a.to_plotly_json() for a in f.layout.annotations],
-                  "shapes": [s.to_plotly_json() for s in f.layout.shapes], "legend.title.text": f.layout.legend.title.text,
+        layout = {"title": f.layout.title.to_plotly_json(),
+                  "annotations": [a.to_plotly_json() for a in f.layout.annotations],
+                  "shapes": [s.to_plotly_json() for s in f.layout.shapes],
+                  "legend.title.text": f.layout.legend.title.text,
                   "xaxis.range": f.layout.xaxis.range, "yaxis.range": f.layout.yaxis.range}
         visible = [shown[j] if o == i else False for j, o in enumerate(owner)]
         buttons.append(dict(label=str(values[i]), method="update", args=[{"visible": visible}, layout]))
-    fig.update_layout(margin=dict(t=110), updatemenus=[dict(type="dropdown", buttons=buttons, active=first, x=0, y=1.02,
-                                                            xanchor="left", yanchor="bottom")])   # above the plot
+    # Step 4: the menu, above the plot
+    fig.update_layout(margin=dict(t=110), updatemenus=[dict(type="dropdown", buttons=buttons, active=first,
+                                                            x=0, y=1.02, xanchor="left", yanchor="bottom")])
     return compact(fig)
 ```
 
 ```{python}
-#| kind: helper
+#| kind: folded
 # @title Helper for the website group buttons (run this cell; you do not need to read it)
 def group_menu(fig, book, small=8):
-    """Buttons that list one group of countries in the legend (a small group is drawn at once); `book` is always drawn."""
+    """Buttons that list one group of countries in the legend; the countries in `book` are always drawn.
+
+    Arguments
+        fig   : a Plotly figure with one trace per country
+        book  : the textbook's countries, always drawn
+        small : a group with at most this many countries is drawn at once
+    Returns
+        the same figure, with the buttons
+    """
+    # Step 1: the countries of each group, with short names for the regions
     names = [t.name for t in fig.data]
-    short = {"Europe and Central Asia": "Europe", "Asia and Pacific": "Asia-Pacific", "Middle East and Africa": "Africa, Mideast"}
-    groups = {"Textbook": list(book), "G7": G7, "Americas": [], "Europe": [], "Asia-Pacific": [], "Africa, Mideast": []}
+    short = {"Europe and Central Asia": "Europe", "Asia and Pacific": "Asia-Pacific",
+             "Middle East and Africa": "Africa, Mideast"}
+    groups = {"Textbook": list(book), "G7": G7, "Americas": [], "Europe": [], "Asia-Pacific": [],
+              "Africa, Mideast": []}
     for c, r in zip(countries.country, countries.region):
         if c in names:
             groups[short.get(r, r)].append(c)
-    first = ["legendonly" if len(names) <= 40 else False] * len(names)   # a short legend lists every country
+    # a short legend lists every country
+    first = ["legendonly" if len(names) <= 40 else False] * len(names)
+    # Step 2: one button per group: drawn, in the legend only, or hidden
     buttons = []
     for label, members in groups.items():
+        # skip a group with no country in the figure
         if not set(members) & set(names):
-            continue                                   # no country of this group in the figure
+            continue
         visible = []
+        # the textbook countries are always drawn; the group's are drawn or listed
         for j, n in enumerate(names):
             if n in book:
                 visible.append(True)
@@ -1059,12 +1382,17 @@ def group_menu(fig, book, small=8):
             else:
                 visible.append(first[j] if label == "Textbook" else False)
         buttons.append(dict(label=label, method="restyle", args=[{"visible": visible}]))
+    # Step 3: start with the first button, and add the buttons above the plot
     for trace, v in zip(fig.data, buttons[0]["args"][0]["visible"]):
         trace.visible = v
     fig.update_layout(margin=dict(t=120), updatemenus=list(fig.layout.updatemenus) + [dict(
         type="buttons", direction="right", x=0, y=1.02, xanchor="left", yanchor="bottom", buttons=buttons)])
     return compact(fig)
 ```
+
+:::
+
+<!-- cell -->
 
 ## Monetary policy rules and the AD curve
 

@@ -33,74 +33,6 @@ accounting rules that tie them together. By the end of it you will be able to:
 
 <!-- cell -->
 
-## Setup
-
-We first load the Python libraries we need. You only have to run this cell once.
-
-> **Python note.** `import` loads a *library*, a toolbox written by other people. We give each
-> library a short nickname, for example `np` for NumPy, so that the code stays short. Text after
-> a `#` is a *comment*: Python ignores it, and it is there for human readers. The `try ... except`
-> block runs one Colab-only line and simply skips it anywhere else.
-
-```{python}
-# Libraries used in this chapter
-import numpy as np                    # numbers and arrays
-import pandas as pd                   # data tables
-import plotly.express as px           # quick charts from data tables
-import plotly.graph_objects as go     # charts built piece by piece
-import plotly.io as pio
-from ipywidgets import interact, Dropdown, ToggleButtons, FloatSlider, SelectMultiple, fixed
-
-# One light blue/green look for every chart
-BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
-LIGHT_BLUE, DARK_TEAL, ORANGE = "#5aa0d8", "#0b4f47", "#e0a33b"   # extra colors for five-country charts
-pio.templates.default = "plotly_white"
-pio.templates["plotly_white"].layout.update(width=860, height=480)   # same size in Colab and on the website
-px.defaults.color_discrete_sequence = [BLUE, TEAL, GREEN, LIGHT_BLUE, DARK_TEAL]
-WIDE = {"description_width": "initial"}         # show the full widget labels
-
-# Colab only: let Plotly charts appear inside the interactive widgets
-try:
-    import google.colab
-    google.colab.output.enable_custom_widget_manager()
-except ImportError:
-    pass                                        # not running in Colab: nothing to do
-
-# The data files of this chapter live in the book's GitHub repository
-DATA_URL = "https://raw.githubusercontent.com/quarcs-lab/macro102-site/main/data/ch18/"
-```
-
-The next cell defines a helper that only the book website needs. Run it and move on.
-
-```{python}
-#| kind: helper
-# @title Helper for the website versions (run this cell; you do not need to read it)
-def slider_figure(make_figure, name, values, start, label=None):
-    """Precompute make_figure(name=value) for every value and join the results with one slider.
-
-    The website cannot run Python, so each interactive figure also gets this precomputed version.
-    """
-    figures = [make_figure(**{name: v}) for v in values]
-    first = values.index(start)
-    fig = go.Figure(layout=figures[first].layout)
-    owner = []                                  # which precomputed figure each trace comes from
-    for i, f in enumerate(figures):
-        for trace in f.data:
-            trace.visible = (i == first)
-            fig.add_trace(trace)
-            owner.append(i)
-    steps = []
-    for i, f in enumerate(figures):
-        layout = {"title": f.layout.title.to_plotly_json(),
-                  "annotations": [a.to_plotly_json() for a in f.layout.annotations],
-                  "shapes": [s.to_plotly_json() for s in f.layout.shapes]}
-        visible = [o == i for o in owner]
-        steps.append(dict(method="update", label=str(values[i]), args=[{"visible": visible}, layout]))
-    fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
-                                    currentvalue=dict(prefix=(label or name) + " = "))])
-    return fig
-```
-
 ## Model overview
 
 **Islandia** has a government now: the **Islandia Treasury**. Every year it pays for harbor repairs, schools and the coast guard, sends pensions to retired islanders, and owes interest on the bonds it sold in earlier years. Taxes cover most of these bills, and whatever they leave unpaid the Treasury borrows. Can the Treasury keep borrowing year after year, and what decides whether Islandia's debt stays manageable? This section answers with a few accounting rules that no government can escape, and we follow the Treasury's books through every step.
@@ -119,7 +51,7 @@ def slider_figure(make_figure, name, values, start, label=None):
 3. [The debt-GDP ratio and sustainability](#the-debt-gdp-ratio-and-sustainability): how the ratio moves, where it settles, and when it explodes.
 4. [Saving, investment and crowding out](#saving-investment-and-crowding-out): who pays for new boats when the Treasury borrows.
 5. [The arithmetic of rising health spending](#the-arithmetic-of-rising-health-spending): why the health share of GDP keeps climbing.
-6. [The model in code](#the-model-in-code): the key relations as Python functions, checked with numbers. The data sections reuse these functions.
+6. [Model in code](#model-in-code): the key relations as Python functions, checked with numbers. The data sections reuse these functions.
 
 **Notation.** This chapter puts no bars over letters: there is no behavior to solve for, only accounting. Policy choices (spending and taxes) and the rates $i$ and $g$ are numbers we set; the debt and the ratios follow from the rules. Capital letters are amounts of money in year $t$, and lowercase letters are the same amounts divided by GDP. In the code the rates are decimals, so 5 percent is `0.05`.
 
@@ -617,48 +549,224 @@ The primary deficit ratio $d_t$ rises every year. With $i = g$, equation (5) bec
 
 <!-- cell -->
 
-### The model in code
+## Model in code
 
-We now turn the key results into Python functions. Each function's description names the equation it computes. The cells after them check the algebra above with numbers.
+Now we turn the Key results into Python. The section has four parts: the setup (folded, because it is the
+same in every chapter), the budget rules as functions, numerical checks of the Key results, and the drawing and
+data tools that the figures use (folded too). Run its cells once, in order. Every later section of the notebook
+reuses them.
 
-> **Python note.** `def` creates a *function*: a named recipe that takes inputs (the *arguments*) and gives
-> back a result with `return`. The text in triple quotes is a one-line description. We write the interest rate
-> as a decimal number, so 5 percent is `0.05`.
+<!-- cell -->
+
+### Setup
+
+Run the setup cells once, before anything else. They load the Python libraries, give every chart the same look,
+store the address of the chapter's data and define a helper that only the book website needs. You can use the
+notebook without reading them; open the box if you are curious.
+
+<!-- cell -->
+
+::: {.callout-note .mic-fold collapse="true" title="Show the setup code"}
+
+The first cell loads the libraries and sets the look of the charts. Its comments explain each step.
 
 ```{python}
+#| kind: folded
+# @title Setup: libraries, chart colors and the data location
+# Text after a "#" is a comment: Python ignores it, it is there for human readers.
+
+# Step 1: load the libraries. `import` loads a library, a toolbox written by
+# other people, and `as np` gives it a short nickname, so the code stays short.
+import numpy as np                    # numbers and arrays
+import pandas as pd                   # data tables
+import plotly.express as px           # quick charts from data tables
+import plotly.graph_objects as go     # charts built piece by piece
+import plotly.io as pio               # settings shared by every chart
+# menus, buttons and sliders for the interactive figures
+from ipywidgets import interact, Dropdown, ToggleButtons, FloatSlider, SelectMultiple, fixed
+
+# Step 2: one light blue/green look for every chart
+BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
+# extra colors for the five-country charts
+LIGHT_BLUE, DARK_TEAL, ORANGE = "#5aa0d8", "#0b4f47", "#e0a33b"
+pio.templates.default = "plotly_white"
+# the same chart size in Colab and on the website
+pio.templates["plotly_white"].layout.update(width=860, height=480)
+px.defaults.color_discrete_sequence = [BLUE, TEAL, GREEN, LIGHT_BLUE, DARK_TEAL]
+WIDE = {"description_width": "initial"}         # show the full widget labels
+
+# Step 3, Colab only: let Plotly charts appear inside the interactive widgets.
+# `try` runs the indented lines; if the import fails (we are not in Colab),
+# `except` skips them.
+try:
+    import google.colab
+    google.colab.output.enable_custom_widget_manager()
+except ImportError:
+    pass                                        # not running in Colab: nothing to do
+
+# Step 4: the data files of this chapter live in the book's GitHub repository
+DATA_URL = "https://raw.githubusercontent.com/quarcs-lab/macro102-site/main/data/ch18/"
+```
+
+The website cannot run Python, so each interactive figure also gets a version with a precomputed slider. The next
+helper builds those versions. Run it and move on.
+
+```{python}
+#| kind: folded
+# @title Helper for the website versions (run this cell; you do not need to read it)
+def slider_figure(make_figure, name, values, start, label=None):
+    """Join precomputed versions of a figure with one slider (the website cannot run Python).
+
+    Arguments
+        make_figure : the function that draws the figure
+        name        : the argument the slider moves
+        values      : the values of that argument to precompute
+        start       : the value shown first
+        label       : the slider's label (the argument name if None)
+    Returns
+        one Plotly figure with all versions and a slider that shows one at a time
+    """
+    # Step 1: draw the figure once for every value
+    figures = [make_figure(**{name: v}) for v in values]
+    first = values.index(start)
+    # Step 2: copy every curve into one figure; only the start value's are visible
+    fig = go.Figure(layout=figures[first].layout)
+    owner = []                          # which precomputed figure each trace is from
+    for i, f in enumerate(figures):
+        for trace in f.data:
+            trace.visible = (i == first)
+            fig.add_trace(trace)
+            owner.append(i)
+    # Step 3: one slider step per value: its curves, title, labels and shapes
+    steps = []
+    for i, f in enumerate(figures):
+        layout = {"title": f.layout.title.to_plotly_json(),
+                  "annotations": [a.to_plotly_json() for a in f.layout.annotations],
+                  "shapes": [s.to_plotly_json() for s in f.layout.shapes]}
+        visible = [o == i for o in owner]
+        steps.append(dict(method="update", label=str(values[i]), args=[{"visible": visible}, layout]))
+    fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
+                                    currentvalue=dict(prefix=(label or name) + " = "))])
+    return fig
+```
+
+:::
+
+<!-- cell -->
+
+### The model as functions
+
+The Key results are accounting rules, so each one becomes a short Python *function*: a named recipe that takes
+inputs and gives back a result. The first four follow the Treasury's books in money: the flow constraint,
+equation (2), the two deficits and the present value of equation (3).
+
+```{python}
+# `def` creates a function. Its inputs are the arguments in parentheses.
+# The text in triple quotes describes the function. Rates are decimals: 5% is 0.05.
 def next_debt(B, G, T, i):
-    """Equation (2): next period's debt, (1 + i) B + G - T."""
+    """Next period's debt, from the flow budget constraint.
+
+    Equation (2):  B_{t+1} = (1 + i) B_t + G_t - T_t
+
+    Arguments
+        B : debt at the start of the period, B_t
+        G : spending except interest, G_t
+        T : taxes, T_t
+        i : nominal interest rate on the debt
+    Returns
+        the debt at the start of the next period, B_{t+1}
+    """
+    # `return` gives back the result: old debt with interest, plus the primary deficit
     return (1 + i) * B + G - T
 
 
 def primary_deficit(G, T):
-    """Primary deficit: spending minus taxes, leaving out the interest payments."""
+    """Primary deficit: spending minus taxes, leaving out the interest payments.
+
+    Equation (2), its last term:  primary deficit = G_t - T_t
+
+    Arguments
+        G : spending except interest, G_t
+        T : taxes, T_t
+    Returns
+        the primary deficit (negative for a primary surplus)
+    """
+    # interest on the debt is left out
     return G - T
 
 
 def total_deficit(G, T, i, B):
-    """Total deficit: spending plus the interest on the debt, minus taxes."""
+    """Total deficit: spending plus the interest on the debt, minus taxes.
+
+    Equation (2), rearranged:  total deficit = G_t + i B_t - T_t = B_{t+1} - B_t
+
+    Arguments
+        G : spending except interest, G_t
+        T : taxes, T_t
+        i : nominal interest rate on the debt
+        B : debt at the start of the period, B_t
+    Returns
+        the total deficit, the number newspapers quote
+    """
+    # the primary deficit plus this year's interest bill i B
     return G + i * B - T
 
 
 def pdv(first, second, i):
-    """Present discounted value of an amount in period 1 and one in period 2 (equation 3)."""
+    """Present discounted value of an amount in period 1 and one in period 2.
+
+    Equation (3), each side:  pdv = first + second / (1 + i)
+
+    Arguments
+        first  : the amount in period 1
+        second : the amount in period 2
+        i      : nominal interest rate, used to discount period 2
+    Returns
+        the present discounted value, in period-1 money
+    """
+    # an amount in period 2 is worth 1 / (1 + i) of it today
     return first + second / (1 + i)
 ```
 
-> **Python note.** `path = []` starts an empty list, and `path.append(b)` adds one value at its end. For a
-> pandas *Series* with years as row labels, `deficit.loc[1951:1974]` keeps the years 1951 to 1974 (both
-> included), and `.sum()` adds them up.
+Next come the rules for the debt-GDP ratio. `next_debt_ratio` is equation (5), and `debt_ratio_path` applies it
+year after year. `debt_change_parts` splits a change in the ratio in two, as equation (6) does.
 
 ```{python}
 def next_debt_ratio(b, i, g, d):
-    """Equation (5): next year's debt ratio, (1 + i) / (1 + g) b + d."""
+    """Next year's debt-GDP ratio.
+
+    Equation (5):  b_t = (1 + i) / (1 + g) b_{t-1} + d_t
+
+    Arguments
+        b : last year's debt ratio, b_{t-1} (percent of GDP)
+        i : nominal interest rate on the debt
+        g : growth rate of nominal GDP
+        d : this year's primary deficit, d_t (percent of GDP)
+    Returns
+        this year's debt ratio, b_t (percent of GDP)
+    """
+    # the old ratio grows by the factor a = (1 + i) / (1 + g), then d adds to it
     return (1 + i) / (1 + g) * b + d
 
 
 def debt_ratio_path(b, i, g, deficits):
-    """The debt ratio after each year of a list of primary deficits (all in percent of GDP)."""
+    """The debt ratio after each year of a list of primary deficits.
+
+    Equation (5), applied once a year:  b_t = (1 + i) / (1 + g) b_{t-1} + d_t
+
+    Arguments
+        b        : the starting debt ratio, b_0 (percent of GDP)
+        i        : nominal interest rate on the debt
+        g        : growth rate of nominal GDP
+        deficits : the primary deficit of each year, d_1, d_2, ... (percent of GDP)
+    Returns
+        a list with the debt ratio at the end of each year
+    """
+    # Step 1: `path = []` starts an empty list
     path = []
+    # Step 2: the `for` loop runs its indented lines once for each deficit in the
+    # list; each pass replaces b by next year's ratio, and `path.append(b)` adds
+    # it at the end of the list
     for d in deficits:
         b = next_debt_ratio(b, i, g, d)
         path.append(b)
@@ -666,9 +774,24 @@ def debt_ratio_path(b, i, g, deficits):
 
 
 def debt_change_parts(debt, deficit, start, end):
-    """Split the change in the debt ratio from start to end into primary deficits and the rest (equation 6)."""
+    """Split the change in the debt ratio from start to end into primary deficits and the rest.
+
+    Equation (6), summed over the years:  b_end - b_start = sum of d_t + sum of (i - g) / (1 + g) b_{t-1}
+
+    Arguments
+        debt    : the debt ratio, a Series with years as row labels
+        deficit : the primary deficit ratio, a Series with years as row labels
+        start   : the first year
+        end     : the last year
+    Returns
+        the change in the ratio, the part from primary deficits, and the rest (interest minus growth)
+    """
+    # Step 1: the change in the ratio over the whole period
     change = debt[end] - debt[start]
+    # Step 2: `.loc[start + 1:end]` keeps the years start + 1 to end (both included),
+    # and `.sum()` adds up their primary deficits
     from_deficits = deficit.loc[start + 1:end].sum()
+    # Step 3: what deficits do not explain is the interest-minus-growth term
     return change, from_deficits, change - from_deficits
 ```
 
@@ -678,46 +801,85 @@ U.S. data in Fig. 2. Three more functions give the long-run results of the debt 
 
 ```{python}
 def stabilizing_surplus(b, i, g):
-    """Equation (7): the primary surplus (% of GDP) that keeps the debt ratio b constant."""
+    """The primary surplus that keeps the debt ratio constant.
+
+    Equation (7):  -d = (i - g) / (1 + g) b
+
+    Arguments
+        b : the debt ratio to hold (percent of GDP)
+        i : nominal interest rate on the debt
+        g : growth rate of nominal GDP
+    Returns
+        the stabilizing primary surplus, -d (percent of GDP)
+    """
+    # the surplus pays just the part of the interest that growth does not cover
     return (i - g) / (1 + g) * b
 
 
 def steady_state_ratio(d, i, g):
-    """The steady-state debt ratio b* = (1 + g) / (g - i) d for a constant primary deficit d."""
+    """The steady-state debt ratio for a constant primary deficit.
+
+    Equation (8):  b* = (1 + g) / (g - i) d
+
+    Arguments
+        d : the constant primary deficit (percent of GDP; negative for a surplus)
+        i : nominal interest rate on the debt
+        g : growth rate of nominal GDP
+    Returns
+        the steady-state debt ratio, b* (percent of GDP)
+    """
+    # with i < g the ratio settles here; with i > g it is a tipping point
     return (1 + g) / (g - i) * d
 
 
 def private_and_foreign_saving(investment, government_saving):
-    """Equation (9) solved for the saving of households, firms and foreigners: I - (T - G)."""
+    """The saving of households, firms and foreigners that investment needs.
+
+    Equation (9), solved for private plus foreign saving:  (Y - T - C) + (IM - EX) = I - (T - G)
+
+    Arguments
+        investment        : investment, I
+        government_saving : government saving, T - G
+    Returns
+        private plus foreign saving
+    """
+    # whatever the government does not save, others must save for investment
     return investment - government_saving
 ```
+
+<!-- cell -->
+
+### Checking the key results
+
+The formulas came from algebra. Now we check them with numbers, one Key result at a time.
 
 **Check 1: the flow constraint, with Exercise 5 of the textbook.** A government owes 5 trillion dollars at an
 interest rate of 5 percent, and GDP (20 trillion dollars) grows by 4 percent a year. In case (a) it balances its
 **primary** budget ($G = T$). In case (b) it balances its **total** budget, so taxes also pay the interest.
 
-> **Python note.** A `for` loop repeats the indented lines once for each value in the list `[1, 2, 3]`. In each
-> pass, `B_a = next_debt(B_a, ...)` replaces the old debt by the new one. An *f-string* such as
-> `f"{B_a:.3f}"` puts a number into the text, here with 3 decimals.
-
 ```{python}
+# Step 1: the rates, and the starting debt and GDP
 i, g = 0.05, 0.04                      # interest rate and GDP growth rate
-B_a, B_b, Y = 5.0, 5.0, 20.0           # debt in cases (a) and (b), and GDP, trillions of dollars
+# debt in cases (a) and (b), and GDP, trillions of dollars
+B_a, B_b, Y = 5.0, 5.0, 20.0
+# Step 2: follow both cases for three years. An f-string, f"... {value:.3f}",
+# puts a value into the text; ":.3f" means "three decimals".
 for year in [1, 2, 3]:
-    T_b = 4.0 + i * B_b                # case (b): taxes cover spending of 4.0 and the interest
+    # case (b): taxes cover spending of 4.0 and the interest
+    T_b = 4.0 + i * B_b
     print(f"Year {year}: (a) primary deficit {primary_deficit(4.0, 4.0):.2f}, total {total_deficit(4.0, 4.0, i, B_a):.3f}"
           f"   (b) primary deficit {primary_deficit(4.0, T_b):.2f}, total {total_deficit(4.0, T_b, i, B_b):.2f}")
+    # equation (2): the new debt replaces the old one in each case
     B_a = next_debt(B_a, G=4.0, T=4.0, i=i)
     B_b = next_debt(B_b, G=4.0, T=T_b, i=i)
-    Y = (1 + g) * Y
+    Y = (1 + g) * Y                    # GDP grows by g
     print(f"   debt (a) {B_a:.3f} = {100 * B_a / Y:.2f}% of GDP,  debt (b) {B_b:.3f} = {100 * B_b / Y:.2f}% of GDP")
 ```
 
 In case (a) the total deficit is the interest bill, so the debt grows at the interest rate, 5 percent a year.
 In case (b) the primary surplus of 0.25 trillion pays the interest, and the debt stays at 5 trillion. With a
-balanced primary budget the debt-GDP ratio
-rises from 25 percent by about 1 percent a year: 5 percent minus 4 percent. With a balanced total budget the
-ratio falls by about 4 percent a year, as GDP grows.
+balanced primary budget the debt-GDP ratio rises from 25 percent by about 1 percent a year: 5 percent minus
+4 percent. With a balanced total budget the ratio falls by about 4 percent a year, as GDP grows.
 
 **Check 2: the intertemporal constraint, equations (3) and (4).** A two-period example with an initial debt of
 25 trillion dollars. The government spends 7 trillion in each period, collects 5 trillion of taxes in period 1,
@@ -725,11 +887,15 @@ and must find the taxes of period 2. We run the flow constraint forward and chec
 equation (3) agree.
 
 ```{python}
-B1, i = 25.0, 0.05                     # initial debt (trillions of dollars) and interest rate
+# Step 1: the initial debt (trillions of dollars), the interest rate and the policies
+B1, i = 25.0, 0.05
 G1, G2, T1 = 7.0, 7.0, 5.0
-B2 = next_debt(B1, G1, T1, i)          # equation (2) for period 1: the debt at the start of period 2
-T2 = (1 + i) * B2 + G2                 # equation (2) for period 2 with B3 = 0: period-2 taxes repay everything
+# Step 2: equation (2) for period 1 gives the debt at the start of period 2
+B2 = next_debt(B1, G1, T1, i)
+# equation (2) for period 2 with B3 = 0: period-2 taxes repay everything
+T2 = (1 + i) * B2 + G2
 print(f"B2 = {B2:.2f}, so the period-2 taxes must be T2 = {T2:.2f} trillion dollars")
+# Step 3: both sides of equation (3), then equation (4)
 print(f"Uses:    pdv of spending {pdv(G1, G2, i):.3f} + initial debt {(1 + i) * B1:.3f} = "
       f"{pdv(G1, G2, i) + (1 + i) * B1:.3f}")
 print(f"Sources: pdv of taxes {pdv(T1, T2, i):.3f}")
@@ -744,12 +910,17 @@ predicts period-2 taxes higher by $1+i = 1.05$ trillion. Then we add a third per
 check the three-period constraint of step 6.
 
 ```{python}
-T2_cut = (1 + i) * next_debt(B1, G1, T1 - 1.0, i) + G2      # period-2 taxes after a tax cut of 1 in period 1
+# Step 1: period-2 taxes after a tax cut of 1 in period 1
+T2_cut = (1 + i) * next_debt(B1, G1, T1 - 1.0, i) + G2
 print(f"A tax cut of 1.00 in period 1 raises T2 by {T2_cut - T2:.2f}")
 
-G3, T2_three = 7.0, 5.0                                      # three periods: taxes of 5 in periods 1 and 2
-B3 = next_debt(next_debt(B1, G1, T1, i), G2, T2_three, i)   # the debt at the start of period 3
-T3 = (1 + i) * B3 + G3                                       # with B4 = 0, period-3 taxes repay everything
+# Step 2: three periods, with taxes of 5 in periods 1 and 2
+G3, T2_three = 7.0, 5.0
+# the debt at the start of period 3
+B3 = next_debt(next_debt(B1, G1, T1, i), G2, T2_three, i)
+# with B4 = 0, period-3 taxes repay everything
+T3 = (1 + i) * B3 + G3
+# Step 3: both sides of the three-period constraint, in present value
 uses = G1 + G2 / (1 + i) + G3 / (1 + i) ** 2 + (1 + i) * B1
 sources = T1 + T2_three / (1 + i) + T3 / (1 + i) ** 2
 print(f"Three periods: T3 = {T3:.3f}, pdv of uses {uses:.3f}, pdv of taxes {sources:.3f}")
@@ -760,8 +931,11 @@ computing the debt and GDP separately. Equation (6) says that the ratio grows at
 with a balanced primary budget, and shrinks at about $g$ with a balanced total budget.
 
 ```{python}
-case_a = debt_ratio_path(25.0, 0.05, 0.04, [0, 0, 0])      # a balanced primary budget for three years
+# Step 1: equation (5) with a balanced primary budget for three years
+case_a = debt_ratio_path(25.0, 0.05, 0.04, [0, 0, 0])
 print("Debt ratio, case (a):", np.round(case_a, 2))
+# Step 2: its growth rate, exact and approximate (equation 6),
+# and with a balanced total budget
 print(f"Growth of the ratio: {100 * (case_a[0] / 25.0 - 1):.2f}% a year = 1.05 / 1.04 - 1")
 print(f"Equation (6), exact: {100 * (0.05 - 0.04) / 1.04:.2f}%,  approximate i - g: {100 * (0.05 - 0.04):.2f}%")
 print(f"Balanced total budget: the ratio changes by {100 * (1 / 1.04 - 1):.2f}% a year (about -g = -4%)")
@@ -772,37 +946,42 @@ equation (7) should keep the ratio constant for 31 years. With $i = 3\%$, $g = 4
 deficit of 2 percent, the simulated path should match the closed form, equation (8), and head slowly to
 $b^* = 208$. With $i = 5\%$, $b^*$ becomes a tipping point.
 
-> **Python note.** `[-1.0] * 31` repeats the list 31 times: a primary surplus of 1 percent of GDP (a deficit of
-> −1) in every year. `path[-1]` is the last element of a list.
-
 ```{python}
+# Step 1: the surplus of equation (7). `[-s] * 31` repeats the list 31 times:
+# the same surplus in every year; `[-1]` is the last element of a list.
 s = stabilizing_surplus(99.5, 0.05, 0.04)
 print(f"i = 5%, g = 4%: stabilizing surplus {s:.3f}% of GDP; ratio after 31 years "
       f"{debt_ratio_path(99.5, 0.05, 0.04, [-s] * 31)[-1]:.2f}%")
 
+# Step 2: i < g, a deficit of 2% every year: simulated path and equation (8)
 b_star = steady_state_ratio(2.0, 0.03, 0.04)
 simulated = debt_ratio_path(99.5, 0.03, 0.04, [2.0] * 31)[-1]
 closed_form = b_star + (1.03 / 1.04) ** 31 * (99.5 - b_star)
 print(f"i = 3%, d = 2%: b* = {b_star:.1f}%; after 31 years {simulated:.2f}% (simulated), {closed_form:.2f}% (equation 8)")
 
-b_tip = steady_state_ratio(-1.0, 0.05, 0.04)                # i > g: a surplus of 1% of GDP
+# Step 3: i > g with a surplus of 1% of GDP (a deficit of -1): b* is a tipping point
+b_tip = steady_state_ratio(-1.0, 0.05, 0.04)
 print(f"i = 5%, surplus 1%: tipping point b* = {b_tip:.1f}%")
+# start just below and just above it
 for start in [99.5, 108.5]:
     print(f"   start at {start}%: after 31 years {debt_ratio_path(start, 0.05, 0.04, [-1.0] * 31)[-1]:.1f}%")
 ```
 
 **Check 6: the comparative statics and inflation.** A one-point rise in $i$, at a ratio of 99.5 percent, should
-raise the yearly change in the ratio by $b/(1+g)$ hundredths of a point, about one point. And expected inflation should leave the ratio unchanged:
-we compare $\pi = 0$ with $\pi = 4\%$ at the same real interest rate (1 percent) and real growth (2 percent).
+raise the yearly change in the ratio by $b/(1+g)$ hundredths of a point, about one point. And expected inflation
+should leave the ratio unchanged: we compare $\pi = 0$ with $\pi = 4\%$ at the same real interest rate
+(1 percent) and real growth (2 percent).
 
 ```{python}
+# Step 1: equation (5) with i = 4% and with i = 5%
 base = next_debt_ratio(99.5, 0.04, 0.04, 2.0)
 higher_i = next_debt_ratio(99.5, 0.05, 0.04, 2.0)
 print(f"One point more interest: the ratio rises by {higher_i - base:.3f} more points: b / (1 + g) / 100, about b / 100")
 
+# Step 2: the same real rates with 0% and 4% inflation
 for pi in [0.0, 0.04]:
     i_nominal = (1 + 0.01) * (1 + pi) - 1                  # Fisher equation, exact
-    g_nominal = (1 + 0.02) * (1 + pi) - 1
+    g_nominal = (1 + 0.02) * (1 + pi) - 1                  # the same for GDP growth
     print(f"inflation {100 * pi:.0f}%: i = {100 * i_nominal:.2f}%, g = {100 * g_nominal:.2f}%, ratio after 10 years "
           f"{debt_ratio_path(99.5, i_nominal, g_nominal, [1.0] * 10)[-1]:.3f}%")
 ```
@@ -813,14 +992,17 @@ agree. Then a deficit 1 point larger, with private saving offsetting half of it 
 should lower investment by $1 - 0.5 = 0.5$ points (equation 10).
 
 ```{python}
+# Step 1: the example economy, and the national income identity
 Y, C, I, G, EX, IM, T = 100.0, 67.0, 18.0, 20.0, 11.0, 16.0, 17.0
 print(f"National income identity: C + I + G + EX - IM = {C + I + G + EX - IM:.1f} = Y")
+# Step 2: the three kinds of saving add up to investment (equation 9)
 private, government, foreign = Y - T - C, T - G, IM - EX
 print(f"Saving: private {private:.1f} + government {government:.1f} + foreign {foreign:.1f} "
       f"= {private + government + foreign:.1f} = I")
 print(f"Private + foreign saving from our function: {private_and_foreign_saving(I, government):.1f}")
 
-new_government, new_private = government - 1.0, private + 0.5      # a tax cut of 1, half of it saved
+# Step 3: a tax cut of 1, half of it saved: investment falls by 0.5 (equation 10)
+new_government, new_private = government - 1.0, private + 0.5
 print(f"After the tax cut: investment = {new_private + new_government + foreign:.1f} (change "
       f"{new_private + new_government + foreign - I:+.1f})")
 ```
@@ -830,35 +1012,66 @@ print(f"After the tax cut: investment = {new_private + new_government + foreign:
 doubles in about 70 years.
 
 ```{python}
-h = 5.0                                          # a health share of 5 percent of GDP
+# Step 1: start from a health share of 5 percent of GDP
+h = 5.0
+# apply equation (11) for 70 years: cost per recipient grows 1 point faster
 for year in range(70):
-    h = h * (1 + 0.03) / (1 + 0.02)              # equation (11): cost per recipient grows 1 point faster
+    h = h * (1 + 0.03) / (1 + 0.02)
+# Step 2: the share after 70 years, and its exact yearly growth
 print(f"Health share after 70 years: {h:.2f}% of GDP ({h / 5.0:.2f} times the start)")
 print(f"Exact yearly growth of the share: {100 * (1.03 / 1.02 - 1):.3f}% (about g_c - g_y = 1%)")
 ```
 
 <!-- cell -->
 
-### Tools for the data
+### Drawing and data tools
 
-Four small tools help with the figures. `period_mean` averages a series over some years, and
+Five small tools help with the figures. `period_mean` averages a series over some years, and
 `add_period_means` draws those averages on a chart. `per_person` turns a share of GDP into dollars per
 person. `actual_and_projection` and `one_legend_entry` prepare the long-run projections of Figs. 6 and 7,
-where actual data (solid lines) are followed by projections (dashed lines).
+where actual data (solid lines) are followed by projections (dashed lines). Run them and move on, or open the
+box to see how they work.
 
-> **Python note.** `zip(columns, colors)` hands over one (column, color) pair at a time to the loop.
-> `fig.add_vrect` shades a band between two x values, and `fig.add_shape(type="line", ...)` draws a straight
-> line between two points.
+<!-- cell -->
+
+::: {.callout-note .mic-fold collapse="true" title="Show the drawing and data tools"}
+
+The first cell holds the averages over a period, used in Figs. 1 and 5, and the conversion to dollars per
+person of Table 18.1.
 
 ```{python}
+#| kind: folded
+# @title Data tools: averages over a period, and dollars per person
 def period_mean(series, start, end):
-    """Average of a Series with years as row labels, from start to end (both included)."""
+    """Average of a Series with years as row labels, from start to end (both included).
+
+    Arguments
+        series : a Series with years as row labels
+        start  : the first year
+        end    : the last year
+    Returns
+        the average over those years
+    """
+    # keep the years start to end, then average them
     return series.loc[start:end].mean()
 
 
 def add_period_means(fig, data, columns, colors, start, end):
-    """Shade the years start-end and draw each column's average over them (Figs. 1 and 5)."""
+    """Shade the years start-end and draw each column's average over them (Figs. 1 and 5).
+
+    Arguments
+        fig        : the figure to draw on
+        data       : the data table, with years as row labels
+        columns    : the columns to average
+        colors     : one color per column
+        start, end : the first and last year of the period
+    Returns
+        the same figure, with the shaded band and the dotted averages
+    """
+    # Step 1: `fig.add_vrect` shades a band between two x values
     fig.add_vrect(x0=start - 0.5, x1=end + 0.5, fillcolor=GRAY, opacity=0.15, line_width=0)
+    # Step 2: `zip(columns, colors)` hands over one (column, color) pair at a time;
+    # `fig.add_shape(type="line", ...)` draws a straight line at each average
     for column, color in zip(columns, colors):
         mean = period_mean(data[column], start, end)
         fig.add_shape(type="line", x0=start - 0.5, x1=end + 0.5, y0=mean, y1=mean,
@@ -867,35 +1080,68 @@ def add_period_means(fig, data, columns, colors, start, end):
 
 
 def per_person(percent_of_gdp, gdp_billions, population_millions):
-    """Dollars per person of a budget line given in percent of GDP (Table 18.1)."""
+    """Dollars per person of a budget line given in percent of GDP (Table 18.1).
+
+    Arguments
+        percent_of_gdp      : the budget line, in percent of GDP
+        gdp_billions        : GDP, billions of dollars
+        population_millions : the population, millions
+    Returns
+        the budget line in dollars per person
+    """
+    # share of GDP times GDP in dollars, divided by the number of people
     return percent_of_gdp / 100 * gdp_billions * 1e9 / (population_millions * 1e6)
 ```
 
-> **Python note.** `melt` turns a *wide* table (one column per series) into a *long* one (one row per year
-> and series), which is the shape Plotly Express likes. `.map({0: ..., 1: ...})` replaces each value by its
-> label, `.copy()` makes an independent copy, and `pd.concat([a, b])` stacks two tables. `trace.name.rsplit(", ", 1)`
-> cuts a text such as `"Revenues, actual"` at its last comma, into its two parts.
+The second cell prepares the projections of Figs. 6 and 7: one long table for Plotly Express, and one legend
+entry per series.
 
 ```{python}
+#| kind: folded
+# @title Data tools: actual data followed by the CBO projection
 def actual_and_projection(data, names):
     """Long table for Figs. 6 and 7: one row per year and series, actual data and CBO projection.
 
-    FY2025 is repeated in the projection, so that the dashed line starts where the solid line ends."""
+    FY2025 is repeated in the projection, so that the dashed line starts where the solid line ends.
+
+    Arguments
+        data  : the wide table, with the columns year, projection (0 or 1) and the series
+        names : maps each column to the name shown in the chart
+    Returns
+        the long table, with the columns year, series, percent and segment
+    """
+    # Step 1: `melt` turns the wide table (one column per series) into a long one
+    # (one row per year and series), the shape Plotly Express likes
     long = data.rename(columns=names).melt(id_vars=["year", "projection"], value_vars=list(names.values()),
                                            var_name="series", value_name="percent")
+    # Step 2: `.map({0: ..., 1: ...})` replaces each 0 or 1 by its label
     long["segment"] = long.projection.map({0: "actual", 1: "CBO projection"})
+    # Step 3: `.copy()` makes an independent copy of FY2025, now part of the projection
     joint = long[long.year == 2025].copy()
     joint["segment"] = "CBO projection"
+    # Step 4: `pd.concat([a, b])` stacks the two tables
     return pd.concat([long, joint]).sort_values(["series", "segment", "year"])
 
 
 def one_legend_entry(fig):
-    """Plotly Express names each trace 'series, segment': keep one legend entry per series."""
+    """Plotly Express names each trace 'series, segment': keep one legend entry per series.
+
+    Arguments
+        fig : a figure made from the table of actual_and_projection
+    Returns
+        the same figure, with one legend entry per series
+    """
     for trace in fig.data:
+        # `rsplit(", ", 1)` cuts a name such as "Revenues, actual" at its last comma
         series, segment = trace.name.rsplit(", ", 1)
+        # actual and projected lines share a name; only the actual one is in the legend
         trace.update(name=series, legendgroup=series, showlegend=(segment == "actual"))
     return fig
 ```
+
+:::
+
+<!-- cell -->
 
 ## U.S. spending, revenue and debt
 

@@ -25,96 +25,6 @@ looks at the ups and downs around that path. By the end of it you will be able t
 
 <!-- cell -->
 
-## Setup
-
-We first load the Python libraries we need. You only have to run this cell once.
-
-> **Python note.** `import` loads a *library*, a toolbox written by other people. We give each
-> library a short nickname, for example `np` for NumPy, so that the code stays short. Text after
-> a `#` is a *comment*: Python ignores it, and it is there for human readers. The `try ... except`
-> block runs one Colab-only line and simply skips it anywhere else.
-
-```{python}
-# Libraries used in this chapter
-import numpy as np                              # numbers and arrays
-import pandas as pd                             # data tables
-import plotly.express as px                     # quick charts from data tables
-import plotly.graph_objects as go               # charts built piece by piece (model figures)
-import plotly.io as pio
-from plotly.subplots import make_subplots       # several panels in one figure
-from ipywidgets import interact, interact_manual, FloatSlider, ToggleButtons, Dropdown, SelectMultiple, fixed
-
-# One light blue/green look for every chart
-BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
-pio.templates.default = "plotly_white"
-pio.templates["plotly_white"].layout.update(width=860, height=480)   # same size in Colab and on the website
-px.defaults.color_discrete_sequence = [BLUE, TEAL, GREEN, "#5aa0d8", "#0b4f47"]
-WIDE = {"description_width": "initial"}         # show the full slider labels
-
-# Colab only: let Plotly charts appear inside the interactive widgets
-try:
-    import google.colab
-    google.colab.output.enable_custom_widget_manager()
-except ImportError:
-    pass                                        # not running in Colab: nothing to do
-
-# The data files of this chapter live in the book's GitHub repository
-DATA_URL = "https://raw.githubusercontent.com/quarcs-lab/macro102-site/main/data/ch09/"
-```
-
-The next cell defines a helper that only the book website needs. Run it and move on.
-
-```{python}
-#| kind: helper
-# @title Helper for the website versions (run this cell; you do not need to read it)
-def slider_figure(make_figure, name, values, start, label=None):
-    """Precompute make_figure(name=value) for every value and join the results with one slider.
-
-    The website cannot run Python, so each interactive figure also gets this precomputed version.
-    """
-    figures = [make_figure(**{name: v}) for v in values]
-    first = values.index(start)
-    fig = go.Figure(layout=figures[first].layout)
-    owner = []                                  # which precomputed figure each trace comes from
-    for i, f in enumerate(figures):
-        for trace in f.data:
-            trace.visible = (i == first)
-            fig.add_trace(trace)
-            owner.append(i)
-    steps = []
-    for i, f in enumerate(figures):
-        layout = {"title": f.layout.title.to_plotly_json(),
-                  "annotations": [a.to_plotly_json() for a in f.layout.annotations],
-                  "shapes": [s.to_plotly_json() for s in f.layout.shapes]}
-        visible = [o == i for o in owner]
-        steps.append(dict(method="update", label=str(values[i]), args=[{"visible": visible}, layout]))
-    fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
-                                    currentvalue=dict(prefix=(label or name) + " = "))])
-    return fig
-```
-
-```{python}
-#| kind: helper
-# @title Helper for the website's country legends (run this cell; you do not need to read it)
-def add_legend_traces(fig, traces, keep=()):
-    """Website: add traces that start hidden but stay in the legend (click to show), except those named in keep.
-
-    If the figure has a slider, its steps only switch the figure's own traces, so the countries you
-    clicked on stay on the chart when you move the slider.
-    """
-    n = len(fig.data)
-    for t in traces:
-        if t.name not in keep:
-            t.visible = "legendonly"
-        fig.add_trace(t)
-    for slider in fig.layout.sliders:
-        steps = []
-        for step in slider.steps:
-            steps.append(dict(method=step.method, label=step.label, args=[step.args[0], step.args[1], list(range(n))]))
-        slider.steps = steps
-    return fig
-```
-
 ## Model overview
 
 Picture **Islandia** again, the small island country whose tools we followed in Chapter 5. Over many years its output climbs along a smooth path, set by its tools, its workers and its ideas. Year to year, though, the ride is bumpy. In some years Harbor Boatworks runs extra shifts and new boats are hard to get; in other years its yards fall quiet, islanders lose their jobs, and prices rise more slowly. This chapter does not yet build a full model of these swings; instead it builds the **frameworks** that the next chapters rest on: a way to measure the swings, and two rules that link them to inflation and to unemployment.
@@ -132,7 +42,7 @@ Picture **Islandia** again, the small island country whose tools we followed in 
 2. [The Phillips curve](#the-phillips-curve): how the gap moves inflation, [solved forward](#solving-the-model) in time.
 3. [Okun's law](#okuns-law): from the output gap to the unemployment gap ([working with the law](#working-with-the-law)).
 4. [A preview of the full short-run model](#a-preview-of-the-full-short-run-model): how the next chapters connect the pieces.
-5. [The model in code](#the-model-in-code): the key results as Python functions, each checked with numbers.
+5. [Model in code](#model-in-code): the key results as Python functions, each checked with numbers.
 
 **Notation.** A bar marks a value that the short-run model takes as given: potential output, long-run inflation and the natural rate of unemployment come from the long-run model, and slopes such as $\bar{\nu}$ (the Greek letter *nu*) are chosen from outside. Letters without a bar are **endogenous**. A tilde marks a short-run deviation from the long run. Short-run output and inflation are both in percent, so changes in inflation are in percentage points ("points"), as in the textbook's figures.
 
@@ -601,58 +511,263 @@ A lower $R_t$ raises spending, so $\tilde{Y}_t$ rises toward zero (the IS curve)
 
 <!-- cell -->
 
-### The model in code
+## Model in code
 
-Now we turn the Key results into Python functions, with Islandia's baseline as their default values. Each function's description names the equation it computes, and the cells after them check the algebra with numbers, one Key result at a time.
+Now we turn the Key results into Python. The section has four parts: the setup (folded, because it is the
+same in every chapter), the model as functions, numerical checks of the Key results, and the drawing and data
+tools that the figures use (folded too). Run its cells once, in order. Every later section of the notebook reuses
+them.
 
-> **Python note.** `def` creates a *function*: a named recipe that takes inputs (the
-> *arguments*) and gives back a result with `return`. Writing `g=2.0` gives the argument a
-> *default value*, used whenever we do not pass one. The text in triple quotes is a short
-> description of what the function does. `**` means "to the power of", and `np.sin` is the sine
-> function, which draws a smooth wave (`np.pi` is the number π).
+<!-- cell -->
+
+### Setup
+
+Run the setup cells once, before anything else. They load the Python libraries, give every chart the same look,
+store the address of the chapter's data and define two helpers that only the book website needs. You can use
+the notebook without reading them; open the box if you are curious.
+
+<!-- cell -->
+
+::: {.callout-note .mic-fold collapse="true" title="Show the setup code"}
+
+The first cell loads the libraries and sets the look of the charts. Its comments explain each step.
 
 ```{python}
+#| kind: folded
+# @title Setup: libraries, chart colors and the data location
+# Text after a "#" is a comment: Python ignores it, it is there for human readers.
+
+# Step 1: load the libraries. `import` loads a library, a toolbox written by
+# other people, and `as np` gives it a short nickname, so the code stays short.
+import numpy as np                              # numbers and arrays
+import pandas as pd                             # data tables
+import plotly.express as px                     # quick charts from data tables
+import plotly.graph_objects as go               # charts built piece by piece
+import plotly.io as pio                         # settings shared by every chart
+from plotly.subplots import make_subplots       # several panels in one figure
+# sliders, buttons and menus for the interactive figures
+from ipywidgets import interact, interact_manual, FloatSlider, ToggleButtons, Dropdown, SelectMultiple, fixed
+
+# Step 2: one light blue/green look for every chart
+BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
+pio.templates.default = "plotly_white"
+# the same chart size in Colab and on the website
+pio.templates["plotly_white"].layout.update(width=860, height=480)
+px.defaults.color_discrete_sequence = [BLUE, TEAL, GREEN, "#5aa0d8", "#0b4f47"]
+WIDE = {"description_width": "initial"}         # show the full slider labels
+
+# Step 3, Colab only: let Plotly charts appear inside the interactive widgets.
+# `try` runs the indented lines; if the import fails (we are not in Colab),
+# `except` skips them.
+try:
+    import google.colab
+    google.colab.output.enable_custom_widget_manager()
+except ImportError:
+    pass                                        # not running in Colab: nothing to do
+
+# Step 4: the data files of this chapter live in the book's GitHub repository
+DATA_URL = "https://raw.githubusercontent.com/quarcs-lab/macro102-site/main/data/ch09/"
+```
+
+The website cannot run Python, so each interactive figure also gets a version with a precomputed slider. The next
+two helpers build those versions and keep the other countries one click away in the legend. Run them and move on.
+
+```{python}
+#| kind: folded
+# @title Helper for the website versions (run this cell; you do not need to read it)
+def slider_figure(make_figure, name, values, start, label=None):
+    """Join precomputed versions of a figure with one slider (the website cannot run Python).
+
+    Arguments
+        make_figure : the function that draws the figure, e.g. phillips_diagram
+        name        : the argument the slider moves, e.g. "nu"
+        values      : the values of that argument to precompute
+        start       : the value shown first
+        label       : the slider's label (the argument name if None)
+    Returns
+        one Plotly figure with all versions and a slider that shows one at a time
+    """
+    # Step 1: draw the figure once for every value
+    figures = [make_figure(**{name: v}) for v in values]
+    first = values.index(start)
+    # Step 2: copy every curve into one figure; only the start value's are visible
+    fig = go.Figure(layout=figures[first].layout)
+    owner = []                          # which precomputed figure each trace is from
+    for i, f in enumerate(figures):
+        for trace in f.data:
+            trace.visible = (i == first)
+            fig.add_trace(trace)
+            owner.append(i)
+    # Step 3: one slider step per value: its curves, title, labels and shapes
+    steps = []
+    for i, f in enumerate(figures):
+        layout = {"title": f.layout.title.to_plotly_json(),
+                  "annotations": [a.to_plotly_json() for a in f.layout.annotations],
+                  "shapes": [s.to_plotly_json() for s in f.layout.shapes]}
+        visible = [o == i for o in owner]
+        steps.append(dict(method="update", label=str(values[i]), args=[{"visible": visible}, layout]))
+    fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
+                                    currentvalue=dict(prefix=(label or name) + " = "))])
+    return fig
+```
+
+```{python}
+#| kind: folded
+# @title Helper for the website's country legends (run this cell; you do not need to read it)
+def add_legend_traces(fig, traces, keep=()):
+    """Add traces that start hidden but stay in the legend (click to show them).
+
+    If the figure has a slider, its steps only switch the figure's own traces, so the countries you
+    clicked on stay on the chart when you move the slider.
+
+    Arguments
+        fig    : a Plotly figure, with or without a slider
+        traces : the extra traces, e.g. one per other country
+        keep   : the names of the traces that are drawn from the start
+    Returns
+        the same figure, with the extra traces added
+    """
+    # Step 1: add the traces; all but those in `keep` show only in the legend.
+    # `len` counts the items of a list: here the figure's own traces.
+    n = len(fig.data)
+    for t in traces:
+        if t.name not in keep:
+            t.visible = "legendonly"
+        fig.add_trace(t)
+    # Step 2: make every slider step switch only the first n traces (the figure's own)
+    for slider in fig.layout.sliders:
+        steps = []
+        for step in slider.steps:
+            steps.append(dict(method=step.method, label=step.label,
+                              args=[step.args[0], step.args[1], list(range(n))]))
+        slider.steps = steps
+    return fig
+```
+
+:::
+
+<!-- cell -->
+
+### The model as functions
+
+The frameworks of this chapter are three short formulas: the definition of short-run output, equations (1)
+and (2), the Phillips curve, equation (5), and Okun's law, equation (8). We write each one as a Python
+*function*: a named recipe that takes inputs and gives back a result. Islandia's baseline gives the default
+values. The first cell builds Islandia's output: the trend, the cycle around it, and the gap between the two.
+
+```{python}
+# `def` creates a function. Its inputs are the arguments in parentheses.
+# `g=2.0` gives g a default value, used whenever we do not pass one.
+# The text in triple quotes describes the function.
 def potential_output(t, g=2.0, Y0=100.0):
-    """Potential output Ybar_t: a smooth trend that grows g percent a year, from Y0 in year 0."""
+    """Potential output Ybar_t: a smooth trend that grows g percent a year.
+
+    Islandia's trend, as in Fig. 1:  Ybar_t = Y0 (1 + g/100)^t
+
+    Arguments
+        t  : the year (a number or an array of years)
+        g  : growth rate of potential output, g-bar, in percent
+        Y0 : potential output in year 0, Ybar_0
+    Returns
+        potential output in year t, Ybar_t
+    """
+    # `return` gives back the result; `**` means "to the power of"
     return Y0 * (1 + g / 100) ** t
 
 
 def actual_output(t, A=2.0, g=2.0, cycle=8):
-    """Actual output Y_t = Ybar_t (1 + Y~_t)   (equation 2), with a wave of +-A percent that repeats every `cycle` years."""
+    """Actual output Y_t: potential output times a cycle factor.
+
+    Equation (2):  Y_t = Ybar_t (1 + Y~_t),  with Y~_t = A sin(2 pi t / cycle) percent
+
+    Arguments
+        t     : the year (a number or an array of years)
+        A     : the size of the swings, in percent (+A at the top, -A at the bottom)
+        g     : growth rate of potential output, g-bar, in percent
+        cycle : the length of one cycle, in years
+    Returns
+        actual output in year t, Y_t
+    """
+    # `np.sin` is the sine function, a smooth wave between -1 and 1 (`np.pi` is
+    # the number pi), so the wave repeats every `cycle` years
     return potential_output(t, g) * (1 + A / 100 * np.sin(2 * np.pi * t / cycle))
 
 
 def short_run_output(Y, Ybar):
-    """Short-run output in percent: 100 (Y - Ybar) / Ybar   (equation 1)."""
+    """Short-run output Y~: the percentage gap between actual and potential output.
+
+    Equation (1):  Y~ = 100 (Y - Ybar) / Ybar
+
+    Arguments
+        Y    : actual output (a number or a column of data)
+        Ybar : potential output, Ybar
+    Returns
+        short-run output, in percent
+    """
+    # positive in a boom, negative in a slump
     return 100 * (Y - Ybar) / Ybar
 ```
 
+The next two functions link the gap to inflation and to unemployment. Each one is a straight line through zero:
+with no gap, inflation is steady and unemployment is at its natural rate.
+
 ```{python}
 def phillips_curve(Y_tilde, nu=0.33):
-    """Change in inflation, percentage points: delta pi = nu * Y_tilde   (the Phillips curve, equation 5)."""
+    """The Phillips curve: the change in inflation caused by short-run output.
+
+    Equation (5):  delta pi = nu-bar * Y~
+
+    Arguments
+        Y_tilde : short-run output Y~, in percent
+        nu      : slope of the Phillips curve, nu-bar
+    Returns
+        the change in inflation, in percentage points
+    """
+    # a boom (Y~ > 0) raises inflation, a slump (Y~ < 0) lowers it
     return nu * Y_tilde
 
 
 def okun_law(Y_tilde, slope=-0.5):
-    """Cyclical unemployment u - u_bar, percentage points: slope * Y_tilde   (Okun's law, equation 8)."""
+    """Okun's law: cyclical unemployment from short-run output.
+
+    Equation (8):  u - u-bar = slope * Y~, with a slope of -1/2
+
+    Arguments
+        Y_tilde : short-run output Y~, in percent
+        slope   : Okun's slope (-1/2 in the textbook)
+    Returns
+        cyclical unemployment u - u-bar, in percentage points
+    """
+    # each percent of output below potential adds half a point of unemployment
     return slope * Y_tilde
 ```
+
+<!-- cell -->
+
+### Checking the key results
+
+The formulas came from algebra. Now we check them with numbers, one Key result at a time, using Islandia's
+baseline: potential output grows 2 percent a year, short-run output swings between $+2$ and $-2$ percent, and
+$\bar{\nu} = 0.33$.
 
 **Check 1: equations (1) and (2), and the trend drops out.** At the top of the boom (year 2) and the bottom of the
 slump (year 6), we compute short-run output from the baseline and rebuild actual output from it. Then we change
 the growth of potential output and recompute short-run output in year 6.
 
-> **Python note.** An *f-string* such as `f"Y~ = {value:+.2f}%"` inserts the value of a variable
-> into a piece of text; `:.2f` means "show two decimals" and the `+` adds a sign. A `for` loop repeats its
-> indented lines once for each value in the list after `in`. `Ybar, Y = a, b` gives two variables their values
-> in one line.
-
 ```{python}
+# Step 1: the top of the boom (year 2) and the bottom of the slump (year 6).
+# A `for` loop repeats its indented lines once for each value after `in`.
 for t in (2, 6):
+    # `Ybar, Y = a, b` gives two variables their values in one line
     Ybar, Y = potential_output(t), actual_output(t)
     Y_tilde = short_run_output(Y, Ybar)
+    # An f-string, f"... {value:+.2f}", puts a value into the text;
+    # ":.2f" means "two decimals", and the "+" adds a sign
     print(f"Year {t}: potential {Ybar:.2f}, actual {Y:.2f}, Y~ = {Y_tilde:+.2f}% (equation 1)")
+    # equation (2): rebuild actual output from the trend and the gap
     print(f"        equation (2): Ybar x (1 + Y~) = {Ybar * (1 + Y_tilde / 100):.2f}")
+
+# Step 2: Y~ in year 6 for three growth rates of potential output
 for g in (0.0, 2.0, 4.0):
     Y_tilde = short_run_output(actual_output(6, g=g), potential_output(6, g=g))
     print(f"Potential grows {g:.0f}% a year: Y~ in year 6 = {Y_tilde:+.2f}%")
@@ -661,58 +776,68 @@ for g in (0.0, 2.0, 4.0):
 **Check 2: the log difference, equation (3).** For gaps of different sizes we compare the exact gap with
 $100\times(\ln Y - \ln\bar{Y}) = 100\ln(1+\tilde{Y})$.
 
-> **Python note.** `np.log` is the natural logarithm. `:+6.1f` reserves 6 characters for the number, so that
-> the columns line up.
-
 ```{python}
+# For gaps from +2 to -10 percent, compare Y~ with the log difference of equation (3).
+# `np.log` is the natural logarithm; ":+6.1f" reserves 6 characters for the
+# number, so that the columns line up.
 for gap in (2.0, -2.0, -5.0, -10.0):
-    log_gap = 100 * np.log(1 + gap / 100)                     # ln Y - ln Ybar, in percent
+    log_gap = 100 * np.log(1 + gap / 100)  # ln Y - ln Ybar, in percent
     print(f"Y~ = {gap:+6.1f}%   log difference = {log_gap:+7.2f}%   error {log_gap - gap:+.2f} points")
 ```
 
 **Check 3: growth rates, equation (4).** Year by year over one cycle, we compare the exact growth rate of actual
 output with potential growth (2 percent) plus the change in short-run output.
 
-> **Python note.** `range(1, 9)` counts 1, 2, ..., 8, so the loop visits every year of one cycle.
-
 ```{python}
+# `range(1, 9)` counts 1, 2, ..., 8, so the loop visits every year of one cycle
 for t in range(1, 9):
+    # Step 1: the exact growth rate of Y, from this year's and last year's levels
     exact = 100 * (actual_output(t) / actual_output(t - 1) - 1)
+    # Step 2: Y~ this year and last year
     gap_now = short_run_output(actual_output(t), potential_output(t))
     gap_before = short_run_output(actual_output(t - 1), potential_output(t - 1))
-    approx = 2.0 + (gap_now - gap_before)                     # equation (4) with g = 2
-    print(f"Year {t}: Y~ = {gap_now:+5.2f}%   growth of Y = {exact:4.2f}% (exact), {approx:4.2f}% (equation 4)")
+    # Step 3: equation (4) with g = 2: potential growth plus the change in Y~
+    approx = 2.0 + (gap_now - gap_before)
+    print(f"Year {t}: Y~ = {gap_now:+5.2f}%   growth of Y = "
+          f"{exact:4.2f}% (exact), {approx:4.2f}% (equation 4)")
 ```
 
 **Check 4: the Phillips curve over one cycle, equations (5) and (6).** We move inflation forward one year at a
 time with equation (5), and compare it with the running-total formula, equation (6). Inflation should peak in
 years 3 and 4 and be back at 2 percent by the end of the cycle.
 
-> **Python note.** `pi = pi + ...` replaces last year's inflation with this year's. `total_gap` starts at zero
-> and adds one year's gap each time round the loop: a *running total*.
-
 ```{python}
-pi = 2.0                                                      # year 0: inflation at its long-run rate
-total_gap = 0.0                                               # running total of short-run output
+# Step 1: year 0, inflation at its long-run rate
+pi = 2.0
+# `total_gap` is a running total: it starts at zero and adds one year's gap
+# each time round the loop
+total_gap = 0.0
+
+# Step 2: move inflation forward one year at a time
 for t in range(1, 9):
     Y_tilde = short_run_output(actual_output(t), potential_output(t))
-    pi = pi + phillips_curve(Y_tilde)                         # one year of equation (5)
+    # one year of equation (5): `pi = pi + ...` replaces last year's inflation
+    # with this year's
+    pi = pi + phillips_curve(Y_tilde)
     total_gap = total_gap + Y_tilde
-    formula = 2.0 + 0.33 * total_gap                          # equation (6)
-    print(f"Year {t}: Y~ = {Y_tilde:+5.2f}%   inflation {pi:.3f}% (year by year), {formula:.3f}% (equation 6)")
+    # equation (6): long-run inflation plus nu-bar times the running total
+    formula = 2.0 + 0.33 * total_gap
+    print(f"Year {t}: Y~ = {Y_tilde:+5.2f}%   inflation "
+          f"{pi:.3f}% (year by year), {formula:.3f}% (equation 6)")
 ```
 
 The same running total measures the **cost of the slump**: the gaps of years 5 to 7 add up to the output lost, and
 the whole cycle adds up to zero.
 
-> **Python note.** `abs` is the absolute value. We use it on the full-cycle total only to drop a meaningless minus
-> sign: the computer's answer is a tiny number such as $-0.0000000000000004$.
-
 ```{python}
+# Step 1: add up the gaps of the slump, years 5 to 7
 lost = 0.0
 for t in (5, 6, 7):
     lost = lost + short_run_output(actual_output(t), potential_output(t))
 print(f"Output lost in years 5-7: {lost:.2f} percent of a year's potential output")
+
+# Step 2: the whole cycle adds up to zero. `abs` is the absolute value: it drops
+# the meaningless minus sign of a tiny rounding error such as -0.0000000000000004
 print(f"Sum of Y~ over the whole cycle (years 1-8): {abs(total_gap):.2f}")
 ```
 
@@ -720,19 +845,24 @@ print(f"Sum of Y~ over the whole cycle (years 1-8): {abs(total_gap):.2f}")
 $\bar{\nu} = 0.33$, equation (7) asks for a cumulative gap of $-3.03$ percent-years. We try it all in one year and
 spread over three years: both must end at 1 percent.
 
-> **Python note.** `[a, b, c]` is a *list*. A loop can sit inside another loop: the outer one picks a path, the
-> inner one runs through its years. `len(path)` is the number of years in the path.
-
 ```{python}
-needed = (1.0 - 2.0) / 0.33                                   # equation (7)
+# Step 1: equation (7), the cumulative Y~ that lowers inflation from 2 to 1 percent
+needed = (1.0 - 2.0) / 0.33
 print(f"Cumulative Y~ needed: {needed:.2f} percent-years")
+
+# Step 2: two paths for Y~. `[a, b, c]` is a list, here one Y~ per year.
 fast = [needed]                                               # all of it in one year
 slow = [needed / 3, needed / 3, needed / 3]                   # spread over three years
+
+# Step 3: a loop inside a loop. The outer one picks a path, the inner one runs
+# through its years with equation (5); `len(path)` is the number of years.
 for path in (fast, slow):
     pi = 2.0
     for Y_tilde in path:
         pi = pi + phillips_curve(Y_tilde)
     print(f"{len(path)} year(s) at Y~ = {path[0]:+.2f}%: inflation ends at {pi:.2f}%")
+
+# Step 4: Okun's law, equation (8), turns the lost output into extra unemployment
 print(f"Okun's law: extra unemployment, summed over the years = {okun_law(needed):+.2f} point-years")
 ```
 
@@ -742,14 +872,21 @@ the Phillips curve in unemployment terms, $\Delta\pi = -2\bar{\nu}(u - \bar{u})$
 equation (5).
 
 ```{python}
+# Step 1: Y~ in years 4 and 5, and the growth of output in between
 gap_4 = short_run_output(actual_output(4), potential_output(4))
 gap_5 = short_run_output(actual_output(5), potential_output(5))
 growth = 100 * (actual_output(5) / actual_output(4) - 1)
-change_u = okun_law(gap_5) - okun_law(gap_4)                  # from equation (8)
+
+# Step 2: the change in unemployment from equation (8), then from equation (9)
+change_u = okun_law(gap_5) - okun_law(gap_4)
 print(f"Year 4 to 5: output grows {growth:.2f}%, unemployment changes by {change_u:+.2f} points (equation 8)")
 print(f"Equation (9): -1/2 x ({growth:.2f} - 2) = {-0.5 * (growth - 2.0):+.2f} points")
-u_gap = okun_law(-2.0)                                        # the bottom of the baseline slump
+
+# Step 3: cyclical unemployment at the bottom of the baseline slump, Y~ = -2%
+u_gap = okun_law(-2.0)
 print(f"Y~ = -2%: u - u_bar = {u_gap:+.2f} points")
+
+# Step 4: the Phillips curve in unemployment terms must match equation (5)
 print(f"Phillips curve with unemployment: -2 x 0.33 x ({u_gap:+.2f}) = {-2 * 0.33 * u_gap:+.2f}; "
       f"with output: {phillips_curve(-2.0):+.2f}")
 ```
@@ -759,59 +896,86 @@ equation (4) is an approximation.
 
 <!-- cell -->
 
-### Drawing the curves
+### Drawing and data tools
+
+The figures share a few tools: one writes a curve's name next to the curve, one shades the U.S. recessions, and
+the others load the data for other countries and give every country its own color. Run them and move on, or
+open the box to see how they work.
+
+<!-- cell -->
+
+::: {.callout-note .mic-fold collapse="true" title="Show the drawing and data tools"}
 
 The textbook writes the name of each curve next to it, so our model figures do the same instead of using a
 legend. `side` says whether the name sits above (`"bottom"`), beside (`"middle"`) or below (`"top"`) the end point.
 
-> **Python note.** `a if condition else b` is a one-line choice: it gives `a` when the condition is true and `b`
-> otherwise. Here it moves the name 4 pixels away from the point, to the right or to the left.
-
 ```{python}
+#| kind: folded
+# @title Drawing tool: a curve's name next to its end point
 def add_end_label(fig, x, y, text, color, side="middle", row=None, col=None, xanchor="left"):
-    """Write a curve's name next to its end point (x, y), in the curve's color."""
+    """Write a curve's name next to its end point (x, y), in the curve's color.
+
+    Arguments
+        fig      : the figure to draw on
+        x, y     : the end point of the curve
+        text     : the curve's name, e.g. "Phillips curve"
+        color    : its color, e.g. TEAL
+        side     : "bottom" puts the name above the point, "middle" beside it,
+                   "top" below it
+        row, col : the panel to draw in (only for figures with two panels, Figs. 1 and 9)
+        xanchor  : "left" writes the name to the right of the point, "right" to its left
+    """
+    # `a if condition else b` is a one-line choice: it gives a when the condition is
+    # true and b otherwise. Here it moves the name 4 pixels to the right or the left.
     fig.add_annotation(x=x, y=y, text=text, showarrow=False, xanchor=xanchor, yanchor=side,
-                       xshift=4 if xanchor == "left" else -4, font=dict(color=color, size=15), row=row, col=col)
+                       xshift=4 if xanchor == "left" else -4, font=dict(color=color, size=15),
+                       row=row, col=col)
 ```
-
-<!-- cell -->
-
-### Shading recessions
 
 Several data figures shade the U.S. recessions, so we write the shading once, here. A small file lists the
 start (peak) and end (trough) month of every U.S. recession since 1960, as dated by the National Bureau of
 Economic Research (NBER).
 
-> **Python note.** `pd.read_csv` reads a data file into a *DataFrame*, a table with named columns, and
-> `parse_dates=[...]` turns text such as `"2020-02-01"` into real dates. A `for` loop repeats the indented
-> lines once for each recession: `zip(recessions.peak, recessions.trough)` hands over one (peak, trough) pair
-> at a time. The `if` skips recessions that ended before the chart starts, and `fig.add_vrect` shades the
-> band between two dates.
-
 ```{python}
+#| kind: folded
+# @title Data tool: shading the U.S. recessions
+# Step 1: read the recession dates. `pd.read_csv` reads a data file into a
+# DataFrame, a table with named columns, and `parse_dates=[...]` turns text
+# such as "2020-02-01" into real dates.
 recessions = pd.read_csv(DATA_URL + "recessions.csv", parse_dates=["peak", "trough"])
 
 
 def shade_recessions(fig, start="1960-01-01"):
-    """Figs. 9.3 and 9.5: shade every NBER recession (peak to trough) that ends after the date start."""
+    """Shade every NBER recession, from peak to trough, that ends after the date start.
+
+    Used in Figs. 3 and 5.
+
+    Arguments
+        fig   : the figure to draw on, with dates on the horizontal axis
+        start : a date such as "1970-01-01"; recessions that end earlier are left out
+    """
+    # Step 2: `zip(recessions.peak, recessions.trough)` hands over one (peak, trough)
+    # pair at a time, and the `if` skips recessions that end before `start`
     for peak, trough in zip(recessions.peak, recessions.trough):
         if trough >= pd.Timestamp(start):
+            # `fig.add_vrect` shades the band between the two dates
             fig.add_vrect(x0=peak, x1=trough, fillcolor=BLUE, opacity=0.15, line_width=0)
 
 
+# Step 3: show the last three recessions of the file
 recessions.tail(3)
 ```
-
-<!-- cell -->
-
-### Data for other countries
 
 The textbook's data figures show the United States. The same concepts are measured for other countries too, and
 this notebook lets you add them. One file collects them, a year per row, for the OECD members and several large
 emerging economies:
 
 ```{python}
+#| kind: folded
+# @title Data tool: the data for other countries
+# one row per country and year
 panel = pd.read_csv(DATA_URL + "short_run_panel.csv")
+# show the first rows of 2020
 panel[panel.year == 2020].head()
 ```
 
@@ -831,73 +995,106 @@ Several countries are often shown together: all the countries with an output gap
 groups of the website's menu in Fig. 5. No two countries in the same view should share a color, so we list the
 menu's groups first.
 
-> **Python note.** A *dictionary* such as `{"Japan": "#16528c"}` maps a name to a value. Here each group's name maps
-> to a list of countries.
-
 ```{python}
+#| kind: folded
+# @title Data tool: the country groups of the menu in Fig. 5
+# A dictionary such as {"Japan": "#16528c"} maps a name to a value.
+# Here each group's name maps to a list of countries.
 GROUPS_9 = {"G7": ["Canada", "France", "Germany", "Italy", "Japan", "United Kingdom"],
-            "Euro area": ["Austria", "Belgium", "Croatia", "Estonia", "Finland", "France", "Germany", "Greece", "Ireland",
-                          "Italy", "Latvia", "Lithuania", "Luxembourg", "Netherlands", "Portugal", "Slovak Republic",
-                          "Slovenia", "Spain"],
-            "Other Europe": ["Bulgaria", "Czechia", "Denmark", "Hungary", "Iceland", "Norway", "Poland", "Romania",
-                             "Sweden", "Switzerland", "Turkey"],
-            "Americas and Asia-Pacific": ["Argentina", "Australia", "Brazil", "Canada", "Chile", "China", "Colombia",
-                                          "Costa Rica", "India", "Indonesia", "Israel", "Japan", "Mexico", "New Zealand",
-                                          "Peru", "South Korea", "Thailand"],
-            "Other emerging economies": ["Russia", "Saudi Arabia", "South Africa", "Turkey", "Bulgaria", "Romania"]}
+            # a country may sit in two groups, e.g. France in the G7 and the euro area
+            "Euro area": ["Austria", "Belgium", "Croatia", "Estonia", "Finland", "France", "Germany",
+                          "Greece", "Ireland", "Italy", "Latvia", "Lithuania", "Luxembourg", "Netherlands",
+                          "Portugal", "Slovak Republic", "Slovenia", "Spain"],
+            "Other Europe": ["Bulgaria", "Czechia", "Denmark", "Hungary", "Iceland", "Norway", "Poland",
+                             "Romania", "Sweden", "Switzerland", "Turkey"],
+            "Americas and Asia-Pacific": ["Argentina", "Australia", "Brazil", "Canada", "Chile", "China",
+                                          "Colombia", "Costa Rica", "India", "Indonesia", "Israel", "Japan",
+                                          "Mexico", "New Zealand", "Peru", "South Korea", "Thailand"],
+            "Other emerging economies": ["Russia", "Saudi Arabia", "South Africa", "Turkey", "Bulgaria",
+                                         "Romania"]}
 ```
 
 The colors come from a small tool. Its palette has 44 colors: Plotly's 24 dark ones, and the 20 darker ones of its
 26 "Alphabet" colors.
 
-> **Python note.** `PALETTE = []` starts an empty list, and `.append` adds one color at a time. In `first_free`,
-> `return` inside a loop stops the function at the first color that fits, `used.count(c)` counts how often `c`
-> appears in the list `used`, and `reversed(PALETTE)` walks through the palette from its last color.
-
 ```{python}
-LIGHT = ["#F7E1A0", "#E2E2E2", "#FBE426", "#16FF32", "#1CFFCE", "#2ED9FF"]   # too pale on white
+#| kind: folded
+# @title Color tool: a palette of 44 colors, and the color for one country
+# Step 1: the colors that are too pale on white
+LIGHT = ["#F7E1A0", "#E2E2E2", "#FBE426", "#16FF32", "#1CFFCE", "#2ED9FF"]
+# Step 2: build the palette. `PALETTE = []` starts an empty list, and `.append`
+# adds one color at a time.
 PALETTE = []
-for c in px.colors.qualitative.Dark24:                                       # 24 dark colors ...
+# Plotly's 24 dark colors, all but one medium blue ...
+for c in px.colors.qualitative.Dark24:
     if c != "#2E91E5":
         PALETTE.append(c)
+# ... and the 20 "Alphabet" colors that are not too pale: 44 in all
 for c in px.colors.qualitative.Alphabet:
     if c not in LIGHT:
-        PALETTE.append(c)                                                     # ... and 20 more: 44 in all
-PALETTE.append("#2E91E5")                    # a medium blue, too close to the U.S. navy: used last
+        PALETTE.append(c)
+# the medium blue is too close to the U.S. navy, so it comes last
+PALETTE.append("#2E91E5")
 
 
 def first_free(used, taken):
-    """The palette color least used in `used` (the group-mates' colors), preferring one no country has `taken` yet."""
+    """The palette color least used by a country's group-mates.
+
+    It prefers a color that no country has taken yet.
+
+    Arguments
+        used  : the colors of the countries shown together with this one (a list)
+        taken : the colors that any country already has
+    Returns
+        one color of PALETTE
+    """
+    # Step 1: the first color that neither the group-mates nor any other country uses.
+    # `return` inside a loop stops the function at the first color that fits.
     for c in PALETTE:
         if c not in used and c not in taken:
             return c
+    # Step 2: none is free, so take the color the group-mates use least.
+    # `used.count(c)` counts how often c appears in the list `used`, and
+    # `reversed(PALETTE)` walks through the palette from its last color,
+    # far from the colors always on show.
     best = PALETTE[-1]
-    for c in reversed(PALETTE):                  # from the end, far from the colors always on show
+    for c in reversed(PALETTE):
         if used.count(c) < used.count(best):
-            best = c                             # a big group shares out the colors evenly
+            best = c                    # a big group shares out the colors evenly
     return best
 ```
 
-> **Python note.** `group_colors` walks through the countries one by one. `dict(fixed or {})` starts from a copy of
-> the fixed colors (an empty dictionary when there are none), `continue` skips a country that already has a color,
-> and `used` collects the colors of the countries that are shown together with this one.
+`group_colors` walks through the countries one by one and gives each the best free color.
 
 ```{python}
+#| kind: folded
+# @title Color tool: a color for every country
 def group_colors(names, groups, fixed=None):
-    """Give each country a color that no other country in its groups uses, as far as the palette allows.
+    """Give each country a color that no other country in its groups uses, if possible.
 
-    names: every country; groups: the lists of countries shown together (menu views); fixed: {country: color}
-    for the textbook's countries, so the default view keeps the book's colors."""
+    Arguments
+        names  : every country, in the order they get their colors
+        groups : the lists of countries shown together (the menu's views)
+        fixed  : {country: color} for the textbook's countries, so the default view
+                 keeps the book's colors (None for no fixed colors)
+    Returns
+        a dictionary {country: color}
+    """
+    # Step 1: `dict(fixed or {})` starts from a copy of the fixed colors
+    # (an empty dictionary when there are none)
     colors = dict(fixed or {})
     for name in names:
+        # `continue` skips a country that already has a color
         if name in colors:
             continue
+        # Step 2: `used` collects the colors of the countries shown with this one
         used = []
         for group in groups:
             if name in group:
                 for other in group:
                     if other in colors:
                         used.append(colors[other])
+        # Step 3: the best free color for this country
         colors[name] = first_free(used, list(colors.values()))
     return colors
 ```
@@ -905,12 +1102,21 @@ def group_colors(names, groups, fixed=None):
 The United States keeps the chapter's blue, and every other country gets a color that no country of its groups uses.
 
 ```{python}
+#| kind: folded
+# @title Color tool: the country colors of the chapter
+# Step 1: the other countries, and the list of every economy, United States first
 others = panel[panel.country != "United States"]
 COUNTRIES = ["United States"] + sorted(others.country.unique())
-WITH_GAP = sorted(others.dropna(subset=["output_gap"]).country.unique())   # shown together in Figs. 3, 7 and 8
+# the countries with an output gap, shown together in Figs. 3, 7 and 8
+WITH_GAP = sorted(others.dropna(subset=["output_gap"]).country.unique())
+# Step 2: a color for each country; the United States keeps the chapter's blue
 COLORS = group_colors(COUNTRIES, [WITH_GAP] + list(GROUPS_9.values()), {"United States": BLUE})
 print(len(COUNTRIES), "economies:", ", ".join(COUNTRIES[:8]), "...")
 ```
+
+:::
+
+<!-- cell -->
 
 ## Trend and cycle
 
@@ -1225,7 +1431,7 @@ Use `by_year.gap.loc[1950:]` as above, with `.max()` and `.idxmax()` instead of 
 recessions shaded.
 
 The data file has quarterly real GDP and CBO potential GDP since 1970. The recessions are shaded with
-`shade_recessions` from "Model overview".
+`shade_recessions` from "Model in code".
 
 > **Python note.** `parse_dates=["date"]` turns text such as `"2020-04-01"` into real dates, so that
 > Plotly and pandas can work with them. `.tail()` shows the last five rows.
@@ -1786,7 +1992,7 @@ slump the opposite happens. The Phillips curve, equation (5), puts this in one l
 
 $$\Delta\pi_t = \bar{\nu}\,\tilde{Y}_t$$
 
-When output is at potential ($\tilde{Y} = 0$), inflation is steady. Our function `phillips_curve` from "The model
+When output is at potential ($\tilde{Y} = 0$), inflation is steady. Our function `phillips_curve` from "Model
 in code" draws the line. The black dot is the economy, at the short-run output you choose.
 
 > **Python note.** `fig.add_shape(type="line", ...)` draws a straight segment, here the dashed guides from the

@@ -29,109 +29,6 @@ that question. By the end of it you will be able to:
 
 <!-- cell -->
 
-## Setup
-
-We first load the Python libraries we need. You only have to run this cell once.
-
-> **Python note.** `import` loads a *library*, a toolbox written by other people. We give each
-> library a short nickname, for example `np` for NumPy, so that the code stays short. Text after
-> a `#` is a *comment*: Python ignores it, and it is there for human readers. The `try ... except`
-> block runs one Colab-only line and simply skips it anywhere else.
-
-```{python}
-# Libraries used in this chapter
-import numpy as np                              # numbers and arrays
-import pandas as pd                             # data tables
-import plotly.express as px                     # quick charts from data tables
-import plotly.graph_objects as go               # charts built piece by piece (model figures)
-import plotly.io as pio
-from plotly.subplots import make_subplots       # several panels in one figure
-from ipywidgets import (interact, fixed, FloatSlider, SelectionSlider, IntRangeSlider, ToggleButtons,
-                        Dropdown, SelectMultiple)
-
-# One light blue/green look for every chart
-BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
-pio.templates.default = "plotly_white"
-pio.templates["plotly_white"].layout.update(width=860, height=480)   # same size in Colab and on the website
-px.defaults.color_discrete_sequence = [BLUE, TEAL, GREEN, "#5aa0d8", "#0b4f47"]
-WIDE = {"description_width": "initial"}         # show the full slider labels
-
-# Colab only: let Plotly charts appear inside the interactive widgets
-try:
-    import google.colab
-    google.colab.output.enable_custom_widget_manager()
-except ImportError:
-    pass                                        # not running in Colab: nothing to do
-
-# The data files of this chapter live in the book's GitHub repository
-DATA_URL = "https://raw.githubusercontent.com/quarcs-lab/macro102-site/main/data/ch04/"
-```
-
-The next cell defines a helper that only the book website needs. Run it and move on.
-
-```{python}
-#| kind: helper
-# @title Helper for the website versions (run this cell; you do not need to read it)
-def slider_figure(make_figure, name, values, start, label=None):
-    """Precompute make_figure(name=value) for every value and join the results with one slider.
-
-    The website cannot run Python, so each interactive figure also gets this precomputed version.
-    """
-    figures = [make_figure(**{name: v}) for v in values]
-    first = values.index(start)
-    fig = go.Figure(layout=figures[first].layout)
-    owner = []                                  # which precomputed figure each trace comes from
-    for i, f in enumerate(figures):
-        for trace in f.data:
-            trace.visible = (i == first)
-            fig.add_trace(trace)
-            owner.append(i)
-    steps = []
-    for i, f in enumerate(figures):
-        layout = {"title": f.layout.title.to_plotly_json(),
-                  "annotations": [a.to_plotly_json() for a in f.layout.annotations],
-                  "shapes": [s.to_plotly_json() for s in f.layout.shapes]}
-        visible = [o == i for o in owner]
-        steps.append(dict(method="update", label=str(values[i]), args=[{"visible": visible}, layout]))
-    fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
-                                    currentvalue=dict(prefix=(label or name) + " = "))])
-    return fig
-```
-
-```{python}
-#| kind: helper
-# @title Helper for the website versions with many countries (run this cell; you do not need to read it)
-def country_menu(fig, shown, regions, label="Textbook countries"):
-    """Draw the countries in `shown` and put every other country one click away in the legend.
-
-    `regions` maps each country to its region. With more than 40 countries, a menu above the plot
-    chooses the region whose countries the legend lists. Traces that are not countries stay as they are.
-    """
-    countries = [trace.name for trace in fig.data if trace.name in regions]
-    groups = [label] + sorted(set(regions[name] for name in countries))
-    if len(countries) <= 40:
-        groups = [None]                                 # a short legend lists every country at once
-    buttons = []
-    for group in groups:
-        visible = []
-        for trace in fig.data:
-            if trace.name in shown:
-                visible.append(True)
-            elif trace.name not in regions:
-                visible.append(True if trace.visible is None else trace.visible)
-            elif group is None or regions[trace.name] == group:
-                visible.append("legendonly")
-            else:
-                visible.append(False)
-        buttons.append(dict(label=group, method="restyle", args=[{"visible": visible}]))
-    for trace, v in zip(fig.data, buttons[0]["args"][0]["visible"]):
-        trace.visible = v
-    if len(groups) > 1:
-        menu = dict(type="dropdown", buttons=buttons, x=1, xanchor="right", y=1.02, yanchor="bottom")
-        fig.update_layout(updatemenus=list(fig.layout.updatemenus) + [menu], margin=dict(t=110))
-    return fig
-```
-
 ## Model overview
 
 Come back to **Islandia**, the small imaginary island country of this book. Its people make one all-purpose good, counted in tons per year, with two inputs: workers and machines (its capital: boats, nets, workshops). Think of all of Islandia's firms as one company, **Harbor Boatworks**, that rents every machine and hires every worker on the island. How much can Islandia make with what it has, and how is the output split between the workers and the owners of the machines? And if Islandia is poorer than another country, is that because it has fewer machines, or because it uses them less well? The production model answers both questions.
@@ -147,7 +44,7 @@ Come back to **Islandia**, the small imaginary island country of this book. Its 
 
 1. [The production model](#the-production-model): the [assumptions](#assumptions), [solving the model](#solving-the-model) from the firm's choice to the market prices, and [what the model predicts](#what-the-model-predicts).
 2. [Development accounting: capital and TFP across countries](#development-accounting-capital-and-tfp-across-countries): the [assumptions](#assumptions-1), [the steps](#solving-the-model-1) that measure TFP and split an income gap, and [what they show](#what-the-model-predicts-1).
-3. [The model in code](#the-model-in-code): the key results as Python functions, checked with numbers. Every later section reuses them.
+3. [Model in code](#model-in-code): the key results as Python functions, checked with numbers. Every later section reuses them.
 
 **Notation.** A bar over a letter marks a **parameter**: a number we take as given from outside the model. Letters without a bar are **endogenous variables**: the model determines them. In the code we simply write `A`, `K_bar` and `L_bar`.
 
@@ -530,95 +427,317 @@ Yes. By the formula of step 5, $MPK_{Islandia}/MPK_{Mainland} = \frac{1}{3}\time
 
 <!-- cell -->
 
-### The model in code
+## Model in code
 
-We now write the key results as Python functions, which every later section reuses. To let you experiment with the shape of the function, the code writes the exponent on capital as $\alpha$ ("alpha"), with the textbook value $\alpha = 1/3$ as the default. Each function's description names the equation it computes, and the cells after it check the algebra with numbers.
+Now we turn the Key results into Python. The section has three parts: the setup (folded, because it is the
+same in every chapter), the model as functions, and numerical checks of the Key results. Run its cells once, in
+order. Every later section of the notebook reuses them.
 
-> **Python note.** `def` creates a *function*: a named recipe that takes inputs (the
-> *arguments*) and gives back a result with `return`. Writing `A=1.0` gives an argument a
-> *default value*, used whenever we do not pass one. The text in triple quotes is a short
-> description of what the function does. `**` means "to the power of", and `1 / 3` is simply the
-> number one third.
+<!-- cell -->
+
+### Setup
+
+Run the setup cells once, before anything else. They load the Python libraries, give every chart the same look,
+store the address of the chapter's data and define two helpers that only the book website needs. You can use
+the notebook without reading them; open the box if you are curious.
+
+<!-- cell -->
+
+::: {.callout-note .mic-fold collapse="true" title="Show the setup code"}
+
+The first cell loads the libraries and sets the look of the charts. Its comments explain each step.
 
 ```{python}
+#| kind: folded
+# @title Setup: libraries, chart colors and the data location
+# Text after a "#" is a comment: Python ignores it, it is there for human readers.
+
+# Step 1: load the libraries. `import` loads a library, a toolbox written by
+# other people, and `as np` gives it a short nickname, so the code stays short.
+import numpy as np                              # numbers and arrays
+import pandas as pd                             # data tables
+import plotly.express as px                     # quick charts from data tables
+# charts built piece by piece (the model figures)
+import plotly.graph_objects as go
+import plotly.io as pio                         # settings shared by every chart
+from plotly.subplots import make_subplots       # several panels in one figure
+# sliders, buttons and menus for the interactive figures
+from ipywidgets import (interact, fixed, FloatSlider, SelectionSlider, IntRangeSlider, ToggleButtons,
+                        Dropdown, SelectMultiple)
+
+# Step 2: one light blue/green look for every chart
+BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
+pio.templates.default = "plotly_white"
+# the same chart size in Colab and on the website
+pio.templates["plotly_white"].layout.update(width=860, height=480)
+px.defaults.color_discrete_sequence = [BLUE, TEAL, GREEN, "#5aa0d8", "#0b4f47"]
+WIDE = {"description_width": "initial"}         # show the full slider labels
+
+# Step 3, Colab only: let Plotly charts appear inside the interactive widgets.
+# `try` runs the indented lines; if the import fails (we are not in Colab),
+# `except` skips them.
+try:
+    import google.colab
+    google.colab.output.enable_custom_widget_manager()
+except ImportError:
+    pass                                        # not running in Colab: nothing to do
+
+# Step 4: the data files of this chapter live in the book's GitHub repository
+DATA_URL = "https://raw.githubusercontent.com/quarcs-lab/macro102-site/main/data/ch04/"
+```
+
+The website cannot run Python, so each interactive figure also gets a version with a precomputed slider. The next
+two helpers build those versions. Run them and move on.
+
+```{python}
+#| kind: folded
+# @title Helper for the website versions (run this cell; you do not need to read it)
+def slider_figure(make_figure, name, values, start, label=None):
+    """Join precomputed versions of a figure with one slider (the website cannot run Python).
+
+    Arguments
+        make_figure : the function that draws the figure, e.g. production_curve
+        name        : the argument the slider moves, e.g. "L"
+        values      : the values of that argument to precompute
+        start       : the value shown first
+        label       : the slider's label (the argument name if None)
+    Returns
+        one Plotly figure with all versions and a slider that shows one at a time
+    """
+    # Step 1: draw the figure once for every value
+    figures = [make_figure(**{name: v}) for v in values]
+    first = values.index(start)
+    # Step 2: copy every curve into one figure; only the start value's are visible
+    fig = go.Figure(layout=figures[first].layout)
+    owner = []                          # which precomputed figure each trace is from
+    for i, f in enumerate(figures):
+        for trace in f.data:
+            trace.visible = (i == first)
+            fig.add_trace(trace)
+            owner.append(i)
+    # Step 3: one slider step per value: its curves, title, labels and shapes
+    steps = []
+    for i, f in enumerate(figures):
+        layout = {"title": f.layout.title.to_plotly_json(),
+                  "annotations": [a.to_plotly_json() for a in f.layout.annotations],
+                  "shapes": [s.to_plotly_json() for s in f.layout.shapes]}
+        visible = [o == i for o in owner]
+        steps.append(dict(method="update", label=str(values[i]), args=[{"visible": visible}, layout]))
+    fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
+                                    currentvalue=dict(prefix=(label or name) + " = "))])
+    return fig
+```
+
+```{python}
+#| kind: folded
+# @title Helper for the website versions with many countries (run this cell; you do not need to read it)
+def country_menu(fig, shown, regions, label="Textbook countries"):
+    """Draw the countries in `shown` and put every other country one click away in the legend.
+
+    With more than 40 countries, a menu above the plot chooses the region whose countries the legend lists.
+    Traces that are not countries stay as they are.
+
+    Arguments
+        fig     : a Plotly figure with one trace per country
+        shown   : the countries drawn at the start
+        regions : maps each country to its region
+        label   : the name of the first menu entry
+    Returns
+        the same figure, with the visibility set and, for many countries, the region menu
+    """
+    # Step 1: the menu entries, the textbook countries and then one entry per region
+    # the traces that are countries, and each of their regions once, A to Z
+    countries = [trace.name for trace in fig.data if trace.name in regions]
+    groups = [label] + sorted(set(regions[name] for name in countries))
+    if len(countries) <= 40:
+        groups = [None]                     # a short legend lists every country at once
+    # Step 2: for each entry, which traces are drawn, in the legend only, or hidden
+    buttons = []
+    for group in groups:
+        visible = []
+        for trace in fig.data:
+            if trace.name in shown:
+                visible.append(True)                    # a textbook country: drawn
+            elif trace.name not in regions:
+                # not a country: as it was
+                visible.append(True if trace.visible is None else trace.visible)
+            elif group is None or regions[trace.name] == group:
+                visible.append("legendonly")            # in this region: a click away
+            else:
+                visible.append(False)                   # another region: hidden
+        buttons.append(dict(label=group, method="restyle", args=[{"visible": visible}]))
+    # Step 3: start with the first entry, and add the menu when there is more than one
+    for trace, v in zip(fig.data, buttons[0]["args"][0]["visible"]):
+        trace.visible = v
+    if len(groups) > 1:
+        menu = dict(type="dropdown", buttons=buttons, x=1, xanchor="right", y=1.02, yanchor="bottom")
+        fig.update_layout(updatemenus=list(fig.layout.updatemenus) + [menu], margin=dict(t=110))
+    return fig
+```
+
+:::
+
+<!-- cell -->
+
+### The model as functions
+
+Three Key results hold the whole model: the production function, equation (1), and the marginal products,
+equations (2) and (3), which are also the equilibrium prices. We write each one as a Python *function*: a named
+recipe that takes inputs and gives back a result. To let you experiment with the shape of the function, the code
+writes the exponent on capital as $\alpha$ ("alpha"), with the textbook value $\alpha = 1/3$ as the default.
+
+```{python}
+# `def` creates a function. Its inputs are the arguments in parentheses.
+# `A=1.0` gives A a default value, used whenever we do not pass one.
+# The text in triple quotes describes the function.
 def production(K, L, A=1.0, alpha=1 / 3):
-    """Output: Y = A K^alpha L^(1 - alpha)   (equation 1; the textbook uses alpha = 1/3)."""
+    """Output, from the Cobb-Douglas production function.
+
+    Equation (1):  Y = A K^alpha L^(1 - alpha), with alpha = 1/3 in the textbook
+
+    Arguments
+        K     : capital, the number of machines
+        L     : labor, the number of workers
+        A     : productivity, A-bar (1 unless we pass another value)
+        alpha : the exponent on capital (1/3 unless we pass another value)
+    Returns
+        output, Y
+    """
+    # `return` gives back the result; `**` means "to the power of",
+    # and `1 / 3` is simply the number one third
     return A * K ** alpha * L ** (1 - alpha)
+```
 
+The marginal products are the extra output from one more machine and from one more worker. In equilibrium they
+are the rental price of capital and the wage. Both are a share of output per unit of the input.
 
+```{python}
 def mpk(K, L, A=1.0, alpha=1 / 3):
-    """Marginal product of capital: MPK = alpha * Y / K   (equation 2)."""
+    """Marginal product of capital, MPK.
+
+    Equation (2):  MPK = alpha Y / K
+
+    Arguments
+        K, L  : capital and labor
+        A     : productivity, A-bar
+        alpha : the exponent on capital
+    Returns
+        the marginal product of capital, which is r* in equilibrium
+    """
+    # one-third of output per machine
     return alpha * production(K, L, A, alpha) / K
 
 
 def mpl(K, L, A=1.0, alpha=1 / 3):
-    """Marginal product of labor: MPL = (1 - alpha) * Y / L   (equation 3)."""
+    """Marginal product of labor, MPL.
+
+    Equation (3):  MPL = (1 - alpha) Y / L
+
+    Arguments
+        K, L  : capital and labor
+        A     : productivity, A-bar
+        alpha : the exponent on capital
+    Returns
+        the marginal product of labor, which is w* in equilibrium
+    """
+    # two-thirds of output per worker
     return (1 - alpha) * production(K, L, A, alpha) / L
 ```
 
-**Check 1: the production function.** With $\bar{A} = 1$ and 64 workers, Harbor Boatworks should make 32 tons with 8 machines. Doubling both inputs should double output, and doubling capital alone should multiply it by only $2^{1/3}$.
+<!-- cell -->
 
-> **Python note.** An *f-string* such as `f"Y = {Y:.2f}"` inserts the value of a variable into a
-> piece of text; `:.2f` means "show two decimals".
+### Checking the key results
+
+The formulas came from algebra. Now we check them with numbers, one Key result at a time.
+
+**Check 1: the production function.** With $\bar{A} = 1$ and 64 workers, Harbor Boatworks should make 32 tons
+with 8 machines. Doubling both inputs should double output, and doubling capital alone should multiply it by
+only $2^{1/3}$.
 
 ```{python}
+# Harbor Boatworks with 8 machines and 64 workers, then with more inputs.
+# An f-string, f"... {value:.2f}", puts a value into the text;
+# ":.2f" means "two decimals".
 print(f"8 machines and 64 workers:       Y = {production(8, 64):.2f} tons")
+# constant returns to scale: double both inputs, double the output
 print(f"Double both (16 and 128):        Y = {production(16, 128):.2f} tons   (constant returns: twice as much)")
+# diminishing returns: double capital alone, output grows by only 2^(1/3)
 print(f"Double capital only (16 and 64): Y = {production(16, 64):.2f} tons   (2^(1/3) = {2 ** (1 / 3):.3f} times as much)")
+# the 2nd machine adds more than the 8th
 print(f"Gain from the 2nd machine: {production(2, 64) - production(1, 64):.2f} tons; "
       f"from the 8th: {production(8, 64) - production(7, 64):.2f} tons")
 ```
 
-**Check 2: the marginal products.** Equations (2) and (3) came from derivatives. A derivative is the extra output from a very small extra amount of an input, divided by that amount, so we can compute it a second way with a tiny step.
+**Check 2: the marginal products.** Equations (2) and (3) came from derivatives. A derivative is the extra output
+from a very small extra amount of an input, divided by that amount, so we can compute it a second way with a tiny
+step.
 
 ```{python}
+# Step 1: 8 machines, 64 workers, and a tiny step for the derivative
 K, L, small = 8, 64, 0.0001
+# Step 2: MPK in two forms of equation (2), then as (extra output) / (small step)
 print(f"MPK, equation (2), (1/3) Y/K:          {mpk(K, L):.4f}")
 print(f"MPK, equation (2), (1/3) A (L/K)^(2/3): {(1 / 3) * (L / K) ** (2 / 3):.4f}")
 print(f"MPK by a small step in K:              {(production(K + small, L) - production(K, L)) / small:.4f}")
+# Step 3: the same three ways for MPL, equation (3)
 print(f"MPL, equation (3), (2/3) Y/L:          {mpl(K, L):.4f}")
 print(f"MPL, equation (3), (2/3) A (K/L)^(1/3): {(2 / 3) * (K / L) ** (1 / 3):.4f}")
 print(f"MPL by a small step in L:              {(production(K, L + small) - production(K, L)) / small:.4f}")
 ```
 
-**Check 3: the equilibrium, the factor shares and zero profit.** For three different economies, we compute the prices as marginal products and compare them with the closed forms of equation (4). Whatever the economy, capital should get one-third of output, labor two-thirds (equation 5), and nothing should be left as profit (equation 6).
-
-> **Python note.** A `for` loop repeats its indented lines once for each item of a list. Here each item is a
-> group of three numbers in parentheses, a *tuple*, and `for K_bar, L_bar, A in ...` gives the three numbers
-> the names `K_bar`, `L_bar` and `A`. `abs` is the absolute value: it avoids printing a tiny rounding error as `-0.000`.
+**Check 3: the equilibrium, the factor shares and zero profit.** For three different economies, we compute the
+prices as marginal products and compare them with the closed forms of equation (4). Whatever the economy, capital
+should get one-third of output, labor two-thirds (equation 5), and nothing should be left as profit
+(equation 6).
 
 ```{python}
+# The `for` loop runs its indented lines once for each item of the list. Each item is
+# a tuple, three numbers in parentheses, and `for K_bar, L_bar, A in` names them.
 for K_bar, L_bar, A in [(1, 1, 1), (2, 1, 1), (8, 64, 1.5)]:
+    # Step 1: output and the prices r* = MPK and w* = MPL
     Y_star = production(K_bar, L_bar, A)
     r_star, w_star = mpk(K_bar, L_bar, A), mpl(K_bar, L_bar, A)
-    r_formula = (1 / 3) * A * (L_bar / K_bar) ** (2 / 3)          # equation (4)
-    w_formula = (2 / 3) * A * (K_bar / L_bar) ** (1 / 3)          # equation (4)
-    profit = Y_star - r_star * K_bar - w_star * L_bar             # equation (6) says zero
+    # Step 2: the same prices from the closed forms, and the profit left over
+    r_formula = (1 / 3) * A * (L_bar / K_bar) ** (2 / 3)        # equation (4)
+    w_formula = (2 / 3) * A * (K_bar / L_bar) ** (1 / 3)        # equation (4)
+    profit = Y_star - r_star * K_bar - w_star * L_bar           # equation (6) says zero
+    # Step 3: print the prices, the shares (equation 5) and the profit. `abs` is the
+    # absolute value: it avoids printing a tiny rounding error as -0.000.
     print(f"K = {K_bar}, L = {L_bar}, A = {A}:  r* = {r_star:.3f} (formula {r_formula:.3f}),  "
           f"w* = {w_star:.3f} (formula {w_formula:.3f})")
     print(f"     capital share {r_star * K_bar / Y_star:.3f},  labor share {w_star * L_bar / Y_star:.3f},  "
           f"profit {abs(profit):.3f}")
 ```
 
-**Check 4: income per person.** Equation (7) says that output per worker depends only on capital per worker, and the wage is two-thirds of it. We check both for the economy with 8 machines and 64 workers, so $\bar{k} = 1/8$.
+**Check 4: income per person.** Equation (7) says that output per worker depends only on capital per worker, and
+the wage is two-thirds of it. We check both for the economy with 8 machines and 64 workers, so $\bar{k} = 1/8$.
 
 ```{python}
+# Step 1: output per worker, y* = Y*/L, with 8 machines and 64 workers
 K_bar, L_bar = 8, 64
 y_star = production(K_bar, L_bar) / L_bar
+# Step 2: y* from capital per worker alone, equation (7)
 print(f"y* = Y*/L:                       {y_star:.4f}")
 print(f"y* = A k^(1/3), equation (7):    {(K_bar / L_bar) ** (1 / 3):.4f}")
+# Step 3: the wage is the MPL, and also two-thirds of y*
 print(f"w* = MPL:                        {mpl(K_bar, L_bar):.4f}")
 print(f"w* = (2/3) y*:                   {(2 / 3) * y_star:.4f}")
 ```
 
-**Check 5: the comparative statics.** Starting from $\bar{K} = \bar{L} = \bar{A} = 1$, we raise one parameter at a time by 1 percent. The table of elasticities predicts $+1\%$ for everything when $\bar{A}$ rises; $+1/3\%$, $+1/3\%$, $+1/3\%$ and $-2/3\%$ for $Y^*$, $y^*$, $w^*$ and $r^*$ when $\bar{K}$ rises; and $+2/3\%$, $-1/3\%$, $-1/3\%$ and $+2/3\%$ when $\bar{L}$ rises.
+**Check 5: the comparative statics.** Starting from $\bar{K} = \bar{L} = \bar{A} = 1$, we raise one parameter at a
+time by 1 percent. The table of elasticities predicts $+1\%$ for everything when $\bar{A}$ rises; $+1/3\%$,
+$+1/3\%$, $+1/3\%$ and $-2/3\%$ for $Y^*$, $y^*$, $w^*$ and $r^*$ when $\bar{K}$ rises; and $+2/3\%$, $-1/3\%$,
+$-1/3\%$ and $+2/3\%$ when $\bar{L}$ rises.
 
 ```{python}
-Y0, w0, r0 = production(1, 1), mpl(1, 1), mpk(1, 1)          # the starting point: y0 = Y0 because L = 1
+# Step 1: the starting point; y0 = Y0 because L = 1
+Y0, w0, r0 = production(1, 1), mpl(1, 1), mpk(1, 1)
+# Step 2: raise A, then K, then L by 1%, and recompute the equilibrium
 for name, K_bar, L_bar, A in [("A", 1, 1, 1.01), ("K", 1.01, 1, 1), ("L", 1, 1.01, 1)]:
     Y_star = production(K_bar, L_bar, A)
     y_star = Y_star / L_bar
     w_star, r_star = mpl(K_bar, L_bar, A), mpk(K_bar, L_bar, A)
+    # Step 3: percentage changes; ":+.3f" shows the sign and three decimals
     print(f"1% higher {name}:  Y* {100 * (Y_star / Y0 - 1):+.3f}%,  y* {100 * (y_star / Y0 - 1):+.3f}%,  "
           f"w* {100 * (w_star / w0 - 1):+.3f}%,  r* {100 * (r_star / r0 - 1):+.3f}%")
 ```
@@ -626,22 +745,29 @@ for name, K_bar, L_bar, A in [("A", 1, 1, 1.01), ("K", 1.01, 1, 1), ("L", 1, 1.0
 The answers are close to the elasticities but not exactly equal, because an elasticity describes very small
 changes and 1 percent is small but not zero.
 
-**Check 6: development accounting with Islandia.** As in the example, Islandia has one-eighth of the benchmark's capital per person and one-eighth of its income. The code calls the benchmark "U.S.", as the data do; in the story it is Mainland. Equation (8) should give a TFP of $1/4$, equation (9) should split the income gap of 8 into $4 \times 2$, and a machine should earn the same marginal product in the two countries.
-
-> **Python note.** `np.log` is the natural logarithm. The shares of the log gap add up to one because the
-> log of a product is the sum of the logs.
+**Check 6: development accounting with Islandia.** As in the example, Islandia has one-eighth of the benchmark's
+capital per person and one-eighth of its income. The code calls the benchmark "U.S.", as the data do; in the
+story it is Mainland. Equation (8) should give a TFP of $1/4$, equation (9) should split the income gap of 8 into
+$4 \times 2$, and a machine should earn the same marginal product in the two countries.
 
 ```{python}
-k_poor, y_poor = 1 / 8, 1 / 8                                   # relative to the United States = 1
-predicted = k_poor ** (1 / 3)                                   # with U.S. productivity
-A_poor = y_poor / k_poor ** (1 / 3)                             # equation (8)
+# Step 1: Islandia's capital and income per person, and the TFP that fits them
+k_poor, y_poor = 1 / 8, 1 / 8                   # relative to the United States = 1
+predicted = k_poor ** (1 / 3)                   # with U.S. productivity
+A_poor = y_poor / k_poor ** (1 / 3)             # equation (8)
 capital_factor = (1 / k_poor) ** (1 / 3)
+# Step 2: split the income gap into a TFP factor and a capital factor, equation (9)
 print(f"Predicted income with U.S. TFP: {predicted:.3f};  implied TFP: {A_poor:.3f}")
 print(f"Income gap {1 / y_poor:.1f} = TFP factor {1 / A_poor:.1f} x capital factor {capital_factor:.1f}   (equation 9)")
+# Step 3: `np.log` is the natural logarithm. The shares of the log gap add up to one,
+# because the log of a product is the sum of the logs.
 print(f"Share of the log gap due to capital: {np.log(capital_factor) / np.log(1 / y_poor):.3f}")
+# Step 4: the return on a machine, without and with Islandia's lower TFP
 print(f"MPK poor / MPK U.S. with equal TFP: {mpk(k_poor, 1) / mpk(1, 1):.2f}")
 print(f"MPK poor / MPK U.S. with its TFP:   {mpk(k_poor, 1, A_poor) / mpk(1, 1):.2f}")
 ```
+
+<!-- cell -->
 
 ## The production function and its equilibrium
 

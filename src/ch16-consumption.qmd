@@ -32,73 +32,6 @@ This chapter asks how a household *chooses* to spend over its lifetime. By the e
 
 <!-- cell -->
 
-## Setup
-
-We first load the Python libraries we need. You only have to run this cell once.
-
-> **Python note.** `import` loads a *library*, a toolbox written by other people. We give each
-> library a short nickname, for example `np` for NumPy, so that the code stays short. Text after
-> a `#` is a *comment*: Python ignores it, and it is there for human readers. The `try ... except`
-> block runs one Colab-only line and simply skips it anywhere else.
-
-```{python}
-# Libraries used in this chapter
-import numpy as np                    # numbers and arrays
-import pandas as pd                   # data tables
-import plotly.express as px           # quick charts from data tables
-import plotly.graph_objects as go     # charts built piece by piece (model figures)
-import plotly.io as pio
-from ipywidgets import interact, FloatSlider, ToggleButtons, SelectMultiple
-
-# One light blue/green look for every chart
-BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
-pio.templates.default = "plotly_white"
-pio.templates["plotly_white"].layout.update(width=860, height=480)   # same size in Colab and on the website
-px.defaults.color_discrete_sequence = [BLUE, TEAL, GREEN, "#5aa0d8", "#0b4f47"]
-WIDE = {"description_width": "initial"}         # show the full slider labels
-
-# Colab only: let Plotly charts appear inside the interactive widgets
-try:
-    import google.colab
-    google.colab.output.enable_custom_widget_manager()
-except ImportError:
-    pass                                        # not running in Colab: nothing to do
-
-# The data files of this chapter live in the book's GitHub repository
-DATA_URL = "https://raw.githubusercontent.com/quarcs-lab/macro102-site/main/data/ch16/"
-```
-
-The next cell defines a helper that only the book website needs. Run it and move on.
-
-```{python}
-#| kind: helper
-# @title Helper for the website versions (run this cell; you do not need to read it)
-def slider_figure(make_figure, name, values, start, label=None):
-    """Precompute make_figure(name=value) for every value and join the results with one slider.
-
-    The website cannot run Python, so each model figure gets this precomputed version.
-    """
-    figures = [make_figure(**{name: v}) for v in values]
-    first = values.index(start)
-    fig = go.Figure(layout=figures[first].layout)
-    owner = []                                  # which figure each trace comes from
-    for i, f in enumerate(figures):
-        for trace in f.data:
-            trace.visible = (i == first)
-            fig.add_trace(trace)
-            owner.append(i)
-    steps = []
-    for i, f in enumerate(figures):
-        layout = {"title": f.layout.title.to_plotly_json(),
-                  "annotations": [a.to_plotly_json() for a in f.layout.annotations],
-                  "shapes": [s.to_plotly_json() for s in f.layout.shapes]}
-        visible = [o == i for o in owner]
-        steps.append(dict(method="update", label=str(values[i]), args=[{"visible": visible}, layout]))
-    fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
-                                    currentvalue=dict(prefix=(label or name) + " = "))])
-    return fig
-```
-
 ## Model overview
 
 Meet a young islander of **Islandia**. He is still a student and earns little today, but once he starts working he expects to earn five times as much. Should he live on his small income now, or borrow against his richer future? Earlier chapters made consumption a fixed share of income; this chapter turns it into a choice, and we follow this islander through every step. The figures and the code of this notebook call him Irving, after the economist Irving Fisher, who first studied this choice.
@@ -115,7 +48,7 @@ Meet a young islander of **Islandia**. He is still a student and earns little to
 1. [The two-period consumption model](#the-two-period-consumption-model): the [assumptions](#assumptions), [solving the model](#solving-the-model) step by step (lifetime budget, Euler equation, consumption plan, interest rate), and [what the model predicts](#what-the-model-predicts).
 2. [Permanent income and the life cycle](#permanent-income-and-the-life-cycle): the same logic over many periods, and saving for retirement.
 3. [Taxes, borrowing constraints and uncertainty](#taxes-borrowing-constraints-and-uncertainty): Ricardian equivalence, the islander who cannot borrow, the random walk and precautionary saving.
-4. [The model in code](#the-model-in-code): the key results as Python functions, checked with numbers. The figures below reuse them.
+4. [Model in code](#model-in-code): the key results as Python functions, checked with numbers. The figures below reuse them.
 
 **Notation.** As in the textbook, a bar marks total wealth $\bar{X}$, a number the islander takes as given and cannot change; the other givens ($f_{\text{today}}$, the incomes, $R$ and $\beta$) carry no bar, and the model determines consumption.
 
@@ -555,99 +488,295 @@ Now $c_{\text{future}}$ is $5 - c_{\text{today}}$ or $7 - c_{\text{today}}$. The
 
 <!-- cell -->
 
-### The model in code
+## Model in code
 
-We now turn the key results into Python functions. Each function's description names the equation it computes, and the cells after it check the algebra above with numbers. The figures below reuse these functions.
+Now we turn the Key results into Python. The section has three parts: the setup (folded, because it is the
+same in every chapter), the model as functions, and numerical checks of the Key results. Run its cells once,
+in order. Every later section of the notebook reuses them.
 
-> **Python note.** `def` creates a *function*: a named recipe that takes inputs (the *arguments*) and gives back a
-> result with `return`. Writing `form="log"` gives the argument a *default value*, used whenever we do not pass
-> one. `if ... :` runs the indented line only when the condition is true; otherwise Python moves on.
-> `np.log` and `np.sqrt` work on a single number and on a whole array of numbers.
+<!-- cell -->
+
+### Setup
+
+Run the setup cells once, before anything else. They load the Python libraries, give every chart the same look,
+store the address of the chapter's data and define a helper that only the book website needs. You can use the
+notebook without reading them; open the box if you are curious.
+
+<!-- cell -->
+
+::: {.callout-note .mic-fold collapse="true" title="Show the setup code"}
+
+The first cell loads the libraries and sets the look of the charts. Its comments explain each step.
 
 ```{python}
+#| kind: folded
+# @title Setup: libraries, chart colors and the data location
+# Text after a "#" is a comment: Python ignores it, it is there for human readers.
+
+# Step 1: load the libraries. `import` loads a library, a toolbox written by
+# other people, and `as np` gives it a short nickname, so the code stays short.
+import numpy as np                    # numbers and arrays
+import pandas as pd                   # data tables
+import plotly.express as px           # quick charts from data tables
+import plotly.graph_objects as go     # charts built piece by piece (model figures)
+import plotly.io as pio               # settings shared by every chart
+# sliders, buttons and multiple-choice lists for the interactive figures
+from ipywidgets import interact, FloatSlider, ToggleButtons, SelectMultiple
+
+# Step 2: one light blue/green look for every chart
+BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
+pio.templates.default = "plotly_white"
+# the same chart size in Colab and on the website
+pio.templates["plotly_white"].layout.update(width=860, height=480)
+px.defaults.color_discrete_sequence = [BLUE, TEAL, GREEN, "#5aa0d8", "#0b4f47"]
+WIDE = {"description_width": "initial"}         # show the full slider labels
+
+# Step 3, Colab only: let Plotly charts appear inside the interactive widgets.
+# `try` runs the indented lines; if the import fails (we are not in Colab),
+# `except` skips them.
+try:
+    import google.colab
+    google.colab.output.enable_custom_widget_manager()
+except ImportError:
+    pass                                        # not running in Colab: nothing to do
+
+# Step 4: the data files of this chapter live in the book's GitHub repository
+DATA_URL = "https://raw.githubusercontent.com/quarcs-lab/macro102-site/main/data/ch16/"
+```
+
+The website cannot run Python, so each interactive figure also gets a version with a precomputed slider. The next
+helper builds those versions. Run it and move on.
+
+```{python}
+#| kind: folded
+# @title Helper for the website versions (run this cell; you do not need to read it)
+def slider_figure(make_figure, name, values, start, label=None):
+    """Join precomputed versions of a figure with one slider (the website cannot run Python).
+
+    Arguments
+        make_figure : the function that draws the figure, e.g. flow_utility
+        name        : the argument the slider moves, e.g. "c"
+        values      : the values of that argument to precompute
+        start       : the value shown first
+        label       : the slider's label (the argument name if None)
+    Returns
+        one Plotly figure with all versions and a slider that shows one at a time
+    """
+    # Step 1: draw the figure once for every value
+    figures = [make_figure(**{name: v}) for v in values]
+    first = values.index(start)
+    # Step 2: copy every curve into one figure; only the start value's are visible
+    fig = go.Figure(layout=figures[first].layout)
+    owner = []                                  # which figure each trace comes from
+    for i, f in enumerate(figures):
+        for trace in f.data:
+            trace.visible = (i == first)
+            fig.add_trace(trace)
+            owner.append(i)
+    # Step 3: one slider step per value: its curves, title, labels and shapes
+    steps = []
+    for i, f in enumerate(figures):
+        layout = {"title": f.layout.title.to_plotly_json(),
+                  "annotations": [a.to_plotly_json() for a in f.layout.annotations],
+                  "shapes": [s.to_plotly_json() for s in f.layout.shapes]}
+        visible = [o == i for o in owner]
+        steps.append(dict(method="update", label=str(values[i]), args=[{"visible": visible}, layout]))
+    fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
+                                    currentvalue=dict(prefix=(label or name) + " = "))])
+    return fig
+```
+
+:::
+
+<!-- cell -->
+
+### The model as functions
+
+The model rests on lifetime utility, equation (1), and on what the islander can afford, equation (2). We write
+each piece as a Python *function*: a named recipe that takes inputs and gives back a result. The first three
+functions describe preferences: flow utility, marginal utility and lifetime utility.
+
+```{python}
+# `def` creates a function. Its inputs are the arguments in parentheses.
+# `form="log"` gives `form` a default value, used whenever we do not pass one.
+# The text in triple quotes describes the function.
 def utility(c, form="log"):
-    """Flow utility u(c) (Fig. 16.1): log c, or the square root of c."""
+    """Flow utility u(c), the curve of Fig. 1.
+
+    Log or square-root utility:  u(c) = log c,  or  u(c) = sqrt(c)
+
+    Arguments
+        c    : consumption (one number or a whole array of numbers)
+        form : "log" (the default) or "square root"
+    Returns
+        flow utility u(c)
+    """
+    # `if ... :` runs the indented line only when the condition is true.
+    # `return` gives back the result; np.log and np.sqrt work on a single
+    # number and on a whole array alike.
     if form == "log":
         return np.log(c)
     return np.sqrt(c)
 
 
 def marginal_utility(c, form="log"):
-    """Marginal utility u'(c): 1/c for log utility, 1/(2 sqrt c) for the square root."""
+    """Marginal utility u'(c), the slope of the utility curve.
+
+    Equation (3) uses it:  u'(c) = 1/c (log),  or  u'(c) = 1/(2 sqrt(c)) (square root)
+
+    Arguments
+        c    : consumption (one number or an array)
+        form : "log" (the default) or "square root"
+    Returns
+        marginal utility u'(c)
+    """
+    # the slope falls as c rises: diminishing marginal utility
     if form == "log":
         return 1 / c
     return 1 / (2 * np.sqrt(c))
 
 
 def lifetime_utility(c_today, c_future, beta=1.0, form="log"):
-    """Lifetime utility U = u(c_today) + beta u(c_future)   (equation 1)."""
+    """Lifetime utility of a consumption plan.
+
+    Equation (1):  U = u(c_today) + beta u(c_future)
+
+    Arguments
+        c_today, c_future : consumption today and in the future
+        beta              : patience, the weight on future utility (1 unless we pass another)
+        form              : "log" (the default) or "square root"
+    Returns
+        lifetime utility, U
+    """
+    # future utility counts with the weight beta
     return utility(c_today, form) + beta * utility(c_future, form)
 ```
 
-The next three functions hold the solution with log utility. A function can `return` two results at once, separated by a comma.
+The next three functions hold the solution with log utility: total wealth, the consumption plan and the interest
+rate that goes with a growth rate of consumption.
 
 ```{python}
 def total_wealth(f_today, y_today, y_future, R):
-    """Total wealth X = f_today + y_today + y_future / (1 + R)   (equation 2)."""
+    """Total wealth, financial plus human wealth.
+
+    Equation (2):  X-bar = f_today + y_today + y_future / (1 + R)
+
+    Arguments
+        f_today            : financial wealth today
+        y_today, y_future  : labor income today and in the future
+        R                  : the real interest rate
+    Returns
+        total wealth, X-bar
+    """
+    # future income counts at its present value, divided by 1 + R
     return f_today + y_today + y_future / (1 + R)
 
 
 def consumption_plan(f_today, y_today, y_future, R, beta=1.0):
-    """Irving's choice with log utility: c_today = X/(1 + beta), c_future = beta (1 + R) c_today   (equations 5 and 6)."""
+    """Irving's best consumption plan with log utility.
+
+    Equations (5) and (6):  c_today = X-bar / (1 + beta),  c_future = beta (1 + R) c_today
+
+    Arguments
+        f_today            : financial wealth today
+        y_today, y_future  : labor income today and in the future
+        R                  : the real interest rate
+        beta               : patience (1 unless we pass another value)
+    Returns
+        c_today, c_future : consumption today and in the future
+    """
+    # Step 1: total wealth, equation (2)
     X = total_wealth(f_today, y_today, y_future, R)
+    # Step 2: consume the share 1/(1 + beta) of it today, equation (5)
     c_today = X / (1 + beta)
+    # Step 3: the Euler equation (4) gives the future; a function can `return`
+    # two results at once, separated by a comma
     return c_today, beta * (1 + R) * c_today
 
 
 def euler_interest_rate(g, beta=1.0):
-    """The real interest rate that makes consumption grow at rate g: R = (1 + g) / beta - 1   (equation 7)."""
+    """The real interest rate that makes consumption grow at rate g.
+
+    Equation (7):  R = (1 + g) / beta - 1
+
+    Arguments
+        g    : the growth rate of consumption, g_c
+        beta : patience (1 unless we pass another value)
+    Returns
+        the real interest rate, R
+    """
+    # equation (4) solved for R, with c_future / c_today = 1 + g
     return (1 + g) / beta - 1
 ```
 
-**The shared baseline.** The textbook gives no numbers for its diagrams, so every figure of this notebook starts from the illustrative Irving of the notation paragraph: $f_{\text{today}}=0$, $y_{\text{today}}=1$, $y_{\text{future}}=5$, and $\beta=1$, $R=0$, as in the caption of the textbook's Fig. 16.2.
+<!-- cell -->
 
-> **Python note.** An *f-string* such as `f"X = {X:.2f}"` inserts the value of a variable into a piece of text;
-> `:.2f` means "show two decimals". Writing `c_today, c_future = ...` unpacks the two results of the function.
+### Checking the key results
+
+**The shared baseline.** The textbook gives no numbers for its diagrams, so every figure of this notebook starts
+from the illustrative Irving of the notation paragraph: $f_{\text{today}}=0$, $y_{\text{today}}=1$,
+$y_{\text{future}}=5$, and $\beta=1$, $R=0$, as in the caption of the textbook's Fig. 16.2. We compute his total
+wealth, his plan and his lifetime utility.
 
 ```{python}
+# Step 1: the shared baseline; one line can give values to three names at once
 f_today, y_today, y_future = 0.0, 1.0, 5.0      # the shared baseline
+# Step 2: total wealth (2) and the plan (5) with R = 0. `c_today, c_future = ...`
+# unpacks the two results of the function into two names.
 X = total_wealth(f_today, y_today, y_future, R=0.0)
 c_today, c_future = consumption_plan(f_today, y_today, y_future, R=0.0)
+# Step 3: show the results. An f-string, f"... {X:.2f}", puts a value into the
+# text; ":.2f" means "two decimals", and ":+.2f" also shows the sign.
 print(f"Total wealth X = {X:.2f}  (financial {f_today:.2f} + human {X - f_today:.2f})")
 print(f"Consumption today {c_today:.2f}, in the future {c_future:.2f}")
 print(f"Saving today = y_today - c_today = {y_today - c_today:+.2f}  (negative: Irving borrows)")
 print(f"Lifetime utility U = {lifetime_utility(c_today, c_future):.3f}")
 ```
 
-Irving earns 1 today but consumes 3: he borrows 2 against his future income and repays it from the 5 he earns later.
+Irving earns 1 today but consumes 3: he borrows 2 against his future income and repays it from the 5 he earns
+later.
 
-**Check 1: the solution without calculus.** The formula $c_{\text{today}}=\bar{X}/(1+\beta)$ came from the Euler equation. We can also let the computer *search* for the best choice. Every $c_{\text{today}}$ on a fine grid leaves $c_{\text{future}}=(1+R)(\bar{X}-c_{\text{today}})$ for the future; we compute lifetime utility for each one and pick the largest. We use $R=0.05$, so that the future is not a copy of today, and try a patient ($\beta = 1$) and a less patient ($\beta = 0.9$) Irving. For each, we also plug the plan into both sides of the Euler equation (3) and of the budget (2).
-
-> **Python note.** `np.linspace(a, b, n)` creates `n` evenly spaced numbers from `a` to `b`. Arithmetic on an array
-> works element by element, so `lifetime_utility` returns one value per grid point. `np.argmax` gives the
-> *position* of the largest value, and `grid[best]` picks the matching number. A `for` loop runs its indented
-> lines once for each element of a list, here once for each value of `beta`.
+**Check 1: the solution without calculus.** The formula $c_{\text{today}}=\bar{X}/(1+\beta)$ came from the Euler
+equation. We can also let the computer *search* for the best choice. Every $c_{\text{today}}$ on a fine grid
+leaves $c_{\text{future}}=(1+R)(\bar{X}-c_{\text{today}})$ for the future; we compute lifetime utility for each
+one and pick the largest. We use $R=0.05$, so that the future is not a copy of today, and try a patient
+($\beta = 1$) and a less patient ($\beta = 0.9$) Irving. For each, we also plug the plan into both sides of the
+Euler equation (3) and of the budget (2).
 
 ```{python}
+# Step 1: total wealth at R = 5%, and a grid of candidates for c_today.
+# np.linspace(a, b, n) makes n evenly spaced numbers from a to b.
 R = 0.05
 X = total_wealth(f_today, y_today, y_future, R)
 grid = np.linspace(0.01, X - 0.01, 100001)          # candidate values of c_today
+# Step 2: a `for` loop runs its indented lines once for each element of the
+# list, here once for each value of beta
 for beta in [1.0, 0.9]:
-    U = lifetime_utility(grid, (1 + R) * (X - grid), beta)   # lifetime utility of each candidate
+    # arithmetic on an array works element by element, so U has one lifetime
+    # utility per candidate; np.argmax gives the position of the largest one
+    U = lifetime_utility(grid, (1 + R) * (X - grid), beta)
     best = np.argmax(U)
     c_today, c_future = consumption_plan(f_today, y_today, y_future, R, beta)
+    # Step 3: compare; grid[best] is the candidate at that position
     print(f"beta = {beta}: grid search c_today = {grid[best]:.4f},  formula (5) X/(1 + beta) = {c_today:.4f}")
+    # both sides of the Euler equation (3), (4), and of the budget (2)
     print(f"   Euler (3): u'(c_today) = {marginal_utility(c_today):.4f},  "
           f"beta (1 + R) u'(c_future) = {beta * (1 + R) * marginal_utility(c_future):.4f}")
     print(f"   Euler (4): c_future / c_today = {c_future / c_today:.4f},  beta (1 + R) = {beta * (1 + R):.4f}")
     print(f"   Budget (2): c_today + c_future/(1 + R) = {c_today + c_future / (1 + R):.4f},  X = {X:.4f}")
 ```
 
-The search and the formula agree, and both sides of the Euler equation and of the budget are equal. With $\beta = 1$ and $R=0.05$ consumption grows by 5 percent from today to the future, exactly $\beta(1+R)=1.05$. The less patient Irving spends more today and lets consumption *fall* a little, since $0.9 \times 1.05 = 0.945 < 1$.
+The search and the formula agree, and both sides of the Euler equation and of the budget are equal. With
+$\beta = 1$ and $R=0.05$ consumption grows by 5 percent from today to the future, exactly $\beta(1+R)=1.05$. The
+less patient Irving spends more today and lets consumption *fall* a little, since $0.9 \times 1.05 = 0.945 < 1$.
 
-**Check 2: the interest rate for 2 percent growth.** Equation (7) gives the real interest rate that makes consumption grow by 2 percent a year. We compute it for $\beta = 1$ and $\beta = 0.99$, compare it with the log approximation $R \approx g_c - \log\beta$, and plug it back into the Euler equation (4).
+**Check 2: the interest rate for 2 percent growth.** Equation (7) gives the real interest rate that makes
+consumption grow by 2 percent a year. We compute it for $\beta = 1$ and $\beta = 0.99$, compare it with the log
+approximation $R \approx g_c - \log\beta$, and plug it back into the Euler equation (4).
 
 ```{python}
+# For a patient and a slightly less patient Irving: R from equation (7), its
+# log approximation, and the growth of consumption that this R implies
 g = 0.02                                             # growth of consumption per year
 for beta in [1.0, 0.99]:
     R_needed = euler_interest_rate(g, beta)
@@ -657,92 +786,124 @@ for beta in [1.0, 0.99]:
           f"implied consumption growth = {100 * growth:.2f}%")
 ```
 
-**Check 3: the elasticities.** The table of comparative statics predicts that a 1 percent rise in $1+R$ changes $c_{\text{today}}$ by $-\sigma$ percent and $c_{\text{future}}$ by $1-\sigma$ percent, and that a 1 percent rise in $\beta$ lowers $c_{\text{today}}$ by $\beta/(1+\beta) = 0.5$ percent. We raise each by 1 percent and compare.
+**Check 3: the elasticities.** The table of comparative statics predicts that a 1 percent rise in $1+R$ changes
+$c_{\text{today}}$ by $-\sigma$ percent and $c_{\text{future}}$ by $1-\sigma$ percent, and that a 1 percent rise
+in $\beta$ lowers $c_{\text{today}}$ by $\beta/(1+\beta) = 0.5$ percent. We raise each by 1 percent and compare.
 
 ```{python}
+# Step 1: the plan at R = 5%, then with 1 + R and with beta 1 percent higher
 R = 0.05
 base_today, base_future = consumption_plan(f_today, y_today, y_future, R)
 new_R = 1.01 * (1 + R) - 1                           # 1 + R is 1 percent higher
 R_today, R_future = consumption_plan(f_today, y_today, y_future, new_R)
 beta_today, beta_future = consumption_plan(f_today, y_today, y_future, R, beta=1.01)
+# Step 2: sigma, the share of future income in total wealth
 sigma = (y_future / (1 + R)) / total_wealth(f_today, y_today, y_future, R)
+# Step 3: the changes in percent, next to the predictions
 print(f"Share of future income in total wealth: sigma = {sigma:.3f}")
 print(f"1% higher 1 + R: c_today {100 * (R_today / base_today - 1):+.3f}%  (predicted {-sigma:+.3f}%)")
 print(f"                 c_future {100 * (R_future / base_future - 1):+.3f}%  (predicted {1 - sigma:+.3f}%)")
 print(f"1% higher beta:  c_today {100 * (beta_today / base_today - 1):+.3f}%  (predicted -0.500%)")
 ```
 
-The numbers are close to the predictions but not identical for $c_{\text{today}}$, because an elasticity describes very
-small changes and 1 percent is small but not zero. The effect on $c_{\text{future}}$ is exact here, since
+The numbers are close to the predictions but not identical for $c_{\text{today}}$, because an elasticity describes
+very small changes and 1 percent is small but not zero. The effect on $c_{\text{future}}$ is exact here, since
 $c_{\text{future}}$ is a straight-line function of $1+R$.
 
-**Check 4: income and substitution effects.** First a grid search confirms the square-root formula $c_{\text{today}} = \bar{X}/[1+\beta^2(1+R)]$. Then we take an Irving whose wealth is all financial, $f_{\text{today}} = 6$ with no labor income, and raise the interest rate. With log utility the two effects cancel, so $c_{\text{today}}$ should not move. With square-root utility the substitution effect wins, so it should fall.
+**Check 4: income and substitution effects.** First a grid search confirms the square-root formula
+$c_{\text{today}} = \bar{X}/[1+\beta^2(1+R)]$. Then we take an Irving whose wealth is all financial,
+$f_{\text{today}} = 6$ with no labor income, and raise the interest rate. With log utility the two effects
+cancel, so $c_{\text{today}}$ should not move. With square-root utility the substitution effect wins, so it
+should fall.
 
 ```{python}
+# Step 1: grid search with square-root utility at R = 5%, against the formula
 R = 0.05
 X = total_wealth(f_today, y_today, y_future, R)
 grid = np.linspace(0.01, X - 0.01, 100001)
 U = lifetime_utility(grid, (1 + R) * (X - grid), 1.0, "square root")
 print(f"Square root, baseline: grid search c_today = {grid[np.argmax(U)]:.4f},  "
       f"formula X/(1 + beta^2 (1 + R)) = {X / (1 + 1.0 ** 2 * (1 + R)):.4f}")
+# Step 2: all wealth financial; raise R and watch c_today under both utilities.
+# `[0]` keeps only the first of the two results, c_today.
 print("All wealth financial (f_today = 6, no labor income), beta = 1:")
 for rate in [0.0, 0.05, 0.10]:
     log_today = consumption_plan(6.0, 0.0, 0.0, rate)[0]
-    root_today = 6.0 / (1 + (1 + rate))
+    root_today = 6.0 / (1 + (1 + rate))            # the square-root formula, beta = 1
     print(f"   R = {rate:.2f}: c_today = {log_today:.3f} with log utility,  {root_today:.3f} with square root")
 ```
 
-**Check 5: permanent income and the life cycle.** We follow the worker of the second block, 40 working periods and 20 in retirement, with $R = 0$. Consumption comes from equation (8); wealth is updated period by period. It should peak at 13.3 on the day of retirement and end at exactly zero. Then we give him an extra 0.01 in a single year: consumption should rise by $0.01/60$, an MPC of $1/60$.
-
-> **Python note.** `np.zeros(T)` makes an array of `T` zeros, and `income[:W] = 1.0` sets its first `W` elements to 1.
-> `.sum()` adds up all elements of an array. `range(T)` counts `0, 1, ..., T - 1`, and `income[t]` is element number `t`.
-> `max(a, b)` is the larger of two numbers.
+**Check 5: permanent income and the life cycle.** We follow the worker of the second block, 40 working periods
+and 20 in retirement, with $R = 0$. Consumption comes from equation (8); wealth is updated period by period. It
+should peak at 13.3 on the day of retirement and end at exactly zero. Then we give him an extra 0.01 in a single
+year: consumption should rise by $0.01/60$, an MPC of $1/60$.
 
 ```{python}
-T, W = 60, 40                                        # periods of life, of which the first 40 are working years
+# Step 1: income over the life. np.zeros(T) makes an array of T zeros, and
+# `income[:W] = 1.0` sets its first W elements to 1.
+# 60 periods of life, of which the first 40 are working years
+T, W = 60, 40
 income = np.zeros(T)
-income[:W] = 1.0                                     # labor income 1 while working, 0 in retirement
+# labor income 1 while working, 0 in retirement
+income[:W] = 1.0
+# Step 2: consumption from equation (8); `.sum()` adds up all elements
 c = income.sum() / T                                 # equation (8) with f_today = 0
+# Step 3: follow wealth period by period. `range(T)` counts 0, 1, ..., T - 1,
+# `income[t]` is element number t, and `max(a, b)` is the larger of two numbers.
 wealth, peak = 0.0, 0.0
 for t in range(T):
-    wealth = wealth + income[t] - c                  # R = 0: saving adds to wealth one for one
+    wealth = wealth + income[t] - c      # R = 0: saving adds to wealth one for one
     peak = max(peak, wealth)
 print(f"Consumption every period c = {c:.3f},  saving while working = {1 - c:.3f}")
 print(f"Peak wealth = {peak:.2f}  (formula W (T - W)/T = {W * (T - W) / T:.2f}),  wealth at the end = {wealth:.6f}")
-income[10] = income[10] + 0.01                       # a one-time extra 0.01 in period 10
+# Step 4: a one-time extra 0.01 in period 10, and the MPC out of it
+income[10] = income[10] + 0.01
 print(f"MPC out of a one-time windfall = {(income.sum() / T - c) / 0.01:.4f}  (1/T = {1 / T:.4f})")
 ```
 
-**Check 6: Ricardian equivalence and the borrowing constraint.** A tax cut of 0.01 today, repaid with interest by a tax rise later, should leave total wealth unchanged. Then we apply equation (9) to two Irvings: the baseline one, whose discounted future income is larger than what he has today, and one with income 4 today and 2 in the future, who wants to save anyway.
-
-> **Python note.** `y_later / (1 + R) > cash` is a *comparison*: it gives `True` or `False`. `min(a, b)` is the smaller
-> of two numbers. Writing `for y_now, y_later in [(1.0, 5.0), (4.0, 2.0)]` hands the loop one pair at a time and
-> unpacks it into two names.
+**Check 6: Ricardian equivalence and the borrowing constraint.** A tax cut of 0.01 today, repaid with interest by
+a tax rise later, should leave total wealth unchanged. Then we apply equation (9) to two Irvings: the baseline
+one, whose discounted future income is larger than what he has today, and one with income 4 today and 2 in the
+future, who wants to save anyway.
 
 ```{python}
+# Step 1: Ricardian equivalence: total wealth before and after the tax cut
 R, cut = 0.05, 0.01
 X_before = total_wealth(f_today, y_today, y_future, R)
-X_after = total_wealth(f_today, y_today + cut, y_future - (1 + R) * cut, R)   # after-tax incomes
+# after-tax incomes: 0.01 more today, 0.01 (1 + R) less in the future
+X_after = total_wealth(f_today, y_today + cut, y_future - (1 + R) * cut, R)
 print(f"Tax cut today, tax rise later: total wealth {X_before:.6f} before, {X_after:.6f} after")
+# Step 2: the borrowing constraint, equation (9). The loop hands over one pair
+# of incomes at a time and unpacks it into the two names y_now and y_later.
 for y_now, y_later in [(1.0, 5.0), (4.0, 2.0)]:
     plan = consumption_plan(0.0, y_now, y_later, R)[0]
     cash = 0.0 + y_now                               # f_today + y_today
+    # a comparison such as `>` gives True or False: does the constraint bind?
     binds = y_later / (1 + R) > cash
+    # `min(a, b)` is the smaller of two numbers: c_today from equation (9)
     print(f"y_today = {y_now}, y_future = {y_later}: plan {plan:.3f}, cash today {cash:.3f}, "
           f"binds: {binds}, c_today = {min(plan, cash):.3f}")
 ```
 
-**Check 7: precautionary saving.** Future income is 3 or 7 with equal chance, instead of a sure 5, with $R = 0$ and $\beta = 1$. A grid search over $c_{\text{today}}$ maximizes expected lifetime utility. It should find $(9-\sqrt{17})/2 \approx 2.44$, below the 3 of the sure case, and the plan should satisfy the expected Euler equation.
+**Check 7: precautionary saving.** Future income is 3 or 7 with equal chance, instead of a sure 5, with $R = 0$
+and $\beta = 1$. A grid search over $c_{\text{today}}$ maximizes expected lifetime utility. It should find
+$(9-\sqrt{17})/2 \approx 2.44$, below the 3 of the sure case, and the plan should satisfy the expected Euler
+equation.
 
 ```{python}
-grid = np.linspace(0.01, 3.99, 100001)               # c_today below 4 keeps consumption positive in the bad case
+# Step 1: candidates for c_today; below 4 keeps consumption positive in the bad case
+grid = np.linspace(0.01, 3.99, 100001)
 saving = y_today - grid                              # f_today = 0 and R = 0
+# Step 2: lifetime utility with a sure income, and expected lifetime utility
+# with income 3 or 7, each with probability 1/2
 sure = np.log(grid) + np.log(5.0 + saving)
 risky = np.log(grid) + 0.5 * np.log(3.0 + saving) + 0.5 * np.log(7.0 + saving)
+# Step 3: the best candidate in each case, and the difference
 c_sure, c_risky = grid[np.argmax(sure)], grid[np.argmax(risky)]
 print(f"Sure future income 5:     c_today = {c_sure:.4f}")
 print(f"Future income 3 or 7:     c_today = {c_risky:.4f}   (formula (9 - sqrt 17)/2 = {(9 - np.sqrt(17)) / 2:.4f})")
 print(f"Precautionary saving = {c_sure - c_risky:.4f}")
+# Step 4: the expected Euler equation, 1/c_today = average of 1/c_future
 low, high = 3.0 + y_today - c_risky, 7.0 + y_today - c_risky
 print(f"Expected Euler: 1/c_today = {1 / c_risky:.4f},  average of 1/c_future = {0.5 / low + 0.5 / high:.4f}")
 ```

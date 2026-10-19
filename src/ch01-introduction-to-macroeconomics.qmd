@@ -28,143 +28,6 @@ facts, and use the model for experiments. By the end of this chapter you will be
 
 <!-- cell -->
 
-## Setup
-
-We first load the Python libraries we need. You only have to run this cell once.
-
-> **Python note.** `import` loads a *library*, a toolbox written by other people. We give each
-> library a short nickname, for example `np` for NumPy, so that the code stays short. Text after
-> a `#` is a *comment*: Python ignores it, and it is there for human readers. The `try ... except`
-> block runs one Colab-only line and simply skips it anywhere else.
-
-```{python}
-# Libraries used in this chapter
-import numpy as np                    # numbers and arrays
-import pandas as pd                   # data tables
-import plotly.express as px           # quick charts from data tables
-import plotly.graph_objects as go     # charts built piece by piece (model figures)
-import plotly.io as pio
-from ipywidgets import interact, fixed, FloatSlider, IntSlider, IntRangeSlider, ToggleButtons, Dropdown, SelectMultiple
-
-# One light blue/green look for every chart
-BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
-pio.templates.default = "plotly_white"
-pio.templates["plotly_white"].layout.update(width=860, height=480)   # same size in Colab and on the website
-px.defaults.color_discrete_sequence = [BLUE, TEAL, GREEN, "#5aa0d8", "#0b4f47", "#e0a33b"]
-WIDE = {"description_width": "initial"}         # show the full slider labels
-
-# Colab only: let Plotly charts appear inside the interactive widgets
-try:
-    import google.colab
-    google.colab.output.enable_custom_widget_manager()
-except ImportError:
-    pass                                        # not running in Colab: nothing to do
-
-# The data files of this chapter live in the book's GitHub repository
-DATA_URL = "https://raw.githubusercontent.com/quarcs-lab/macro102-site/main/data/ch01/"
-```
-
-The next cell defines a helper that only the book website needs. Run it and move on.
-
-```{python}
-#| kind: helper
-# @title Helper for the website versions (run this cell; you do not need to read it)
-def slider_figure(make_figure, name, values, start, label=None):
-    """Precompute make_figure(name=value) for every value and join the results with one slider.
-
-    The website cannot run Python, so each model figure gets this precomputed version.
-    """
-    figures = [make_figure(**{name: v}) for v in values]
-    first = values.index(start)
-    fig = go.Figure(layout=figures[first].layout)
-    owner = []                                  # which figure each trace comes from
-    for i, f in enumerate(figures):
-        for trace in f.data:
-            trace.visible = (i == first)
-            fig.add_trace(trace)
-            owner.append(i)
-    steps = []
-    for i, f in enumerate(figures):
-        layout = {"title": f.layout.title.to_plotly_json(),
-                  "annotations": [a.to_plotly_json() for a in f.layout.annotations],
-                  "shapes": [s.to_plotly_json() for s in f.layout.shapes]}
-        visible = [o == i for o in owner]
-        steps.append(dict(method="update", label=str(values[i]), args=[{"visible": visible}, layout]))
-    fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
-                                    currentvalue=dict(prefix=(label or name) + " = "))])
-    return fig
-```
-
-The data figures of this chapter let you add other countries. On the website, a menu above each of
-these figures adds a group of countries (the G7, a world region, ...); the next cell builds those menus.
-
-```{python}
-#| kind: helper
-# @title Helpers for the website's country menus (run this cell; you do not need to read it)
-def country_traces(data, y, skip, x="year", fmt=".1f", markers=False):
-    """One line per country of a long table (country, x, y), leaving out the countries in skip."""
-    extra = {}
-    for name, part in data.groupby("country"):
-        if name not in skip:
-            extra[name] = [go.Scatter(x=part[x], y=part[y], name=name, mode="lines+markers" if markers else "lines",
-                                      line=dict(color=COLORS[name], width=2),
-                                      hovertemplate=f"<b>{name}</b><br>%{{x}}: %{{y:{fmt}}}<extra></extra>")]
-    return extra
-
-
-def country_menu(fig, extra, countries):
-    """Add the extra countries' traces hidden, and a menu that shows one group of them (G7, a region, ...).
-
-    The traces already in fig (the textbook's) stay as they are, and slider steps only switch those."""
-    n = len(fig.data)
-    owner = []
-    for name, traces in extra.items():
-        for trace in traces:
-            trace.visible = False
-            fig.add_trace(trace)
-            owner.append(name)
-    groups = {"G7": countries.country[countries.g7], "G20": countries.country[countries.g20],
-              "OECD": countries.country[countries.oecd]}
-    for region in sorted(countries.region.unique()):
-        groups[region] = countries.country[countries.region == region]
-    rest, autoscale = list(range(n, len(fig.data))), {"yaxis.autorange": True}
-    buttons = [dict(label="Textbook only", method="update", args=[{"visible": [False] * len(owner)}, autoscale, rest])]
-    for label, members in groups.items():
-        visible = [o in set(members) for o in owner]
-        if any(visible):
-            buttons.append(dict(label=f"+ {label} ({sum(visible)})", method="update", args=[{"visible": visible}, autoscale, rest]))
-    menu = dict(type="dropdown", buttons=buttons, active=0, x=1, xanchor="right", y=1.02, yanchor="bottom")
-    fig.update_layout(updatemenus=list(fig.layout.updatemenus) + [menu], margin=dict(t=110))
-    for slider in fig.layout.sliders:
-        for step in slider.steps:
-            step.args = [{"visible": list(step.args[0]["visible"])}, step.args[1], list(range(n))]
-    return fig
-```
-
-```{python}
-#| kind: helper
-# @title Helper for the website's one-country menus (run this cell; you do not need to read it)
-def dropdown_figure(make_figure, name, values, start):
-    """Like slider_figure, but with a dropdown menu: one precomputed figure per value (e.g. per country)."""
-    figures = [make_figure(**{name: v}) for v in values]
-    fig = go.Figure(layout=figures[values.index(start)].layout)
-    owner = []
-    for i, f in enumerate(figures):
-        for trace in f.data:
-            trace.visible = (values[i] == start)
-            fig.add_trace(trace)
-            owner.append(i)
-    buttons = []
-    for i, f in enumerate(figures):
-        layout = {"title": f.layout.title.to_plotly_json(), "annotations": [a.to_plotly_json() for a in f.layout.annotations],
-                  "shapes": [s.to_plotly_json() for s in f.layout.shapes], "yaxis": f.layout.yaxis.to_plotly_json(),
-                  "xaxis": f.layout.xaxis.to_plotly_json()}
-        buttons.append(dict(label=str(values[i]), method="update", args=[{"visible": [o == i for o in owner]}, layout]))
-    menu = dict(type="dropdown", buttons=buttons, active=values.index(start), x=1, xanchor="right", y=1.02, yanchor="bottom")
-    fig.update_layout(updatemenus=[menu], margin=dict(t=110))
-    return fig
-```
-
 ## Model overview
 
 Meet **Islandia**, a small imaginary island country that we follow through the whole book. Before we can explain anything about Islandia, we must measure it: how fast its prices rise, how many islanders have jobs, how fast its income grows. Then we need a way to explain what we measured: a **model**, a small economy written as a few equations. This section builds both kits step by step, and every later chapter reuses them.
@@ -182,7 +45,7 @@ Meet **Islandia**, a small imaginary island country that we follow through the w
 2. [Growth rates and compound growth](#growth-rates-and-compound-growth): [compound growth](#solving-compound-growth), the average growth rate and the rule of 70.
 3. [How a model works: the labor market](#how-a-model-works-the-labor-market): the [assumptions](#assumptions), [solving the model](#solving-the-model), and [what the model predicts](#what-the-model-predicts-1).
 4. [Extension: a minimum wage](#extension-a-minimum-wage): what happens when a law puts a floor under the wage.
-5. [The model in code](#the-model-in-code): the key results as Python functions, checked with numbers. Every later section reuses these functions.
+5. [Model in code](#model-in-code): the key results as Python functions, checked with numbers. Every later section reuses these functions.
 
 **Notation.** A bar over a letter marks a **parameter**: a number the model builder chooses, such as $\bar{a}$ or $\bar{f}$. Letters without a bar are **endogenous variables**: the model determines them (in the measurement blocks, the data record them). A subscript $t$ marks the year, as in $y_t$. In the code we simply write `a`, `l` and `f`.
 
@@ -278,7 +141,7 @@ Dividing by the right total turns raw counts into rates that we can compare acro
 | $+1$ point in the unemployment rate $u$ | $-p \approx -0.63$ points | a point of $u$ is a point of the labor force, not of all adults |
 | $+1$ point in the participation rate $p$ | $+(1-u) \approx +0.97$ points | most new participants find a job |
 
-In logs, $\ln e = \ln p + \ln(1-u)$ ([Appendix C.4](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.4-logarithms)), so the percentage change of $e$ splits exactly into a participation part and an unemployment part. By April 2020 participation had dropped to about 60.1 percent and unemployment had jumped to about 14.8 percent. Check 5 in [The model in code](#the-model-in-code) shows that roughly 70 percent of the fall in $e$ came from higher unemployment and 30 percent from people leaving the labor force.
+In logs, $\ln e = \ln p + \ln(1-u)$ ([Appendix C.4](https://quarcs-lab.github.io/macro102-site/notebooks/appC-math-review-for-macroeconomics.html#c.4-logarithms)), so the percentage change of $e$ splits exactly into a participation part and an unemployment part. By April 2020 participation had dropped to about 60.1 percent and unemployment had jumped to about 14.8 percent. Check 5 in [Model in code](#model-in-code) shows that roughly 70 percent of the fall in $e$ came from higher unemployment and 30 percent from people leaving the labor force.
 
 **The output gap** is negative in a recession and positive in a boom. Its log form is accurate only for small gaps: for a gap as deep as the Great Depression's, the two versions differ by about 2 points (Check 6 in the code).
 
@@ -578,64 +441,352 @@ The floor binds, because 14 is above $w^* = 10$. The wage is 14, employment is $
 
 <!-- cell -->
 
-### The model in code
+## Model in code
 
-We now turn the results into Python functions. Each function's description names the equation it computes. The cells after them check the algebra above with numbers. Every later section of the notebook reuses `labor_supply`, `labor_demand` and `equilibrium`.
+Now we turn the Key results into Python. The section has three parts: the setup (folded, because it is the
+same in every chapter), the model as functions, and numerical checks of the Key results. Run its cells once,
+in order. Every later section of the notebook reuses them.
 
-> **Python note.** `def` creates a *function*: a named recipe that takes inputs (the
-> *arguments*) and gives back a result with `return`. Writing `a=2.0` gives the argument a
-> *default value*, used whenever we do not pass one. The text in triple quotes is a short
-> description of what the function does. A function can return two results at once, separated by a comma.
-> `**` means "to the power of", and `np.log` is the natural logarithm.
+<!-- cell -->
+
+### Setup
+
+Run the setup cells once, before anything else. They load the Python libraries, give every chart the same look,
+store the address of the chapter's data and define the helpers that only the book website needs. You can use
+the notebook without reading them; open the box if you are curious.
+
+<!-- cell -->
+
+::: {.callout-note .mic-fold collapse="true" title="Show the setup code"}
+
+The first cell loads the libraries and sets the look of the charts. Its comments explain each step.
 
 ```{python}
+#| kind: folded
+# @title Setup: libraries, chart colors and the data location
+# Text after a "#" is a comment: Python ignores it, it is there for human readers.
+
+# Step 1: load the libraries. `import` loads a library, a toolbox written by
+# other people, and `as np` gives it a short nickname, so the code stays short.
+import numpy as np                    # numbers and arrays
+import pandas as pd                   # data tables
+import plotly.express as px           # quick charts from data tables
+import plotly.graph_objects as go     # charts built piece by piece (model figures)
+import plotly.io as pio               # settings shared by every chart
+# sliders, buttons and menus for the interactive figures
+from ipywidgets import (interact, fixed, FloatSlider, IntSlider, IntRangeSlider, ToggleButtons, Dropdown,
+                        SelectMultiple)
+
+# Step 2: one light blue/green look for every chart
+BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
+pio.templates.default = "plotly_white"
+# the same chart size in Colab and on the website
+pio.templates["plotly_white"].layout.update(width=860, height=480)
+px.defaults.color_discrete_sequence = [BLUE, TEAL, GREEN, "#5aa0d8", "#0b4f47", "#e0a33b"]
+WIDE = {"description_width": "initial"}         # show the full slider labels
+
+# Step 3, Colab only: let Plotly charts appear inside the interactive widgets.
+# `try` runs the indented lines; if the import fails (we are not in Colab),
+# `except` skips them.
+try:
+    import google.colab
+    google.colab.output.enable_custom_widget_manager()
+except ImportError:
+    pass                                        # not running in Colab: nothing to do
+
+# Step 4: the data files of this chapter live in the book's GitHub repository
+DATA_URL = "https://raw.githubusercontent.com/quarcs-lab/macro102-site/main/data/ch01/"
+```
+
+The website cannot run Python, so each interactive figure also gets a version with precomputed sliders or
+menus. The next three cells build those versions. Run them and move on.
+
+```{python}
+#| kind: folded
+# @title Helper for the website versions (run this cell; you do not need to read it)
+def slider_figure(make_figure, name, values, start, label=None):
+    """Join precomputed versions of a figure with one slider (the website cannot run Python).
+
+    Arguments
+        make_figure : the function that draws the figure, e.g. labor_market
+        name        : the argument the slider moves, e.g. "f"
+        values      : the values of that argument to precompute
+        start       : the value shown first
+        label       : the slider's label (the argument name if None)
+    Returns
+        one Plotly figure with all versions and a slider that shows one at a time
+    """
+    # Step 1: draw the figure once for every value
+    figures = [make_figure(**{name: v}) for v in values]
+    first = values.index(start)
+    # Step 2: copy every curve into one figure; only the start value's are visible
+    fig = go.Figure(layout=figures[first].layout)
+    owner = []                                  # which figure each trace comes from
+    for i, f in enumerate(figures):
+        for trace in f.data:
+            trace.visible = (i == first)
+            fig.add_trace(trace)
+            owner.append(i)
+    # Step 3: one slider step per value: its curves, title, labels and shapes
+    steps = []
+    for i, f in enumerate(figures):
+        layout = {"title": f.layout.title.to_plotly_json(),
+                  "annotations": [a.to_plotly_json() for a in f.layout.annotations],
+                  "shapes": [s.to_plotly_json() for s in f.layout.shapes]}
+        visible = [o == i for o in owner]
+        steps.append(dict(method="update", label=str(values[i]), args=[{"visible": visible}, layout]))
+    fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
+                                    currentvalue=dict(prefix=(label or name) + " = "))])
+    return fig
+```
+
+The data figures of this chapter let you add other countries. On the website, a menu above each of these
+figures adds a group of countries (the G7, a world region, ...); the next cell builds those menus.
+
+```{python}
+#| kind: folded
+# @title Helpers for the website's country menus (run this cell; you do not need to read it)
+def country_traces(data, y, skip, x="year", fmt=".1f", markers=False):
+    """One line per country of a long table (country, x, y), leaving out the countries in skip.
+
+    Arguments
+        data    : a long table with a "country" column, the x column and the y column
+        y       : the name of the column to draw
+        skip    : the countries to leave out (the ones the figure already draws)
+        x       : the name of the column on the horizontal axis
+        fmt     : the number format of the hover label, e.g. ".1f"
+        markers : True to draw a dot at every point as well
+    Returns
+        a dictionary that maps each country to a list with its one trace
+    """
+    # one trace per country that is not in `skip`, in its own color from COLORS
+    extra = {}
+    for name, part in data.groupby("country"):
+        if name not in skip:
+            extra[name] = [go.Scatter(x=part[x], y=part[y], name=name,
+                                      mode="lines+markers" if markers else "lines",
+                                      line=dict(color=COLORS[name], width=2),
+                                      hovertemplate=f"<b>{name}</b><br>%{{x}}: %{{y:{fmt}}}<extra></extra>")]
+    return extra
+
+
+def country_menu(fig, extra, countries):
+    """Add the extra countries' traces hidden, and a menu that shows one group of them (G7, a region, ...).
+
+    The traces already in fig (the textbook's) stay as they are, and slider steps only switch those.
+
+    Arguments
+        fig       : a Plotly figure with the textbook's traces (and maybe a slider)
+        extra     : the extra countries' traces, from country_traces
+        countries : the country table, with the columns country, region, g7, g20 and oecd
+    Returns
+        the same figure, with the extra traces hidden and the menu of groups above the plot
+    """
+    # Step 1: add every extra trace, hidden, and remember its country
+    n = len(fig.data)
+    owner = []
+    for name, traces in extra.items():
+        for trace in traces:
+            trace.visible = False
+            fig.add_trace(trace)
+            owner.append(name)
+    # Step 2: the groups of the menu: G7, G20, OECD, then each region, A to Z
+    groups = {"G7": countries.country[countries.g7], "G20": countries.country[countries.g20],
+              "OECD": countries.country[countries.oecd]}
+    for region in sorted(countries.region.unique()):
+        groups[region] = countries.country[countries.region == region]
+    # Step 3: one button per group. A button switches only the extra traces (`rest`)
+    # and rescales the y-axis to the lines that are shown.
+    rest, autoscale = list(range(n, len(fig.data))), {"yaxis.autorange": True}
+    # the first button hides every extra country
+    buttons = [dict(label="Textbook only", method="update",
+                    args=[{"visible": [False] * len(owner)}, autoscale, rest])]
+    for label, members in groups.items():
+        # True for the extra traces whose country is in this group
+        visible = [o in set(members) for o in owner]
+        # leave out the groups without any extra country
+        if any(visible):
+            buttons.append(dict(label=f"+ {label} ({sum(visible)})", method="update",
+                                args=[{"visible": visible}, autoscale, rest]))
+    # the menu sits above the plot, at the right, with room for it in the top margin
+    menu = dict(type="dropdown", buttons=buttons, active=0, x=1, xanchor="right", y=1.02, yanchor="bottom")
+    fig.update_layout(updatemenus=list(fig.layout.updatemenus) + [menu], margin=dict(t=110))
+    # Step 4: the slider steps (if any) switch only the first n traces, the textbook's
+    for slider in fig.layout.sliders:
+        for step in slider.steps:
+            step.args = [{"visible": list(step.args[0]["visible"])}, step.args[1], list(range(n))]
+    return fig
+```
+
+The last helper builds the website version of a figure that shows one country at a time, chosen from a menu.
+
+```{python}
+#| kind: folded
+# @title Helper for the website's one-country menus (run this cell; you do not need to read it)
+def dropdown_figure(make_figure, name, values, start):
+    """Like slider_figure, but with a dropdown menu: one precomputed figure per value (e.g. per country).
+
+    Arguments
+        make_figure : the function that draws the figure
+        name        : the argument the menu sets, e.g. "country"
+        values      : the values of that argument to precompute
+        start       : the value shown first
+    Returns
+        one Plotly figure with all versions and a menu that shows one at a time
+    """
+    # Step 1: draw the figure once for every value
+    figures = [make_figure(**{name: v}) for v in values]
+    # Step 2: copy every curve into one figure; only the start value's are visible
+    fig = go.Figure(layout=figures[values.index(start)].layout)
+    owner = []                                  # which figure each trace comes from
+    for i, f in enumerate(figures):
+        for trace in f.data:
+            trace.visible = (values[i] == start)
+            fig.add_trace(trace)
+            owner.append(i)
+    # Step 3: one menu entry per value: its curves, title, labels, shapes and axes
+    buttons = []
+    for i, f in enumerate(figures):
+        layout = {"title": f.layout.title.to_plotly_json(),
+                  "annotations": [a.to_plotly_json() for a in f.layout.annotations],
+                  "shapes": [s.to_plotly_json() for s in f.layout.shapes],
+                  "yaxis": f.layout.yaxis.to_plotly_json(),
+                  "xaxis": f.layout.xaxis.to_plotly_json()}
+        buttons.append(dict(label=str(values[i]), method="update",
+                            args=[{"visible": [o == i for o in owner]}, layout]))
+    # Step 4: put the menu above the plot, at the right, starting at the start value
+    menu = dict(type="dropdown", buttons=buttons, active=values.index(start), x=1, xanchor="right", y=1.02,
+                yanchor="bottom")
+    fig.update_layout(updatemenus=[menu], margin=dict(t=110))
+    return fig
+```
+
+:::
+
+<!-- cell -->
+
+### The model as functions
+
+The labor-market model has two curves, supply and demand, and one Key result: the equilibrium wage and
+employment, equations (6) and (7). We write each one as a Python *function*: a named recipe that takes
+inputs and gives back a result. Every later section of the notebook reuses `labor_supply`, `labor_demand` and
+`equilibrium`.
+
+```{python}
+# `def` creates a function. Its inputs are the arguments in parentheses.
+# `a=2.0` gives a a default value, used whenever we do not pass one.
+# The text in triple quotes describes the function.
 def labor_supply(w, a=2.0, l=30.0):
-    """Hours of work offered at the wage w: L^s = a w + l."""
+    """Hours of work the islanders offer at the wage w.
+
+    The labor-supply curve of Fig. 8:  L^s = a-bar w + l-bar
+
+    Arguments
+        w : the wage
+        a : the slope of labor supply, a-bar (extra hours per extra dollar)
+        l : the hours offered at a zero wage, l-bar
+    Returns
+        the hours supplied, L^s
+    """
+    # `return` gives back the result
     return a * w + l
 
 
 def labor_demand(w, f=60.0):
-    """Hours of work the firm wants to hire at the wage w: L^d = f - w."""
+    """Hours of work Harbor Boatworks wants to hire at the wage w.
+
+    The labor-demand curve of Fig. 8:  L^d = f-bar - w
+
+    Arguments
+        w : the wage
+        f : the hours the firm would hire at a zero wage, f-bar
+    Returns
+        the hours demanded, L^d
+    """
+    # each extra dollar of wage makes one hour less worth hiring
     return f - w
 
 
 def equilibrium(a=2.0, l=30.0, f=60.0):
-    """The wage and employment at which supply equals demand: equations (6) and (7)."""
-    w_star = (f - l) / (1 + a)
-    L_star = labor_demand(w_star, f)
+    """The wage and employment at which supply equals demand.
+
+    Equations (6) and (7):  w* = (f-bar - l-bar) / (1 + a-bar),  L* = (a-bar f-bar + l-bar) / (1 + a-bar)
+
+    Arguments
+        a : the slope of labor supply, a-bar
+        l : the hours offered at a zero wage, l-bar
+        f : the hours the firm would hire at a zero wage, f-bar
+    Returns
+        the equilibrium wage w* and employment L*, as two numbers
+    """
+    w_star = (f - l) / (1 + a)                  # equation (6)
+    L_star = labor_demand(w_star, f)            # put w* into demand: equation (7)
+    # a function can return two results at once, separated by a comma
     return w_star, L_star
+```
 
+The growth block gives two more formulas: the average growth rate that links two levels, equation (4), and the
+exact doubling time behind the rule of 70, equation (5).
 
+```{python}
 def average_growth(start, end, years):
-    """The constant yearly growth rate that turns `start` into `end` in `years` years: equation (4)."""
+    """The constant yearly growth rate that turns `start` into `end` in `years` years.
+
+    Equation (4):  g = (y_T / y_0)^(1/T) - 1
+
+    Arguments
+        start : the first level, y_0
+        end   : the last level, y_T
+        years : the number of years between them, T
+    Returns
+        the average growth rate g, as a decimal (0.02 = 2 percent)
+    """
+    # `**` means "to the power of"
     return (end / start) ** (1 / years) - 1
 
 
 def doubling_time(g):
-    """Exact number of years it takes to double at the growth rate g: ln 2 / ln(1 + g)."""
+    """Exact number of years it takes to double at the growth rate g.
+
+    Equation (5) is its approximation:  T = ln 2 / ln(1 + g), close to 70 / (100 g)
+
+    Arguments
+        g : the growth rate, as a decimal
+    Returns
+        the doubling time in years
+    """
+    # `np.log` is the natural logarithm, ln
     return np.log(2) / np.log(1 + g)
 ```
 
-Let us check the functions against the baseline answer. The wage from equation (6), put into either curve, must
-give the employment of equation (7).
+<!-- cell -->
 
-> **Python note.** `w_star, L_star = equilibrium()` stores the two results of the function in two
-> variables. An *f-string* such as `f"w* = {w_star:.1f}"` inserts the value of a variable into a
-> piece of text; `:.1f` means "show one decimal".
+### Checking the key results
+
+The formulas came from algebra. Now we check them with numbers, one Key result at a time. First Islandia's
+baseline, $\bar{a} = 2$, $\bar{\ell} = 30$ and $\bar{f} = 60$: the wage from equation (6), put into either curve,
+must give the employment of equation (7).
 
 ```{python}
+# Islandia's equilibrium; the two results of the function go into two variables
 w_star, L_star = equilibrium()
+# An f-string, f"... {w_star:.1f}", puts a value into the text;
+# ":.1f" means "one decimal".
 print(f"Equilibrium wage       w* = {w_star:.1f}")
 print(f"Equilibrium employment L* = {L_star:.1f}   (equation 7: {(2 * 60 + 30) / (1 + 2):.1f})")
-print(f"At w*, supply = {labor_supply(w_star):.1f} and demand = {labor_demand(w_star):.1f}: the market clears")
+# at w* the hours offered equal the hours wanted
+print(
+    f"At w*, supply = {labor_supply(w_star):.1f} and demand = {labor_demand(w_star):.1f}: the market clears")
 ```
 
-**Check 1: the elasticities.** Raise each parameter by 1 percent and see by what percentage $w^*$ and $L^*$ change.
-The table above predicts $+2\%$ and $+0.8\%$ for $\bar{f}$, $-1\%$ and $+0.2\%$ for $\bar{\ell}$, and $-0.67\%$ and
-$+0.13\%$ for $\bar{a}$.
+**Check 1: the elasticities.** We raise each parameter by 1 percent and see by what percentage $w^*$ and $L^*$
+change. The table above predicts $+2\%$ and $+0.8\%$ for $\bar{f}$, $-1\%$ and $+0.2\%$ for $\bar{\ell}$, and
+$-0.67\%$ and $+0.13\%$ for $\bar{a}$.
 
 ```{python}
+# Step 1: the baseline equilibrium
 w0, L0 = equilibrium(a=2.0, l=30.0, f=60.0)
+# Step 2: one parameter 1% higher at a time; ":+.2f" shows the sign and two decimals
 w1, L1 = equilibrium(a=2.0, l=30.0, f=60.0 * 1.01)
 print(f"1% higher f: w* {100 * (w1 / w0 - 1):+.2f}%,  L* {100 * (L1 / L0 - 1):+.2f}%")
 w1, L1 = equilibrium(a=2.0, l=30.0 * 1.01, f=60.0)
@@ -650,44 +801,49 @@ parameters. For $\bar{a}$ they are close but not exact, because an elasticity de
 **Check 2: the minimum wage.** For several floors, we compute unemployment directly, as hours supplied minus hours
 demanded at the wage that holds, and compare the result with equation (8).
 
-> **Python note.** `for w_min in (8, 11, 12, 14):` runs the indented lines once for each number in the brackets.
-> `max(a, b)` is the larger of two numbers, so `max(w_star, w_min)` is the wage that holds, and
-> `max(..., 0)` turns a negative formula value into zero when the floor does not bind.
-
 ```{python}
+# the market wage, w* = 10, without a floor
 w_star, L_star = equilibrium()
+# `for w_min in (8, 11, 12, 14):` runs the indented lines once for each floor.
+# `max(a, b)` is the larger of two numbers.
 for w_min in (8, 11, 12, 14):
     w = max(w_star, w_min)                                   # the wage that holds
-    direct = labor_supply(w) - labor_demand(w)               # hours offered minus hours hired
-    formula = max((1 + 2.0) * (w_min - w_star), 0)           # equation (8), zero if the floor does not bind
+    # unemployment, directly: hours offered minus hours hired
+    direct = labor_supply(w) - labor_demand(w)
+    # equation (8); `max(..., 0)` gives zero when the floor does not bind
+    formula = max((1 + 2.0) * (w_min - w_star), 0)
     print(f"floor {w_min:2d}: wage {w:4.1f}, employment {labor_demand(w):4.1f}, "
           f"unemployment {direct:4.1f} (direct) and {formula:4.1f} (equation 8)")
 ```
 
-**Check 3: compound growth.** We let GDP per person grow by 1.9 percent a year for 155 years, one year at a time, and
-compare the result with equation (3). Then equation (4) must recover the growth rate, and the log formula must come close.
-
-> **Python note.** `range(155)` counts 0, 1, ..., 154, so the `for` loop runs its indented line 155 times.
-> `level = level * (1 + 0.019)` replaces the old value by the new one. The underscore `_` is a name for a loop
-> counter that we do not need.
+**Check 3: compound growth.** We let GDP per person grow by 1.9 percent a year for 155 years, one year at a time,
+and compare the result with equation (3). Then equation (4) must recover the growth rate, and the log formula must
+come close.
 
 ```{python}
+# Step 1: grow a level of 1 by 1.9% a year. `range(155)` counts 0, 1, ..., 154, so
+# the loop runs 155 times; `_` names a loop counter we do not need.
 level = 1.0
 for _ in range(155):
-    level = level * (1 + 0.019)                              # one year of growth
+    # one year of growth: the new value replaces the old one
+    level = level * (1 + 0.019)
+# Step 2: compare with equations (3) and (4) and with the log formula
 print(f"Year by year: level after 155 years = {level:.3f}")
 print(f"Equation (3): (1.019)^155           = {(1 + 0.019) ** 155:.3f}")
 print(f"Equation (4) recovers g             = {100 * average_growth(1.0, level, 155):.3f}%")
 print(f"Log formula (ln y_T - ln y_0) / T   = {100 * (np.log(level) - np.log(1.0)) / 155:.3f}%")
+# Step 3: the growth rate that makes income ten times larger in a century
 print(f"Tenfold in 100 years needs g        = {100 * average_growth(1, 10, 100):.2f}%")
 ```
 
-**Check 4: the rule of 70.** Equation (5) against the exact doubling time, and the factor after 100 years, as in the
-table above.
+**Check 4: the rule of 70.** We compare equation (5) with the exact doubling time, and add the factor after 100
+years, as in the table above.
 
 ```{python}
+# for each growth rate: the exact doubling time, the rule of 70 and (1 + g)^100
 for g in (0.01, 0.02, 0.03, 0.05, 0.10):
-    print(f"g = {100 * g:4.1f}%: doubles in {doubling_time(g):5.1f} years (rule of 70: {70 / (100 * g):5.1f}); "
+    print(f"g = {100 * g:4.1f}%: doubles in {doubling_time(g):5.1f} years "
+          f"(rule of 70: {70 / (100 * g):5.1f}); "
           f"factor after 100 years {(1 + g) ** 100:7.1f}")
 ```
 
@@ -695,29 +851,39 @@ for g in (0.01, 0.02, 0.03, 0.05, 0.10):
 Then we split the fall of $e$ into its two parts with logs.
 
 ```{python}
-Pop, LF = 100.0, 63.3                            # per 100 adults, February 2020: 63.3 in the labor force
-U = 0.035 * LF                                   # 3.5 percent of the labor force is unemployed
-e_feb = 100 * (LF - U) / Pop                     # left side of equation (1): E / Pop, in percent
+# Step 1: February 2020, per 100 adults; both sides of equation (1)
+# 63.3 of 100 adults are in the labor force
+Pop, LF = 100.0, 63.3
+# 3.5 percent of the labor force is unemployed
+U = 0.035 * LF
+# left side of equation (1): E / Pop, in percent
+e_feb = 100 * (LF - U) / Pop
 print(f"February 2020: E/Pop = {e_feb:.2f}%,   p(1 - u) = {63.3 * (1 - 0.035):.2f}%")
+# Step 2: April 2020 from equation (1), and the fall of ln e split into its two parts
 e_apr = 60.1 * (1 - 0.148)                       # equation (1) for April 2020
 fall = np.log(e_apr) - np.log(e_feb)
 part_p = np.log(60.1) - np.log(63.3)             # participation part
 part_u = np.log(1 - 0.148) - np.log(1 - 0.035)   # unemployment part
+# Step 3: the shares of the two parts; ":.0%" shows a share as a percentage
 print(f"April 2020:    e = {e_apr:.1f}%, a fall of {e_feb - e_apr:.1f} points")
-print(f"Share of the log fall due to participation: {part_p / fall:.0%}, to unemployment: {part_u / fall:.0%}")
+print(
+    f"Share of the log fall due to participation: {part_p / fall:.0%}, to unemployment: {part_u / fall:.0%}")
 print(f"The two parts add up: {part_p + part_u:.4f} = {fall:.4f}")
 ```
 
-**Check 6: compounding prices and the log form of the gap.** A year of 3,080 percent inflation, two years of 10 percent,
-and equation (2) against its log form for small and large gaps.
+**Check 6: compounding prices and the log form of the gap.** A year of 3,080 percent inflation, two years of
+10 percent, and equation (2) against its log form for small and large gaps.
 
 ```{python}
+# Step 1: inflation compounds: prices are multiplied by (1 + inflation) each year
 print(f"3,080% inflation multiplies prices by {1 + 3080 / 100:.1f}")
 print(f"Two years of 10% raise prices by {100 * ((1 + 0.10) * (1 + 0.10) - 1):.0f}%")
+# Step 2: the output gap for 2009, the Great Depression and 1944, exactly and in logs
 for ratio_to_potential in (0.953, 0.83, 1.23):
     exact = 100 * (ratio_to_potential - 1)                   # equation (2)
     approx = 100 * np.log(ratio_to_potential)                # log form
-    print(f"Y / Y_pot = {ratio_to_potential:.3f}: gap {exact:+6.1f}% (equation 2), {approx:+6.1f}% (log form)")
+    print(
+        f"Y / Y_pot = {ratio_to_potential:.3f}: gap {exact:+6.1f}% (equation 2), {approx:+6.1f}% (log form)")
 ```
 
 The log form is within a tenth of a point for a gap like 2009's, but it is off by almost 2 points for the
@@ -2067,7 +2233,7 @@ United States: [Bureau of Labor Statistics (`UNRATE`), via FRED](https://fred.st
 different sources, so treat $p$ as an approximation.)
 
 (b) Split the change of $\ln e$ from 2007 to 2013 into a participation part and an unemployment part, as in
-Check 5 of the Model overview. What share of the fall does each part explain, in each country?
+Check 5 of "Model in code". What share of the fall does each part explain, in each country?
 
 (c) In which country did the crisis show up partly as people leaving the labor force? Suggest one reason why
 participation could even *rise* in a deep recession.
