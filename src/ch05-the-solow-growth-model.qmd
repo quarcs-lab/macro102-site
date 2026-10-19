@@ -25,108 +25,6 @@ chapter you will be able to:
 
 <!-- cell -->
 
-## Setup
-
-We first load the Python libraries we need. You only have to run this cell once.
-
-> **Python note.** `import` loads a *library*, a toolbox written by other people. We give each
-> library a short nickname, for example `np` for NumPy, so that the code stays short. Text after
-> a `#` is a *comment*: Python ignores it, and it is there for human readers. The `try ... except`
-> block runs one Colab-only line and simply skips it anywhere else.
-
-```{python}
-# Libraries used in this chapter
-import numpy as np                              # numbers and arrays
-import pandas as pd                             # data tables
-import plotly.express as px                     # quick charts from data tables
-import plotly.graph_objects as go               # charts built piece by piece (model figures)
-import plotly.io as pio
-from plotly.subplots import make_subplots       # several panels in one figure
-from ipywidgets import interact, interact_manual, FloatSlider, ToggleButtons, Dropdown, fixed
-
-# One light blue/green look for every chart
-BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
-pio.templates.default = "plotly_white"
-pio.templates["plotly_white"].layout.update(width=860, height=480)   # same size in Colab and on the website
-px.defaults.color_discrete_sequence = [BLUE, TEAL, GREEN, "#5aa0d8", "#0b4f47"]
-WIDE = {"description_width": "initial"}         # show the full slider labels
-
-# Colab only: let Plotly charts appear inside the interactive widgets
-try:
-    import google.colab
-    google.colab.output.enable_custom_widget_manager()
-except ImportError:
-    pass                                        # not running in Colab: nothing to do
-
-# The data files of this chapter live in the book's GitHub repository
-DATA_URL = "https://raw.githubusercontent.com/quarcs-lab/macro102-site/main/data/ch05/"
-```
-
-The next cell defines a helper that only the book website needs. Run it and move on.
-
-```{python}
-#| kind: helper
-# @title Helper for the website versions (run this cell; you do not need to read it)
-def slider_figure(make_figure, name, values, start, label=None):
-    """Precompute make_figure(name=value) for every value and join the results with one slider.
-
-    The website cannot run Python, so each interactive figure also gets this precomputed version.
-    """
-    figures = [make_figure(**{name: v}) for v in values]
-    first = values.index(start)
-    fig = go.Figure(layout=figures[first].layout)
-    owner = []                                  # which precomputed figure each trace comes from
-    for i, f in enumerate(figures):
-        for trace in f.data:
-            trace.visible = (i == first)
-            fig.add_trace(trace)
-            owner.append(i)
-    steps = []
-    for i, f in enumerate(figures):
-        layout = {"title": f.layout.title.to_plotly_json(),
-                  "annotations": [a.to_plotly_json() for a in f.layout.annotations],
-                  "shapes": [s.to_plotly_json() for s in f.layout.shapes]}
-        visible = [o == i for o in owner]
-        steps.append(dict(method="update", label=str(values[i]), args=[{"visible": visible}, layout]))
-    fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
-                                    currentvalue=dict(prefix=(label or name) + " = "))])
-    return fig
-```
-
-```{python}
-#| kind: helper
-# @title Helper for the website versions with many countries (run this cell; you do not need to read it)
-def country_menu(fig, shown, regions, label="Textbook countries"):
-    """Draw the countries in `shown` and put every other country one click away in the legend.
-
-    `regions` maps each country to its region. With more than 40 countries, a menu above the plot
-    chooses the region whose countries the legend lists. Traces that are not countries stay as they are.
-    """
-    countries = [trace.name for trace in fig.data if trace.name in regions]
-    groups = [label] + sorted(set(regions[name] for name in countries))
-    if len(countries) <= 40:
-        groups = [None]                                 # a short legend lists every country at once
-    buttons = []
-    for group in groups:
-        visible = []
-        for trace in fig.data:
-            if trace.name in shown:
-                visible.append(True)
-            elif trace.name not in regions:
-                visible.append(True if trace.visible is None else trace.visible)
-            elif group is None or regions[trace.name] == group:
-                visible.append("legendonly")
-            else:
-                visible.append(False)
-        buttons.append(dict(label=group, method="restyle", args=[{"visible": visible}]))
-    for trace, v in zip(fig.data, buttons[0]["args"][0]["visible"]):
-        trace.visible = v
-    if len(groups) > 1:
-        menu = dict(type="dropdown", buttons=buttons, x=1, xanchor="right", y=1.02, yanchor="bottom")
-        fig.update_layout(updatemenus=list(fig.layout.updatemenus) + [menu], margin=dict(t=110))
-    return fig
-```
-
 ## Model overview
 
 Picture **Islandia**, a small imaginary island country. Its people make one all-purpose good. Each year they can eat it, or they can turn it into tools (boats, nets, workshops) that help them make more of the good next year. Tools do not last forever: every year some of them break or rot. Will Islandia keep getting richer just by building more tools? This section answers that question with the Solow model, and we follow Islandia through every step.
@@ -142,7 +40,7 @@ Picture **Islandia**, a small imaginary island country. Its people make one all-
 
 1. [The basic Solow model](#the-basic-solow-model): the [assumptions](#assumptions), [solving the model](#solving-the-model) step by step, and [what the model predicts](#what-the-model-predicts).
 2. [Adding population growth](#adding-population-growth): what changes when Islandia's population grows.
-3. [The model in code](#the-model-in-code): the key results as Python functions, checked with numbers. Every later section reuses these functions.
+3. [Model in code](#model-in-code): the key results as Python functions, checked with numbers. Every later section reuses these functions.
 
 **Notation.** A bar over a letter marks a **parameter**: a number we choose from outside the model. Letters without a bar are **endogenous variables**: the model determines them. In the code we simply write `A`, `s`, `d` and `n`.
 
@@ -467,137 +365,387 @@ Now $\bar{n}+\bar{d} = 0.15$, so by equation (9) $y^* = (0.4/0.15)^{1/2} \approx
 
 <!-- cell -->
 
-### The model in code
+## Model in code
 
-Now we turn the Key results into Python functions. Each function's description names the equation it computes. The cells after it check the algebra with numbers, one Key result at a time.
+Now we turn the Key results into Python. The section has four parts: the setup (folded, because it is the
+same in every chapter), the model as functions, numerical checks of the Key results, and the drawing tools that
+the figures use (folded too). Run its cells once, in order. Every later section of the notebook reuses them.
 
-> **Python note.** `def` creates a *function*: a named recipe that takes inputs (the
-> *arguments*) and gives back a result with `return`. Writing `A=1.0` gives the argument a
-> *default value*, used whenever we do not pass one. The text in triple quotes is a short
-> description of what the function does. `**` means "to the power of".
+<!-- cell -->
+
+### Setup
+
+Run the setup cells once, before anything else. They load the Python libraries, give every chart the same look,
+store the address of the chapter's data and define two helpers that only the book website needs. You can use
+the notebook without reading them; open the box if you are curious.
+
+<!-- cell -->
+
+::: {.callout-note .mic-fold collapse="true" title="Show the setup code"}
+
+The first cell loads the libraries and sets the look of the charts. Its comments explain each step.
 
 ```{python}
+#| kind: folded
+# @title Setup: libraries, chart colors and the data location
+# Text after a "#" is a comment: Python ignores it, it is there for human readers.
+
+# Step 1: load the libraries. `import` loads a library, a toolbox written by
+# other people, and `as np` gives it a short nickname, so the code stays short.
+import numpy as np                              # numbers and arrays
+import pandas as pd                             # data tables
+import plotly.express as px                     # quick charts from data tables
+import plotly.graph_objects as go               # charts built piece by piece
+import plotly.io as pio                         # settings shared by every chart
+from plotly.subplots import make_subplots       # several panels in one figure
+# sliders and buttons for the interactive figures
+from ipywidgets import interact, interact_manual, FloatSlider, ToggleButtons, Dropdown, fixed
+
+# Step 2: one light blue/green look for every chart
+BLUE, TEAL, GREEN, GRAY = "#16528c", "#008070", "#7fb23a", "#8a96a3"
+pio.templates.default = "plotly_white"
+# the same chart size in Colab and on the website
+pio.templates["plotly_white"].layout.update(width=860, height=480)
+px.defaults.color_discrete_sequence = [BLUE, TEAL, GREEN, "#5aa0d8", "#0b4f47"]
+WIDE = {"description_width": "initial"}         # show the full slider labels
+
+# Step 3, Colab only: let Plotly charts appear inside the interactive widgets.
+# `try` runs the indented lines; if the import fails (we are not in Colab),
+# `except` skips them.
+try:
+    import google.colab
+    google.colab.output.enable_custom_widget_manager()
+except ImportError:
+    pass                                        # not running in Colab: nothing to do
+
+# Step 4: the data files of this chapter live in the book's GitHub repository
+DATA_URL = "https://raw.githubusercontent.com/quarcs-lab/macro102-site/main/data/ch05/"
+```
+
+The website cannot run Python, so each interactive figure also gets a version with a precomputed slider. The next
+two helpers build those versions. Run them and move on.
+
+```{python}
+#| kind: folded
+# @title Helper for the website versions (run this cell; you do not need to read it)
+def slider_figure(make_figure, name, values, start, label=None):
+    """Join precomputed versions of a figure with one slider (the website cannot run Python).
+
+    Arguments
+        make_figure : the function that draws the figure, e.g. solow_diagram
+        name        : the argument the slider moves, e.g. "s"
+        values      : the values of that argument to precompute
+        start       : the value shown first
+        label       : the slider's label (the argument name if None)
+    Returns
+        one Plotly figure with all versions and a slider that shows one at a time
+    """
+    # Step 1: draw the figure once for every value
+    figures = [make_figure(**{name: v}) for v in values]
+    first = values.index(start)
+    # Step 2: copy every curve into one figure; only the start value's are visible
+    fig = go.Figure(layout=figures[first].layout)
+    owner = []                          # which precomputed figure each trace is from
+    for i, f in enumerate(figures):
+        for trace in f.data:
+            trace.visible = (i == first)
+            fig.add_trace(trace)
+            owner.append(i)
+    # Step 3: one slider step per value: its curves, title, labels and shapes
+    steps = []
+    for i, f in enumerate(figures):
+        layout = {"title": f.layout.title.to_plotly_json(),
+                  "annotations": [a.to_plotly_json() for a in f.layout.annotations],
+                  "shapes": [s.to_plotly_json() for s in f.layout.shapes]}
+        visible = [o == i for o in owner]
+        steps.append(dict(method="update", label=str(values[i]), args=[{"visible": visible}, layout]))
+    fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
+                                    currentvalue=dict(prefix=(label or name) + " = "))])
+    return fig
+```
+
+```{python}
+#| kind: folded
+# @title Helper for the website versions with many countries (run this cell; you do not need to read it)
+def country_menu(fig, shown, regions, label="Textbook countries"):
+    """Draw the countries in `shown` and put every other country one click away in the legend.
+
+    With more than 40 countries, a menu above the plot chooses the region whose countries the legend lists.
+    Traces that are not countries stay as they are.
+
+    Arguments
+        fig     : a Plotly figure with one trace per country
+        shown   : the countries drawn at the start
+        regions : maps each country to its region
+        label   : the name of the first menu entry
+    Returns
+        the same figure, with the visibility set and, for many countries, the region menu
+    """
+    # Step 1: the menu entries, the textbook countries and then one entry per region
+    # the traces that are countries, and each of their regions once, A to Z
+    countries = [trace.name for trace in fig.data if trace.name in regions]
+    groups = [label] + sorted(set(regions[name] for name in countries))
+    if len(countries) <= 40:
+        groups = [None]                     # a short legend lists every country at once
+    # Step 2: for each entry, which traces are drawn, in the legend only, or hidden
+    buttons = []
+    for group in groups:
+        visible = []
+        for trace in fig.data:
+            if trace.name in shown:
+                visible.append(True)                    # a textbook country: drawn
+            elif trace.name not in regions:
+                visible.append(True if trace.visible is None else trace.visible)   # not a country: as it was
+            elif group is None or regions[trace.name] == group:
+                visible.append("legendonly")    # in this region: a click away
+            else:
+                visible.append(False)                   # another region: hidden
+        buttons.append(dict(label=group, method="restyle", args=[{"visible": visible}]))
+    # Step 3: start with the first entry, and add the menu when there is more than one
+    for trace, v in zip(fig.data, buttons[0]["args"][0]["visible"]):
+        trace.visible = v
+    if len(groups) > 1:
+        menu = dict(type="dropdown", buttons=buttons, x=1, xanchor="right", y=1.02, yanchor="bottom")
+        fig.update_layout(updatemenus=list(fig.layout.updatemenus) + [menu], margin=dict(t=110))
+    return fig
+```
+
+:::
+
+<!-- cell -->
+
+### The model as functions
+
+Two Key results hold the whole model: the production function, equation (1), and the steady state, equations
+(3), (4) and (9). We write each one as a Python *function*: a named recipe that takes inputs and gives back a
+result. The first function is output per person.
+
+```{python}
+# `def` creates a function. Its inputs are the arguments in parentheses.
+# `A=1.0` gives A a default value, used whenever we do not pass one.
+# The text in triple quotes describes the function.
 def output(k, A=1.0):
-    """Output per person: y = A k^(1/3)   (equation 1)."""
+    """Output per person, from the production function.
+
+    Equation (1):  y = A k^(1/3)
+
+    Arguments
+        k : capital per person
+        A : productivity, A-bar (1 unless we pass another value)
+    Returns
+        output per person, y
+    """
+    # `return` gives back the result; `**` means "to the power of"
     return A * k ** (1 / 3)
+```
 
+The steady state is where investment just covers depreciation. Solving equation (2) for that point gives $k^*$,
+and putting $k^*$ into the production function gives $y^*$. The argument `n` is population growth, which adds to
+depreciation (equation 9). It is 0 unless we pass another value, so the same functions serve the basic model and
+the model with population growth in Fig. 11.
 
+```{python}
 def steady_state_k(s, d, A=1.0, n=0.0):
-    """Steady-state capital per person: k* = (s A / (n + d))^(3/2)   (equations 3 and 9; n is used in Fig. 11)."""
+    """Steady-state capital per person, k*.
+
+    Equation (3), or (9) with population growth:  k* = (s A / (n + d))^(3/2)
+
+    Arguments
+        s : investment rate, s-bar
+        d : depreciation rate, d-bar
+        A : productivity, A-bar
+        n : population growth rate, n-bar (0 in the basic model)
+    Returns
+        steady-state capital per person, k*
+    """
+    # investment s A k^(1/3) equals (n + d) k exactly at k*; solving for k gives:
     return (s * A / (n + d)) ** (3 / 2)
 
 
 def steady_state_y(s, d, A=1.0, n=0.0):
-    """Steady-state output per person: y* = A^(3/2) (s / (n + d))^(1/2)   (equations 4 and 9)."""
+    """Steady-state output per person, y*.
+
+    Equation (4), or (9) with population growth:  y* = A^(3/2) (s / (n + d))^(1/2)
+
+    Arguments
+        s : investment rate, s-bar
+        d : depreciation rate, d-bar
+        A : productivity, A-bar
+        n : population growth rate, n-bar (0 in the basic model)
+    Returns
+        steady-state output per person, y*
+    """
+    # the same as output(steady_state_k(s, d, A, n), A), written as one formula
     return A ** (3 / 2) * (s / (n + d)) ** (1 / 2)
 ```
 
-Let us try the functions on Islandia, with $\bar{s}=0.4$, $\bar{d}=0.1$ and $\bar{A}=1$. This cell checks the Key result for the
-steady state: the formula for $y^*$ and the production function applied to $k^*$ must give the same number.
+<!-- cell -->
 
-> **Python note.** An *f-string* such as `f"k* = {k_star:.2f}"` inserts the value of a variable
-> into a piece of text; `:.2f` means "show two decimals".
+### Checking the key results
+
+The formulas came from algebra. Now we check them with numbers, one Key result at a time, using Islandia's
+values $\bar{s}=0.4$, $\bar{d}=0.1$ and $\bar{A}=1$. First the steady state itself: the formula for $y^*$ and the
+production function applied to $k^*$ must give the same number, and so must both sides of equation (5).
 
 ```{python}
+# Islandia's steady state, from equation (3) and then equation (1)
 k_star = steady_state_k(s=0.4, d=0.1)
 y_star = output(k_star)
+
+# An f-string, f"... {value:.2f}", puts a value into the text;
+# ":.2f" means "two decimals".
 print(f"Steady-state capital per person k* = {k_star:.2f}")
 print(f"Steady-state output per person  y* = {y_star:.2f}")
+# equation (4) must give the same y* as the line above
 print(f"Check with equation (4):        y* = {steady_state_y(s=0.4, d=0.1):.2f}")
+# consumption is what is not invested, c* = (1 - s) y*
 print(f"Consumption per person          c* = {(1 - 0.4) * y_star:.2f}")
+# both sides of equation (5), K/Y = s/d
 print(f"Capital-output ratio, eq. (5): k*/y* = {k_star / y_star:.2f}   and s/d = {0.4 / 0.1:.2f}")
 print(f"Real interest rate (1/3)(d/s):   r* = {100 * 0.1 / (3 * 0.4):.1f}%")
 ```
 
-**Check 1: Islandia really converges to $k^*$.** The formula for $k^*$ came from algebra. Here we start Islandia
-with very few tools and apply equation (2) for 300 years, one year at a time.
-
-> **Python note.** `range(300)` counts 0, 1, ..., 299, so the `for` loop runs its indented lines 300 times.
-> `k = k + ...` replaces the old value of `k` by the new one. `if year in (10, 50, 100)` is true only in those years.
+**Check 1: Islandia really converges to $k^*$.** We start Islandia with very few tools and apply equation (2)
+for 300 years, one year at a time. Capital should approach the $k^*$ of the formula.
 
 ```{python}
-k = 1.0                                          # start far below the steady state
+# Step 1: start far below the steady state
+k = 1.0
+
+# Step 2: apply equation (2) once a year. `range(300)` counts 0, 1, ..., 299,
+# so the `for` loop runs its indented lines 300 times.
+# `if year in (10, 50, 100)` is true only in those years.
 for year in range(300):
     if year in (10, 50, 100):
         print(f"Year {year:3d}: k = {k:.3f}")
-    k = k + 0.4 * output(k) - 0.1 * k            # equation (2)
+    # new k = old k + investment - depreciation
+    k = k + 0.4 * output(k) - 0.1 * k
+
+# Step 3: compare the end point with the formula
 print(f"Year 300: k = {k:.3f}   (formula: k* = {steady_state_k(s=0.4, d=0.1):.3f})")
 ```
 
-**Check 2: the elasticities.** Raise each parameter by 1 percent and see by what percentage $y^*$ changes. The
-comparative-statics table predicts $+0.5\%$ for $\bar{s}$, $+1.5\%$ for $\bar{A}$ and $-0.5\%$ for $\bar{d}$.
+**Check 2: the elasticities.** We raise each parameter by 1 percent and see by what percentage $y^*$ changes.
+The comparative-statics table predicts $+0.5\%$ for $\bar{s}$, $+1.5\%$ for $\bar{A}$ and $-0.5\%$ for $\bar{d}$.
 
 ```{python}
+# Step 1: y* at Islandia's values
 base = steady_state_y(s=0.4, d=0.1, A=1.0)
+
+# Step 2: y* with one parameter 1% higher, relative to the base (0.005 = 0.5%)
 change_s = steady_state_y(s=0.4 * 1.01, d=0.1, A=1.0) / base - 1
 change_A = steady_state_y(s=0.4, d=0.1, A=1.0 * 1.01) / base - 1
 change_d = steady_state_y(s=0.4, d=0.1 * 1.01, A=1.0) / base - 1
+
+# Step 3: show them in percent; ":+.3f" shows the sign and three decimals
 print(f"1% higher s: y* changes by {100 * change_s:+.3f}%")
 print(f"1% higher A: y* changes by {100 * change_A:+.3f}%")
 print(f"1% higher d: y* changes by {100 * change_d:+.3f}%")
 ```
 
-The answers are close to 0.5, 1.5 and −0.5 but not exact, because an elasticity describes very small
-changes and 1 percent is small but not zero.
+The answers are close to 0.5, 1.5 and −0.5 but not exact. An elasticity describes very small changes, and
+1 percent is small but not zero.
 
 **Check 3: the speed of transition.** Equation (6) says that the growth rate of capital depends only on how far
 $k_t$ is from $k^*$. We compare it with the growth rate computed directly from equation (2). The 50 percent row is
 Islandia right after the storm in *What the model predicts*.
 
 ```{python}
+# Islandia's steady state, the benchmark for "how far from k*"
 k_star = steady_state_k(s=0.4, d=0.1)
-for share in (0.5, 0.95, 1.5):                   # capital at 50%, 95% and 150% of the steady state
+
+# For capital at 50%, 95% and 150% of the steady state, compute the growth
+# rate of k in two ways; ":.0%" shows a share as a percentage
+for share in (0.5, 0.95, 1.5):
     k = share * k_star
-    direct = (0.4 * output(k) - 0.1 * k) / k             # growth rate from equation (2)
-    formula = 0.1 * ((k_star / k) ** (2 / 3) - 1)        # equation (6)
+    direct = (0.4 * output(k) - 0.1 * k) / k        # equation (2): net investment / k
+    formula = 0.1 * ((k_star / k) ** (2 / 3) - 1)   # equation (6)
     print(f"k = {share:.0%} of k*: growth of k = {100 * direct:+.2f}% (direct), {100 * formula:+.2f}% (eq. 6)")
 ```
 
-**Check 4: population growth.** This cell checks the Key result with population growth. With $\bar{n} = 0.02$ and
-$\bar{d} = 0.08$, equation (9) gives the same steady state as $\bar{n} = 0$ and $\bar{d} = 0.1$. Faster population
-growth, 3 percent, lowers $y^*$ by about 5 percent.
+**Check 4: population growth.** With $\bar{n} = 0.02$ and $\bar{d} = 0.08$, equation (9) gives the same steady
+state as $\bar{n} = 0$ and $\bar{d} = 0.1$, because only $\bar{n}+\bar{d}$ matters. Faster population growth,
+3 percent, should lower $y^*$ by about 5 percent.
 
 ```{python}
+# y* with 2% and with 3% population growth (equation 9); n + d is 0.10 and then 0.11
 y_n2 = steady_state_y(s=0.4, d=0.08, n=0.02)
 y_n3 = steady_state_y(s=0.4, d=0.08, n=0.03)
 print(f"n = 2%: y* = {y_n2:.3f}")
 print(f"n = 3%: y* = {y_n3:.3f}   ({100 * (y_n3 / y_n2 - 1):+.1f}%)")
 ```
 
-### Drawing the curves
+<!-- cell -->
+
+### Drawing tools
+
+The Solow diagrams of the figures share four small tools: one draws a curve and writes its name on the plot, one
+draws an arrow along the capital axis, and two set up the axes. Run them and move on, or open the box to see how
+they work.
+
+<!-- cell -->
+
+::: {.callout-note .mic-fold collapse="true" title="Show the drawing tools"}
 
 As in the textbook, every curve of a Solow diagram carries its name on the plot, right after its last point
-inside the axes, so the diagrams need no legend. The helper `add_curve` below draws one curve and writes its
-name. If the name of another curve already sits close by, it leaves the name out, so that two names never
-overlap. The black dots carry short labels such as $k^*$.
-
-> **Python note.** `y <= y_max` gives `True` or `False` for every point, and `k[inside]` keeps only the points
-> where it is `True`: the part of the curve inside the axes. `[-1]` takes the last element of an array. A `for`
-> loop repeats its indented lines once for each element, here for each name already on the figure.
-> `if ... else` chooses between two cases, and `abs` is the absolute value. A bare `return` leaves the function
-> early. The `row` and `col` arguments say in which panel to draw; we need them only in Figs. 5 and 7.
+inside the axes, so the diagrams need no legend. `add_curve` draws one curve and writes its name. If the name of
+another curve already sits close by, it leaves the name out, so that two names never overlap.
 
 ```{python}
+#| kind: folded
+# @title Drawing tool: a curve with its name on the plot
 def add_curve(fig, k, y, label, color, y_max, dash="solid", row=None, col=None):
-    """Draw one curve of a Solow diagram and write its name at its last point inside the axes."""
-    inside = y <= y_max                                   # the part of the curve below the top of the axes
+    """Draw one curve of a Solow diagram and write its name at its last point inside the axes.
+
+    Arguments
+        fig      : the figure to draw on
+        k, y     : the points of the curve (arrays)
+        label    : the curve's name, e.g. "Investment, s·y"
+        color    : its color, e.g. TEAL
+        y_max    : the top of the vertical axis
+        dash     : "solid" or "dash"
+        row, col : the panel to draw in (only for figures with two panels, Figs. 5 and 7)
+    """
+    # Step 1: keep the part of the curve below the top of the axes. `y <= y_max`
+    # gives True or False for each point; `k[inside]` keeps the points where it is True.
+    inside = y <= y_max
     fig.add_trace(go.Scatter(x=k[inside], y=y[inside], name=label, mode="lines",
                              line=dict(color=color, width=3, dash=dash)), row=row, col=col)
+    # [-1] is the last element: the last point inside the axes
     k_end, y_end = k[inside][-1], y[inside][-1]
-    for old in fig.layout.annotations:                    # is another name already close by?
+
+    # Step 2: is another name already close by? (`abs` is the absolute value)
+    for old in fig.layout.annotations:
         if old.showarrow is False and old.xref != "paper":
             if abs(old.y - y_end) < y_max / 12 and abs(old.x - k_end) < k[-1] / 3:
-                return                                    # yes: leave this name out
+                # yes: a bare `return` leaves the function early, without a name
+                return
+
+    # Step 3: write the name right after the curve's last point: level with it when
+    # the curve reaches the right edge, just below the top if it leaves through the top
     if inside[-1]:
-        anchor = "middle"                                 # the curve reaches the right edge: name right after it
+        anchor = "middle"
     else:
-        anchor = "top"                                    # the curve leaves through the top: name just below the top
-    fig.add_annotation(x=k_end, y=y_end, text=label, showarrow=False, xanchor="left", yanchor=anchor, xshift=5,
-                       font=dict(color=color, size=13), row=row, col=col)
+        anchor = "top"
+    fig.add_annotation(x=k_end, y=y_end, text=label, showarrow=False, xanchor="left", yanchor=anchor,
+                       xshift=5, font=dict(color=color, size=13), row=row, col=col)
+```
 
+`add_arrow` shows where capital moves: from a starting point toward the steady state.
 
+```{python}
+#| kind: folded
+# @title Drawing tool: an arrow along the capital axis
 def add_arrow(fig, k_from, k_to, height):
-    """Draw an arrow along the k-axis from k_from to k_to (none if the two are the same)."""
+    """Draw an arrow along the k-axis from k_from to k_to (none if the two are the same).
+
+    Arguments
+        fig    : the figure to draw on
+        k_from : where capital starts
+        k_to   : where capital goes
+        height : the height of the arrow on the vertical axis
+    """
+    # draw it only if the two points are visibly apart
     if abs(k_to - k_from) > 0.1:
         fig.add_annotation(x=k_to, y=height, ax=k_from, ay=height, xref="x", yref="y", axref="x", ayref="y",
                            showarrow=True, arrowhead=3, arrowwidth=2, arrowcolor=GREEN)
@@ -606,23 +754,42 @@ def add_arrow(fig, k_from, k_to, height):
 The axes of each diagram are fixed, so that you can see the curves move. Only when an extreme slider setting
 would push a steady state off the chart does `axis_end` widen an axis, by doubling it until the point fits.
 
-> **Python note.** A `while` loop repeats its indented lines as long as its condition is true. `max(a, b)` is
-> the larger of two numbers. In `k_axis`, `//` divides and drops the remainder, and `list(range(5, 21, 5))` is
-> the list `[5, 10, 15, 20]`, the tick marks of the usual axis.
-
 ```{python}
+#| kind: folded
+# @title Drawing tools: fixed axes that widen only when needed
 def axis_end(top, end):
-    """End of a fixed axis: `end`, doubled until the highest point `top` fits on the chart."""
-    while top > 0.95 * end:                           # the point would fall off the chart: widen the axis
+    """The end of a fixed axis, doubled until the highest point fits on the chart.
+
+    Arguments
+        top : the highest point to show, e.g. k*
+        end : the usual end of the axis
+    Returns
+        the end of the axis: `end`, or a doubled value if `top` would fall off
+    """
+    # a `while` loop repeats as long as its condition is true: here, as long as
+    # the point would fall off the chart, double the axis
+    while top > 0.95 * end:
         end = 2 * end
     return end
 
 
 def k_axis(k_end):
-    """The k-axis of a Solow diagram, from 0 to k_end, with round ticks and none at 0 (the corner)."""
-    step = 5 * (k_end // 20)                          # 5 apart on the usual axis, wider on a widened one
+    """The k-axis of a Solow diagram, from 0 to k_end, with round ticks and none at 0 (the corner).
+
+    Arguments
+        k_end : the end of the axis (from axis_end)
+    Returns
+        the axis settings, for fig.update_layout(xaxis=...)
+    """
+    # `//` divides and drops the remainder; ticks 5 apart on the usual axis, 0 to 20
+    step = 5 * (k_end // 20)
+    # list(range(5, 21, 5)) is [5, 10, 15, 20], the ticks of the usual axis
     return dict(title="Capital per person, k", range=[0, k_end], tickvals=list(range(step, k_end + 1, step)))
 ```
+
+:::
+
+<!-- cell -->
 
 ## The Solow diagram and the steady state
 
