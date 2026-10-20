@@ -1,0 +1,251 @@
+# Chapter 2. Measuring the Macroeconomy: a podcast companion to the mind map
+
+Two voices: HOST, a curious host who asks what students would ask, and ECONOMIST, who explains.
+
+## Opening
+
+HOST: Welcome back. Today we are on measuring the macroeconomy: how we measure a whole economy with numbers. In the early 1930s, during the Great Depression, American leaders could not say how bad the crisis was. Why not?
+
+ECONOMIST: Because nobody had measured the whole economy yet. They had only stock prices and a few counts of factory output. So the economist Simon Kuznets and a team at the U.S. Department of Commerce built the national accounts: records that add up a country's production, spending and income.
+
+HOST: And the best-known number in those accounts is GDP?
+
+ECONOMIST: Yes. GDP is short for gross domestic product. It's the value of all the final goods and services a country produces in a year, counted at the prices people pay. Final means that a good has reached its last user, like the bread you eat, not the flour inside it.
+
+HOST: So when GDP grows, the country makes more goods?
+
+ECONOMIST: Not only that. Prices matter too. Here's a modern puzzle. From 1995 to 2022, U.S. GDP measured in dollars became about 3.4 times as large. But the amount of goods and services produced did not even double. The rest came from higher prices.
+
+HOST: So here is today's question. How do we count a whole economy, and split its growth into higher prices and more goods?
+
+ECONOMIST: By the end of this episode, you'll be able to do three things. First, say who buys and who earns U.S. GDP, and explain why production, spending and income are three ways to count the same total. Second, split the growth of GDP in dollars into higher prices and more goods, and explain why the choice of prices matters. Third, explain why we compare countries at common prices, the same prices for every country, and name what GDP leaves out.
+
+HOST: And we'll follow the chapter's mind map part by part?
+
+ECONOMIST: Yes. Part one gives the facts. Part two builds the accounting framework behind them. Part three shows the uses and limits of GDP. Each part has three or four leaves, small topics that we take in order.
+
+## Part 1: The facts
+
+HOST: Part one of the map: The facts. The first leaf asks who buys GDP. So who does buy it?
+
+ECONOMIST: Economists split the buyers into four groups. Households buy consumption goods and services, like food, rent and medical care. Firms buy investment goods: new buildings, machines and software. The government buys goods and services, like the work of teachers and new roads. And people in other countries buy the country's exports.
+
+HOST: And what about the things we buy from other countries?
+
+ECONOMIST: Those are imports. We subtract them, because they were made somewhere else. Exports minus imports are called net exports.
+
+HOST: Which group is the biggest? Firms and the government spend huge amounts. My guess is that households buy about half.
+
+ECONOMIST: Households buy even more than that, because consumption covers everything families buy, day after day. From 1950 to 2025, consumption averaged about 64 percent of U.S. GDP. That's close to two-thirds.
+
+HOST: So the shares hardly change at all?
+
+ECONOMIST: They change, but slowly. Since 1970, consumption's share has risen by 7.4 percentage points. A percentage point is the simple difference between two percentages. So out of every 100 dollars of GDP, consumers now buy 7.4 dollars more than they did then.
+
+HOST: Then another share had to fall. I'd guess investment, because money spent in shops is not invested.
+
+ECONOMIST: It sounds logical, but investment actually ended a little higher. The government bought less, and the country bought more abroad than it sold. Government purchases lost 6.2 points, and net exports lost 3.4 points. The four shares always add up to 100 percent, so the points some shares gain, others must lose. Net exports are now negative, which is called a trade deficit.
+
+HOST: Next leaf: who earns GDP.
+
+ECONOMIST: Every dollar of GDP is also someone's income. Part of it goes to workers as wages, salaries and benefits. Apart from some taxes, the rest goes to the owners of capital, meaning buildings, machines and other tools. Labor's share is the part of income that pays for work.
+
+HOST: I learned that workers always get about two-thirds of income. So my guess is that labor's share stays at two-thirds.
+
+ECONOMIST: You're half right. On average, it's close to two-thirds. But the share is not constant. In 1970 it was 0.69. That means workers earned 69 cents of every dollar of income.
+
+HOST: And today?
+
+ECONOMIST: In 2025, it was 0.59, the lowest in the data. So labor's share has slowly fallen for more than five decades. In part three, we ask why.
+
+HOST: The last leaf of this part is prices. How much have prices gone up?
+
+ECONOMIST: Here we follow the price level, the average price of everything counted in GDP. Guess first. How many times higher is the U.S. price level now than in 1947?
+
+HOST: Hmm. Maybe five times higher?
+
+ECONOMIST: More than twice that, because small rises every year build on each other over almost eight decades. The price level is about 12 times its 1947 level. On average, what cost one dollar in 1947 costs about 12 dollars now. The growth rate of the price level is called inflation. It's the percent by which prices go up in a year.
+
+HOST: So when was inflation highest?
+
+ECONOMIST: In the 1970s. It peaked at 10.9 percent in 1975.
+
+HOST: And has high inflation come back since then?
+
+ECONOMIST: Yes. A second wave peaked at 7.8 percent in 2022.
+
+HOST: So in part one we saw three facts. Households buy most of what the U.S. economy produces. Workers earn most of its income, but a smaller part than in 1970. And prices keep going up, but not at a steady pace.
+
+ECONOMIST: Right. But every one of these facts depends on definitions. Next branch: how the accounts are built, and why their numbers fit together.
+
+## Part 2: The accounting framework
+
+HOST: Part two of the map: The accounting framework. The first leaf says production equals expenditure equals income. What does that mean?
+
+ECONOMIST: Expenditure simply means spending. We can count GDP by adding up what is produced, what is spent on it, or the incomes it pays. All three give the same total. Let's see why on Islandia, a small imaginary island country that we come back to often.
+
+HOST: My guess is that they just add up every sale on the island.
+
+ECONOMIST: That would count some things more than once. A farm sells grain worth 40 dollars to a mill. The mill makes flour and sells it for 70 dollars to a bakery. The bakery sells bread worth 120 dollars to islanders.
+
+HOST: So all the sales add up to 230 dollars.
+
+ECONOMIST: Yes, but the grain is inside the flour, and the flour is inside the bread. So 230 counts the grain three times and the flour twice. The answer is value added: what a firm sells, minus what it buys from other firms. For the mill, that's 70 dollars of flour minus 40 dollars of grain, so 30 dollars.
+
+HOST: So the farm adds 40, because it buys nothing from other firms. And the bakery adds 120 minus 70, which is 50.
+
+ECONOMIST: Exactly. Add the three, and you get 120 dollars, the value of the bread. Each dollar of value added is also someone's income. It pays workers, taxes, and machines that wear out, called depreciation. Profit is whatever is left for the owners, so the incomes also add up to 120 dollars.
+
+HOST: Next leaf: who buys it. We met those buyers in part one.
+
+ECONOMIST: Now they become a rule. GDP equals consumption plus investment plus government purchases plus net exports. This is the national income identity. An identity is true by definition, in every year and every country.
+
+HOST: But what if a firm can't sell what it makes?
+
+ECONOMIST: Suppose Harbor Boatworks, a boat builder on Islandia, can't sell a boat this year. The boat counts as investment in inventories, meaning goods made but not yet sold. It's as if the boat builder had bought its own boat. So every good produced has a buyer somewhere in the accounts.
+
+HOST: Here's something I've always believed. Imports come with a minus sign. So when islanders buy more imports, GDP falls.
+
+ECONOMIST: A lot of students think that, but imports don't lower GDP directly. Suppose an islander buys a new boat built on Mainland, the country that Islandia trades with. Consumption goes up by the price of the boat, and so do imports, so net exports fall by the same amount. The two changes cancel. The minus sign only removes goods made abroad, which were already counted in spending. GDP falls only if the islander would otherwise have bought a boat from Harbor Boatworks, and that's a question about behavior.
+
+HOST: Next leaf: real GDP holds prices fixed. Why do we need to keep prices the same?
+
+ECONOMIST: GDP in dollars, called nominal GDP, can grow because goods cost more or because there are more goods. Real GDP values each year's goods at the same prices, so it changes only when quantities change. Back to Islandia. In this example, it makes only apples and computers.
+
+HOST: Does it matter which prices? Growth is growth, I'd say.
+
+ECONOMIST: You'd think so, but the answer changes a little. Let's build the answer at the old prices step by step. In 2026, Islandia spends 6,000 dollars in all: 5,000 on computers and 1,000 on apples.
+
+HOST: And what happens the next year?
+
+ECONOMIST: In 2027, Islandia makes 10 percent more apples and 20 percent more computers. To measure real growth, we value these extra goods at the old 2026 prices.
+
+HOST: So the extra apples are worth 10 percent of 1,000 dollars. That's 100 dollars.
+
+ECONOMIST: Right. And the extra computers are worth 20 percent of 5,000 dollars, which is 1,000 dollars. Together, the extra goods are worth 1,100 dollars.
+
+HOST: And we started from 6,000. So real growth is 1,100 divided by 6,000?
+
+ECONOMIST: Yes, about 18.3 percent. So real growth is an average of the two growth rates. Computers count much more in that average, because they had five sixths of the spending. This measure is called the Laspeyres index: growth at the starting prices.
+
+HOST: And at 2027 prices?
+
+ECONOMIST: In 2027, an apple costs 3 dollars instead of 2, but a computer costs the same as before. So computers became cheaper compared with apples, and they take a smaller share of spending. The fast-growing good counts for less in the average, so real growth comes out lower, at 17.7 percent. Growth at the ending prices is called the Paasche index.
+
+HOST: Two answers for the same island. Which one is right?
+
+ECONOMIST: Neither is wrong. Each one uses a different year's prices. Statistical offices take the average of the two, which here is 18.0 percent. Over many years, one set of prices goes out of date. So offices use the prices of two neighboring years at a time, and link the years like a chain. That's called chain weighting. The United States moved to it in the 1990s, when computer prices were falling fast.
+
+HOST: Last leaf of this part: prices link the two measures, GDP in dollars and real GDP.
+
+ECONOMIST: GDP in dollars equals the price level times real GDP. So GDP in dollars grows for two reasons, higher prices and more goods. Take 2022. Prices went up 7.1 percent, and real GDP grew 2.4 percent.
+
+HOST: So GDP in dollars grew by the sum, about 9.5 percent?
+
+ECONOMIST: Very close: it grew 9.7 percent. Adding leaves out one small piece, the price rise on the extra goods. When both changes are small, that piece is tiny. So the growth of GDP in dollars is about inflation plus real growth.
+
+HOST: Now the modern puzzle from the opening. GDP in dollars became about 3.4 times as large. How much was more goods?
+
+ECONOMIST: Real GDP became 1.93 times as large, so output almost doubled. Over those 27 years, prices went up by about three quarters.
+
+HOST: So can we add the two growth rates, like in 2022?
+
+ECONOMIST: Not here. Both changes are big, so the price rise on all the extra goods is big too. Instead, we multiply. The price level became 1.76 times as high, and 1.76 times 1.93 is about 3.4.
+
+HOST: So in part two we saw that value added counts each stage once, and that spending and income add up to the same total. Real GDP keeps prices the same, but the prices we pick change the answer a little.
+
+ECONOMIST: Yes. Next branch: we use these tools to compare countries, and we look at what GDP misses.
+
+## Part 3: Uses and limits
+
+HOST: Part three of the map: Uses and limits. The first leaf: compare at common prices. Why is it hard to compare countries?
+
+ECONOMIST: Because countries use different currencies, like Islandia and Mainland. The simple way is to convert with the exchange rate, the price of one currency in another. Take China and the United States in 2019. Converted at the exchange rate, China's GDP was 67 percent of U.S. GDP.
+
+HOST: A dollar is a dollar. So that comparison sounds fair to me.
+
+ECONOMIST: It sounds fair, but it misses one thing: prices differ between countries. In 2019, goods in China cost almost a third less than the same goods in the United States. So each dollar of China's GDP stands for more goods.
+
+HOST: So how do we correct for that?
+
+ECONOMIST: We value China's goods at U.S. prices. To do that, we divide China's GDP in dollars by China's prices as a share of U.S. prices. That share is below one, so China's GDP gets larger. At common prices, China's economy was 98 percent of the U.S. economy, almost the same size. This is called purchasing power parity, or PPP: comparing countries at the same prices.
+
+HOST: So China was almost as rich as the United States?
+
+ECONOMIST: No. That's the whole economy. China has about 4 times as many people, so per person it was still only about a quarter of the U.S. level.
+
+HOST: But why are goods cheaper in China?
+
+ECONOMIST: Services like haircuts can't be shipped, and they need a lot of work, so they are cheap where wages are low. Suppose a haircut on Islandia costs half as much as on Mainland. At the exchange rate, it counts as half a Mainland haircut, though it's the same service. So exchange rates make poorer countries look poorer than they are.
+
+HOST: Next leaf: beyond GDP. What does GDP leave out?
+
+ECONOMIST: GDP counts mostly what is sold in markets. If you cook dinner at home, only the groceries count, not your time. A restaurant meal counts in full. GDP also leaves out how long and how healthy people's lives are, how much free time they have, and damage to the environment.
+
+HOST: Then GDP must be a poor guide to how well people live.
+
+ECONOMIST: You're partly right: for one country, it can miss a lot. Two economists at Stanford built a broader measure of welfare, meaning how good people's lives are. It starts from what people consume, and adds the value of longer lives, more free time and a fairer sharing of consumption. In 2007, France's GDP per person was about 70 percent of the U.S. level.
+
+HOST: And with the broader measure?
+
+ECONOMIST: French people lived longer, worked fewer hours, and shared consumption more equally. So France's welfare was about 91 percent of the U.S. level. But across more than 100 countries, welfare and GDP were very closely linked. Countries with higher GDP usually had higher welfare too. So GDP is imperfect, but it's not a poor guide.
+
+HOST: Next leaf: who gains from growth? Back to labor's falling share. Why did it fall?
+
+ECONOMIST: Economists still debate it. One idea is that cheaper machines and software replace some workers. Another is that a few very large firms with few workers have taken a bigger part of their markets. A third is that workers have less power to ask for higher pay, because of global trade and weaker unions. And part of the fall comes from how statisticians count software and research, which is also debated.
+
+HOST: Does it matter which explanation is right?
+
+ECONOMIST: Yes, for policy. If machines replace workers, it points to training, and to how we tax capital and labor. If big firms are the cause, it points to competition policy, meaning rules that stop firms from gaining too much power over a market. If workers lost power, it points to the rules of the labor market. And if it's only a question of counting, no response is needed.
+
+HOST: Last leaf: check the definitions before comparing.
+
+ECONOMIST: The World Bank counts government spending on roads, buildings and equipment as investment. The Bureau of Economic Analysis, which builds the U.S. accounts, counts it as government purchases. So for the United States, the World Bank's investment share is about 4 points higher, and its government share about 4 points lower.
+
+HOST: So it's the same spending, just put in a different group.
+
+ECONOMIST: Exactly. So before you compare two countries, check that the numbers use the same definitions.
+
+HOST: So in part three we saw that countries must be compared at the same prices, that GDP leaves out a lot, and that who gains from growth is still debated.
+
+ECONOMIST: Right. Let's sum up.
+
+## Wrap-up
+
+HOST: Let's go back to our three goals. First, who buys and who earns GDP, and why are production, spending and income the same total?
+
+ECONOMIST: Households buy about two-thirds of U.S. GDP, and workers earn most of the income, though a falling share. The three counts agree because value added counts each stage once, and every dollar of value added is someone's income.
+
+HOST: Second, splitting growth. Real GDP holds prices fixed, so it shows only the goods.
+
+ECONOMIST: Yes. But the prices you choose change the answer a little, 18.3 or 17.7 percent, because computers grew fastest and got cheaper, so they count more at the old prices. So offices average the two answers and link the years in a chain.
+
+HOST: And third, comparing countries.
+
+ECONOMIST: Use common prices, because poorer countries usually have lower prices. And remember what GDP leaves out: health, free time, work at home and the environment.
+
+HOST: So what's the one idea to keep?
+
+ECONOMIST: Measure before you model. In the coming chapters, we build models, simple stories of how the economy works. But first we must measure it well. GDP is one total that we can count in three ways. Its growth splits into higher prices and more goods. And countries must be compared at the same prices.
+
+HOST: Here's a question to think about. Suppose Islandia's currency loses value against Mainland's, so one unit of Islandia's money buys less of Mainland's money. Nothing else changes in either country. What happens to Islandia's GDP compared with Mainland's? First at the exchange rate, and then at common prices.
+
+ECONOMIST: Pause the episode and think about it for a moment.
+
+HOST: Okay, we're back. What's the answer?
+
+ECONOMIST: At the exchange rate, Islandia looks smaller. Its GDP is worth less in Mainland's money, by the same percent as its currency fell. At common prices, nothing changes. Islandia still makes the same goods, and its prices in Mainland's money fell by that same percent. At common prices, we divide its GDP in Mainland's money by its prices in Mainland's money. Both fell by the same percent, so the result does not move. That's why common prices are better for comparing what countries produce.
+
+HOST: Where can students try all this themselves?
+
+ECONOMIST: Open the chapter's Colab notebook to rebuild every chart and calculation yourself. And the Data Apps let you explore the charts without any code.
+
+HOST: And next time?
+
+ECONOMIST: In Chapter 3, we use real GDP per person at common prices, the measure we built today. We ask: why are some countries so much richer than others, and how do we read growth from the data?
+
+HOST: That's it for today. Thanks for listening, and see you next time.
+
+---
+
+*© 2026 Carlos Mendez. CC BY-NC 4.0. Voices generated with Google Gemini text-to-speech.*
