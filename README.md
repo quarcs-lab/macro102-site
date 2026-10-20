@@ -43,8 +43,9 @@
 | D | [Growth and Development Accounting](notebooks/appD-growth-and-development-accounting.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/appD-growth-and-development-accounting.ipynb) |
 | E | [Growth and Convergence Across Countries](notebooks/appE-growth-and-convergence-across-countries.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/appE-growth-and-convergence-across-countries.ipynb) |
 | F | [Augmented Solow Growth Model](notebooks/appF-augmented-solow-growth-model.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/appF-augmented-solow-growth-model.ipynb) |
-| G | [DSGE Modeling with Python](notebooks/appG-dsge-modeling-with-python.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/appG-dsge-modeling-with-python.ipynb) |
-| H | [The DSGE Model of Smets and Wouters](notebooks/appH-the-dsge-model-of-smets-and-wouters.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/appH-the-dsge-model-of-smets-and-wouters.ipynb) |
+| G | [Growth and Institutions](notebooks/appG-growth-and-institutions.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/appG-growth-and-institutions.ipynb) |
+| H | [DSGE Modeling with Python](notebooks/appH-dsge-modeling-with-python.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/appH-dsge-modeling-with-python.ipynb) |
+| I | [The DSGE Model of Smets and Wouters](notebooks/appI-the-dsge-model-of-smets-and-wouters.ipynb) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/quarcs-lab/macro102-site/blob/main/notebooks/appI-the-dsge-model-of-smets-and-wouters.ipynb) |
 
 ## Repository layout
 
@@ -54,10 +55,11 @@
 | `notebooks/` | The chapter notebooks (`.ipynb`, saved with outputs). Open them in Colab. |
 | `src/` | The source of each notebook (`.qmd`). The notebook is generated from it, so edit the source, not the `.ipynb`. |
 | `data/chNN/` | The CSV files each notebook reads, plus a `README.md` with sources and a `build_data.py` that rebuilds the wider files. |
-| `data/appA/`, `images/appA/` | The data files and the Colab screenshots of Appendix A. (Appendix B downloads its data live from the original sources; Appendices G and H install the Snowdrop package and use the models and data that come with it.) |
+| `data/appA/`, `images/appA/` | The data files and the Colab screenshots of Appendix A. (Appendix B downloads its data live from the original sources; Appendices H and I install the Snowdrop package and use the models and data that come with it.) |
 | `data/appE/` | The Penn World Table 10.0 panel of Appendix E (84 countries, 1960–2019), with its `build_data.py` and `README.md`. |
 | `data/appF/` | The data of Mankiw, Romer and Weil (1992) and their variables rebuilt from the Penn World Table 11.0 and the World Bank WDI (Appendix F), with `build_data.py` and `README.md`. |
-| `_quarto.yml`, `index.qmd`, `_includes/` | The Quarto book website, in a dark theme (the default, in the colors of the book cover) and a light one, switched with the button at the top right. `_includes/theme-*.scss` hold the colors; `_includes/plotly-theme.html` recolors the saved charts for the dark theme, so each chart is stored only once. The matplotlib charts of Appendices G and H are saved as light/dark image pairs, and `_includes/styles.css` shows the one that matches the theme. |
+| `data/appG/` | The data of Acemoglu, Johnson and Robinson (2001), from their replication files (Appendix G), with `build_data.py` and `README.md`. |
+| `_quarto.yml`, `index.qmd`, `_includes/` | The Quarto book website, in a dark theme (the default, in the colors of the book cover) and a light one, switched with the button at the top right. `_includes/theme-*.scss` hold the colors; `_includes/plotly-theme.html` recolors the saved charts for the dark theme, so each chart is stored only once. The matplotlib charts of Appendices H and I are saved as light/dark image pairs, and `_includes/styles.css` shows the one that matches the theme. |
 
 ## Rebuilding
 
