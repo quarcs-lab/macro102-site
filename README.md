@@ -60,6 +60,8 @@
 | `data/appF/` | The data of Mankiw, Romer and Weil (1992) and their variables rebuilt from the Penn World Table 11.0 and the World Bank WDI (Appendix F), with `build_data.py` and `README.md`. |
 | `data/appG/` | The data of Acemoglu, Johnson and Robinson (2001), from their replication files (Appendix G), with `build_data.py` and `README.md`. |
 | `_quarto.yml`, `index.qmd`, `_includes/` | The Quarto book website, in a dark theme (the default, in the colors of the book cover) and a light one, switched with the button at the top right. `_includes/theme-*.scss` hold the colors; `_includes/plotly-theme.html` recolors the saved charts for the dark theme, so each chart is stored only once. The matplotlib charts of Appendices H and I are saved as light/dark image pairs, and `_includes/styles.css` shows the one that matches the theme. |
+| `es/index.qmd`, `ja/index.qmd`, `_includes/home-i18n.html` | The home page in Spanish and Japanese (hand translations; nothing else is translated). Spanish and Japanese browsers are sent from the English home page to `es/` or `ja/`, and a switcher under the title lets readers pick a language (remembered). On those pages the sidebar and footer are translated too. |
+| `scripts/check_home_translations.py` | Fails when `index.qmd` has changed since the translations were made. After editing `index.qmd`: update both translations, then run it with `--sync-tables` (copies the chapter and appendix tables) and `--stamp`. |
 
 ## Rebuilding
 
