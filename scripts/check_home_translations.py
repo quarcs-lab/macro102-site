@@ -29,8 +29,10 @@ HEADERS = {
            "appendices": "| 付録 | ノートブック | AI Notebook |"},
 }
 
-# Links that may differ on purpose: the mind map of each language, the license deed in its language
+# Links that may differ on purpose: the mind map of each language, the license deed in its language,
+# and the Japanese-language Spotify show linked from the Japanese homepage.
 ALLOWED_EXTRA = re.compile(r"preface-data-science-and-macroeconomic-models-(es|ja)-v\d+|/deed\.(es|ja)$")
+JA_SHOW = "https://open.spotify.com/show/0Rch7WqDEa5z1vWXd1aWcM"
 ALLOWED_MISSING = re.compile(r"preface-data-science-and-macroeconomic-models-v\d+|by-nc/4\.0/$")
 
 
@@ -105,7 +107,8 @@ def check(path, lang, english, digest):
         problems.append(f"{n_tr} headings, the English has {n_en}")
     en_links, tr_links = links(english), links(text)
     missing = {l for l in en_links - tr_links if not ALLOWED_MISSING.search(l)}
-    extra = {l for l in tr_links - en_links if not ALLOWED_EXTRA.search(l)}
+    extra = {l for l in tr_links - en_links
+             if not ALLOWED_EXTRA.search(l) and not (lang == "ja" and l == JA_SHOW)}
     problems += [f"missing link: {l}" for l in sorted(missing)]
     problems += [f"extra link: {l}" for l in sorted(extra)]
     for img in re.findall(r'(?:src|href)="\.\./(images/[^"]+)"', text):
