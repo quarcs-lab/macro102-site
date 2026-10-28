@@ -38,6 +38,7 @@ if(dataNode){
   const passages=$$('.passage');
   const speed=$('#speed'),autopause=$('#autopause'),now=$('#now-playing');
   let clip=null,timer=null,frame=null;
+  let stopSpeech=()=>{};
   const span=id=>{const el=document.getElementById(id);return el?[+el.dataset.start,+el.dataset.end]:null;};
   const clear=()=>{clearTimeout(timer);cancelAnimationFrame(frame);timer=null;
     $$('.passage.playing').forEach(p=>p.classList.remove('playing'));now.textContent='';};
@@ -70,7 +71,7 @@ if(dataNode){
   };
   const play=(id,opts={})=>{
     const s=span(id);if(!s)return;
-    clear();clip={id,start:s[0],end:s[1],once:!!opts.once,
+    stopSpeech();clear();clip={id,start:s[0],end:s[1],once:!!opts.once,
       button:opts.button||document.querySelector(`.passage button.play[data-turn="${id}"]`)};
     showPlaying(clip.button);
     audio.playbackRate=+speed.value;
@@ -95,6 +96,55 @@ if(dataNode){
     b.setAttribute('aria-pressed',String(on));
     if(on)play(b.dataset.turn);else if(clip&&clip.id===b.dataset.turn)stop();
   }));
+
+  // N1 passage read-aloud: the browser's own Japanese speech synthesis, one sentence at a time.
+  const synth=window.speechSynthesis;const sentences=lesson.passage_sentences||[];
+  const voiceSelect=$('#ja-voice'),ttsNote=$('#tts-note');
+  let speech=null,keepAlive=null,jaVoices=[];
+  const showSaying=btn=>$$('.say-btn').forEach(x=>{
+    if(!x.dataset.label)x.dataset.label=x.textContent;
+    const on=x===btn;x.classList.toggle('active',on);x.setAttribute('aria-pressed',String(on));
+    x.textContent=on?(x.classList.contains('say-all')?'■ 停止':'■'):x.dataset.label;});
+  const mark=i=>$$('.say').forEach(e=>e.classList.toggle('saying',+e.dataset.s===i));
+  stopSpeech=()=>{if(!speech)return;speech=null;clearInterval(keepAlive);try{synth.cancel();}catch(e){}mark(-1);showSaying(null);};
+  const sayNext=run=>{
+    if(speech!==run)return;
+    if(run.i>run.to){stopSpeech();return;}
+    const i=run.i,u=new SpeechSynthesisUtterance(sentences[i]);
+    u.lang='ja-JP';u.rate=+speed.value;
+    const v=jaVoices.find(x=>x.name===voiceSelect.value);if(v)u.voice=v;
+    u.onend=()=>{if(speech===run&&run.i===i){run.i++;sayNext(run);}};
+    u.onerror=e=>{if(e.error!=='interrupted'&&e.error!=='canceled'){ttsNote.textContent='読み上げに失敗しました（'+e.error+'）。';stopSpeech();}};
+    mark(i);synth.speak(u);
+  };
+  const say=(from,to,btn)=>{
+    stop();stopSpeech();
+    speech={i:from,to,button:btn};showSaying(btn);
+    // Chrome stops long speech after ~15 s unless it is nudged.
+    keepAlive=setInterval(()=>{if(synth.speaking&&!synth.paused){synth.pause();synth.resume();}},10000);
+    sayNext(speech);
+  };
+  if(!synth||!window.SpeechSynthesisUtterance){
+    $$('.say-btn').forEach(b=>b.disabled=true);if(voiceSelect)voiceSelect.disabled=true;
+    if(ttsNote)ttsNote.textContent='このブラウザは読み上げに対応していません。';
+  }else if(voiceSelect){
+    const loadVoices=()=>{
+      // Natural voices first (Google, Kyoko, O-ren, Otoya, Hattori), novelty voices last.
+      const rank=v=>{const i=['Google','Kyoko','O-ren','Otoya','Hattori','Microsoft'].findIndex(n=>v.name.includes(n));return i<0?9:i;};
+      jaVoices=synth.getVoices().filter(v=>/^ja/i.test(v.lang)).sort((a,b)=>rank(a)-rank(b));
+      const keep=voiceSelect.value||progress.voice;voiceSelect.textContent='';
+      jaVoices.forEach(v=>voiceSelect.append(new Option(v.name+(v.localService?'':' (online)'),v.name)));
+      if(jaVoices.some(v=>v.name===keep))voiceSelect.value=keep;
+      ttsNote.textContent=jaVoices.length?'':'日本語の音声が見つかりません。端末の設定で日本語の音声を追加すると、より自然に読み上げます。';
+      voiceSelect.hidden=!jaVoices.length;
+    };
+    loadVoices();synth.addEventListener?.('voiceschanged',loadVoices);
+    voiceSelect.addEventListener('change',()=>{progress.voice=voiceSelect.value;save();});
+    $$('.say-btn').forEach(b=>b.addEventListener('click',()=>{
+      if(speech&&speech.button===b){stopSpeech();return;}
+      say(+b.dataset.from,+b.dataset.to,b);}));
+    addEventListener('pagehide',()=>{try{synth.cancel();}catch(e){}});
+  }
 
   // Flashcards
   let filter='all',index=0,flipped=false;
