@@ -41,7 +41,14 @@ if(dataNode){
   const span=id=>{const el=document.getElementById(id);return el?[+el.dataset.start,+el.dataset.end]:null;};
   const clear=()=>{clearTimeout(timer);cancelAnimationFrame(frame);timer=null;
     $$('.passage.playing').forEach(p=>p.classList.remove('playing'));now.textContent='';};
-  const stop=()=>{clip=null;clear();audio.pause();};
+  // The button that started a clip turns into a stop button until the clip (or chain) ends.
+  const showPlaying=btn=>$$('button.play').forEach(x=>{
+    if(!x.dataset.label){x.dataset.label=x.textContent;x.dataset.aria=x.getAttribute('aria-label')||'';}
+    const on=x===btn;x.classList.toggle('active',on);x.setAttribute('aria-pressed',String(on));
+    x.textContent=on?(x.dataset.once?'■ 停止':'■'):x.dataset.label;
+    if(on)x.setAttribute('aria-label','停止');else if(x.dataset.aria)x.setAttribute('aria-label',x.dataset.aria);});
+  const stop=()=>{clip=null;clear();audio.pause();showPlaying(null);
+    $$('button.loop').forEach(o=>o.setAttribute('aria-pressed','false'));};
   const watch=()=>{
     if(!clip)return;
     if(audio.currentTime>=clip.end-0.04){audio.pause();finish();return;}
@@ -63,7 +70,9 @@ if(dataNode){
   };
   const play=(id,opts={})=>{
     const s=span(id);if(!s)return;
-    clear();clip={id,start:s[0],end:s[1],once:!!opts.once};
+    clear();clip={id,start:s[0],end:s[1],once:!!opts.once,
+      button:opts.button||document.querySelector(`.passage button.play[data-turn="${id}"]`)};
+    showPlaying(clip.button);
     audio.playbackRate=+speed.value;
     audio.currentTime=s[0];
     const el=document.getElementById(id);
@@ -77,7 +86,9 @@ if(dataNode){
   // Using the main player's own controls ends clip mode.
   audio.addEventListener('pause',()=>{if(clip&&audio.currentTime<clip.end-0.1&&!timer)stop();});
   audio.addEventListener('seeked',()=>{if(clip&&(audio.currentTime<clip.start-0.3||audio.currentTime>clip.end+0.3))stop();});
-  $$('button.play').forEach(b=>b.addEventListener('click',()=>play(b.dataset.turn,{once:b.dataset.once==='1'})));
+  $$('button.play').forEach(b=>b.addEventListener('click',()=>{
+    if(clip&&clip.button===b){stop();return;}
+    play(b.dataset.turn,{once:b.dataset.once==='1',button:b});}));
   $$('button.loop').forEach(b=>b.addEventListener('click',()=>{
     const on=b.getAttribute('aria-pressed')!=='true';
     $$('button.loop').forEach(o=>o.setAttribute('aria-pressed','false'));
