@@ -143,11 +143,6 @@
         lab.appendChild(document.createTextNode(" Ratio scale"));
         tools.appendChild(lab);
       }
-      var png = el("button", "snap-btn snap-png", "PNG");
-      png.type = "button";
-      png.title = "Download this chart as a PNG image";
-      png.addEventListener("click", function () { savePng(p); });
-      tools.appendChild(png);
       head.appendChild(tools);
       card.appendChild(head);
       var chart = el("div", "snap-chart");
@@ -173,30 +168,14 @@
     }
     if (c.log) c.log.checked = snap.isLog(p, state);
     c.card.classList.toggle("snap-empty", fig.empty);
+    // Plotly's own camera icon saves the chart as shown (the site hides the toolbar on touch screens)
     window.Plotly.newPlot(c.chart, fig.data, fig.layout, {
       responsive: true, displaylogo: false,
-      modeBarButtonsToRemove: ["select2d", "lasso2d", "autoScale2d", "toImage"]
+      modeBarButtonsToRemove: ["select2d", "lasso2d", "autoScale2d"],
+      toImageButtonOptions: { format: "png", scale: 2,
+                              filename: "country-snapshots_" + state.countries.join("-") + "_" + p.id }
     });
     c.code.render();
-  }
-
-  // the PNG: the light chart with its title, the country and the source (Jones's look on paper)
-  function savePng(p) {
-    var fig = snap.figure(p, state);
-    var who = state.countries.map(function (c) { return snap.name(c); }).join(", ");
-    var layout = JSON.parse(JSON.stringify(fig.layout));
-    layout.width = 900;
-    layout.height = 520;
-    layout.margin = { l: 70, r: layout.yaxis2 ? 70 : 30, t: 110, b: 70 };
-    layout.title = { text: "<b>" + esc(who) + "</b><br>" + esc(fig.title) + "<br><span style='font-size:12px'>" +
-                     esc(fig.unit) + "</span>", x: 0.02, xanchor: "left", y: 0.97, yanchor: "top", font: { size: 16 } };
-    layout.legend.y = 1.0;
-    layout.annotations = (layout.annotations || []).concat([{
-      text: "Source: Penn World Table 11.0. Country Snapshots, Data Science and Macroeconomic Models.",
-      showarrow: false, xref: "paper", yref: "paper", x: 0, y: -0.16, xanchor: "left", font: { size: 10, color: "#8a96a3" }
-    }]);
-    window.Plotly.toImage({ data: fig.data, layout: layout }, { format: "png", width: 900, height: 520, scale: 2 })
-      .then(function (url) { download("country-snapshots_" + state.countries.join("-") + "_" + p.id + ".png", url); });
   }
 
   // ---- the controls ---------------------------------------------------------------------------------
