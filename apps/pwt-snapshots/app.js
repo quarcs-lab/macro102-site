@@ -1,5 +1,5 @@
-/* app.js — the Country Snapshots page: controls, the 12 charts, the code boxes and the URL.
-   Generated into macro102-site/apps/country-snapshots/ by /write-country-snapshots (do not edit there).
+/* app.js — the PWT Snapshots page: controls, the 12 charts, the code boxes and the URL.
+   Generated into macro102-site/apps/pwt-snapshots/ by /write-pwt-snapshots (do not edit there).
    The logic (charts, Python code, URL) is in snapcore.js; this file only wires it to the page.
    Charts are always drawn with Plotly.newPlot: the book's plotly-theme.html wraps it to keep the light
    figure and recolor it in dark mode (Plotly.react would bypass that). */
@@ -173,7 +173,7 @@
       responsive: true, displaylogo: false,
       modeBarButtonsToRemove: ["select2d", "lasso2d", "autoScale2d"],
       toImageButtonOptions: { format: "png", scale: 2,
-                              filename: "country-snapshots_" + state.countries.join("-") + "_" + p.id }
+                              filename: "pwt-snapshots_" + state.countries.join("-") + "_" + p.id }
     });
     c.code.render();
   }
@@ -352,7 +352,7 @@
 
     $("snap-csv").addEventListener("click", function () {
       var url = URL.createObjectURL(new Blob([snap.csv(state)], { type: "text/csv" }));
-      download("country-snapshots_" + state.countries.join("-") + "_" + state.start + "-" + state.end + ".csv", url);
+      download("pwt-snapshots_" + state.countries.join("-") + "_" + state.start + "-" + state.end + ".csv", url);
       setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
     });
     $("snap-share").addEventListener("click", function () {

@@ -1,6 +1,6 @@
-# Country Snapshots data
+# PWT Snapshots data
 
-The data behind the book's interactive [Country Snapshots](https://quarcs-lab.github.io/macro102-site/apps/country-snapshots.html) page, built from the [Penn World Table 11.0](https://www.rug.nl/ggdc/productivity/pwt/) (Feenstra, Inklaar and Timmer 2015) by the `/write-country-snapshots` skill. Generated: do not edit by hand.
+The data behind the book's interactive [PWT Snapshots](https://quarcs-lab.github.io/macro102-site/apps/pwt-snapshots.html) page, built from the [Penn World Table 11.0](https://www.rug.nl/ggdc/productivity/pwt/) (Feenstra, Inklaar and Timmer 2015) by the `/write-pwt-snapshots` skill. Generated: do not edit by hand.
 
 `country_snapshots.csv` has one row per country and year (1950-2023). Values are rounded to 6 significant digits. An empty cell is a missing value.
 
