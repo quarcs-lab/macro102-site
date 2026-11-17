@@ -168,9 +168,12 @@
     }
     if (c.log) c.log.checked = snap.isLog(p, state);
     c.card.classList.toggle("snap-empty", fig.empty);
+    // Plotly's own camera icon saves the chart as shown (the site hides the toolbar on touch screens)
     window.Plotly.newPlot(c.chart, fig.data, fig.layout, {
       responsive: true, displaylogo: false,
-      modeBarButtonsToRemove: ["select2d", "lasso2d", "autoScale2d", "toImage"]
+      modeBarButtonsToRemove: ["select2d", "lasso2d", "autoScale2d"],
+      toImageButtonOptions: { format: "png", scale: 2,
+                              filename: "country-snapshots_" + state.countries.join("-") + "_" + p.id }
     });
     c.code.render();
   }
