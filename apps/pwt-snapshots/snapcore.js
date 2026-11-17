@@ -1,5 +1,5 @@
-/* snapcore.js — the Country Snapshots logic, with no DOM: state and URL, the charts and the Python code.
-   Generated into macro102-site/apps/country-snapshots/ by /write-country-snapshots (do not edit there).
+/* snapcore.js — the PWT Snapshots logic, with no DOM: state and URL, the charts and the Python code.
+   Generated into macro102-site/apps/pwt-snapshots/ by /write-pwt-snapshots (do not edit there).
    The page (app.js) and the tests (check_code.cjs, in Node) share it, so the code a reader copies is
    checked against the very charts the page draws. */
 (function (root, factory) {
@@ -356,7 +356,7 @@
     var self = this, rel = panels.some(function (p) { return self.relative(p, st); });
     var np = st.countries.length === 1 && panels.some(function (p) { return p.average; });
     var codes = st.countries.map(function (c) { return self.name(c); }).join(", ");
-    var out = [comment("Country Snapshots: " + title),
+    var out = [comment("PWT Snapshots: " + title),
                "# Data: Penn World Table 11.0, prepared for the book",
                "# \"Data Science and Macroeconomic Models\""];
     if (np) out.push("import numpy as np");
