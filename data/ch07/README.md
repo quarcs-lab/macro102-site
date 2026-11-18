@@ -81,3 +81,34 @@ names and World Bank regions come from <https://api.worldbank.org/v2/country?for
   - Source: World Inequality Database bulk file <https://wid.world/bulk_download/wid_all_data.zip>, variable `aptincj992`. `build_data.py` reads only the needed `WID_data_XX.csv` members with HTTP range requests (the archive is about 900 MB) and caches the filtered rows per country.
   - A different concept from the textbook's: pre-tax income (WID has it for every country) instead of PSZ post-tax income. For the U.S., 1980–2014, WID pre-tax growth is −1.25% at the 10th percentile (PSZ post-tax: +0.26%), 0.58% at the median (0.91%), 2.10% at the 99th (2.29%) and 4.08% at the 99.99th (4.04%): taxes and transfers lift the bottom.
   - Used by Figure 12 ("Beyond the United States").
+
+## Bolivia
+
+`bolivia.csv`: `series, date, value`, 609 rows, written by macro102's `/write-bolivia-data` (merge file
+`.claude/skills/write-bolivia-data/merges/ch07.py`). It holds Bolivia's counterparts for the chapter's charts;
+the notebook adds them to the charts as hidden lines (click "Bolivia" in a legend to show one). No other file
+of this folder changed: Bolivia is already in `emp_pop_countries.csv` and `manufacturing_countries.csv`, and the
+other multi-country files are left as they are because printed checks and the practice problems count their
+countries. `date` is a year, a month (`YYYY-MM-DD`), or, for the `growth_*` series, the percentile.
+
+- `emp_pop`, `emp_pop_men`, `emp_pop_women`: employment-population ratio, ages 15+, percent, 1991–2025. ILO modelled
+  estimates, World Bank WDI `SL.EMP.TOTL.SP.ZS` (`.MA.ZS`, `.FE.ZS`), from `data/bolivia/`.
+- `unemployment_m`: urban unemployment rate, percent, monthly, 2015-10 to 2024-12 (no data June–December 2020), not
+  seasonally adjusted. INE, Continuous Employment Survey (ECE), via the IMF; from `data/bolivia/`.
+- `unemployment_a`: urban unemployment rate, percent, annual, 1971–2024 (a few years missing). INE household and
+  employment surveys, via the IMF; from `data/bolivia/`. Above 14 percent in 1983–1988.
+- `college_premium`: 100 × ln(average hourly earnings of employees with a bachelor's or higher degree, ISCED 6–8,
+  weighted by the number of employees at each level / those with upper secondary education, ISCED 3), log points,
+  2021–2025. INE's ECE via ILOSTAT (`EAR_EHRA_SEX_EDU_NB_A`, `EES_TEES_SEX_EDU_NB_A`, source `BA:74`). A proxy for
+  the college premium: all employees aged 15+ and not adjusted for anything, unlike EPI's U.S. premium and the
+  OECD's full-time workers aged 25–64.
+- `bachelor_share`: share of people aged 25–64 with a bachelor's or higher degree (ISCED 6–8), percent, 2016–2025
+  (no 2020). INE's ECE via ILOSTAT (`POP_XWAP_SEX_AGE_EDU_NB_A`, source `BA:74`).
+- `manufacturing_millions`: employment in manufacturing, millions, 1991–2025: Bolivia's rows of
+  `manufacturing_countries.csv` (ILO modelled estimates).
+- `top01_share`: pre-tax national income share of the top 0.1 percent, percent, 1980–2025. WID bulk file
+  `WID_data_BO.csv` (variable `sptinc992j`, percentile `p99.9p100`, read with HTTP range requests as in
+  `build_data.py`), current vintage. WID holds the share at 9.61 from 1980 to 2000 (no Bolivian tax or survey data).
+- `growth_1980-2014`, `growth_1990-2024`: average annual growth of pre-tax national income per adult at each of
+  WID's 127 g-percentiles (`date` = the percentile), percent, computed as for `percentile_growth_countries.csv`
+  (variable `aptinc992j`).

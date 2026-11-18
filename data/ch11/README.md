@@ -36,3 +36,12 @@ it again). Run it from the macro102 checkout: `.venv/bin/python -I ../macro102-s
 The figure stays U.S.-only (conventions §6b): its subject is the CBO's February 2009 forecasts of the U.S.
 unemployment rate with and without the ARRA stimulus, a series that exists only for the U.S. Cross-country
 unemployment rates (OECD, 40 economies) are in `data/ch10/unemployment_panel.csv`, used by the Chapter 10 notebook.
+
+## Bolivia
+
+`bolivia.csv`: `series, date, value`, 104 rows, written by macro102's `/write-bolivia-data` (merge file
+`.claude/skills/write-bolivia-data/merges/ch11.py`). Fig. 6 shows it as a hidden line (click "Bolivia" in the
+legend). The CBO forecasts stay U.S.-only; only the actual rate has a Bolivian counterpart.
+
+- `unemployment_m`: Bolivia's urban unemployment rate, percent, monthly, 2015-10 to 2024-12 (no data June–December
+  2020), not seasonally adjusted. INE, Continuous Employment Survey (ECE), via the IMF; from `data/bolivia/`.
