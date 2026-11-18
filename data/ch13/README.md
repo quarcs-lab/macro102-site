@@ -53,3 +53,22 @@ period: `iso3, country`, then `date` (first day of the quarter) or `year`, then 
   (the U.S. 2025 value from `fig13-19.csv`). Validation: JST and WDI differ by 0.09 points on average over 1990–2020;
   JST's U.K. series differs from the BoE series by 0.22 points on average over 1871–2016. Known quirk: Germany's 1923
   inflation is about 10^11 percent (prices rose about a billion-fold), so its 1917–1936 window average is in the billions.
+
+## Bolivia
+
+Added on 2026-11-18 by macro102's `/write-bolivia-data` skill (`merges/ch13.py`) from the book's Bolivia files in
+[`data/bolivia/`](../bolivia/README.md). No multi-country file changed; the charts show Bolivia only when the reader
+clicks it in the legend or picks it in a menu.
+
+- `inflation_annual.csv` already had Bolivia (WDI CPI inflation, 1960–2025; Fig. 19): unchanged.
+- `taylor_rule_countries.csv`, `output_gaps_oecd.csv` and `inflation_long_annual.csv`: unchanged. Bolivia has no BIS
+  policy rate, no OECD output gap and no Macrohistory price series, and the Practice problems average all their
+  economies, so Bolivia's rows are in `bolivia.csv`.
+- `bolivia.csv` (new; columns `series, date, value`; `date` is a year or the first day of the quarter): 533 rows.
+
+| `series` | Chart | Content | Span |
+|---|---|---|---|
+| `interbank_q` | Fig. 16 | Overnight interbank (money-market) rate in bolivianos (Banco Central de Bolivia, via the IMF), quarterly mean of complete quarters, percent: the book's **proxy** for the policy rate (Bolivia sets no policy-rate target and kept a fixed exchange rate; the Treasury bill yield is not used because the BCB held almost no auctions from 2016 to 2025) | 1995Q1–2026Q3 |
+| `inflation_q` | Fig. 16 | Headline CPI inflation over four quarters (quarterly mean of INE's CPI, via the IMF), percent; Bolivia publishes no core CPI series here | 1958Q1–2026Q2 |
+| `output_gap` | Fig. 17 | Output gap **estimated by the book**: 100 × log(real GDP / HP trend), λ = 100, WDI real GDP | 1960–2025 |
+| `inflation` | Figs. 17 and 21 | CPI inflation (WDI `FP.CPI.TOTL.ZG`), percent | 1960–2025 |
