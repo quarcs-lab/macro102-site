@@ -109,3 +109,14 @@ Aggregates (regions, income groups, the euro area) are dropped. All shares are i
   to the July 2023 vintage in `us_trade.csv`). Known quirks: financial centers, oil exporters and a few aid-dependent
   economies have positions beyond ±300 percent of GDP (Qatar +1,578, Liberia −1,837). Used by the many-country
   version of Figure 6.
+
+## Bolivia
+
+No rows added to the multi-country files: Bolivia (`BOL`, Latin America & Caribbean) is already in
+`wdi_trade.csv`, `pwt_trade_world.csv`, `twin_deficits_world.csv`, `niip_world.csv` and `countries.csv`, and its rows
+stay as they are. `pwt_trade.csv` keeps its nine textbook countries; the notebook draws Bolivia's yearly PWT balance
+from `pwt_trade_world.csv`. The new file `bolivia.csv` (`series, date, value`, percent of GDP) repeats Bolivia's rows
+of those files for the U.S. charts of Figs. 1, 2, 5 and 6, which are drawn before the multi-country files are loaded:
+`exports`, `imports`, `trade_balance` (WDI, 1960–2024), `investment`, `budget_deficit`, `trade_deficit`
+(`twin_deficits_world.csv`, 1980–2025) and `niip` (External Wealth of Nations, 1970–2024). Made by the macro102
+`/write-bolivia-data` skill (`merges/ch19.py`).
