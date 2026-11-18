@@ -96,3 +96,24 @@ is exactly the textbook's; the `source` column says where every row comes from.
     trade deficit (165 percent of GDP in 2002), Germany's 1995 deficit (debt takeover of the
     Treuhandanstalt).
 
+
+## Bolivia (added 2026-11-18)
+
+Bolivia is offered, hidden until clicked, in every data chart of the chapter. Its rows are merged by the
+macro102 skill `/write-bolivia-data` (`merges/ch01.py`) from the book's Bolivia files in
+[`data/bolivia/`](../bolivia/README.md); every other row of the files below is unchanged.
+
+- `unemployment_world.csv` (Fig. 4): 35 rows added, `BOL`, Bolivia, 1991–2025, source `WDI (ILO
+  modelled)`: World Bank WDI `SL.UEM.TOTL.ZS` (ILO modelled estimate, whole country, ages 15+), the
+  same series the file uses for the OECD and G20 members AMECO does not cover. Bolivia is in neither
+  group; the file now has 57 economies.
+- `bolivia.csv`: `series, date, value`. Bolivia's counterparts to the U.S.-only charts:
+  - `emp_pop` (Fig. 2): employment-population ratio, ages 15+, percent, 1991–2025, World Bank WDI
+    `SL.EMP.TOTL.SP.ZS` (ILO modelled; the same numbers as Bolivia's rows of `employment_world.csv`);
+  - `output_gap` (Fig. 7, the output gap): percent of potential GDP, 1960–2025, estimated by the book
+    (Hodrick-Prescott trend, λ = 100, of WDI real GDP extended with the IMF WEO projections; see
+    [`data/bolivia/README.md`](../bolivia/README.md)). Bolivia publishes no output gap.
+- Already in the files, unchanged: `maddison_world.csv` (Figs. 1 and 7), `employment_world.csv`
+  (Fig. 2, other countries), `inflation_world.csv` (Fig. 3; 11,750 percent in 1985, the
+  hyperinflation), `deficits_world.csv` (Fig. 5; IMF WEO budget balance from 1981, WDI trade balance)
+  and `countries.csv`.
