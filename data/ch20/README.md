@@ -125,3 +125,26 @@ textbook-country rows of the matching `fig20-*.csv`; `build_data.py` prints the 
 - `tfp_pwt.csv` (Figure 14) — 6,988 rows, 120 economies, 1954–2023: `iso3`, `country`, `year`, `rtfpna` (TFP at
   constant national prices, 2021 = 1). Source: Penn World Table 11.0. Validation: the six textbook countries, 2000 =
   100, equal `fig20-14.csv` (largest gap 0.013).
+
+## Bolivia
+
+Bolivia is offered, hidden until clicked, in every chart of the chapter that has a Bolivian series (see the
+[Bolivia data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/bolivia/README.md)). Bolivia's rows were
+already in `inflation_wdi.csv`, `rer_pwt.csv`, `tfp_pwt.csv`, `fx_crises.csv`, `credit_wdi.csv`,
+`current_account_imf.csv` and `debt.csv` (same sources, unchanged). No other file was changed; the Federal Reserve
+(`fx_monthly.csv`) and Jordà-Schularick-Taylor (`fx_history.csv`) files have no Bolivia, so its counterparts are in a
+separate file, made from `data/bolivia/` by macro102's `.claude/skills/write-bolivia-data/merges/ch20.py`:
+
+- `bolivia.csv` — 857 rows: `series`, `date` (a year, or YYYY-MM-DD for months), `value`.
+  - `fx_monthly` — official exchange rate, bolivianos per U.S. dollar, monthly average, 1971-01 to 2026-10 (IMF
+    Exchange Rates dataset, the Banco Central de Bolivia's rate; Fig. 1 and the 25-currency chart). The IMF writes
+    the rates before the 1987 redenomination (1 boliviano = 1,000,000 pesos bolivianos) in today's bolivianos. The
+    rate was fixed at 6.91 (6.96 selling) from 2011 and moved to about 11.8–11.9 from July 2026.
+  - `fx_annual` — the same rate, annual average, 1950–2025: 1950–1958 from the Penn World Table 11.0 (`xr`), from
+    1959 the IMF's monthly rate averaged (Fig. 6 and the 17-country chart).
+  - `fx_eop` — the official rate at the end of each year, 1990–2025: Bolivia's rows of `fx_crises.csv` (Fig. 8).
+  - `rer_pwt` — price level of GDP relative to the U.S., 1950–2023: Bolivia's rows of `rer_pwt.csv` (Fig. 3, Japan,
+    and the Big Mac proxy).
+  - `gdp_pc_pwt` — real GDP per person in 2023 (PWT `rgdpo / pop`, 2021 dollars), as `gdp_pc_2023` of
+    `big_mac.csv`. Bolivia has no McDonald's and no Big Mac price; the chart shows a proxy, the U.S. Big Mac price
+    times Bolivia's price level of GDP (`rer_pwt` in 2023).

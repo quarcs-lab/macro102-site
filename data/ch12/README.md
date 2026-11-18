@@ -91,3 +91,28 @@ so that the default (U.S.) view of each notebook figure is the textbook figure.
   economies (1,406 rows; income only for 23). Source: OECD Household dashboard, `OECD.SDD.NAD,DSD_HHDASH@DF_HHDASH_INDIC,1.1`,
   measures `B6GS1M_R_POP` and `P3S1M_R_POP`. Validation: from 2019Q4 to 2021Q1 U.S. income per person rose 17.6
   percent (`fig12-17.csv`, total: 17.5) and consumption 1.1 percent (total: 1.4).
+
+## Bolivia
+
+Bolivia's series for the chapter's charts, added by macro102's `/write-bolivia-data` skill
+(`merges/ch12.py`) from the book's Bolivian data in [`data/bolivia/`](../bolivia/README.md). Bolivia is
+hidden in every chart until the reader picks it. No other row of any file changed.
+
+- `gdp_quarterly.csv`: 40 rows `BOL, Bolivia`, 2015Q1–2024Q4. `gdp_index` is INE's quarterly real GDP (constant 1990
+  bolivianos, Cuadro 1.01.01), seasonally adjusted by the book, as a volume index with 2020 = 100 (the mean of the
+  four quarters of 2020), the convention of the OECD rows. It is not an OECD series.
+- `cpi_monthly.csv`: 78 rows `BOL, Bolivia`, 2020-01 to 2026-06. `inflation_all` is the 12-month change of INE's CPI
+  (IMF CPI database); `inflation_core` is empty (Bolivia publishes no core CPI in these sources). Bolivia has no core
+  data, so it drops out of Problem 8, which uses only economies with core inflation.
+- `bolivia.csv`: `series, date, value`, Bolivia's counterparts for the U.S. charts and the policy-rate charts.
+  - `money_market`: the interbank overnight rate in bolivianos, percent a year, monthly, 1995-01 to 2026-09, complete
+    (381 months; IMF, Monetary and Financial Statistics, from the Banco Central de Bolivia). A **proxy** for a policy
+    rate: the BCB sets no policy-rate target, and this is the short rate it steers most directly. Used in Figs. 2 and
+    9; kept out of `policy_rates_monthly.csv`, whose BIS series feed Problem 5.
+  - `real_gdp_index`: INE's quarterly real GDP, seasonally adjusted by the book, 2019Q4 = 100, 2015Q1–2024Q4
+    (Fig. 14).
+  - `gov_spending`: general government total expenditure, percent of GDP, calendar years 2007–2025, dated January 1
+    (IMF *World Economic Outlook*, October 2026; the same numbers as Bolivia's rows of `government_spending.csv`).
+    General government, all levels, by calendar year; Fig. 16 shows U.S. federal outlays by fiscal year.
+- Already in the files and unchanged: Bolivia's rows of `government_spending.csv` (Fig. 16, other countries) and of
+  `inflation_annual.csv` (Fig. 9).
