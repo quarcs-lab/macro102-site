@@ -496,6 +496,98 @@ ul.task-list li input[type="checkbox"] {
   };
 })();
 </script>
+<script>
+/* Show one country in every chart from the address (user decision, 2026-11-18): a page opened with
+   ?show=BOL draws Bolivia in each chart that offers it. Bolivia is never drawn by default: its traces
+   carry meta="BOL" and start hidden in the legend, and some charts offer it as a menu entry or a
+   slider step labeled "Bolivia...". Built by the macro102 /write-bolivia-data skill.
+   It must load after plotly-controls.html: that script turns the in-chart menus and sliders into page
+   controls, so this one picks the Bolivia entry through those controls (keeping them in step), then
+   switches on the tagged traces. Without ?show=, nothing changes. */
+(function () {
+  "use strict";
+  var P = window.Plotly;
+  var code = (new URLSearchParams(location.search).get("show") || "").toUpperCase();
+  var NAMES = { BOL: "Bolivia" };
+  if (!P || P.__bookShow || !NAMES[code]) return;
+  P.__bookShow = true;
+  var name = NAMES[code];
+  var parser = new DOMParser();
+  function text(label) { return parser.parseFromString(String(label == null ? "" : label), "text/html").body.textContent; }
+  function mine(label) { return text(label).trim().indexOf(name) === 0; }
+
+  function pickControls(div, menus, sliders) {
+    var bar = div.parentNode && div.parentNode.querySelector(".book-controls");
+    if (!bar) return;
+    var groups = Array.prototype.filter.call(bar.children, function (e) {
+      return e.matches(".book-ctl-select, .book-ctl-buttons");
+    });
+    menus.forEach(function (m, k) {
+      var buttons = (m.buttons || []).filter(function (b) { return b.visible !== false; });
+      var i = buttons.findIndex(function (b) { return mine(b.label); });
+      var g = groups[k];
+      if (i < 0 || !g) return;
+      if (g.tagName === "SELECT") { g.value = String(i); g.dispatchEvent(new Event("change")); }
+      else if (g.children[i]) g.children[i].click();
+    });
+    var ranges = bar.querySelectorAll(".book-ctl-range");
+    sliders.forEach(function (s, k) {
+      var steps = (s.steps || []).filter(function (st) { return st.visible !== false; });
+      var i = steps.findIndex(function (st) { return mine(st.label); });
+      if (i < 0 || !ranges[k]) return;
+      ranges[k].value = String(i);
+      ranges[k].dispatchEvent(new Event("input"));
+    });
+  }
+  function showTraces(div) {
+    var idx = [];
+    // only the traces waiting in the legend: the hidden copies (visible: false) belong to other menu
+    // entries or slider steps, which pickControls has already chosen
+    (div.data || []).forEach(function (t, i) { if (t.meta === code && t.visible === "legendonly") idx.push(i); });
+    if (idx.length) return P.restyle(div, { visible: true }, idx);
+  }
+  function notice() {
+    if (document.getElementById("book-show-notice")) return;
+    var main = document.querySelector("main") || document.body;
+    var n = document.createElement("p");
+    n.id = "book-show-notice";
+    n.className = "book-show-notice";
+    var off = location.pathname + location.hash;
+    n.innerHTML = "Showing <strong>" + name + "</strong> in every chart that has its data. " +
+                  "<a href=\"" + off + "\">Hide it</a> to see the default views.";
+    main.insertBefore(n, main.firstChild);
+  }
+
+  var newPlot = P.newPlot, react = P.react;
+  P.newPlot = function (gd, data, layout) {
+    var fig = data && !Array.isArray(data) && typeof data === "object" ? data : { layout: layout };
+    var L = fig.layout || {};
+    var menus = (L.updatemenus || []).slice(), sliders = (L.sliders || []).slice();
+    return Promise.resolve(newPlot.apply(P, arguments)).then(function (res) {
+      var div = typeof gd === "string" ? document.getElementById(gd) : gd;
+      if (div) {
+        div.__bookShow = true;
+        pickControls(div, menus, sliders);
+        return Promise.resolve(showTraces(div)).then(function () { return res; });
+      }
+      return res;
+    });
+  };
+  P.react = function (gd) {                       // a theme redraw restores the saved visibility
+    var div = typeof gd === "string" ? document.getElementById(gd) : gd;
+    return Promise.resolve(react.apply(P, arguments)).then(function (res) {
+      if (div && div.__bookShow) showTraces(div);
+      return res;
+    });
+  };
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", notice);
+  else notice();
+})();
+</script>
+<style>
+.book-show-notice { border-left: 4px solid var(--bs-primary, #2c7be5); padding: .4rem .8rem;
+                    background: rgba(44, 123, 229, .08); font-size: .95em; }
+</style>
 
 
 <link rel="stylesheet" href="../_includes/styles.css">
@@ -729,8 +821,8 @@ function googleTranslateElementInit() {
 <p><a href="../index.html">← Back to the book</a></p>
 <section id="snapshot" class="level2">
 <h2 class="anchored" data-anchor-id="snapshot">The snapshot</h2>
-<link rel="stylesheet" href="weo-snapshots/app.css?v=04b5b15e70">
-<div id="snap-app" class="snap snap-loading" data-src="weo-snapshots/snapshots.json?v=76ed012c88" data-default="USA" data-benchmark="USA">
+<link rel="stylesheet" href="weo-snapshots/app.css?v=025e4f2a27">
+<div id="snap-app" class="snap snap-loading" data-src="weo-snapshots/snapshots.json?v=40f2633b21" data-default="USA" data-benchmark="USA">
   <p id="snap-status" role="status">Loading the data…</p>
   <div class="snap-body">
     <div class="snap-controls">
@@ -780,9 +872,9 @@ function googleTranslateElementInit() {
   </div>
 </div>
 <script type="application/json" id="snap-panels">[{"id":"growth","title":"Real GDP growth","series":[{"var":"growth","code":"NGDP_RPCH","label":"Real GDP growth","decimals":1}],"unit":"% per year","zero":true,"average":true,"hint":"The gray bands are recessions: the years when real GDP fell. Booms and recessions around the average growth rate are the business cycle of Chapter 9."},{"id":"infl","title":"Inflation","series":[{"var":"infl","code":"PCPIPCH","label":"Inflation (average)","decimals":1},{"var":"infl_eop","code":"PCPIEPCH","label":"Inflation (end of year)","decimals":1}],"unit":"% per year (consumer prices)","zero":true,"hint":"Average inflation compares the price level of the whole year with the year before; end-of-year inflation compares December with December, so it moves first when inflation turns."},{"id":"unemp","title":"Unemployment rate","series":[{"var":"unemp","code":"LUR","label":"Unemployment rate","decimals":1}],"unit":"% of the labor force","hint":"Unemployment rises in recessions and falls slowly in recoveries (Okun's law). Many countries have no comparable unemployment data."},{"id":"gap","title":"Output gap","series":[{"var":"gap","code":"NGAP_NPGDP","label":"Output gap","decimals":1}],"unit":"% of potential GDP","zero":true,"hint":"The short-run output of Chapter 9: actual GDP minus potential GDP, in percent. The IMF estimates it only for about 30 economies, mostly advanced ones."},{"id":"balance","title":"Government budget balance","series":[{"var":"balance","code":"GGXCNL_NGDP","label":"Overall balance","decimals":1},{"var":"primary","code":"GGXONLB_NGDP","label":"Primary balance","decimals":1}],"unit":"% of GDP","zero":true,"hint":"Below zero is a deficit. The primary balance leaves out interest payments, so the gap between the two lines is the interest the government pays on its debt."},{"id":"struct","title":"Structural budget balance","series":[{"var":"struct","code":"GGSB_NPGDP","label":"Structural balance","decimals":1}],"unit":"% of potential GDP","zero":true,"hint":"The balance the budget would have if output were at its potential: it removes the automatic effect of the business cycle, so its changes show the fiscal policy chosen."},{"id":"revexp","title":"Government revenue and spending","series":[{"var":"revenue","code":"GGR_NGDP","label":"Revenue","decimals":1},{"var":"spending","code":"GGX_NGDP","label":"Spending","decimals":1}],"unit":"% of GDP","hint":"When spending is above revenue the government runs a deficit and borrows. Rich countries tend to have larger governments, as shares of GDP."},{"id":"debt","title":"Government debt","series":[{"var":"debt","code":"GGXWDG_NGDP","label":"Gross debt","decimals":1},{"var":"net_debt","code":"GGXWDN_NGDP","label":"Net debt","decimals":1}],"unit":"% of GDP","hint":"The debt ratio rises with deficits and in recessions (GDP falls); it falls when GDP grows faster than the debt. Net debt subtracts the government's financial assets."},{"id":"ca","title":"Current account balance","series":[{"var":"ca","code":"BCA_NGDPD","label":"Current account","decimals":1}],"unit":"% of GDP","zero":true,"hint":"A surplus (above zero) means the country lends to the rest of the world; a deficit means it borrows from it."},{"id":"si","title":"Saving and investment","series":[{"var":"saving","code":"NGSD_NGDP","label":"National saving","decimals":1},{"var":"investment","code":"NID_NGDP","label":"Investment","decimals":1}],"unit":"% of GDP","hint":"Saving minus investment is (about) the current account: a country that invests more than it saves borrows the difference from abroad."},{"id":"trade","title":"Trade volumes","series":[{"var":"exports","code":"TX_RPCH","label":"Exports","decimals":1},{"var":"imports","code":"TM_RPCH","label":"Imports","decimals":1}],"unit":"% change in volume","zero":true,"hint":"The growth of the real quantities of goods and services sold to and bought from abroad. Trade swings much more than GDP: look at 2009 and 2020."},{"id":"size","title":"Size and income","series":[{"var":"ppp_share","code":"PPPSH","label":"Share of world GDP","decimals":2},{"var":"ppp_pc","code":"PPPPC","label":"GDP per capita","decimals":0,"log":true}],"unit":"% of world GDP (PPP)","axis2":"international dollars (PPP, current prices)","hint":"Two ways to be big: a large share of world GDP (an economy's size) and a high GDP per capita (its people's income). The PWT Snapshots follow income over the long run."}]</script>
-<script type="application/json" id="snap-quicklinks">[["G001","G110","G200","G163"],["USA","JPN","DEU","GBR","FRA","ITA","CAN"],["CHN","IND","KOR","IDN","TUR","RUS"],["BRA","MEX","ARG","CHL"],["NGA","ZAF","EGY","KEN"]]</script>
-<script src="weo-snapshots/weocore.js?v=5c64b01040"></script>
-<script src="weo-snapshots/app.js?v=2050b16577"></script>
+<script type="application/json" id="snap-quicklinks">[["G001","G110","G200","G163"],["USA","JPN","DEU","GBR","FRA","ITA","CAN"],["CHN","IND","KOR","IDN","TUR","RUS"],["BRA","MEX","ARG","CHL","BOL"],[{"label":"Bolivia and neighbors","c":["BOL","PER","CHL","ARG","BRA"]}],["NGA","ZAF","EGY","KEN"]]</script>
+<script src="weo-snapshots/weocore.js?v=cae67af10f"></script>
+<script src="weo-snapshots/app.js?v=96349e4cea"></script>
 </section>
 <section id="explore" class="level2">
 <h2 class="anchored" data-anchor-id="explore">Explore</h2>
@@ -854,6 +946,10 @@ function googleTranslateElementInit() {
 <tr class="odd">
 <td><code>last_actual</code></td>
 <td>the last year of actual data of this country and variable</td>
+</tr>
+<tr class="even">
+<td><code>source</code></td>
+<td>empty for the IMF WEO; where the WEO has no number, the series that fills the gap (see below)</td>
 </tr>
 </tbody>
 </table>

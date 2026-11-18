@@ -169,6 +169,22 @@
     return { x: x, actual: actual, proj: proj };
   };
 
+  // where a line shown is not the IMF's: the gaps filled outside the WEO (db.sources, e.g. Bolivia's output
+  // gap, estimated by the book) -> a sentence for under the chart, or ""
+  Weo.prototype.fillNote = function (p, st, shown) {
+    var self = this, vars = shown.map(function (i) { return p.series[i].var; }), out = [];
+    if (st.countries.length > 1) vars = vars.slice(0, 1);
+    st.countries.forEach(function (iso) {
+      vars.forEach(function (v) {
+        var f = ((self.db.sources || {})[iso] || {})[v];
+        if (!f || f.last < st.start || f.first > st.end) return;
+        var span = f.first <= st.start && f.last >= st.end ? "" : " (" + f.first + "-" + f.last + ")";
+        out.push(self.name(iso) + ", " + p.series.filter(function (x) { return x.var === v; })[0].label.toLowerCase() + span + ": " + f.text + ".");
+      });
+    });
+    return out.join(" ");
+  };
+
   // ---- the chart --------------------------------------------------------------------------------
   // -> {data, layout, title, unit, empty}: a Plotly figure plus the panel's title (with the latest actual
   //    values) and unit line for the card header.
@@ -258,7 +274,8 @@
     var units = shown.map(function (i) { return self.unit(p, i); });
     var unitLine = units.filter(function (u, k) { return units.indexOf(u) === k; }).join(" · ");
     if (logAxis || (dual && p.series[1].log)) unitLine += " · ratio scale" + (dual ? " (right)" : "");
-    return { data: traces, layout: layout, title: single ? titleParts.join(" and ") : titleParts[0], unit: unitLine, empty: empty };
+    return { data: traces, layout: layout, title: single ? titleParts.join(" and ") : titleParts[0], unit: unitLine, empty: empty,
+             note: this.fillNote(p, st, shown) };
   };
   Weo.prototype.decimalsOf = function (v) {
     for (var i = 0; i < this.panels.length; i++)
