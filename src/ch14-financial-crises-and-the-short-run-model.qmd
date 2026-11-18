@@ -705,6 +705,39 @@ def name_bolivia(fig, names):
     return fig
 ```
 
+```{python}
+#| kind: folded
+# @title Helper for Bolivia's legend (run this cell; you do not need to read it)
+def bolivia_legend(fig, x, y):
+    """Put Bolivia's legend entries in a second legend, inside the plot at (x, y).
+
+    The chart's own legend stays as it was; Bolivia's entries sit in an empty
+    part of the plot, on a transparent background.
+
+    Arguments
+        fig : a figure with Bolivia's lines
+        x   : the left edge of the legend, as a share of the plot's width
+        y   : the bottom edge of the legend, as a share of the plot's height
+    Returns
+        the same figure
+    """
+    # Step 1: Bolivia's lines go to the second legend
+    for trace in fig.data:
+        if (trace.name or "").startswith("Bolivia"):
+            trace.legend = "legend2"
+    # Step 2: place it, with no background
+    fig.update_layout(
+        legend2=dict(
+            x=x,
+            y=y,
+            xanchor="left",
+            yanchor="bottom",
+            bgcolor="rgba(0,0,0,0)",
+        )
+    )
+    return fig
+```
+
 :::
 
 <!-- cell -->
@@ -2412,9 +2445,11 @@ def taylor_chart(r_bar=2.0, weight=0.5):
         bolivia_series("inflation_q"), bolivia_series("output_gap_q"), r_bar, weight
     )
     rate_name = "Bolivia (interbank rate, proxy)"
-    rule_name = "Bolivia (Taylor rule, gap estimated by the book)"
+    rule_name = "Bolivia (Taylor rule, book's gap)"
     fig.add_trace(bolivia_line(bolivia_series("interbank_q"), rate_name))
     fig.add_trace(bolivia_line(rule.dropna(), rule_name, dash="dash"))
+    # Step 6: Bolivia's legend at the bottom, from 2010, where the chart is empty
+    bolivia_legend(fig, x=0.37, y=0.02)
     return hide_bolivia(fig)
 ```
 
@@ -2507,8 +2542,8 @@ inputs.add_trace(
 )
 # Step 4: Bolivia: the output gap estimated by the book (left) and headline CPI
 # inflation, a proxy for core inflation (right)
-gap_name = "Bolivia (output gap, estimated by the book)"
-inflation_name = "Bolivia (CPI inflation, proxy for core)"
+gap_name = "Bolivia (output gap, book)"
+inflation_name = "Bolivia (CPI inflation, proxy)"
 inputs.add_trace(bolivia_line(bolivia_series("output_gap_q"), gap_name), row=1, col=1)
 inputs.add_trace(
     bolivia_line(bolivia_series("inflation_q"), inflation_name),
@@ -2538,7 +2573,9 @@ inputs.update_layout(
     title="The inputs of the rule: a deep slump after 2008, low inflation until 2021",
     legend=dict(orientation="h", y=-0.15),
 )
-# Step 4: Bolivia's lines wait in the legend until clicked
+# Step 4: Bolivia's lines wait in a legend of their own, at the bottom of the
+# left panel, until clicked
+bolivia_legend(inputs, x=0.02, y=0.02)
 hide_bolivia(inputs)
 inputs.show()
 ```
@@ -3247,16 +3284,28 @@ fig.add_annotation(
 fig.update_layout(
     yaxis=dict(range=[-15, 31], tickvals=[-10, -5, 0, 5, 10, 15, 20, 25, 30]),
     legend_title_text="",
-    legend=dict(x=0.01, y=0.99, xanchor="left", yanchor="top"),
+    # a transparent legend, so Bolivia's line shows through it when clicked
+    legend=dict(
+        x=0.01,
+        y=0.99,
+        xanchor="left",
+        yanchor="top",
+        bgcolor="rgba(0,0,0,0)",
+    ),
 )
 # Step 4: Bolivia, in the legend until clicked: the growth of base money and broad
 # money (values beyond the fixed axis are off the chart)
 base_name = "Bolivia (base money)"
 broad_name = "Bolivia (broad money)"
 fig.add_trace(bolivia_line(bolivia_series("base_money_growth"), base_name))
-fig.add_trace(
-    bolivia_line(bolivia_series("broad_money_growth"), broad_name, dash="dash")
-)
+# broad money skips the 12 months across a break in the IMF series: a full run of
+# months leaves them empty, so the line stops there instead of bridging the gap
+broad = bolivia_series("broad_money_growth")
+months = pd.date_range(broad.index[0], broad.index[-1], freq="MS")
+broad = broad.reindex(months.strftime("%Y-%m-%d"))
+fig.add_trace(bolivia_line(broad, broad_name, dash="dash"))
+# Bolivia's legend at the bottom, from 2006, where the chart is empty
+bolivia_legend(fig, x=0.43, y=0.02)
 hide_bolivia(fig)
 fig.show()
 ```
@@ -3264,7 +3313,7 @@ fig.show()
 **Sources.** Data: Board of Governors of the Federal Reserve System, [H.6 Money Stock Measures](https://www.federalreserve.gov/releases/h6/), via FRED:
 [Currency Component of M1 (`CURRSL`)](https://fred.stlouisfed.org/series/CURRSL), [M1 (`M1SL`)](https://fred.stlouisfed.org/series/M1SL) and [M2 (`M2SL`)](https://fred.stlouisfed.org/series/M2SL);
 recession dates: [National Bureau of Economic Research, business cycle dates](https://www.nber.org/research/business-cycle-dating), as the indicator [`USREC`, via FRED](https://fred.stlouisfed.org/series/USREC). The 12-month growth rates are our own calculation.
-Bolivia: base money and broad money of the Banco Central de Bolivia ([IMF, Monetary and Financial Statistics](https://data.imf.org/)), growth over 12 months (values beyond the axis are off the chart); file [`data/ch14/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch14/bolivia.csv).
+Bolivia: base money and broad money of the Banco Central de Bolivia ([IMF, Monetary and Financial Statistics](https://data.imf.org/)), growth over 12 months (values beyond the axis are off the chart; broad money growth is left out from December 2020 to November 2021, across a break in the IMF series); file [`data/ch14/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch14/bolivia.csv).
 Prepared files: [`data/ch14/fig14-6.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch14/fig14-6.csv), [`data/ch14/recessions.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch14/recessions.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch14/README.md)).
 Chart: inspired by Fig. 14.6 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -3416,7 +3465,7 @@ keep_bolivia_in_legend(fig)
 
 **Sources.** Data: [World Bank, World Development Indicators, Broad money growth (annual %) (`FM.LBL.BMNY.ZG`)](https://databank.worldbank.org/metadataglossary/world-development-indicators/series/FM.LBL.BMNY.ZG);
 euro area: [European Central Bank, M3 annual growth rate (`BSI.M.U2.Y.V.M30.X.I.U2.2300.Z01.A`)](https://data.ecb.europa.eu/data/datasets/BSI/BSI.M.U2.Y.V.M30.X.I.U2.2300.Z01.A).
-Bolivia: the same [World Bank WDI series](https://data.worldbank.org/indicator/FM.LBL.BMNY.ZG), in the legend.
+Bolivia: the same [World Bank WDI series](https://data.worldbank.org/indicator/FM.LBL.BMNY.ZG), in the legend; its 2020 value (−30%) reflects a break in the IMF and World Bank series (a redefinition), not a contraction.
 Prepared file: [`data/ch14/money_world.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch14/money_world.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch14/README.md)).
 Chart: inspired by Fig. 14.6 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -3989,7 +4038,10 @@ fig.update_layout(
 # percent of GDP, on a hidden axis of their own (y2)
 assets_name = "Bolivia (central bank assets, % of GDP, own scale)"
 fig.add_trace(bolivia_line(bolivia_series("cb_assets_gdp"), assets_name, yaxis="y2"))
-fig.update_layout(yaxis2=dict(overlaying="y", visible=False))
+# its axis starts at 0 and reaches twice Bolivia's highest value, so the line stays
+# in the lower half, below the legend
+top = 2 * bolivia_series("cb_assets_gdp").max()
+fig.update_layout(yaxis2=dict(overlaying="y", visible=False, range=[0, top]))
 hide_bolivia(fig)
 fig.show()
 ```
@@ -3999,7 +4051,7 @@ fig.show()
 [`TREAS1T5`](https://fred.stlouisfed.org/series/TREAS1T5) and [`TREAS10Y`](https://fred.stlouisfed.org/series/TREAS10Y); [mortgage-backed securities (`WSHOMCB`)](https://fred.stlouisfed.org/series/WSHOMCB);
 [agency debt (`FEDDT`)](https://fred.stlouisfed.org/series/FEDDT); [Commercial Paper Funding Facility (`WCPFF`)](https://fred.stlouisfed.org/series/WCPFF).
 The grouping into five layers is our own.
-Bolivia: total assets of the Banco Central de Bolivia ([IMF, Monetary and Financial Statistics](https://data.imf.org/)) in percent of nominal GDP ([World Bank WDI, `NY.GDP.MKTP.CN`](https://data.worldbank.org/indicator/NY.GDP.MKTP.CN)), drawn on their own scale; file [`data/ch14/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch14/bolivia.csv).
+Bolivia: total assets of the Banco Central de Bolivia ([IMF, Monetary and Financial Statistics](https://data.imf.org/)) in percent of nominal GDP ([World Bank WDI, `NY.GDP.MKTP.CN`](https://data.worldbank.org/indicator/NY.GDP.MKTP.CN)), drawn on their own scale (the drop in 2017 comes from a break in WDI's GDP, which jumps 35% that year); file [`data/ch14/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch14/bolivia.csv).
 Prepared file: [`data/ch14/fig14-9.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch14/fig14-9.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch14/README.md)).
 Chart: inspired by Fig. 14.9 (a Federal Reserve Bank of Cleveland chart reprinted there) in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -4146,7 +4198,7 @@ keep_bolivia_in_legend(fig)
 ```
 
 **Sources.** Data: [Bank for International Settlements, Central bank total assets (`WS_CBTA`), percent of GDP](https://data.bis.org/topics/CBTA).
-Bolivia: total assets of the Banco Central de Bolivia at the end of each quarter ([IMF, Monetary and Financial Statistics](https://data.imf.org/)) in percent of the year's nominal GDP ([World Bank WDI, `NY.GDP.MKTP.CN`](https://data.worldbank.org/indicator/NY.GDP.MKTP.CN)), as the BIS has no Bolivian series; its rows are in the same file.
+Bolivia: total assets of the Banco Central de Bolivia at the end of each quarter ([IMF, Monetary and Financial Statistics](https://data.imf.org/)) in percent of the year's nominal GDP ([World Bank WDI, `NY.GDP.MKTP.CN`](https://data.worldbank.org/indicator/NY.GDP.MKTP.CN)), as the BIS has no Bolivian series (the drop in 2017 comes from a break in WDI's GDP, which jumps 35% that year); its rows are in the same file.
 Prepared file: [`data/ch14/cb_assets_world.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch14/cb_assets_world.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch14/README.md)).
 Chart: inspired by Fig. 14.9 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)

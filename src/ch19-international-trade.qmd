@@ -829,10 +829,12 @@ def group_menu(fig, groups, start, title):
     first = list(groups).index(start)
     for t, v in zip(fig.data, buttons[first]["args"][0]["visible"]):
         t.visible = v
-    # Bolivia's traces are tagged, for the page switch ?show=BOL
+    # Bolivia's traces are tagged, for the page switch ?show=BOL, and listed last
+    # in the legend (`legendrank` orders the entries; the others have 1000)
     for t, o in zip(fig.data, owners):
         if o == "Bolivia":
             t.meta = "BOL"
+            t.legendrank = 2000
     # the title, the start group's y range and the menu at the top left
     fig.update_layout(title=title, yaxis_range=buttons[first]["args"][1]["yaxis.range"], yaxis_tickvals=None,
                       margin=dict(t=115), updatemenus=[dict(buttons=buttons, active=first, direction="down",
@@ -1573,11 +1575,16 @@ fig.update_xaxes(range=[1948, 2033])
 fig.update_yaxes(range=[2, 18.5], tickvals=[4, 6, 8, 10, 12, 14, 16, 18])
 
 # Step 4: Bolivia's exports and imports (World Bank), hidden until clicked in
-# the legend; they are much larger shares, so they get their own scale. Only
-# Bolivia's lines are in the legend
+# the legend; they are much larger shares, so they get their own scale, and each
+# name gives the line's range. Only Bolivia's lines are in the legend
 fig.update_traces(showlegend=False)
-add_bolivia_line(fig, "exports", "Bolivia: exports (own scale)", own_scale=True)
-add_bolivia_line(fig, "imports", "Bolivia: imports (own scale)", "dash", True)
+for series, dash in [("exports", "solid"), ("imports", "dash")]:
+    values = bolivia_series(series)
+    name = (f"Bolivia: {series} (own scale, "
+            f"{values.min():.0f}–{values.max():.0f}%)")
+    add_bolivia_line(fig, series, name, dash, own_scale=True)
+# the own scale is 3 times the left one, so both put zero at the same height
+fig.update_layout(yaxis2=dict(range=[3 * 2, 3 * 18.5]))
 legend_inside(fig)
 fig.show()
 ```
@@ -1585,7 +1592,7 @@ fig.show()
 **Sources.** Data: U.S. Bureau of Economic Analysis (BEA), National Income and Product Accounts, via FRED: [Exports of goods and services (`EXPGSA`)](https://fred.stlouisfed.org/series/EXPGSA),
 [Imports of goods and services (`IMPGSA`)](https://fred.stlouisfed.org/series/IMPGSA) and [Gross domestic product (`GDPA`)](https://fred.stlouisfed.org/series/GDPA).
 Prepared file: [`data/ch19/us_trade.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch19/us_trade.csv), checked against [`data/ch19/fig19-1.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch19/fig19-1.csv) (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch19/README.md)).
-Bolivia: World Bank, World Development Indicators, [exports](https://data.worldbank.org/indicator/NE.EXP.GNFS.ZS) and [imports](https://data.worldbank.org/indicator/NE.IMP.GNFS.ZS) of goods and services, % of GDP, on their own scale; file [`data/ch19/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch19/bolivia.csv).
+Bolivia: World Bank, World Development Indicators, [exports](https://data.worldbank.org/indicator/NE.EXP.GNFS.ZS) and [imports](https://data.worldbank.org/indicator/NE.IMP.GNFS.ZS) of goods and services, % of GDP, on their own scale (three times the left one, with the same zero); file [`data/ch19/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch19/bolivia.csv).
 Chart: inspired by Fig. 19.1 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -2060,10 +2067,9 @@ def trade_balance_chart(start=1976, end=2025):
     fig.update_yaxes(range=[-6.5, 2.5], tickvals=[-5, -4, -3, -2, -1, 0, 1, 2])
 
     # Step 6: Bolivia's trade balance (World Bank), hidden until clicked in the
-    # legend; it swings much more, so it gets its own scale
-    name = "Bolivia: trade balance (own scale)"
-    add_bolivia_line(fig, "trade_balance", name, own_scale=True)
-    return legend_inside(fig, x=0.99, xanchor="right")
+    # legend; it swings much more, so its extremes run off the chart
+    add_bolivia_line(fig, "trade_balance", "Bolivia")
+    return legend_inside(fig)
 ```
 
 ```{python}
@@ -2096,7 +2102,7 @@ slider_figure(
 [Imports of goods and services (`IMPGSA`)](https://fred.stlouisfed.org/series/IMPGSA), [Gross domestic product (`GDPA`)](https://fred.stlouisfed.org/series/GDPA) and
 [Net exports of goods and services (`A019RC1A027NBEA`)](https://fred.stlouisfed.org/series/A019RC1A027NBEA).
 Prepared file: [`data/ch19/us_trade.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch19/us_trade.csv), checked against [`data/ch19/fig19-2.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch19/fig19-2.csv) (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch19/README.md)).
-Bolivia: World Bank, World Development Indicators, [external balance on goods and services, % of GDP](https://data.worldbank.org/indicator/NE.RSB.GNFS.ZS), on its own scale; file [`data/ch19/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch19/bolivia.csv).
+Bolivia: World Bank, World Development Indicators, [external balance on goods and services, % of GDP](https://data.worldbank.org/indicator/NE.RSB.GNFS.ZS); file [`data/ch19/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch19/bolivia.csv).
 Chart: inspired by Fig. 19.2 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -2682,7 +2688,7 @@ fig.add_trace(
         locations=["BOL"],
         locationmode="ISO-3",
         mode="markers",
-        name="Bolivia (ring on the map)",
+        name="Bolivia",
         showlegend=True,
         marker=dict(size=16, symbol="circle-open", color="black", line_width=3),
     )
@@ -2833,7 +2839,7 @@ def fast_growers_chart(start=2000, end=2023, vintage="PWT 11.0", countries=FIG4)
             go.Bar(
                 x=["Bolivia"],
                 y=[bolivia["Bolivia"]],
-                name="Bolivia (average trade balance)",
+                name="Bolivia",
                 showlegend=True,
                 marker_color=BOLIVIA_COLOR,
                 texttemplate="%{y:.1f}",
@@ -2876,6 +2882,7 @@ slider_figure(
 
 **Sources.** Data: Groningen Growth and Development Centre, [Penn World Table 11.0](https://www.rug.nl/ggdc/productivity/pwt/) ([doi:10.34894/FABVLR](https://doi.org/10.34894/FABVLR)) and [Penn World Table 10.01](https://doi.org/10.34894/QT5BCC), the textbook's version (Feenstra, Inklaar and Timmer 2015, *American Economic Review*); variables `csh_c`, `csh_i` and `csh_g`.
 Prepared files: [`data/ch19/pwt_trade.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch19/pwt_trade.csv) and [`data/ch19/pwt_trade_world.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch19/pwt_trade_world.csv) (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch19/README.md)).
+Bolivia (not one of the textbook's fast growers, shown for comparison): the same Penn World Table 11.0 variables, from `pwt_trade_world.csv`.
 Chart: inspired by Fig. 19.4 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -3081,7 +3088,7 @@ fig.add_trace(
         x=bolivia_point.growth,
         y=bolivia_point.trade_balance,
         mode="markers",
-        name="Bolivia (ring)",
+        name="Bolivia",
         marker=dict(
             size=18,
             symbol="circle-open",
@@ -3259,12 +3266,19 @@ def twin_deficits_chart(episode="1980s: 1979 to 1986"):
     )
 
     # Step 4: Bolivia's three lines (World Bank and IMF), hidden until clicked
-    # in the legend; its trade balance swings far beyond the textbook's range, so
-    # the three share their own scale
+    # in the legend; its largest trade surpluses run below the chart. One legend
+    # entry, "Bolivia", shows or hides all three (`legendgroup`, one group per
+    # episode); the hover names each line
     for series, dash in [("investment", "solid"), ("budget_deficit", "dash"),
                          ("trade_deficit", "dot")]:
-        name = "Bolivia: " + series.replace("_", " ") + " (own scale)"
-        add_bolivia_line(fig, series, name, dash, own_scale=True)
+        name = "Bolivia: " + series.replace("_", " ")
+        add_bolivia_line(fig, series, name, dash)
+        fig.update_traces(
+            legendgroup="Bolivia, " + episode,
+            showlegend=(series == "investment"),
+            selector=dict(name=name),
+        )
+    fig.update_traces(name="Bolivia", selector=dict(name="Bolivia: investment"))
     return fig
 ```
 
@@ -3300,7 +3314,7 @@ slider_figure(
 [Federal government net saving (`FGDEF`)](https://fred.stlouisfed.org/series/FGDEF), [Gross domestic product, quarterly (`GDP`)](https://fred.stlouisfed.org/series/GDP),
 [Net exports of goods and services (`A019RC1A027NBEA`)](https://fred.stlouisfed.org/series/A019RC1A027NBEA) and [Gross domestic product (`GDPA`)](https://fred.stlouisfed.org/series/GDPA).
 Prepared file: [`data/ch19/fig19-5.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch19/fig19-5.csv) (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch19/README.md)).
-Bolivia: [gross capital formation](https://data.worldbank.org/indicator/NE.GDI.TOTL.ZS) (World Bank, public and private investment) and [general government net lending](https://www.imf.org/en/Publications/WEO) (IMF World Economic Outlook, all levels of government, not only the central one) and the World Bank trade balance, on their own scale; file [`data/ch19/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch19/bolivia.csv).
+Bolivia: [gross capital formation](https://data.worldbank.org/indicator/NE.GDI.TOTL.ZS) (World Bank, public and private investment) and [general government net lending](https://www.imf.org/en/Publications/WEO) (IMF World Economic Outlook, all levels of government, not only the central one) and the World Bank trade balance (one legend entry: solid, investment; dashed, budget deficit; dotted, trade deficit); file [`data/ch19/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch19/bolivia.csv).
 Chart: inspired by Fig. 19.5 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -3626,7 +3640,8 @@ fig.add_annotation(
     showarrow=False,
     font=dict(size=13),
 )
-# Step 4: the axes, and the legend in the bottom left corner, on a white box
+# Step 4: the axes, and the legend in the bottom left corner, with a clear
+# background so that Bolivia's line shows through it
 fig.update_xaxes(range=[1970, 2030], tickvals=[1980, 1990, 2000, 2010, 2020, 2030])
 fig.update_yaxes(range=[-85, 22], tickvals=[-80, -60, -40, -20, 0, 20])
 fig.update_layout(
@@ -3636,12 +3651,14 @@ fig.update_layout(
         xanchor="left",
         yanchor="bottom",
         title="",
-        bgcolor="rgba(255,255,255,0.8)",
+        bgcolor="rgba(0,0,0,0)",
     )
 )
 # Step 5: Bolivia's position (External Wealth of Nations), hidden until clicked
-# in the legend; it fell below -100% of GDP, so it gets its own hidden scale
-add_bolivia_line(fig, "niip", "Bolivia (own scale)", own_scale=True)
+# in the legend; its lows run off the chart. Its own legend ("legend2"), top left
+add_bolivia_line(fig, "niip", "Bolivia")
+fig.update_traces(legend="legend2", selector=dict(name="Bolivia"))
+fig.update_layout(legend2=dict(x=0.01, y=0.99, bgcolor="rgba(0,0,0,0)"))
 fig.show()
 ```
 
@@ -3652,7 +3669,7 @@ and Product Accounts, via FRED: [U.S. net international investment position (`II
 [`IIPUSNETIA`](https://alfred.stlouisfed.org/series?seid=IIPUSNETIA) and
 [`GDPA`](https://alfred.stlouisfed.org/series?seid=GDPA) via ALFRED.
 Prepared file: [`data/ch19/us_trade.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch19/us_trade.csv), checked against [`data/ch19/fig19-6.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch19/fig19-6.csv) (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch19/README.md)).
-Bolivia: Lane and Milesi-Ferretti, [External Wealth of Nations database](https://www.brookings.edu/articles/the-external-wealth-of-nations-database/), net position as a percent of GDP, on its own scale; file [`data/ch19/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch19/bolivia.csv).
+Bolivia: Lane and Milesi-Ferretti, [External Wealth of Nations database](https://www.brookings.edu/articles/the-external-wealth-of-nations-database/), net position as a percent of GDP; file [`data/ch19/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch19/bolivia.csv).
 Chart: inspired by Fig. 19.6 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->

@@ -1218,6 +1218,33 @@ def add_bolivia_line(fig, series, label, scale=None):
     if scale is not None:
         fig.update_layout(yaxis2=dict(overlaying="y", visible=False, range=scale))
     return hide_bolivia(fig)
+
+
+def legend_inside(fig, x, y, xanchor="left", yanchor="top"):
+    """Put the legend inside the plot, with a transparent background.
+
+    A chart with one line has no legend; Bolivia's line gives it one. Inside the
+    plot, in a corner that the lines leave empty, the legend keeps the plot as
+    wide as before.
+
+    Arguments
+        fig     : the chart
+        x, y    : the legend's position, as shares of the plot's width and height
+        xanchor : the side of the legend that sits at x, "left" or "right"
+        yanchor : the side of the legend that sits at y, "top", "middle" or "bottom"
+    Returns
+        the same figure
+    """
+    fig.update_layout(
+        legend=dict(
+            x=x,
+            y=y,
+            xanchor=xanchor,
+            yanchor=yanchor,
+            bgcolor="rgba(0,0,0,0)",
+        )
+    )
+    return fig
 ```
 
 A country should keep its color in every chart, so we give each one a fixed color once. The textbook's economies
@@ -1363,10 +1390,13 @@ def all_countries(make_figure, names, shown):
     choices = [("Textbook's view", list(shown)), ("All countries", list(names))]
     for r in ["Americas", "Europe", "Asia and Pacific", "Africa and Middle East"]:
         choices.append((r, [n for n in names if region.get(n) == r]))
-    # each entry draws its countries and puts the others in the legend only
+    # each entry draws its countries and puts the others in the legend only. A line is
+    # matched by its country (`legendgroup`), which stays "Bolivia" when the legend
+    # name says more, e.g. "Bolivia (interbank rate, proxy)"
     buttons = []
     for label, members in choices:
-        visible = [True if t.name in members else "legendonly" for t in fig.data]
+        visible = [True if (t.legendgroup or t.name) in members else "legendonly"
+                   for t in fig.data]
         buttons.append(dict(label=label, method="restyle", args=[{"visible": visible}]))
     # Step 3: start with the textbook's view, and make the page lighter: the country
     # name once in the hover text instead of once per point, months without the day
@@ -1754,6 +1784,14 @@ PERIODS = {
     "2007–08 cuts": ("2007-06-01", "2009-06-01"),
     "2022–23 hikes": ("2021-06-01", "2024-06-01"),
 }
+# Where Bolivia's legend entry sits in each period (x, y, yanchor): a spot that
+# neither line crosses, so the entry never covers Bolivia's line
+BOLIVIA_LEGEND = {
+    "2000–2026": (0.39, 0.99, "top"),
+    "2004–06 hikes": (0.01, 0.99, "top"),
+    "2007–08 cuts": (0.01, 0.99, "top"),
+    "2022–23 hikes": (0.01, 0.375, "middle"),
+}
 
 
 def lowest_and_highest(period):
@@ -1820,15 +1858,16 @@ def fed_chart(period="2000–2026"):
     # no 0 label: it would crowd the first year
     fig.update_yaxes(range=[0, 8], tickvals=[1, 2, 3, 4, 5, 6, 7])
     # Step 5: Bolivia's overnight interbank rate, a proxy (its central bank sets no
-    # policy rate), hidden until it is clicked in the legend. It goes above 8
-    # percent, so it gets its own scale: a hidden second y-axis with zero at the
-    # same height (hover to read its values)
-    return add_bolivia_line(
+    # policy rate), hidden until it is clicked in the legend. It shares the
+    # chart's axis, so its peaks above 8 percent go off the chart
+    add_bolivia_line(
         fig,
         bolivia_series("interbank_rate"),
-        "Bolivia (interbank rate, proxy, own scale)",
-        scale=[0, 12],
+        "Bolivia (interbank rate, proxy)",
     )
+    # Step 6: its legend entry inside the plot, at the period's empty spot
+    x, y, yanchor = BOLIVIA_LEGEND[period]
+    return legend_inside(fig, x, y, yanchor=yanchor)
 ```
 
 ```{python}
@@ -1858,6 +1897,9 @@ for name in PERIODS:
                 {
                     "xaxis.range": list(zoomed.layout.xaxis.range),
                     "title.text": zoomed.layout.title.text,
+                    "legend.x": zoomed.layout.legend.x,
+                    "legend.y": zoomed.layout.legend.y,
+                    "legend.yanchor": zoomed.layout.legend.yanchor,
                 }
             ],
         )
@@ -1882,7 +1924,7 @@ fig
 **Sources.** Data: [Board of Governors of the Federal Reserve System, Federal Funds Effective Rate (`FEDFUNDS`), via FRED](https://fred.stlouisfed.org/series/FEDFUNDS);
 [NBER recession dates (`USREC`), via FRED](https://fred.stlouisfed.org/series/USREC).
 Bolivia: [IMF, Monetary and Financial Statistics, interbank money-market rate](https://data.imf.org/), from the Banco Central de Bolivia,
-a proxy for the policy rate (Bolivia's central bank sets no policy-rate target), on its own scale; file [`data/ch10/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/bolivia.csv).
+a proxy for the policy rate (Bolivia's central bank sets no policy-rate target); file [`data/ch10/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/bolivia.csv).
 Prepared files: [`data/ch10/fig10-2.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/fig10-2.csv), [`data/ch10/recessions.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/recessions.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/README.md)).
 Chart: inspired by Fig. 10.2 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -2737,6 +2779,8 @@ def covid_chart(date="March 2023"):
         marker=dict(color=ORANGE, size=16, symbol="circle-open", line_width=3),
         name="Bolivia" if k == 0 else "Bolivia (GDP loss to 2024Q4)",
     )
+    # Step 6: its legend entry inside the plot, in the empty top right corner
+    legend_inside(fig, 0.99, 0.99, xanchor="right")
     return hide_bolivia(fig)
 ```
 
@@ -3160,6 +3204,8 @@ add_bolivia_line(
     "Bolivia (employed persons, millions, own scale)",
     scale=[2, 8],
 )
+# Step 5: its legend entry inside the plot, in the empty top left corner
+legend_inside(fig, 0.01, 0.99)
 fig.show()
 ```
 
@@ -3728,10 +3774,12 @@ def unemployment_chart(recession="Great Recession"):
     # Step 4: fixed axes
     fig.update_xaxes(range=["1999-07-01", "2026-12-01"])
     fig.update_yaxes(range=[3, 16], tickvals=[4, 6, 8, 10, 12, 14, 16])
-    # Step 5: Bolivia's urban unemployment rate, quarterly, hidden until it is
+    # Step 5: Bolivia's unemployment rate (INE's survey), quarterly, hidden until it is
     # clicked in the legend
     rate = bolivia_series("unemployment_q")
-    return add_bolivia_line(fig, rate, "Bolivia (urban unemployment, INE)")
+    add_bolivia_line(fig, rate, "Bolivia (unemployment, INE survey)")
+    # Step 6: its legend entry inside the plot, in the empty top left corner
+    return legend_inside(fig, 0.01, 0.99)
 ```
 
 ```{python}
@@ -3759,7 +3807,7 @@ slider_figure(
 
 **Sources.** Data: [U.S. Bureau of Labor Statistics, Unemployment Rate (`UNRATE`), via FRED](https://fred.stlouisfed.org/series/UNRATE);
 [NBER recession dates (`USREC`), via FRED](https://fred.stlouisfed.org/series/USREC).
-Bolivia: [INE, urban unemployment rate](https://www.ine.gob.bo/), quarterly, not seasonally adjusted, via the [IMF](https://data.imf.org/);
+Bolivia: [INE, unemployment rate, Continuous Employment Survey (ECE)](https://www.ine.gob.bo/), quarterly, not seasonally adjusted, via the [IMF](https://data.imf.org/);
 file [`data/ch10/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/bolivia.csv).
 Prepared files: [`data/ch10/fig10-9.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/fig10-9.csv), [`data/ch10/recessions.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/recessions.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/README.md)).
@@ -3916,7 +3964,7 @@ of Fig. 9 (the largest difference over 320 months is 0.0).
 ```{python}
 # Load the OECD unemployment rates: one row per country and month
 unemp_panel = pd.read_csv(DATA_URL + "unemployment_panel.csv", parse_dates=["date"])
-# Bolivia is not in the OECD's file: add INE's urban rate (add_bolivia)
+# Bolivia is not in the OECD's file: add INE's survey rate (add_bolivia)
 unemp_panel = add_bolivia(unemp_panel, "unemployment_q", "unemployment_rate")
 unemp_panel.tail(3)
 ```
@@ -4007,7 +4055,7 @@ all_countries(
 
 **Sources.** Data: [OECD, harmonised unemployment rates, monthly (dataflow `DSD_LFS@DF_IALFS_UNE_M`), OECD Data
 Explorer](https://data-explorer.oecd.org/); [NBER recession dates (`USREC`), via FRED](https://fred.stlouisfed.org/series/USREC).
-Bolivia: [INE, urban unemployment rate](https://www.ine.gob.bo/), quarterly, not seasonally adjusted and not harmonised, via the
+Bolivia: [INE, unemployment rate, Continuous Employment Survey (ECE)](https://www.ine.gob.bo/), quarterly, not seasonally adjusted and not harmonised, via the
 [IMF](https://data.imf.org/); file [`data/ch10/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/bolivia.csv).
 Prepared files: [`data/ch10/unemployment_panel.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/unemployment_panel.csv), [`data/ch10/countries.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/countries.csv), [`data/ch10/recessions.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/recessions.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/README.md)).
@@ -4160,13 +4208,12 @@ def inflation_chart(measure="log change"):
             bgcolor="rgba(255,255,255,0.8)",
         )
     )
-    # Step 4: Bolivia, hidden until it is clicked in the legend. Its inflation
-    # passed 20 percent in 2025, so it gets its own scale: a hidden second y-axis,
-    # 2.5 times as tall, with zero at the same height (hover to read its values)
+    # Step 4: Bolivia, hidden until it is clicked in the legend. It shares the
+    # chart's axis, so its inflation above 12 percent (2025) goes off the chart
     rate = bolivia_series("inflation_log")
     if measure == "percent change":
         rate = percent_from_log(rate)
-    return add_bolivia_line(fig, rate, "Bolivia (own scale)", scale=[-3.75, 30])
+    return add_bolivia_line(fig, rate, "Bolivia")
 ```
 
 ```{python}
@@ -4196,8 +4243,8 @@ slider_figure(
 [U.K. Office for National Statistics, CPIH](https://www.ons.gov.uk/economy/inflationandpriceindices/timeseries/l522/mm23),
 via the [OECD prices database (dataflow `DSD_PRICES@DF_PRICES_ALL`), OECD Data Explorer](https://data-explorer.oecd.org/);
 [Eurostat, HICP, euro area (`prc_hicp_minr`)](https://ec.europa.eu/eurostat/databrowser/view/prc_hicp_minr/default/table).
-Bolivia: [INE, consumer price index](https://www.ine.gob.bo/), via the [IMF Consumer Price Index dataset](https://data.imf.org/en/datasets/IMF.STA:CPI),
-on its own scale; file [`data/ch10/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/bolivia.csv).
+Bolivia: [INE, consumer price index](https://www.ine.gob.bo/), via the [IMF Consumer Price Index dataset](https://data.imf.org/en/datasets/IMF.STA:CPI);
+file [`data/ch10/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/bolivia.csv).
 Prepared file: [`data/ch10/fig10-10.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/fig10-10.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/README.md)).
 Chart: inspired by Fig. 10.10 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)

@@ -822,6 +822,8 @@ def data_slider(make_figure, name, values, start, title, label=None, **fixed):
     """
     # Step 1: draw the figure once for every value
     figures = {v: make_figure(**{name: v}, **fixed) for v in values}
+    # the y data of every line for every value, saved before Step 2 empties some lines
+    all_ys = {v: {t.name: compact(t.y) for t in figures[v].data} for v in values}
     fig = go.Figure(layout=figures[start].layout)
     # Step 2: one line per name; a line missing at the start value is added empty
     for v in [start] + list(values):
@@ -832,7 +834,7 @@ def data_slider(make_figure, name, values, start, title, label=None, **fixed):
     # Step 3: one slider step per value: the new y data of every line, the new title
     steps = []
     for v in values:
-        ys = {t.name: compact(t.y) for t in figures[v].data}
+        ys = all_ys[v]
         new_y = [ys.get(t.name, [None] * len(t.y)) for t in fig.data]
         steps.append(dict(method="update", label=str(v),
                           args=[{"y": new_y}, {"title.text": title.format(v)}]))
@@ -1834,10 +1836,11 @@ fig.add_scatter(
     line=dict(color=TEAL),
     showlegend=False,
 )
-# Step 2b: Bolivia's official rate, on a third, hidden scale of its own (from almost
-# 0 before the 1985 hyperinflation to about 12 bolivianos in 2026); it waits in the
-# legend until clicked (`hide_bolivia`)
+# Step 2b: Bolivia's official rate, on a third, hidden scale of its own, from 1987,
+# after the redenomination (the earlier rates are almost 0 in today's bolivianos);
+# it waits in the legend until clicked (`hide_bolivia`)
 bol_fx = bolivia[bolivia.series == "fx_monthly"]
+bol_fx = bol_fx[bol_fx.date >= "1987-01-01"]
 fig.add_scatter(
     x=pd.to_datetime(bol_fx.date),
     y=bol_fx.value,
@@ -1860,8 +1863,9 @@ fig.update_layout(
     showlegend=True,
     legend=dict(x=0.01, y=0.02, xanchor="left", yanchor="bottom",
                 bgcolor="rgba(0,0,0,0)"),
-    # Bolivia's scale: no ticks, the hover box shows the values
-    yaxis3=dict(overlaying="y", visible=False),
+    # Bolivia's scale: no ticks (the hover box shows the values), from zero, so
+    # that its line starts above the legend
+    yaxis3=dict(overlaying="y", visible=False, rangemode="tozero"),
     xaxis=dict(range=["1970-01-01", "2028-01-01"]),
     yaxis=dict(
         title="Yen per dollar (left scale)",
@@ -1901,7 +1905,7 @@ fig.show()
 **Sources.** Data: Board of Governors of the Federal Reserve System, [H.10 Foreign Exchange Rates](https://www.federalreserve.gov/releases/h10/), via [FRED](https://fred.stlouisfed.org/release?rid=17): [Japanese yen to one U.S. dollar (`EXJPUS`)](https://fred.stlouisfed.org/series/EXJPUS) and
 [U.S. dollars to one euro (`EXUSEU`)](https://fred.stlouisfed.org/series/EXUSEU) (inverted to euros per dollar), monthly.
 Prepared file: [`data/ch20/fig20-1.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch20/fig20-1.csv) (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch20/README.md)).
-Bolivia: International Monetary Fund, [Exchange Rates dataset](https://data.imf.org/), the Banco Central de Bolivia's official rate, bolivianos per dollar, monthly average (in today's bolivianos also before the 1987 redenomination), on a hidden scale of its own; only the official rate is shown, although a parallel market traded dollars well above the official 6.96 bolivianos from 2023, until the official rate moved to about 12 in mid-2026; file [`data/ch20/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch20/bolivia.csv).
+Bolivia: International Monetary Fund, [Exchange Rates dataset](https://data.imf.org/), the Banco Central de Bolivia's official rate, bolivianos per dollar, monthly average, from 1987 (after the redenomination; the earlier rates are almost 0 in today's bolivianos), on a hidden scale of its own; only the official rate is shown, although a parallel market traded dollars well above the official 6.96 bolivianos from 2023, until the official rate moved to about 12 in mid-2026; file [`data/ch20/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch20/bolivia.csv).
 Chart: inspired by Fig. 20.1 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -2018,9 +2022,12 @@ def dollar_index_data(countries, base):
 #| kind: drawing
 # @title Drawing code: Fig. 1, the price of a dollar in any currency
 # Bolivia's official rate (IMF, file bolivia.csv) joins the 25 currencies, in the
-# same columns; `if` adds it only once, even when the cell runs again
+# same columns, from January 1985, so that the hyperinflation shows and no month
+# rounds to 0.0 (the old-peso rates before it are almost 0 in today's bolivianos);
+# `if` adds it only once, even when the cell runs again
 if "Bolivia" not in set(fx_all.country):
     bol_fx = bolivia[bolivia.series == "fx_monthly"]
+    bol_fx = bol_fx[bol_fx.date >= "1985-01-01"]
     bol_rows = pd.DataFrame(
         {
             "iso3": "BOL",
@@ -2147,7 +2154,7 @@ fig
 **Sources.** Data: Board of Governors of the Federal Reserve System, [H.10 Foreign Exchange Rates](https://www.federalreserve.gov/releases/h10/), via [FRED](https://fred.stlouisfed.org/release?rid=17): monthly rates of 25 currencies against the dollar, from
 [the yen (`EXJPUS`)](https://fred.stlouisfed.org/series/EXJPUS) and [the euro (`EXUSEU`)](https://fred.stlouisfed.org/series/EXUSEU) to `EXUSUK`, `EXCAUS`, `EXSZUS`, `EXCHUS`, `EXKOUS`,
 `EXINUS`, `EXMXUS`, `EXBZUS` and the others listed in the data notes. Prepared file: [`data/ch20/fx_monthly.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch20/fx_monthly.csv) (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch20/README.md)).
-Bolivia: International Monetary Fund, [Exchange Rates dataset](https://data.imf.org/), the Banco Central de Bolivia's official rate, monthly average; only the official rate is shown, although a parallel market traded dollars well above the official 6.96 bolivianos from 2023, until the official rate moved to about 12 in mid-2026; file [`data/ch20/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch20/bolivia.csv).
+Bolivia: International Monetary Fund, [Exchange Rates dataset](https://data.imf.org/), the Banco Central de Bolivia's official rate, monthly average, from January 1985, so that the hyperinflation shows (the earlier rates are almost 0 in today's bolivianos); only the official rate is shown, although a parallel market traded dollars well above the official 6.96 bolivianos from 2023, until the official rate moved to about 12 in mid-2026; file [`data/ch20/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch20/bolivia.csv).
 Chart: inspired by Fig. 20.1 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -2703,8 +2710,10 @@ fig.add_scatter(
     name="Bolivia (proxy: U.S. Big Mac price × price level)",
     showlegend=True,
 )
-# it waits in the legend, in the top left corner, until clicked (`hide_bolivia`)
-fig.update_layout(legend=dict(x=0.01, y=0.99, xanchor="left", yanchor="top"))
+# it waits in the legend, in the empty top-left corner, until clicked (`hide_bolivia`)
+fig.update_layout(
+    legend=dict(x=0.01, y=0.99, xanchor="left", yanchor="top", bgcolor="rgba(0,0,0,0)")
+)
 hide_bolivia(fig)
 fig.show()
 ```
@@ -3404,7 +3413,7 @@ bol_year = bolivia[bolivia.series == "fx_annual"]
 fig.add_scatter(
     x=bol_year.date.astype(int),
     y=bol_year.value,
-    name="Bolivia (bolivianos per dollar, own scale)",
+    name="Bolivia (bolivianos per dollar, own ratio scale)",
     yaxis="y2",
     line=dict(color=BOLIVIA_COLOR),
     showlegend=True,
@@ -3412,7 +3421,7 @@ fig.add_scatter(
 )
 fig.update_layout(
     yaxis2=dict(overlaying="y", type="log", visible=False),
-    legend=dict(x=0.01, y=0.99, xanchor="left", yanchor="top"),
+    legend=dict(x=0.01, y=0.99, xanchor="left", yanchor="top", bgcolor="rgba(0,0,0,0)"),
 )
 # it waits in the legend until clicked (`hide_bolivia`)
 hide_bolivia(fig)

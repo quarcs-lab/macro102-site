@@ -693,11 +693,10 @@ def slider_figure(make_figure, name, values, start, label=None):
 
 
 def hide_bolivia(fig):
-    """Tag Bolivia's lines (meta="BOL") and hide them until clicked in the legend."""
+    """Tag Bolivia's lines (meta="BOL"), hide them until clicked, list them last."""
     for trace in fig.data:
         if (trace.name or "").startswith("Bolivia"):
-            trace.meta = "BOL"
-            trace.visible = "legendonly"
+            trace.update(meta="BOL", visible="legendonly", legendrank=2000)
     return fig
 
 
@@ -707,7 +706,7 @@ def hide_bolivia_steps(fig):
     bolivia = [(t.name or "").startswith("Bolivia") for t in fig.data]
     for trace, mine in zip(fig.data, bolivia):
         if mine:
-            trace.meta = "BOL"
+            trace.update(meta="BOL", legendrank=2000)
             if trace.visible:
                 trace.visible = "legendonly"
     # Step 2: in every step, a Bolivia trace that would be drawn waits in the legend
@@ -1431,17 +1430,31 @@ fig.update_xaxes(rangeslider_visible=True)
 # Step 4: Bolivia's ratio (ILO, ages 15+, annual), hidden until you click it in the
 # legend. It lies above this axis, so it gets its own invisible axis, "y2"
 emp_bol = bolivia_years("emp_pop")
+low, high = emp_bol.value.min(), emp_bol.value.max()
 fig.add_trace(
     go.Scatter(
         x=emp_bol.date,
         y=emp_bol.value,
-        name="Bolivia (ILO, ages 15+, %, own scale)",
+        name=f"Bolivia (ILO, 15+, {low:.0f}-{high:.0f}%, own scale)",
         mode="lines+markers",
         line=dict(color=BOLIVIA_COLOR),
         yaxis="y2",
     )
 )
-fig.update_layout(yaxis2=dict(overlaying="y", visible=False))
+# Step 5: the own axis is this axis (50 to 66) times a factor k, so that 0 sits
+# at the same height on both; k puts Bolivia's highest value near the top. The
+# legend (only Bolivia) sits inside the empty top-left corner, see-through
+k = 1.02 * high / 66
+fig.update_layout(
+    yaxis2=dict(overlaying="y", visible=False, range=[50 * k, 66 * k]),
+    legend=dict(
+        x=0.01,
+        y=0.99,
+        xanchor="left",
+        yanchor="top",
+        bgcolor="rgba(0,0,0,0)",
+    ),
+)
 hide_bolivia(fig)
 fig.show()
 ```
@@ -1543,8 +1556,20 @@ for group, dash in [["men", "solid"], ["women", "dot"]]:
             name="Bolivia, " + group + " (ILO, ages 15+)",
             mode="lines",
             line=dict(color=BOLIVIA_COLOR, dash=dash),
+            legend="legend2",
         )
     )
+# Step 4: Bolivia's entries get a second legend inside the empty bottom-right
+# corner, see-through, so the chart keeps its size
+fig.update_layout(
+    legend2=dict(
+        x=0.99,
+        y=0.01,
+        xanchor="right",
+        yanchor="bottom",
+        bgcolor="rgba(0,0,0,0)",
+    )
+)
 hide_bolivia(fig)
 fig.show()
 ```
@@ -1797,16 +1822,26 @@ shade_recessions(fig, "1950-01-01")
 # Step 3: no tick label in the bottom-left corner, and the range slider below
 fig.update_yaxes(range=[0, 16], tickvals=[2, 4, 6, 8, 10, 12, 14])
 fig.update_xaxes(rangeslider_visible=True)
-# Step 4: Bolivia's monthly urban rate (INE, from October 2015), hidden until you
-# click it in the legend
+# Step 4: Bolivia's monthly rate (INE's ECE survey, from October 2015), hidden
+# until you click it in the legend
 unemp_bol = bolivia_series("unemployment_m")
 fig.add_trace(
     go.Scatter(
         x=pd.to_datetime(unemp_bol.date),
         y=unemp_bol.value,
-        name="Bolivia (urban unemployment, INE)",
+        name="Bolivia (unemployment, INE's ECE survey)",
         mode="lines",
         line=dict(color=BOLIVIA_COLOR),
+    )
+)
+# Step 5: the legend (only Bolivia) inside the empty top-left corner, see-through
+fig.update_layout(
+    legend=dict(
+        x=0.01,
+        y=0.99,
+        xanchor="left",
+        yanchor="top",
+        bgcolor="rgba(0,0,0,0)",
     )
 )
 hide_bolivia(fig)
@@ -1818,7 +1853,7 @@ recession dates: [NBER, U.S. Business Cycle Expansions and Contractions](https:/
 via the FRED recession indicator [`USREC`](https://fred.stlouisfed.org/series/USREC).
 Prepared files: [`data/ch07/fig7-2.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/fig7-2.csv), [`data/ch07/recessions.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/recessions.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/README.md)).
-Bolivia: [INE, Encuesta Continua de Empleo](https://www.ine.gob.bo/), urban unemployment rate, monthly, not seasonally adjusted (no data from June to December 2020), as reported to the [IMF](https://data.imf.org/); file [`data/ch07/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/bolivia.csv).
+Bolivia: [INE, Encuesta Continua de Empleo (ECE)](https://www.ine.gob.bo/), unemployment rate, monthly, not seasonally adjusted (no data from June to December 2020), as reported to the [IMF](https://data.imf.org/); file [`data/ch07/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/bolivia.csv).
 Chart: inspired by Fig. 7.2 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -1928,9 +1963,9 @@ the highest monthly rate among them, which the title reports.
 ```{python}
 # The countries of the picker, A to Z
 MONTHLY_COUNTRIES = sorted(monthly.country.unique())
-# Bolivia's monthly urban rate (INE) is not an OECD series: the charts use a copy
+# Bolivia's monthly rate (INE's ECE) is not an OECD series: the charts use a copy
 # of the table with Bolivia's rows added at the end (`pd.concat` stacks tables)
-BOLIVIA_URBAN = "Bolivia (urban, INE)"
+BOLIVIA_INE = "Bolivia (INE)"
 unemp_bol = bolivia_series("unemployment_m")
 monthly_all = pd.concat(
     [
@@ -1938,7 +1973,7 @@ monthly_all = pd.concat(
         pd.DataFrame(
             {
                 "iso3": "BOL",
-                "country": BOLIVIA_URBAN,
+                "country": BOLIVIA_INE,
                 "date": pd.to_datetime(unemp_bol.date),
                 "unemployment_rate": unemp_bol.value,
             }
@@ -1977,7 +2012,7 @@ MONTHLY_COLORS = group_colors(
     [MONTHLY_SHOWN, MONTHLY_COUNTRIES],
     BOOK_COLORS,
 )
-MONTHLY_COLORS[BOLIVIA_URBAN] = BOLIVIA_COLOR
+MONTHLY_COLORS[BOLIVIA_INE] = BOLIVIA_COLOR
 
 
 def unemployment_countries(names=("United States",)):
@@ -2028,7 +2063,7 @@ legend to add it**, and double-click one to show it alone.
 # Fig. 2 with a country picker (hold Ctrl or Cmd to pick several)
 interact(
     unemployment_countries,
-    names=SelectMultiple(options=MONTHLY_COUNTRIES + [BOLIVIA_URBAN],
+    names=SelectMultiple(options=MONTHLY_COUNTRIES + [BOLIVIA_INE],
                          value=("United States",), rows=10,
                          description="countries", style=WIDE),
 );
@@ -2039,7 +2074,7 @@ interact(
 # @title Website version: Fig. 2 for 34 OECD countries (click a country in the legend)
 # every country in one chart, and Bolivia last; the legend buttons come from
 # legend_menu, and Bolivia waits in the legend (hide_bolivia)
-fig = unemployment_countries(tuple(MONTHLY_COUNTRIES) + (BOLIVIA_URBAN,))
+fig = unemployment_countries(tuple(MONTHLY_COUNTRIES) + (BOLIVIA_INE,))
 legend_menu(fig, MONTHLY_SHOWN, label="U.S. and Germany")
 hide_bolivia(fig)
 fig.update_layout(
@@ -2054,7 +2089,7 @@ fig
 U.S. rows: [U.S. Bureau of Labor Statistics, `UNRATE`, via FRED](https://fred.stlouisfed.org/series/UNRATE).
 Prepared file: [`data/ch07/unemployment_countries_monthly.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/unemployment_countries_monthly.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/README.md)).
-Bolivia (not an OECD series): [INE, Encuesta Continua de Empleo](https://www.ine.gob.bo/), urban unemployment rate, monthly, not seasonally adjusted (no data from June to December 2020), as reported to the [IMF](https://data.imf.org/); file [`data/ch07/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/bolivia.csv).
+Bolivia (not an OECD series): [INE, Encuesta Continua de Empleo (ECE)](https://www.ine.gob.bo/), unemployment rate, monthly, not seasonally adjusted (no data from June to December 2020), as reported to the [IMF](https://data.imf.org/); file [`data/ch07/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/bolivia.csv).
 Chart: inspired by Fig. 7.2 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -2813,13 +2848,13 @@ def unemployment_in(year=2022):
             "variable": "Economy",
         },
     )
-    # Step 2b: Bolivia's urban rate (INE), hidden until you click it in the legend
+    # Step 2b: Bolivia's rate (INE surveys), hidden until you click it in the legend
     unemp_bol = bolivia_series("unemployment_a")
     fig.add_trace(
         go.Scatter(
             x=unemp_bol.date.astype(int),
             y=unemp_bol.value,
-            name="Bolivia (urban unemployment, INE)",
+            name="Bolivia (INE)",
             mode="lines",
             line=dict(color=BOLIVIA_COLOR),
         )
@@ -2872,7 +2907,7 @@ Europe: euro area of 12 countries, [European Commission, AMECO database](https:/
 unemployment rate (`ZUTN`), which replaces the textbook's OECD series.
 Prepared file: [`data/ch07/fig7-7.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/fig7-7.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/README.md)).
-Bolivia: [INE](https://www.ine.gob.bo/), urban unemployment rate from its household and employment surveys, annual, as reported to the [IMF](https://data.imf.org/); the years 1983–1988, above 14 percent, run off the chart; file [`data/ch07/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/bolivia.csv).
+Bolivia: [INE](https://www.ine.gob.bo/), unemployment rate from its household and employment surveys (their coverage varies over time), annual, as reported to the [IMF](https://data.imf.org/); the years 1983–1988, above 14 percent, run off the chart; file [`data/ch07/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/bolivia.csv).
 Chart: inspired by Fig. 7.7 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -2945,7 +2980,7 @@ average rate since 1985, which the title reports.
 # The economies of the picker, A to Z, and the textbook's three
 AMECO_COUNTRIES = sorted(ameco.country.unique())
 BOOK_ECONOMIES = ("Euro area (12 countries)", "Japan", "United States")
-# Bolivia's annual urban rate (INE) is not in AMECO: the charts use a copy of the
+# Bolivia's annual rate (INE surveys) is not in AMECO: the charts use a copy of the
 # table with Bolivia's rows added at the end
 unemp_bol = bolivia_series("unemployment_a")
 ameco_all = pd.concat(
@@ -2954,7 +2989,7 @@ ameco_all = pd.concat(
         pd.DataFrame(
             {
                 "iso3": "BOL",
-                "country": BOLIVIA_URBAN,
+                "country": BOLIVIA_INE,
                 "year": unemp_bol.date.astype(int),
                 "unemployment_rate": unemp_bol.value,
             }
@@ -2994,7 +3029,7 @@ AMECO_COLORS = group_colors(
     [AMECO_SHOWN, AMECO_COUNTRIES],
     BOOK_COLORS,
 )
-AMECO_COLORS[BOLIVIA_URBAN] = BOLIVIA_COLOR
+AMECO_COLORS[BOLIVIA_INE] = BOLIVIA_COLOR
 
 
 def unemployment_long_run(names=BOOK_ECONOMIES):
@@ -3050,7 +3085,7 @@ shown; **click a country in the legend to add it**.
 # Fig. 7 with a picker of economies (hold Ctrl or Cmd to pick several)
 interact(
     unemployment_long_run,
-    names=SelectMultiple(options=AMECO_COUNTRIES + [BOLIVIA_URBAN],
+    names=SelectMultiple(options=AMECO_COUNTRIES + [BOLIVIA_INE],
                          value=BOOK_ECONOMIES, rows=10,
                          description="economies", style=WIDE),
 );
@@ -3061,7 +3096,7 @@ interact(
 # @title Website version: Fig. 7 for 43 economies (click a country in the legend)
 # every economy in one chart, and Bolivia last; the legend buttons come from
 # legend_menu, and Bolivia waits in the legend (hide_bolivia)
-fig = unemployment_long_run(tuple(AMECO_COUNTRIES) + (BOLIVIA_URBAN,))
+fig = unemployment_long_run(tuple(AMECO_COUNTRIES) + (BOLIVIA_INE,))
 legend_menu(fig, AMECO_SHOWN, label="Textbook view + Spain, South Korea")
 hide_bolivia(fig)
 fig.update_layout(
@@ -3077,7 +3112,7 @@ fig
 unemployment rate, Eurostat definition (series `<country>.1.0.0.0.ZUTN`), 42 countries and the euro area of 12.
 Prepared file: [`data/ch07/unemployment_countries.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/unemployment_countries.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/README.md)).
-Bolivia (not in AMECO): [INE](https://www.ine.gob.bo/), urban unemployment rate from its household and employment surveys, annual, as reported to the [IMF](https://data.imf.org/); file [`data/ch07/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/bolivia.csv).
+Bolivia (not in AMECO): [INE](https://www.ine.gob.bo/), unemployment rate from its household and employment surveys (their coverage varies over time), annual, as reported to the [IMF](https://data.imf.org/); file [`data/ch07/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/bolivia.csv).
 Chart: inspired by Fig. 7.7 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -3240,19 +3275,33 @@ fig.update_layout(
 )
 # Step 3: Bolivia's premium (a proxy: hourly earnings of all employees, INE's
 # survey via the ILO), hidden until clicked. It lies above this axis, so it gets
-# its own invisible axis "y2", which starts at 0 (`rangemode="tozero"`)
+# its own invisible axis "y2" (its range is set in Step 4)
 premium_bol = bolivia_series("college_premium")
+low, high = premium_bol.value.min(), premium_bol.value.max()
 fig.add_trace(
     go.Scatter(
         x=premium_bol.date.astype(int),
         y=premium_bol.value,
-        name="Bolivia: college premium (ILO, log points, proxy, own scale)",
+        name=f"Bolivia (premium, proxy, {low:.0f}-{high:.0f} log points, own scale)",
         mode="lines+markers",
         line=dict(color=BOLIVIA_COLOR),
         yaxis="y2",
+        legend="legend2",
     )
 )
-fig.update_layout(yaxis2=dict(overlaying="y", visible=False, rangemode="tozero"))
+# Step 4: own axis = this axis (0 to 60) times k, so 0 is at the same height; a
+# second, see-through legend in the empty top-left corner keeps the legend below
+k = 1.02 * high / 60
+fig.update_layout(
+    yaxis2=dict(overlaying="y", visible=False, range=[0, 60 * k]),
+    legend2=dict(
+        x=0.01,
+        y=0.99,
+        xanchor="left",
+        yanchor="top",
+        bgcolor="rgba(0,0,0,0)",
+    ),
+)
 hide_bolivia(fig)
 fig.show()
 ```
@@ -3331,7 +3380,7 @@ PREMIUM_COUNTRIES = sorted(
 )
 # Bolivia's premium, a proxy from INE's survey via the ILO (all employees): the
 # line chart uses a copy of the table with Bolivia's rows added at the end
-BOLIVIA_PROXY = "Bolivia (ILO, proxy)"
+BOLIVIA_PROXY = "Bolivia (proxy)"
 premium_bol = bolivia_series("college_premium")
 college_all = pd.concat(
     [
@@ -3502,6 +3551,16 @@ fig.add_trace(
         name="Bolivia (ILO, proxy)",
         mode="markers",
         marker=dict(symbol="circle-open-dot", size=16, color=BOLIVIA_COLOR),
+    )
+)
+# the legend (only Bolivia) inside the empty top-right corner, see-through
+fig.update_layout(
+    legend=dict(
+        x=0.99,
+        y=0.99,
+        xanchor="right",
+        yanchor="top",
+        bgcolor="rgba(0,0,0,0)",
     )
 )
 hide_bolivia(fig)
@@ -3859,19 +3918,33 @@ fig.update_yaxes(range=[10, 20], tickvals=[12, 14, 16, 18, 20])
 fig.update_xaxes(rangeslider_visible=True, range=["1950-01-01", "2030-01-01"])
 # Step 4: Bolivia's manufacturing workers (ILO estimates, annual), hidden until
 # clicked. Half a million workers lie far below this axis, so they get their own
-# invisible axis "y2", which starts at 0 (`rangemode="tozero"`)
+# invisible axis "y2" (its range is set in Step 5)
 manuf_bol = bolivia_years("manufacturing_millions")
+low, high = manuf_bol.value.min(), manuf_bol.value.max()
 fig.add_trace(
     go.Scatter(
         x=manuf_bol.date,
         y=manuf_bol.value,
-        name="Bolivia (ILO, millions of workers, own scale)",
+        name=f"Bolivia (ILO, {low:.2f}-{high:.2f} million, own scale)",
         mode="lines+markers",
         line=dict(color=BOLIVIA_COLOR),
         yaxis="y2",
     )
 )
-fig.update_layout(yaxis2=dict(overlaying="y", visible=False, rangemode="tozero"))
+# Step 5: the own axis is this axis (10 to 20) times a factor k, so 0 sits at the
+# same height on both; k puts Bolivia's lowest value just above the bottom, which
+# leaves the top-right corner free for the legend (only Bolivia), see-through
+k = low / 10 / 1.01
+fig.update_layout(
+    yaxis2=dict(overlaying="y", visible=False, range=[10 * k, 20 * k]),
+    legend=dict(
+        x=0.99,
+        y=0.99,
+        xanchor="right",
+        yanchor="top",
+        bgcolor="rgba(0,0,0,0)",
+    ),
+)
 hide_bolivia(fig)
 fig.show()
 ```
@@ -4496,7 +4569,7 @@ fig.add_trace(
     go.Scatter(
         x=pct_bol.percentile,
         y=pct_bol.value,
-        name="Bolivia, 1980–2014 (WID, pre-tax income, proxy)",
+        name="Bolivia, 1980–2014 (pre-tax, proxy)",
         mode="lines+markers",
         line=dict(color=BOLIVIA_COLOR),
         marker=dict(size=6),

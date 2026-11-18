@@ -523,10 +523,16 @@ def hide_bolivia(fig):
     """
     # Step 1: which traces are Bolivia's
     bolivia = [(trace.name or "").startswith("Bolivia") for trace in fig.data]
-    # Step 2: tag them, and move the visible ones to the legend
+    # Step 2: tag them, and move the visible ones to the legend. The legend says
+    # "Bolivia" (not the data's long name) and lists it after the other countries
+    # (`legendrank`: a higher rank comes later; the default is 1000)
     for trace, is_bolivia in zip(fig.data, bolivia):
         if is_bolivia:
             trace.meta = "BOL"
+            trace.legendrank = 2000
+            if trace.name == "Bolivia (Plurinational State of)":
+                trace.name = "Bolivia"
+                trace.legendgroup = "Bolivia"
             if trace.visible is not False:
                 trace.visible = "legendonly"
     # Step 3: a slider step that shows a Bolivian trace puts it in the legend only
@@ -1767,27 +1773,17 @@ bolivia = world[world.country == BOLIVIA]
 
 
 def ratio_with_bolivia(g):
-    """ratio_scale_chart for the U.S., plus Bolivia's data on its own scale.
+    """ratio_scale_chart for the U.S., plus Bolivia's data on the same ratio scale.
 
-    Bolivia's hidden axis spans as many doublings as the U.S. axis (2,500 to
-    140,000 dollars), so the slopes, the growth rates, compare directly.
+    Bolivia's years below 2,500 dollars, before the 1920s, fall under the chart.
     """
     fig = ratio_scale_chart(g)
     fig.add_trace(
         go.Scatter(
             x=bolivia.year,
             y=bolivia.gdppc,
-            name="Bolivia data (own scale)",
+            name="Bolivia data",
             line=dict(color=COLORS[BOLIVIA], width=3),
-            yaxis="y2",
-        )
-    )
-    fig.update_layout(
-        yaxis2=dict(
-            overlaying="y",
-            visible=False,
-            type="log",
-            range=[np.log10(1000), np.log10(1000 * 140000 / 2500)],
         )
     )
     return fig
@@ -1868,7 +1864,7 @@ before 1929 and for every other country: [Maddison Project Database 2023, GDP pe
 The dashed constant-growth line is our own least-squares fit.
 Prepared files: [`data/ch03/fig3-2.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch03/fig3-2.csv) and [`data/ch03/maddison_world.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch03/maddison_world.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch03/README.md)).
-Bolivia: the same Maddison Project data; on the U.S. chart it is drawn on its own hidden ratio scale, which spans as many doublings as the U.S. axis, so the slopes compare directly.
+Bolivia: the same Maddison Project data, on the same ratio scale; its years below 2,500 dollars, before the 1920s, fall under the chart.
 Chart: inspired by Fig. 3.5 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -2302,7 +2298,10 @@ fig.add_trace(bolivia_ring(first.level_2023, first.growth))
 for frame in fig.frames:
     one = ring[ring.start_year == int(frame.name)]
     frame.data = list(frame.data) + [go.Scatter(x=one.level_2023, y=one.growth)]
-fig.update_layout(showlegend=True)       # the legend, to click Bolivia's ring
+# the legend, to click Bolivia's ring: inside the empty bottom-right corner and
+# transparent, so that the plot keeps its size
+fig.update_layout(showlegend=True, legend_bgcolor="rgba(0,0,0,0)")
+fig.update_layout(legend=dict(x=0.99, xanchor="right", y=0.02, yanchor="bottom"))
 hide_bolivia(fig)
 fig.show()
 ```
@@ -2711,8 +2710,7 @@ interact(
 ```{python}
 #| kind: website
 # @title Website version: Fig. 9 with a precomputed slider for the starting year
-# Step 1: one picture of Fig. 9 per period, with Bolivia's three series (Maddison
-# data, dotted) relative to its own first year
+# Step 1: Fig. 9 per period, plus Bolivia's three series relative to its first year
 PERIODS = [(1870, 2025), (1900, 2025), (1929, 2025), (1950, 2025), (1980, 2025),
            (2000, 2025)]
 
@@ -2722,13 +2720,17 @@ def rules_with_bolivia(period):
     fig = growth_rules_chart(period)
     start, end, chosen, rates = growth_rules(period, "Bolivia (Plurinational State of)")
     colors = {"Total GDP": "#e0a33b", "Per capita GDP": GREEN, "Population": BLUE}
+    # one short legend entry, "Bolivia", for its three lines; the hover names each
     for series, color in colors.items():
+        label = f"Bolivia: {series[0].lower() + series[1:]} ({start} = 1)"
         fig.add_trace(
             go.Scatter(
                 x=chosen.year,
                 y=chosen[series],
-                name=f"Bolivia: {series[0].lower() + series[1:]} ({start} = 1)",
+                name="Bolivia",
                 legendgroup="Bolivia",
+                showlegend=(series == "Total GDP"),
+                hovertemplate=label + "<br>%{x}: %{y:.2f}<extra></extra>",
                 line=dict(color=color, dash="dot"),
             )
         )
@@ -2782,6 +2784,8 @@ fig.update_yaxes(range=[np.log10(0.5), np.log10(150)])
 # tag Bolivia's lines, the last ones; the slider draws them on its last step
 for trace in fig.data[-len(since_1950("Bolivia (Plurinational State of)").data):]:
     trace.meta = "BOL"
+# the slider writes Bolivia's short name
+fig.layout.sliders[0].steps[-1].label = "Bolivia"
 fig
 ```
 
