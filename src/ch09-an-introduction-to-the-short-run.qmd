@@ -642,6 +642,15 @@ def add_legend_traces(fig, traces, keep=()):
                               args=[step.args[0], step.args[1], list(range(n))]))
         slider.steps = steps
     return fig
+
+
+def hide_bolivia(fig):
+    """Tag Bolivia's lines (meta="BOL") and hide them until clicked in the legend."""
+    for trace in fig.data:
+        if (trace.name or "").startswith("Bolivia"):
+            trace.meta = "BOL"
+            trace.visible = "legendonly"
+    return fig
 ```
 
 :::
@@ -997,6 +1006,34 @@ menu's groups first.
 
 ```{python}
 #| kind: folded
+# @title Data tool: Bolivia's data, kept apart from the panel
+# Bolivia's series, kept apart (columns series, date, value): the book's own
+# estimates of potential output and the output gap, and Bolivian statistics
+bolivia = pd.read_csv(DATA_URL + "bolivia.csv")
+
+
+def bolivia_series(name):
+    """One of Bolivia's series in bolivia.csv, with the dates as row labels."""
+    rows = bolivia[bolivia.series == name]
+    return pd.Series(rows.value.values, index=rows.date.values, name=name)
+
+
+# Bolivia's annual rows, with the column names of the panel
+bolivia_panel = pd.DataFrame({
+    "gdp_real": bolivia_series("gdp_real"),
+    "gdp_potential": bolivia_series("gdp_potential"),
+    "output_gap": bolivia_series("output_gap"),
+    "inflation": bolivia_series("inflation"),
+    "unemployment": bolivia_series("unemployment"),
+    "unemployment_trend": bolivia_series("unemployment_trend"),
+})
+bolivia_panel = bolivia_panel.rename_axis("year").reset_index()
+bolivia_panel["year"] = bolivia_panel.year.astype(int)
+bolivia_panel["country"] = "Bolivia"
+```
+
+```{python}
+#| kind: folded
 # @title Data tool: the country groups of the menu in Fig. 5
 # A dictionary such as {"Japan": "#16528c"} maps a name to a value.
 # Here each group's name maps to a list of countries.
@@ -1111,6 +1148,7 @@ COUNTRIES = ["United States"] + sorted(others.country.unique())
 WITH_GAP = sorted(others.dropna(subset=["output_gap"]).country.unique())
 # Step 2: a color for each country; the United States keeps the chapter's blue
 COLORS = group_colors(COUNTRIES, [WITH_GAP] + list(GROUPS_9.values()), {"United States": BLUE})
+COLORS["Bolivia"] = "#D62728"           # Bolivia: a red no other country uses
 print(len(COUNTRIES), "economies:", ", ".join(COUNTRIES[:8]), "...")
 ```
 
@@ -1373,7 +1411,7 @@ us_levels = gdp.rename(
 # with real GDP. `.dropna(subset=[...])` drops the rows with no value in that
 # column, `.unique()` lists each name once, and `sorted` sorts them.
 LEVEL_COUNTRIES = ["United States"] + sorted(
-    others.dropna(subset=["gdp_real"]).country.unique()
+    list(others.dropna(subset=["gdp_real"]).country.unique()) + ["Bolivia"]
 )
 
 
@@ -1390,8 +1428,10 @@ def gdp_levels(country):
     """
     if country == "United States":
         return us_levels
-    # the country's years with real GDP, with the same column names as the U.S.
-    data = others[others.country == country].dropna(subset=["gdp_real"])
+    # the country's years with real GDP, with the same column names as the U.S.;
+    # Bolivia's rows are kept apart, in bolivia_panel
+    rows = bolivia_panel if country == "Bolivia" else others
+    data = rows[rows.country == country].dropna(subset=["gdp_real"])
     return data.rename(
         columns={"gdp_real": "Actual GDP", "gdp_potential": "Potential GDP"}
     )
@@ -1422,6 +1462,11 @@ def gdp_title(country, data):
         )
     # Step 2: `.notna().any()` is True when a column has at least one number, and
     # `.idxmin()` gives the row label of the smallest value
+    if country == "Bolivia":
+        return (
+            f"Bolivia: the deepest slump was {-gaps.min():.1f}% below potential "
+            f"(estimated by the book), in {data.year[gaps.idxmin()]}"
+        )
     if gaps.notna().any():
         return (
             f"{country}: the deepest slump was {-gaps.min():.1f}% below potential, "
@@ -1483,6 +1528,8 @@ def gdp_chart(scale="ratio", country="United States"):
         if country == "United States"
         else "Trillions of 2021 dollars (PPP)"
     )
+    if country == "Bolivia":
+        unit = "Billions of constant bolivianos (World Bank)"
     title = gdp_title(country, data)
 
     # Step 2: `px.line` with a list `y=[...]` draws one line per column, and
@@ -1517,6 +1564,9 @@ def gdp_chart(scale="ratio", country="United States"):
         fig.update_yaxes(range=[0, linear_top])
     # Step 4: the horizontal axis, from the year before the first one to 2026
     fig.update_xaxes(range=[data.year.min() - 1, 2026])
+    # Bolivia's lines carry the tag the website uses to find them
+    if country == "Bolivia":
+        fig.update_traces(meta="BOL")
     return fig
 ```
 
@@ -1580,6 +1630,7 @@ Other countries: OECD, *Economic Outlook* No. 119, real GDP at purchasing power 
 (`GDPVTR`, `GDPV`), from the [OECD Data Explorer](https://data-explorer.oecd.org/) (dataflow `DSD_EO@DF_EO`).
 Prepared files: [`data/ch09/fig9-2.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch09/fig9-2.csv) and [`data/ch09/short_run_panel.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch09/short_run_panel.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch09/README.md)).
+Bolivia (in the menu): real GDP from [World Bank, WDI (`NY.GDP.MKTP.KN`)](https://data.worldbank.org/indicator/NY.GDP.MKTP.KN), in billions of constant bolivianos, and potential output [estimated by the book](https://github.com/quarcs-lab/macro102-site/blob/main/data/bolivia/README.md) (a Hodrick–Prescott trend); file [`data/ch09/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch09/bolivia.csv).
 Chart: inspired by Fig. 9.2 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -1708,8 +1759,27 @@ annual_gaps = annual_gaps[["country", "year", "output_gap"]].copy()
 # `pd.to_datetime(... + "-07-01")` turns a year into the date of 1 July of that
 # year, the middle of the year
 annual_gaps["date"] = pd.to_datetime(annual_gaps.year.astype(str) + "-07-01")
-# Step 3: the countries of the menu, the United States first
-GAP_COUNTRIES = ["United States"] + sorted(annual_gaps.country.unique())
+# Step 3: the countries of the menu, the United States first; Bolivia's output gap
+# is the book's own estimate (bolivia.csv)
+GAP_COUNTRIES = ["United States"] + sorted(
+    list(annual_gaps.country.unique()) + ["Bolivia"]
+)
+
+
+def bolivia_gap_line():
+    """Bolivia's quarterly short-run output, estimated by the book (Fig. 3).
+
+    Returns
+        a Plotly line, named "Bolivia ...", in Bolivia's color
+    """
+    gap_q = bolivia_series("output_gap_q")
+    return go.Scatter(
+        x=pd.to_datetime(gap_q.index),
+        y=gap_q.values,
+        name="Bolivia (quarterly, estimated by the book)",
+        mode="lines",
+        line=dict(color=COLORS["Bolivia"], width=2),
+    )
 ```
 
 ```{python}
@@ -1788,6 +1858,9 @@ def fluctuations_chart(countries=("United States",)):
     data = annual_gaps[annual_gaps.country.isin(countries)]
     if len(data) > 0:
         add_gap_countries(fig, data)
+    # Bolivia, quarterly, from the book's own estimate
+    if "Bolivia" in countries:
+        fig.add_trace(bolivia_gap_line())
 
     # Step 3: the line Y~ = 0 (output at potential), and the recessions shaded
     fig.add_hline(y=0, line_dash="dash", line_color="black", line_width=1)
@@ -1837,6 +1910,9 @@ fig = fluctuations_chart()
 extra = px.line(annual_gaps, x="date", y="output_gap", color="country", markers=True,
                 hover_name="year", color_discrete_map=COLORS)
 add_legend_traces(fig, extra.data)
+# Bolivia's quarterly line, also in the legend
+add_legend_traces(fig, [bolivia_gap_line()])
+hide_bolivia(fig)
 # the two U.S. lines come first
 n_us, n_all = 2, len(fig.data)
 # the axis fits the countries you switch on
@@ -1861,6 +1937,7 @@ recessions: NBER business-cycle dates, from the [NBER-based recession indicator 
 other countries: OECD, *Economic Outlook* No. 119, output gap (`GAP`), from the [OECD Data Explorer](https://data-explorer.oecd.org/) (dataflow `DSD_EO@DF_EO`).
 Prepared files: [`data/ch09/fig9-3.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch09/fig9-3.csv), [`data/ch09/recessions.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch09/recessions.csv) and [`data/ch09/short_run_panel.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch09/short_run_panel.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch09/README.md)).
+Bolivia: quarterly short-run output [estimated by the book](https://github.com/quarcs-lab/macro102-site/blob/main/data/bolivia/README.md) from [INE's quarterly real GDP](https://www.ine.gob.bo/) (a Hodrick–Prescott trend as potential output); file [`data/ch09/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch09/bolivia.csv).
 Chart: inspired by Fig. 9.3 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -2062,6 +2139,12 @@ def employment_data(country):
     """
     if country == "United States":
         return jobs, "Monthly"
+    # Bolivia: INE's monthly employment survey, not seasonally adjusted
+    if country == "Bolivia":
+        change = bolivia_series("employment_change_m")
+        data = pd.DataFrame({"date": pd.to_datetime(change.index),
+                             "emp_change_pct": change.values})
+        return data, "Monthly"
     # the rows of one country
     return emp_q[emp_q.country == country], "Quarterly"
 ```
@@ -2085,16 +2168,16 @@ def employment_chart(view="full range", country="United States"):
     # quarter of the year (1 to 4).
     data, freq = employment_data(country)
     low = data.loc[data.emp_change_pct.idxmin()]
-    # the date of the largest fall, and the title
-    if country == "United States":
+    # the date of the largest fall (a month for the U.S. and Bolivia), and the title
+    when = f"{low.date.year} Q{low.date.quarter}"
+    if freq == "Monthly":
         when = f"{low.date:%B %Y}"
+    title = (
+        f"{country}: employment fell most in {when}, "
+        f"by {-low.emp_change_pct:.1f}% in one {freq.lower().replace('ly', '')}"
+    )
+    if country == "United States":
         title = "Employment grows in most months; 2008–09 and April 2020 stand out"
-    else:
-        when = f"{low.date.year} Q{low.date.quarter}"
-        title = (
-            f"{country}: employment fell most in {when}, "
-            f"by {-low.emp_change_pct:.1f}% in one quarter"
-        )
 
     # Step 2: `px.bar` draws one bar per row
     fig = px.bar(
@@ -2147,7 +2230,10 @@ interact(
                   description="view", style=WIDE),
     country=Dropdown(
         options=["United States"]
-        + sorted(emp_q.country[emp_q.country != "United States"].unique()),
+        + sorted(
+            list(emp_q.country[emp_q.country != "United States"].unique())
+            + ["Bolivia"]
+        ),
         value="United States",
         description="country", style=WIDE),
 );
@@ -2158,13 +2244,15 @@ interact(
 # @title Website version: Fig. 4 with a country menu and buttons for the view
 # Step 1: the countries of the menu, and an empty chart with the U.S. layout
 EMP_COUNTRIES = ["United States"] + sorted(
-    emp_q.country[emp_q.country != "United States"].unique())
+    list(emp_q.country[emp_q.country != "United States"].unique()) + ["Bolivia"])
 fig = go.Figure(layout=employment_chart().layout)
 # Step 2: each country's bars (only the U.S. ones visible), and a menu entry that
 # shows them, with that country's title, label and axes
 menu = []
 for c in EMP_COUNTRIES:
     f = employment_chart("full range", c)
+    if c == "Bolivia":
+        f.update_traces(meta="BOL")         # Bolivia's bars: the website's tag
     fig.add_trace(f.data[0].update(visible=(c == "United States")))
     shown = []
     for k in range(len(EMP_COUNTRIES)):
@@ -2196,6 +2284,7 @@ other countries: OECD, *Economic Outlook* No. 119, total employment (`ET`, quart
 (dataflow `DSD_EO@DF_EO`).
 Prepared files: [`data/ch09/fig9-4.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch09/fig9-4.csv) and [`data/ch09/employment_quarterly.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch09/employment_quarterly.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch09/README.md)).
+Bolivia (in the menu): the monthly change in employed persons from [INE's Continuous Employment Survey](https://www.ine.gob.bo/), via the [IMF](https://data.imf.org/), not seasonally adjusted, late 2015 to 2024 (no survey from June to December 2020); file [`data/ch09/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch09/bolivia.csv).
 Chart: inspired by Fig. 9.4 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -2294,6 +2383,11 @@ steps when a country with higher inflation is added.
 # Annual CPI inflation of the other countries, with a date for each year
 other_inflation = others.dropna(subset=["inflation"])
 other_inflation = other_inflation[["country", "year", "inflation"]].copy()
+# Bolivia's World Bank inflation, from bolivia_panel, goes at the end
+other_inflation = pd.concat(
+    [other_inflation, bolivia_panel[["country", "year", "inflation"]]],
+    ignore_index=True,
+)
 other_inflation["date"] = pd.to_datetime(other_inflation.year, format="%Y")
 ```
 
@@ -2439,9 +2533,15 @@ interact(
 fig = inflation_chart()
 # the U.S. lines come first
 n_us = len(fig.data)
-extra = px.line(other_inflation, x="date", y="inflation", color="country",
+groups_data = other_inflation[other_inflation.country != "Bolivia"]
+extra = px.line(groups_data, x="date", y="inflation", color="country",
                 markers=True, hover_name="year", color_discrete_map=COLORS)
 add_legend_traces(fig, extra.data)
+# Bolivia's line comes last, in the legend whatever the group
+bolivia_line = px.line(other_inflation[other_inflation.country == "Bolivia"],
+                       x="date", y="inflation", color="country", markers=True,
+                       hover_name="year", color_discrete_map=COLORS)
+add_legend_traces(fig, bolivia_line.data)
 # Step 2: one menu entry per group: the group's countries go in the legend
 # ("legendonly": click a name to draw it), and the others are hidden
 buttons = []
@@ -2449,10 +2549,12 @@ for group, members in GROUPS_9.items():
     shown = [True] * n_us
     for t in extra.data:
         shown.append("legendonly" if t.name in members else False)
+    shown.append("legendonly")          # Bolivia
     buttons.append(dict(label=group, method="restyle", args=[{"visible": shown}]))
-# Step 3: the G7 at the start
+# Step 3: the G7 at the start, and Bolivia in the legend
 for t in fig.data[n_us:]:
     t.visible = "legendonly" if t.name in GROUPS_9["G7"] else False
+hide_bolivia(fig)
 # the axis fits the countries you switch on
 fig.update_yaxes(autorange=True)
 fig.update_layout(
@@ -2467,6 +2569,7 @@ recessions: NBER business-cycle dates, from the [NBER-based recession indicator 
 other countries: [World Bank, World Development Indicators, Inflation, consumer prices (`FP.CPI.TOTL.ZG`)](https://data.worldbank.org/indicator/FP.CPI.TOTL.ZG), with gaps filled from the [World Bank's Global Inflation Database](https://www.worldbank.org/en/research/brief/inflation-database), and OECD *Economic Outlook* No. 119 CPI inflation from the [OECD Data Explorer](https://data-explorer.oecd.org/) where both are missing.
 Prepared files: [`data/ch09/fig9-5.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch09/fig9-5.csv), [`data/ch09/cpi_monthly.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch09/cpi_monthly.csv), [`data/ch09/recessions.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch09/recessions.csv) and [`data/ch09/short_run_panel.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch09/short_run_panel.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch09/README.md)).
+Bolivia (always in the legend): [World Bank, WDI (`FP.CPI.TOTL.ZG`)](https://data.worldbank.org/indicator/FP.CPI.TOTL.ZG); file [`data/ch09/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch09/bolivia.csv).
 Chart: inspired by Fig. 9.5 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -2799,16 +2902,19 @@ def phillips_data(country):
     """
     if country == "United States":
         return phillips
-    # Step 1: the country's rows. `.diff()` gives the change from the row before:
-    # here delta pi_t = pi_t - pi_(t-1).
-    data = others[others.country == country].copy()
+    # Step 1: the country's rows (Bolivia's are kept apart, with the book's own
+    # output gap). `.diff()` gives the change from the row before: here
+    # delta pi_t = pi_t - pi_(t-1).
+    rows = bolivia_panel if country == "Bolivia" else others
+    data = rows[rows.country == country].copy()
     data["d_inflation"] = data.inflation.diff()
     # Step 2: the U.S. column names, and only the years with both values
     data = data.rename(columns={"output_gap": "short_run_output"})
     data = data.dropna(subset=["short_run_output", "d_inflation"])
     # Step 3: no year labels, and one period: the years of the data
     data["label"] = ""
-    data["period"] = f"{data.year.min()}–{data.year.max()} (OECD data)"
+    source = "gap estimated by the book" if country == "Bolivia" else "OECD data"
+    data["period"] = f"{data.year.min()}–{data.year.max()} ({source})"
     return data
 ```
 
@@ -2965,6 +3071,7 @@ for c in GAP_COUNTRIES[1:]:
 extra = px.scatter(pd.concat(points), x="short_run_output", y="d_inflation",
                    color="country", hover_name="year", color_discrete_map=COLORS)
 add_legend_traces(fig, extra.data)
+hide_bolivia(fig)
 fig
 ```
 
@@ -2972,6 +3079,7 @@ fig
 other countries: OECD, *Economic Outlook* No. 119, output gap (`GAP`), from the [OECD Data Explorer](https://data-explorer.oecd.org/) (dataflow `DSD_EO@DF_EO`), and [World Bank, World Development Indicators, Inflation, consumer prices (`FP.CPI.TOTL.ZG`)](https://data.worldbank.org/indicator/FP.CPI.TOTL.ZG), with gaps filled from the [World Bank's Global Inflation Database](https://www.worldbank.org/en/research/brief/inflation-database).
 Prepared files: [`data/ch09/fig9-7.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch09/fig9-7.csv) and [`data/ch09/short_run_panel.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch09/short_run_panel.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch09/README.md)).
+Bolivia: the output gap [estimated by the book](https://github.com/quarcs-lab/macro102-site/blob/main/data/bolivia/README.md) from [World Bank real GDP (`NY.GDP.MKTP.KN`)](https://data.worldbank.org/indicator/NY.GDP.MKTP.KN), and [World Bank CPI inflation (`FP.CPI.TOTL.ZG`)](https://data.worldbank.org/indicator/FP.CPI.TOTL.ZG); file [`data/ch09/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch09/bolivia.csv).
 Chart: inspired by Fig. 9.7 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -3108,8 +3216,10 @@ def okun_data(country):
     """
     if country == "United States":
         return okun
-    # Step 1: cyclical unemployment, u minus its trend
-    data = others[others.country == country].copy()
+    # Step 1: cyclical unemployment, u minus its trend (Bolivia: urban unemployment
+    # and the book's output gap, kept apart in bolivia_panel)
+    rows = bolivia_panel if country == "Bolivia" else others
+    data = rows[rows.country == country].copy()
     data["cyclical_unemployment"] = data.unemployment - data.unemployment_trend
     # Step 2: the U.S. column names, and only the years with both values
     data = data.rename(columns={"output_gap": "short_run_output"})
@@ -3244,6 +3354,7 @@ for c in GAP_COUNTRIES[1:]:
 extra = px.scatter(pd.concat(points), x="short_run_output", y="cyclical_unemployment",
                    color="country", hover_name="year", color_discrete_map=COLORS)
 add_legend_traces(fig, extra.data)
+hide_bolivia(fig)
 fig
 ```
 
@@ -3252,6 +3363,7 @@ fig
 other countries: OECD, *Economic Outlook* No. 119, output gap (`GAP`), from the [OECD Data Explorer](https://data-explorer.oecd.org/) (dataflow `DSD_EO@DF_EO`), and unemployment rate (`UNR`); the trend through each country's unemployment rate is our own (Hodrick–Prescott).
 Prepared files: [`data/ch09/fig9-8.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch09/fig9-8.csv) and [`data/ch09/short_run_panel.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch09/short_run_panel.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch09/README.md)).
+Bolivia: the output gap [estimated by the book](https://github.com/quarcs-lab/macro102-site/blob/main/data/bolivia/README.md), and [INE's urban unemployment rate](https://www.ine.gob.bo/) (via the [IMF](https://data.imf.org/)) minus its Hodrick–Prescott trend; file [`data/ch09/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch09/bolivia.csv).
 Chart: inspired by Fig. 9.8 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->

@@ -635,6 +635,10 @@ def slider_figure(make_figure, name, values, start, label=None):
     for i, f in enumerate(figures):
         for trace in f.data:
             trace.visible = (i == first)
+            # Bolivia's lines wait in the legend of the shown step
+            if (trace.name or "").startswith("Bolivia"):
+                trace.meta = "BOL"
+                trace.visible = "legendonly" if i == first else False
             fig.add_trace(trace)
             owner.append(i)
     # Step 3: one slider step per value: its curves, title, labels and shapes
@@ -643,11 +647,130 @@ def slider_figure(make_figure, name, values, start, label=None):
         layout = {"title": f.layout.title.to_plotly_json(),
                   "annotations": [a.to_plotly_json() for a in f.layout.annotations],
                   "shapes": [s.to_plotly_json() for s in f.layout.shapes]}
-        visible = [o == i for o in owner]
+        visible = []
+        for o, trace in zip(owner, fig.data):
+            shown = (o == i)
+            if shown and trace.meta == "BOL":
+                shown = "legendonly"        # Bolivia stays one click away
+            visible.append(shown)
         steps.append(dict(method="update", label=str(values[i]), args=[{"visible": visible}, layout]))
     fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
                                     currentvalue=dict(prefix=(label or name) + " = "))])
     return fig
+```
+
+The last helpers add Bolivia's data, for Bolivian readers. Bolivia's lines are hidden until you click them in the
+legend.
+
+```{python}
+#| kind: folded
+# @title Helpers for Bolivia's lines (run this cell; you do not need to read it)
+# Bolivia's series (bolivia.csv: IMF and World Bank), and its color
+BOLIVIA = pd.read_csv(DATA_URL + "bolivia.csv")
+BOLIVIA_COLOR = "#d52b1e"
+
+
+def bolivia_series(series, last=2031):
+    """One of Bolivia's series in bolivia.csv, years as labels, up to `last`."""
+    rows = BOLIVIA[(BOLIVIA.series == series) & (BOLIVIA.date <= last)]
+    return rows.set_index("date").value.rename_axis("year")
+
+
+def hide_bolivia(fig):
+    """Tag Bolivia's lines (meta="BOL") and hide them until clicked in the legend."""
+    for trace in fig.data:
+        if (trace.name or "").startswith("Bolivia"):
+            trace.meta = "BOL"
+            trace.visible = "legendonly"
+    return fig
+
+
+def add_bolivia_line(fig, values, name, dash="solid", yaxis="y", color=BOLIVIA_COLOR):
+    """Add one of Bolivia's series (a Series with years as labels) as a line.
+
+    The line is hidden until clicked in the legend; `yaxis="y2"` puts it on the
+    chart's second axis.
+    """
+    fig.add_trace(
+        go.Scatter(
+            x=values.index,
+            y=values,
+            name=name,
+            mode="lines",
+            legendgroup=name,
+            yaxis=yaxis,
+            showlegend=True,
+            line=dict(color=color, width=2, dash=dash),
+        )
+    )
+    return hide_bolivia(fig)
+
+
+def add_bolivia_projection(fig, series, name, color=BOLIVIA_COLOR):
+    """Bolivia's series up to 2025, then dashed: the IMF projection to 2031."""
+    values = bolivia_series(series)
+    add_bolivia_line(fig, values.loc[:2025], name, color=color)
+    add_bolivia_line(fig, values.loc[2025:], name, "dash", color=color)
+    fig.data[-1].showlegend = False     # one legend entry for both parts
+    return fig
+
+
+def legend_inside(fig, x=0.01, y=0.99, xanchor="left", yanchor="top"):
+    """Put the legend inside a corner of the chart, so the chart keeps its width."""
+    fig.update_layout(
+        legend=dict(
+            x=x,
+            y=y,
+            xanchor=xanchor,
+            yanchor=yanchor,
+            bgcolor="rgba(0,0,0,0)",
+            title_text="",
+        )
+    )
+    return fig
+```
+
+```{python}
+#| kind: folded
+# @title Helpers for Bolivia's rows in the tables of the chapter (run this cell)
+def with_bolivia(data, column, series):
+    """A multi-country table plus Bolivia's rows of one series (region Americas).
+
+    Bolivia is in none of the OECD and IMF files of the chapter, so its rows come
+    from bolivia.csv (IMF WEO and World Bank), up to 2025.
+    """
+    values = bolivia_series(series, last=2025)
+    rows = pd.DataFrame({
+        "iso3": "BOL",
+        "country": "Bolivia",
+        "year": values.index,
+        column: values.values,
+        "region": "Americas",
+    })
+    # drop old Bolivian rows first, so that running the cell twice changes nothing
+    return pd.concat([data[data.country != "Bolivia"], rows], ignore_index=True)
+
+
+def bolivia_budget():
+    """Bolivia's rows for the table `finance` (Figs. 1 and 5 for any country).
+
+    General government revenue, spending and balance (IMF WEO) up to 2025, and
+    gross capital formation, public and private (World Bank), which stands in
+    for private investment: Bolivia publishes no private investment series.
+    """
+    rows = pd.concat(
+        {
+            "revenue": bolivia_series("revenue", last=2025),
+            "spending": bolivia_series("spending", last=2025),
+            "balance": bolivia_series("balance", last=2025),
+            "private_investment": bolivia_series("investment", last=2025),
+        },
+        axis=1,
+    ).reset_index()
+    rows.insert(0, "iso3", "BOL")
+    rows.insert(1, "country", "Bolivia")
+    rows["region"] = "Americas"
+    return rows
 ```
 
 :::
@@ -1256,6 +1379,12 @@ def budget_chart(period="FY1950–1969"):
         legend=dict(x=0.99, y=0.99, xanchor="right", yanchor="top"),
         legend_title_text="",
     )
+    # Step 6: Bolivia's general government, all levels (IMF WEO, calendar
+    # years), hidden until clicked in the legend
+    spending_bo = bolivia_series("spending", last=2025)
+    add_bolivia_line(fig, spending_bo, "Bolivia: spending, all government (IMF)")
+    revenue_bo = bolivia_series("revenue", last=2025)
+    add_bolivia_line(fig, revenue_bo, "Bolivia: revenue, all government (IMF)", "dash")
     return fig
 ```
 
@@ -1288,6 +1417,7 @@ slider_figure(
 **Source.** Data: [Office of Management and Budget, Historical Tables](https://www.whitehouse.gov/omb/budget/historical-tables/) of the FY2027 Budget, Table 1.2, total receipts and total outlays as percentages of GDP.
 Prepared file: [`data/ch18/fig18-1.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch18/fig18-1.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch18/README.md)).
+Bolivia: [IMF, World Economic Outlook](https://www.imf.org/en/Publications/WEO), general government revenue and expenditure (all levels of government, calendar years, not the federal budget alone); file [`data/ch18/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch18/bolivia.csv).
 Chart: inspired by Fig. 18.1 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -1387,6 +1517,16 @@ def country_budget(country):
 ```{python}
 #| kind: drawing
 # @title Drawing code: Fig. 1 for any country, general government budgets
+# Bolivia (IMF WEO, not OECD), for Bolivian readers: added to the table and to
+# the menu (bolivia_budget)
+finance = pd.concat(
+    [finance[finance.country != "Bolivia"], bolivia_budget()],
+    ignore_index=True,
+)
+if "Bolivia" not in FINANCE_COUNTRIES:
+    FINANCE_COUNTRIES = sorted(FINANCE_COUNTRIES + ["Bolivia"])
+
+
 def budget_by_country(country="United States"):
     """General government spending and revenue (% of GDP, OECD) of one country.
 
@@ -1465,6 +1605,9 @@ def dropdown_figure(make_figure, options, start):
     for i, f in enumerate(figures):
         for trace in f.data:
             trace.visible = (i == first)
+            # the traces of a "Bolivia" choice are tagged, for the switch ?show=BOL
+            if str(options[i]).startswith("Bolivia"):
+                trace.meta = "BOL"
             fig.add_trace(trace)
             owner.append(i)
     # Step 3: one menu entry per option: its traces, title, axis, labels and shapes
@@ -1511,6 +1654,7 @@ dropdown_figure(budget_by_country, FINANCE_COUNTRIES, start="United States")
 **Source.** Data: OECD national accounts, general government total revenue (`OTR`), total expenditure (`OTE`) and net lending (`B9`) (Table 12, dataflow `DSD_NASEC10@DF_TABLE12`), divided by GDP (Table 1, `DSD_NAMAIN10@DF_TABLE1_EXPENDITURE`); via the [OECD Data Explorer](https://data-explorer.oecd.org/).
 Prepared file: [`data/ch18/gov_finance.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch18/gov_finance.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch18/README.md)).
+Bolivia (in the menu): [IMF, World Economic Outlook](https://www.imf.org/en/Publications/WEO), general government revenue and expenditure, 1981–2025; file [`data/ch18/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch18/bolivia.csv).
 Chart: inspired by Fig. 18.1 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -1721,11 +1865,20 @@ fig.add_annotation(
 ```{python}
 #| kind: drawing
 # @title Drawing code: Fig. 2, the two vertical axes
+# Bolivia (IMF), hidden until clicked in the legend: its budget balance on the
+# left axis and its gross debt on the right axis. Only Bolivia's lines are in
+# the legend, inside the bottom right corner
+fig.update_traces(showlegend=False)
+balance_bo = bolivia_series("balance", last=2025)
+add_bolivia_line(fig, balance_bo, "Bolivia: budget balance (IMF, left axis)")
+debt_bo = bolivia_series("gross_debt_history")
+add_bolivia_line(fig, debt_bo, "Bolivia: gross debt (IMF, right axis)", "dash", "y2")
+legend_inside(fig, x=0.99, y=0.01, xanchor="right", yanchor="bottom")
 # In `update_layout`, `yaxis2=dict(overlaying="y", side="right", ...)` puts the
 # second axis on the right, over the same plot. The ranges put the zeros of both
 # axes at the same height, so the dashed line marks zero on both.
 fig.update_layout(
-    showlegend=False,
+    showlegend=True,
     hovermode="x unified",
     yaxis=dict(
         title="Surplus or deficit (% of GDP)",
@@ -1748,6 +1901,7 @@ fig.show()
 **Sources.** Data: [Office of Management and Budget, Historical Tables](https://www.whitehouse.gov/omb/budget/historical-tables/) of the FY2027 Budget, Table 1.2 (surplus or deficit as a percentage of GDP) and Table 7.1 (federal debt held by the public as a percentage of GDP).
 Prepared file: [`data/ch18/fig18-2.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch18/fig18-2.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch18/README.md)).
+Bolivia: [IMF, World Economic Outlook](https://www.imf.org/en/Publications/WEO), general government net lending (all levels of government), and the [IMF *Public Finances in Modern History* database](https://www.imf.org/external/datamapper/d), gross government debt (above the right axis in 1981–1987); file [`data/ch18/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch18/bolivia.csv).
 Chart: inspired by Fig. 18.2 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -1854,10 +2008,16 @@ def country_colors(names, fixed):
         a dictionary with one color per country
     """
     colors = {}
+    # Bolivia gets its own color, so that the other countries keep theirs
+    others = []
+    for name in sorted(names):
+        if name != "Bolivia":
+            others.append(name)
+    colors["Bolivia"] = BOLIVIA_COLOR
     # `enumerate` numbers the countries as the loop runs (0, 1, 2, ...), and
     # `i % len(PALETTE)` is the remainder of the division, which starts again at 0
     # when the colors run out
-    for i, name in enumerate(sorted(names)):
+    for i, name in enumerate(others):
         colors[name] = PALETTE[i % len(PALETTE)]
     # `colors.update(fixed)` overwrites some entries of the dictionary: the
     # textbook's countries keep the colors of the book
@@ -1903,6 +2063,8 @@ each: up to 150 percent of GDP, or up to 300 percent when a country above 150 pe
 ```{python}
 #| kind: drawing
 # @title Drawing code: Fig. 2 for any countries, gross government debt
+# Bolivia (same IMF database), for Bolivian readers: added to the table
+gross = with_bolivia(gross, "gross_debt", "gross_debt_history")
 # one fixed color per country; the United States keeps the textbook's blue
 GROSS_COLORS = country_colors(gross.country.unique(), {"United States": BLUE})
 
@@ -2043,11 +2205,14 @@ fig.update_layout(
 )
 # Step 2: draw the United States; the buttons and the legend add the others
 legend_menu(fig, gross, ["United States"])
+# Step 3: Bolivia, tagged for the page switch ?show=BOL, waits in the legend
+hide_bolivia(fig)
 ```
 
 **Source.** Data: [International Monetary Fund, *Public Finances in Modern History* database, general government gross debt (`d`), percent of GDP](https://www.imf.org/external/datamapper/d) ([dataset page](https://www.imf.org/external/datamapper/datasets/FPP)). The IMF asks users to cite Mauro, Romeu, Binder and Zaman (2015), "A modern history of fiscal prudence and profligacy", [*Journal of Monetary Economics* 76: 55–70](https://doi.org/10.1016/j.jmoneco.2015.07.003).
 Prepared file: [`data/ch18/gross_debt.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch18/gross_debt.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch18/README.md)).
+Bolivia: the same IMF database, 1953 and 1970–2024; file [`data/ch18/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch18/bolivia.csv).
 Chart: inspired by Fig. 18.2 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -2140,6 +2305,21 @@ fig = px.bar(
 )
 # Step 2: `texttemplate="%{y:.1f}"` writes each bar's value above it
 fig.update_traces(texttemplate="%{y:.1f}", textposition="outside")
+# Step 3: Bolivia's bars (IMF WEO), hidden until clicked in the legend;
+# `offsetgroup` puts each one in the place of its year's bars
+for year, color in [("2019 (textbook year)", GREEN), ("2024 (latest)", LIGHT_BLUE)]:
+    fig.add_trace(
+        go.Bar(
+            x=["Bolivia"],
+            y=[bolivia_series("spending")[int(year[:4])]],
+            name=f"Bolivia, {year[:4]} (IMF)",
+            offsetgroup=year,
+            marker=dict(color=color, line=dict(color=BOLIVIA_COLOR, width=2)),
+            texttemplate="%{y:.1f}",
+            textposition="outside",
+        )
+    )
+hide_bolivia(fig)
 fig.update_layout(
     legend=dict(x=0.01, y=0.99, xanchor="left", yanchor="top"),
     legend_title_text="",
@@ -2150,6 +2330,7 @@ fig.show()
 **Source.** Data: OECD, *Government at a Glance*, general government expenditure as a percentage of GDP (dataflow `DSD_GOV@DF_GOV_PF_YU`, measure `GE`), via the [OECD Data Explorer](https://data-explorer.oecd.org/).
 Prepared file: [`data/ch18/fig18-3.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch18/fig18-3.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch18/README.md)).
+Bolivia: [IMF, World Economic Outlook](https://www.imf.org/en/Publications/WEO), general government expenditure; file [`data/ch18/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch18/bolivia.csv).
 Chart: inspired by Fig. 18.3 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -2211,11 +2392,20 @@ order = oecd[oecd.year == 2019].sort_values("gov_spending").country.tolist()
 ```{python}
 #| kind: drawing
 # @title Drawing code: Fig. 3, all OECD countries, 2007 to 2024
-# Step 1: one bar per country. `animation_frame="year"` draws one chart per year
+# Step 1: Bolivia (IMF WEO, not OECD), for Bolivian readers: its own group,
+# hidden until clicked in the legend, at the right end of the chart
+spending_bo = bolivia_series("spending", last=2024).loc[2007:]
+bolivia_bars = pd.DataFrame({
+    "country": "Bolivia",
+    "year": spending_bo.index,
+    "gov_spending": spending_bo.values,
+    "group": "Bolivia (IMF)",
+})
+# Step 2: one bar per country. `animation_frame="year"` draws one chart per year
 # and adds a play button and a slider; `category_orders` fixes the order of the
 # countries on the x-axis
 fig = px.bar(
-    oecd,
+    pd.concat([oecd, bolivia_bars], ignore_index=True),
     x="country",
     y="gov_spending",
     color="group",
@@ -2227,6 +2417,7 @@ fig = px.bar(
         "United States": BLUE,
         "France, Germany, Italy, Spain": TEAL,
         "Other OECD": GRAY,
+        "Bolivia (IMF)": BOLIVIA_COLOR,
     },
     labels={
         "country": "Country",
@@ -2236,7 +2427,8 @@ fig = px.bar(
     },
     title="General government spending in the 38 OECD countries (in the 2019 order)",
 )
-# Step 2: the legend in the top left corner, and slanted country names
+hide_bolivia(fig)
+# Step 3: the legend in the top left corner, and slanted country names
 fig.update_layout(
     legend=dict(x=0.01, y=0.99, xanchor="left", yanchor="top"),
     legend_title_text="",
@@ -2244,7 +2436,7 @@ fig.update_layout(
     xaxis_tickangle=-60,
     height=600,
 )
-# Step 3: room for the slanted country names above the slider and the play button
+# Step 4: room for the slanted country names above the slider and the play button
 fig.layout.sliders[0].pad.t = 100
 fig.layout.updatemenus[0].pad.t = 110
 fig.show()
@@ -2253,6 +2445,7 @@ fig.show()
 **Source.** Data: OECD, *Government at a Glance*, general government expenditure as a percentage of GDP (dataflow `DSD_GOV@DF_GOV_PF_YU`, measure `GE`), via the [OECD Data Explorer](https://data-explorer.oecd.org/).
 Prepared file: [`data/ch18/gov_spending.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch18/gov_spending.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch18/README.md)).
+Bolivia (not an OECD member): [IMF, World Economic Outlook](https://www.imf.org/en/Publications/WEO), general government expenditure; file [`data/ch18/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch18/bolivia.csv).
 Chart: inspired by Fig. 18.3 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -2366,6 +2559,9 @@ fig.update_traces(
     selector=dict(name="Japan, 1995–2005 (Economic Outlook)"),
     line_dash="dot",
 )
+# Bolivia's net debt (IMF WEO), hidden until clicked in the legend
+net_debt_bo = bolivia_series("net_debt", last=2025)
+add_bolivia_line(fig, net_debt_bo, "Bolivia (IMF)")
 # Step 3: fixed axes, and the legend in one row above the lines
 fig.update_xaxes(range=[1994, 2026.5])
 fig.update_yaxes(tickvals=[20, 40, 60, 80, 100, 120, 140, 160])
@@ -2379,6 +2575,7 @@ fig.show()
 **Sources.** Data: OECD government financial balance sheets, general government net financial worth (`BF90`, dataflow `DSD_NASEC20@DF_T720GOV_A`), divided by GDP (OECD Table 1, `DSD_NAMAIN10@DF_TABLE1_EXPENDITURE`); for Japan in 1995–2005, the OECD *Economic Outlook* net financial liabilities (`GNFLQ`); all via the [OECD Data Explorer](https://data-explorer.oecd.org/).
 Prepared file: [`data/ch18/fig18-4.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch18/fig18-4.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch18/README.md)).
+Bolivia: [IMF, World Economic Outlook](https://www.imf.org/en/Publications/WEO), general government net debt (gross debt minus the government's debt-type financial assets, close to the OECD measure); file [`data/ch18/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch18/bolivia.csv).
 Chart: inspired by Fig. 18.4 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -2444,6 +2641,8 @@ the scales described above.
 ```{python}
 #| kind: drawing
 # @title Drawing code: Fig. 4 for any countries, net government debt
+# Bolivia (IMF WEO, not OECD), for Bolivian readers: added to the table
+world_debt = with_bolivia(world_debt, "net_debt", "net_debt")
 # one fixed color per country; the textbook's five keep the textbook's colors
 NET_COLORS = country_colors(
     world_debt.country.unique(),
@@ -2516,11 +2715,14 @@ fig.update_layout(
 )
 # Step 2: draw the textbook's five; the buttons and the legend add the others
 legend_menu(fig, world_debt, list(BOOK_FIVE))
+# Step 3: Bolivia, tagged for the page switch ?show=BOL, waits in the legend
+hide_bolivia(fig)
 ```
 
 **Sources.** Data: OECD government financial balance sheets, general government net financial worth (`BF90`, dataflow `DSD_NASEC20@DF_T720GOV_A`), divided by GDP (OECD Table 1, `DSD_NAMAIN10@DF_TABLE1_EXPENDITURE`); via the [OECD Data Explorer](https://data-explorer.oecd.org/).
 Prepared file: [`data/ch18/net_debt.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch18/net_debt.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch18/README.md)).
+Bolivia (not in the OECD balance sheets): [IMF, World Economic Outlook](https://www.imf.org/en/Publications/WEO), general government net debt, 2000–2025; file [`data/ch18/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch18/bolivia.csv).
 Chart: inspired by Fig. 18.4 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -2663,6 +2865,13 @@ def saving_chart(period="1980–2025"):
         ),
         legend_title_text="",
     )
+    # Step 6: Bolivia (World Bank and IMF), hidden until clicked in the legend:
+    # its investment includes public investment (a proxy), and its budget
+    # balance covers all levels of government
+    investment_bo = bolivia_series("investment")
+    add_bolivia_line(fig, investment_bo, "Bolivia: investment, all (proxy)")
+    balance_bo = bolivia_series("balance", last=2025)
+    add_bolivia_line(fig, balance_bo, "Bolivia: budget balance (IMF)", "dash")
     return fig
 ```
 
@@ -2692,6 +2901,7 @@ slider_figure(
 **Sources.** Data: U.S. Bureau of Economic Analysis, national accounts, via FRED: [gross private domestic investment (`GPDI`)](https://fred.stlouisfed.org/series/GPDI), [net federal government saving (`FGDEF`)](https://fred.stlouisfed.org/series/FGDEF) and [GDP (`GDP`)](https://fred.stlouisfed.org/series/GDP).
 Prepared file: [`data/ch18/fig18-5.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch18/fig18-5.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch18/README.md)).
+Bolivia: [World Bank, gross capital formation](https://data.worldbank.org/indicator/NE.GDI.TOTL.ZS), public and private, a proxy for private investment (Bolivia publishes no private investment series), and [IMF, World Economic Outlook](https://www.imf.org/en/Publications/WEO), general government net lending; file [`data/ch18/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch18/bolivia.csv).
 Chart: inspired by Fig. 18.5 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -2815,6 +3025,13 @@ def crowding_out_chart(country="United States"):
         ),
     )
     fig.update_traces(line_width=3)
+    # Bolivia: total investment (World Bank), public and private, stands in for
+    # private investment, which Bolivia does not publish
+    if country == "Bolivia":
+        fig.update_traces(
+            name="Investment, public and private (proxy)",
+            selector=dict(name="Private investment"),
+        )
     # Step 4: the dashed zero line, and the legend above the chart
     fig.add_hline(y=0, line=dict(color="black", width=1, dash="dash"))
     fig.update_layout(
@@ -2844,6 +3061,7 @@ dropdown_figure(crowding_out_chart, BALANCE_COUNTRIES, start="United States")
 **Sources.** Data: OECD national accounts, general government net lending (`B9`, Table 12, dataflow `DSD_NASEC10@DF_TABLE12`); OECD *National Accounts at a Glance*, Chapter 3, investment and the government's share of it (`DSD_NAAG@DF_NAAG_III`); GDP and changes in inventories (Table 1, `DSD_NAMAIN10@DF_TABLE1_EXPENDITURE`); all via the [OECD Data Explorer](https://data-explorer.oecd.org/).
 Prepared file: [`data/ch18/gov_finance.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch18/gov_finance.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch18/README.md)).
+Bolivia (in the menu): [World Bank, gross capital formation](https://data.worldbank.org/indicator/NE.GDI.TOTL.ZS), public and private, a proxy for private investment, and [IMF, World Economic Outlook](https://www.imf.org/en/Publications/WEO), general government net lending; file [`data/ch18/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch18/bolivia.csv).
 Chart: inspired by Fig. 18.5 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -2890,7 +3108,7 @@ revenue stays near 18 percent of GDP.
 The textbook's figure combines actual data up to 2000 with projections that the Congressional Budget Office (CBO)
 made in 2002, up to 2075. Our file has OMB's actual numbers up to FY2025 and CBO's newest long-term projections,
 from February 2026, which end in 2056. The column `projection` is 1 for the projected years. Figs. 6 and 7 stay
-U.S.-only: they show the CBO's projections, which cover only the U.S. federal budget.
+focused on the U.S.: they show the CBO's projections, which cover only the U.S. federal budget (Bolivia's lines, hidden in the legend, come from the IMF and the WHO).
 
 ```{python}
 # The last three years of Fig. 6's file (loaded for the key numbers of Fig. 2)
@@ -2980,7 +3198,11 @@ for name, color in COLORS_6.items():
             showlegend=(name == "Revenues"),
         )
     )
-# Step 3: the gray band marks the projected years; fixed axes
+# Step 3: Bolivia (IMF WEO, all levels of government), hidden until clicked in
+# the legend; dashed after 2025, the IMF projection
+add_bolivia_projection(fig, "revenue", "Bolivia: revenue (IMF)", "#8c1c13")
+add_bolivia_projection(fig, "spending_ex_interest", "Bolivia: spending excl. interest")
+# Step 4: the gray band marks the projected years; fixed axes
 fig.add_vrect(x0=2025, x1=2056, fillcolor=GRAY, opacity=0.12, line_width=0)
 fig.update_xaxes(range=[1945, 2080])
 fig.update_yaxes(range=[0, 31], tickvals=[5, 10, 15, 20, 25, 30])
@@ -2995,6 +3217,7 @@ fig.show()
 [Congressional Budget Office, *The Long-Term Budget Outlook: 2026 to 2056*, February 2026](https://www.cbo.gov/data/budget-economic-data) for the projections.
 Prepared file: [`data/ch18/fig18-6.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch18/fig18-6.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch18/README.md)).
+Bolivia: [IMF, World Economic Outlook](https://www.imf.org/en/Publications/WEO), general government revenue, and revenue minus the primary balance (spending excluding interest), all levels of government, calendar years, IMF projections after 2025; file [`data/ch18/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch18/bolivia.csv).
 The CBO 2002 markers are read from the textbook's figure (CBO, *A 125-Year Picture of the Federal Government's Share of the Economy, 1950 to 2075*, 2002).
 Chart: inspired by Fig. 18.6 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
@@ -3109,7 +3332,10 @@ def debt_projection(i=4.0, g=4.0, cut=0.0):
     # `[...] if top == 250 else None` is a one-line `if`: the list of ticks when the
     # axis has its usual size, and None (let Plotly choose) when it has grown
     fig.update_yaxes(tickvals=[50, 100, 150, 200, 250] if top == 250 else None)
-    return fig
+    # Step 6: Bolivia's gross debt (IMF WEO), hidden until clicked in the legend;
+    # dashed after 2025, the IMF projection (no deficit cut)
+    add_bolivia_projection(fig, "gross_debt", "Bolivia: gross debt (IMF)")
+    return legend_inside(fig)
 ```
 
 ```{python}
@@ -3142,6 +3368,7 @@ slider_figure(
 **Sources.** Data: [Office of Management and Budget, Historical Tables](https://www.whitehouse.gov/omb/budget/historical-tables/), Table 7.1 (debt held by the public); [Congressional Budget Office, *The Long-Term Budget Outlook: 2026 to 2056*](https://www.cbo.gov/data/budget-economic-data) (primary deficits, revenue minus spending excluding interest).
 Prepared files: [`data/ch18/fig18-2.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch18/fig18-2.csv), [`data/ch18/fig18-6.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch18/fig18-6.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch18/README.md)).
+Bolivia: [IMF, World Economic Outlook](https://www.imf.org/en/Publications/WEO), general government gross debt, IMF projection after 2025 (the slider's cut applies to the U.S. only); file [`data/ch18/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch18/bolivia.csv).
 Chart: inspired by the discussion of Fig. 18.6 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -3259,6 +3486,10 @@ fig = px.line(
 # one legend entry per part (one_legend_entry)
 one_legend_entry(fig)
 fig.update_traces(line_width=3)
+# Bolivia's government health spending (WHO, via the World Bank), hidden until
+# clicked in the legend
+health_bo = bolivia_series("health_government")
+add_bolivia_line(fig, health_bo, "Bolivia: government health spending")
 # Step 3: the gray band marks the projected years; fixed axes
 fig.add_vrect(x0=2025, x1=2056, fillcolor=GRAY, opacity=0.12, line_width=0)
 fig.update_xaxes(range=[1945, 2060])
@@ -3274,6 +3505,7 @@ fig.show()
 [Congressional Budget Office, *The Long-Term Budget Outlook: 2026 to 2056*, February 2026](https://www.cbo.gov/data/budget-economic-data) for the projections.
 Prepared file: [`data/ch18/fig18-7.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch18/fig18-7.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch18/README.md)).
+Bolivia: [World Bank (WHO Global Health Expenditure Database), domestic general government health expenditure](https://data.worldbank.org/indicator/SH.XPD.GHED.GD.ZS), all levels of government, the counterpart of Medicare and Medicaid (Bolivia's pensions and other spending are not split out); file [`data/ch18/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch18/bolivia.csv).
 Chart: inspired by Fig. 18.7 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -3402,6 +3634,8 @@ fig.add_trace(
         line=dict(color=GRAY, width=2, dash="dot"),
     )
 )
+# Bolivia (WHO, via the World Bank), hidden until clicked in the legend
+add_bolivia_line(fig, bolivia_series("health"), "Bolivia (WHO)")
 # Step 3: fixed axes, and the legend in the top left corner
 fig.update_xaxes(range=[1968, 2027])
 fig.update_yaxes(tickvals=[4, 6, 8, 10, 12, 14, 16, 18, 20])
@@ -3415,6 +3649,7 @@ fig.show()
 **Source.** Data: OECD Health Statistics, System of Health Accounts, current health expenditure as a percentage of GDP (dataflow `DSD_SHA@DF_SHA`), via the [OECD Data Explorer](https://data-explorer.oecd.org/).
 Prepared file: [`data/ch18/fig18-8.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch18/fig18-8.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch18/README.md)).
+Bolivia: [World Bank (WHO Global Health Expenditure Database), current health expenditure](https://data.worldbank.org/indicator/SH.XPD.CHEX.GD.ZS), the same System of Health Accounts concept; file [`data/ch18/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch18/bolivia.csv).
 Chart: inspired by Fig. 18.8 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -3476,6 +3711,8 @@ each, on the textbook's scale.
 ```{python}
 #| kind: drawing
 # @title Drawing code: Fig. 8 for any countries, health spending
+# Bolivia (WHO, via the World Bank; not OECD), for Bolivian readers: added
+health_world = with_bolivia(health_world, "health_share", "health")
 # one fixed color per country; the textbook's five keep the textbook's colors
 HEALTH_COLORS = country_colors(
     health_world.country.unique(),
@@ -3546,11 +3783,14 @@ fig.update_layout(
 )
 # Step 2: draw the textbook's five; the buttons and the legend add the others
 legend_menu(fig, health_world, list(FIVE))
+# Step 3: Bolivia, tagged for the page switch ?show=BOL, waits in the legend
+hide_bolivia(fig)
 ```
 
 **Source.** Data: OECD Health Statistics, System of Health Accounts, current health expenditure as a percentage of GDP (dataflow `DSD_SHA@DF_SHA`), via the [OECD Data Explorer](https://data-explorer.oecd.org/).
 Prepared file: [`data/ch18/health_spending.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch18/health_spending.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch18/README.md)).
+Bolivia (not in the OECD data): [World Bank (WHO Global Health Expenditure Database), current health expenditure](https://data.worldbank.org/indicator/SH.XPD.CHEX.GD.ZS), 2000–2023; file [`data/ch18/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch18/bolivia.csv).
 Chart: inspired by Fig. 18.8 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->

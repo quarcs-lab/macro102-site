@@ -584,6 +584,20 @@ def slider_figure(make_figure, name, values, start, label=None):
     fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
                                     currentvalue=dict(prefix=(label or name) + " = "))])
     return fig
+
+
+# Bolivia's lines: the red of its flag, a color that no other country uses
+BOLIVIA_RED = "#D52B1E"
+
+
+def hide_bolivia(fig):
+    """Tag Bolivia's lines (meta="BOL") and hide them until clicked in the legend."""
+    # a loop over the lines; `trace.name or ""` is "" for a line with no name
+    for trace in fig.data:
+        if (trace.name or "").startswith("Bolivia"):
+            trace.meta = "BOL"
+            trace.visible = "legendonly"
+    return fig
 ```
 
 :::
@@ -1513,6 +1527,27 @@ fig.add_annotation(
 # Step 3: fixed axes, from mid-1969 to 2027
 fig.update_xaxes(range=["1969-07-01", "2027-01-01"])
 fig.update_yaxes(range=[40, 105], tickvals=[50, 60, 70, 80, 90, 100])
+# Step 4: Bolivia, hidden until clicked in the legend: domestic credit to the
+# private sector (households and firms together), a proxy, one value a year.
+# Most of it lies below 40 percent, so it gets its own scale on a hidden axis.
+bolivia = pd.read_csv(DATA_URL + "bolivia.csv")
+credit = bolivia[bolivia.series == "private_credit_gdp"]
+fig.add_trace(
+    go.Scatter(
+        x=pd.to_datetime(credit.date.astype(str)),
+        y=credit.value,
+        name="Bolivia (private credit, % of GDP, proxy, own scale)",
+        yaxis="y2",
+        line=dict(color=BOLIVIA_RED, width=2),
+    )
+)
+# Bolivia's scale spans 65 points, like the left one, so equal moves look equal;
+# the legend sits inside the plot, below the peak's label, so the plot keeps its width
+fig.update_layout(
+    yaxis2=dict(overlaying="y", visible=False, range=[5, 70]),
+    legend=dict(x=0.01, y=0.86, xanchor="left", yanchor="top"),
+)
+hide_bolivia(fig)
 fig.show()
 ```
 
@@ -1521,6 +1556,7 @@ fig.show()
 Prepared file: [`data/ch16/fig16-3.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch16/fig16-3.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch16/README.md)).
 More about the debt data: the Federal Reserve's [Financial Accounts release](https://www.federalreserve.gov/releases/z1/).
+Bolivia: [World Bank, World Development Indicators, Domestic credit to private sector (% of GDP) (`FD.AST.PRVT.GD.ZS`)](https://data.worldbank.org/indicator/FD.AST.PRVT.GD.ZS), a proxy for household debt (it covers households and firms together; no source has Bolivian household debt), drawn on its own scale; file [`data/ch16/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch16/bolivia.csv).
 Chart: inspired by Fig. 16.3 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -1714,8 +1750,26 @@ above 100 percent is chosen.
 ```{python}
 #| kind: drawing
 # @title Drawing code: Fig. 3, household debt in the chosen countries
-# each country keeps its color; the United States is blue, as in Fig. 3
-DEBT_COLORS = country_colors(debt_world.country.unique(), {"United States": BLUE})
+# Bolivia: domestic credit to the private sector, a proxy (households and firms
+# together; the BIS has no Bolivian household debt), one value per year
+BOLIVIA_DEBT = "Bolivia (credit to the private sector, proxy)"
+credit = bolivia[bolivia.series == "private_credit_gdp"]
+bolivia_debt = pd.DataFrame(
+    {
+        "country": BOLIVIA_DEBT,
+        "date": pd.to_datetime(credit.date.astype(str)),
+        "debt_gdp": credit.value,
+        "region": "Americas",
+    }
+)
+# the countries you can choose: the 43 of the BIS, then Bolivia
+debt_choices = pd.concat([debt_world, bolivia_debt], ignore_index=True)
+# each country keeps its color; the United States is blue, as in Fig. 3, and
+# Bolivia red
+DEBT_COLORS = country_colors(
+    debt_world.country.unique(),
+    {"United States": BLUE, BOLIVIA_DEBT: BOLIVIA_RED},
+)
 
 
 def debt_by_country(countries=("United States",)):
@@ -1729,7 +1783,7 @@ def debt_by_country(countries=("United States",)):
         a Plotly figure
     """
     # Step 1: `.isin(countries)` keeps the rows of the chosen countries
-    chosen = debt_world[debt_world.country.isin(countries)]
+    chosen = debt_choices[debt_choices.country.isin(countries)]
     # two fixed scales: up to 105 percent, or 140 for the most indebted countries
     top = 105
     if chosen.debt_gdp.max() > 100:
@@ -1765,7 +1819,7 @@ every multi-country chart.
 # a tuple of names, such as ("United States", "Canada").
 interact(
     debt_by_country,
-    countries=SelectMultiple(options=sorted(debt_world.country.unique()),
+    countries=SelectMultiple(options=sorted(debt_choices.country.unique()),
                              value=("United States",), rows=8,
                              description="countries", style=WIDE),
 );
@@ -1838,18 +1892,20 @@ def legend_menu(fig, data, shown):
 #| kind: website
 # @title Website version: Fig. 3 for all 43 countries (buttons and legend)
 # Step 1: the chart with every country
-fig = debt_by_country(tuple(debt_world.country.unique()))
+fig = debt_by_country(tuple(debt_choices.country.unique()))
 fig.update_layout(
     title="Household debt in 43 countries, percent of GDP (BIS)",
     height=560,
 )
-# Step 2: the United States shown, the others one click away (legend_menu)
-legend_menu(fig, debt_world, ["United States"])
+# Step 2: the United States shown, the others one click away (legend_menu);
+# Bolivia's proxy is tagged and stays in the legend (hide_bolivia)
+hide_bolivia(legend_menu(fig, debt_choices, ["United States"]))
 ```
 
 **Source.** Data: [Bank for International Settlements, total credit statistics, credit to households and NPISHs from all sectors, percent of GDP (dataflow `WS_TC`)](https://data.bis.org/topics/TOTAL_CREDIT).
 Prepared file: [`data/ch16/household_debt.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch16/household_debt.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch16/README.md)).
+Bolivia: [World Bank, World Development Indicators, Domestic credit to private sector (% of GDP) (`FD.AST.PRVT.GD.ZS`)](https://data.worldbank.org/indicator/FD.AST.PRVT.GD.ZS), a proxy for household debt (it covers households and firms together; no source has Bolivian household debt); file [`data/ch16/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch16/bolivia.csv).
 Chart: inspired by Fig. 16.3 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -2004,7 +2060,20 @@ def saving_chart(frequency="quarterly"):
     # Step 3: fixed axes (no 0 next to the first year)
     fig.update_xaxes(range=["1969-07-01", "2027-01-01"])
     fig.update_yaxes(range=[0, 35], tickvals=[5, 10, 15, 20, 25, 30, 35])
-    return fig
+    # Step 4: Bolivia, hidden until clicked in the legend: gross national saving
+    # (households, firms and the government), a proxy, one value per year
+    gns = bolivia[bolivia.series == "gross_national_saving"]
+    fig.add_trace(
+        go.Scatter(
+            x=pd.to_datetime(gns.date.astype(str)),
+            y=gns.value,
+            name="Bolivia (gross national saving, % of GNI, proxy)",
+            line=dict(color=BOLIVIA_RED, width=2),
+        )
+    )
+    # the legend inside the plot, right of the buttons: the plot keeps its width
+    fig.update_layout(legend=dict(x=0.3, y=0.98, xanchor="left", yanchor="top"))
+    return hide_bolivia(fig)
 ```
 
 ```{python}
@@ -2024,18 +2093,24 @@ interact(
 fig = saving_chart("quarterly")
 by_month = saving_chart("monthly")
 fig.add_trace(by_month.data[0])
-fig.data[1].visible = False
+fig.data[2].visible = False             # the monthly line comes after Bolivia's
 # Step 2: two buttons; each shows one line and its title
 buttons = [
     dict(
         label="quarterly",
         method="update",
-        args=[{"visible": [True, False]}, {"title.text": fig.layout.title.text}],
+        args=[
+            {"visible": [True, "legendonly", False]},
+            {"title.text": fig.layout.title.text},
+        ],
     ),
     dict(
         label="monthly",
         method="update",
-        args=[{"visible": [False, True]}, {"title.text": by_month.layout.title.text}],
+        args=[
+            {"visible": [False, "legendonly", True]},
+            {"title.text": by_month.layout.title.text},
+        ],
     ),
 ]
 # Step 3: the row of buttons, at the top left of the chart
@@ -2058,6 +2133,7 @@ fig
 **Source.** Data: [U.S. Bureau of Economic Analysis, Personal Saving Rate (`PSAVERT`), via FRED](https://fred.stlouisfed.org/series/PSAVERT); the quarterly values are our averages of the monthly data.
 Prepared files: [`data/ch16/fig16-4.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch16/fig16-4.csv), [`data/ch16/saving_rate_monthly.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch16/saving_rate_monthly.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch16/README.md)).
+Bolivia: [World Bank, World Development Indicators, Gross savings (% of GNI) (`NY.GNS.ICTR.ZS`)](https://data.worldbank.org/indicator/NY.GNS.ICTR.ZS), a proxy for the household saving rate (it covers households, firms and the government, before depreciation; Bolivia publishes no household saving rate); file [`data/ch16/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch16/bolivia.csv).
 Chart: inspired by Fig. 16.4 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -2118,8 +2194,25 @@ scale for the extreme countries.
 ```{python}
 #| kind: drawing
 # @title Drawing code: Fig. 4, household saving in the chosen countries
-# each country keeps its color; the United States is blue
-SAVING_COLORS = country_colors(saving_world.country.unique(), {"United States": BLUE})
+# Bolivia: gross national saving, a proxy (households, firms and the government;
+# Bolivia publishes no household saving rate), one value per year
+BOLIVIA_SAVING = "Bolivia (gross national saving, proxy)"
+gns = bolivia[bolivia.series == "gross_national_saving"]
+bolivia_saving = pd.DataFrame(
+    {
+        "country": BOLIVIA_SAVING,
+        "year": gns.date,
+        "saving_rate": gns.value,
+        "region": "Americas",
+    }
+)
+# the countries you can choose: the 35 of the OECD, then Bolivia
+saving_choices = pd.concat([saving_world, bolivia_saving], ignore_index=True)
+# each country keeps its color; the United States is blue, and Bolivia red
+SAVING_COLORS = country_colors(
+    saving_world.country.unique(),
+    {"United States": BLUE, BOLIVIA_SAVING: BOLIVIA_RED},
+)
 
 
 def saving_by_country(countries=("United States",)):
@@ -2133,7 +2226,7 @@ def saving_by_country(countries=("United States",)):
         a Plotly figure
     """
     # Step 1: the rows of the chosen countries
-    chosen = saving_world[saving_world.country.isin(countries)]
+    chosen = saving_choices[saving_choices.country.isin(countries)]
     # two fixed scales: -5 to 20 percent, or -30 to 45 for the extreme countries
     low, high = -5, 20
     if chosen.saving_rate.min() < -5 or chosen.saving_rate.max() > 20:
@@ -2166,7 +2259,7 @@ def saving_by_country(countries=("United States",)):
 # Fig. 4 for the countries you pick (hold Ctrl, or Cmd on a Mac, to pick several)
 interact(
     saving_by_country,
-    countries=SelectMultiple(options=sorted(saving_world.country.unique()),
+    countries=SelectMultiple(options=sorted(saving_choices.country.unique()),
                              value=("United States",), rows=8,
                              description="countries", style=WIDE),
 );
@@ -2176,7 +2269,7 @@ interact(
 #| kind: website
 # @title Website version: household saving rates in 35 countries (buttons and legend)
 # Step 1: the chart with every country
-fig = saving_by_country(tuple(saving_world.country.unique()))
+fig = saving_by_country(tuple(saving_choices.country.unique()))
 fig.update_layout(
     title=(
         "Household saving rates in 35 countries, "
@@ -2184,13 +2277,15 @@ fig.update_layout(
     ),
     height=560,
 )
-# Step 2: the United States shown, the others one click away (legend_menu)
-legend_menu(fig, saving_world, ["United States"])
+# Step 2: the United States shown, the others one click away (legend_menu);
+# Bolivia's proxy is tagged and stays in the legend (hide_bolivia)
+hide_bolivia(legend_menu(fig, saving_choices, ["United States"]))
 ```
 
 **Source.** Data: OECD, National Accounts at a Glance, net saving of households and NPISHs as a percentage of net disposable income (dataflow `DSD_NAAG@DF_NAAG_V`, measure `B8NS1M`), via the [OECD Data Explorer](https://data-explorer.oecd.org/).
 Prepared file: [`data/ch16/saving_rates.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch16/saving_rates.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch16/README.md)).
+Bolivia: [World Bank, World Development Indicators, Gross savings (% of GNI) (`NY.GNS.ICTR.ZS`)](https://data.worldbank.org/indicator/NY.GNS.ICTR.ZS), a proxy for the household saving rate (it covers households, firms and the government, before depreciation; Bolivia publishes no household saving rate); file [`data/ch16/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch16/bolivia.csv).
 Chart: inspired by Fig. 16.4 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->

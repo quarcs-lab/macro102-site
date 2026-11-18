@@ -530,6 +530,42 @@ def slider_figure(make_figure, name, values, start, label=None):
 
 ```{python}
 #| kind: folded
+# @title Helper for Bolivia on the website (run this cell; no need to read it)
+def hide_bolivia(fig):
+    """Tag Bolivia's lines (meta="BOL") and hide them until clicked in the legend."""
+    for trace in fig.data:
+        if (trace.name or "").startswith("Bolivia"):
+            trace.meta = "BOL"
+            trace.visible = "legendonly"
+    return fig
+
+
+def hide_bolivia_steps(fig):
+    """Keep Bolivia's traces (meta="BOL") legend-only in every step of a slider."""
+    # Step 1: tag Bolivia's traces; the start step's copy waits in the legend
+    bolivia = [(t.name or "").startswith("Bolivia") for t in fig.data]
+    for trace, mine in zip(fig.data, bolivia):
+        if mine:
+            trace.meta = "BOL"
+            if trace.visible:
+                trace.visible = "legendonly"
+    # Step 2: in every step, a Bolivia trace that would be drawn waits in the legend
+    for step in fig.layout.sliders[0].steps:
+        visible = step.args[0]["visible"]
+        step.args = [
+            {
+                "visible": [
+                    "legendonly" if v and mine else v
+                    for v, mine in zip(visible, bolivia)
+                ]
+            },
+            step.args[1],
+        ]
+    return fig
+```
+
+```{python}
+#| kind: folded
 # @title Helper for the website versions with many countries (run this cell; you do not need to read it)
 def country_menu(fig, shown, regions, label="Textbook countries"):
     """Draw the countries in `shown` and put every other country one click away in the legend.
@@ -558,6 +594,8 @@ def country_menu(fig, shown, regions, label="Textbook countries"):
         for trace in fig.data:
             if trace.name in shown:
                 visible.append(True)                    # a textbook country: drawn
+            elif (trace.name or "").startswith("Bolivia"):
+                visible.append("legendonly")            # Bolivia: in every legend
             elif trace.name not in regions:
                 # not a country: as it was
                 visible.append(True if trace.visible is None else trace.visible)
@@ -1878,6 +1916,27 @@ POSITIONS = {
     "Brazil": "bottom right",
     "Burundi": "middle right",
 }
+# Bolivia's name in the data
+BOLIVIA = "Bolivia (Plurinational State of)"
+
+
+def bolivia_ring(x, y):
+    """Bolivia's point as a red ring, hidden until clicked in the legend.
+
+    Arguments
+        x, y : Bolivia's coordinates (columns of its rows)
+    Returns
+        a Plotly trace, tagged meta="BOL"
+    """
+    return go.Scatter(
+        x=list(x),
+        y=list(y),
+        mode="markers",
+        name="Bolivia",
+        meta="BOL",
+        visible="legendonly",
+        marker=dict(symbol="circle-open", color="#c0392b", size=18, line_width=3),
+    )
 
 
 def add_rest_and_curve(fig, rest):
@@ -1954,6 +2013,9 @@ def predicted_income_chart(year=2023, countries=tuple(EIGHT)):
     )
     # Step 3: the other countries and the curve (add_rest_and_curve)
     add_rest_and_curve(fig, rest)
+    # Bolivia's point, ringed: a click away in the legend
+    bolivia = pwt[(pwt.year == year) & pwt.in_sample & (pwt.country == BOLIVIA)]
+    fig.add_trace(bolivia_ring(bolivia.k_rel, bolivia.k_rel ** (1 / 3)))
 
     # Step 4: the title reports China, or else the first chosen country
     others = chosen[chosen.country != "United States"]
@@ -2020,10 +2082,12 @@ for step in fig.layout.sliders[0].steps:       # ... in every year of the slider
         },
         step.args[1],
     ]
+# Step 3: Bolivia's ring waits in the legend in every year (hide_bolivia_steps)
+hide_bolivia_steps(fig)
 fig
 ```
 
-**Sources.** Data: [Penn World Table 11.0](https://www.rug.nl/ggdc/productivity/pwt/), Groningen Growth and Development Centre ([DOI 10.34894/FABVLR](https://doi.org/10.34894/FABVLR)), variables `rgdpo` (real GDP), `pop` (population) and `csh_i` (investment share); cite as Feenstra, Inklaar and Timmer (2015), ["The Next Generation of the Penn World Table"](https://doi.org/10.1257/aer.20130954), *American Economic Review* 105(10). Capital per person is our own perpetual-inventory estimate from PWT investment, and TFP is computed from it. The curve is the model's prediction, $y^* = k^{1/3}$.
+**Sources.** Data: [Penn World Table 11.0](https://www.rug.nl/ggdc/productivity/pwt/), Groningen Growth and Development Centre ([DOI 10.34894/FABVLR](https://doi.org/10.34894/FABVLR)), variables `rgdpo` (real GDP), `pop` (population) and `csh_i` (investment share); cite as Feenstra, Inklaar and Timmer (2015), ["The Next Generation of the Penn World Table"](https://doi.org/10.1257/aer.20130954), *American Economic Review* 105(10). Capital per person is our own perpetual-inventory estimate from PWT investment, and TFP is computed from it. The curve is the model's prediction, $y^* = k^{1/3}$. Bolivia (the ringed point, in the legend): the same [Penn World Table 11.0](https://www.rug.nl/ggdc/productivity/pwt/) data, also in [`data/ch04/pwt_production.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch04/pwt_production.csv).
 Prepared file: [`data/ch04/pwt_production.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch04/pwt_production.csv) (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch04/README.md)).
 Chart: inspired by Fig. 4.4 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
@@ -2193,6 +2257,9 @@ def prediction_chart(alpha=1 / 3):
             line=dict(color=BLUE, width=3),
         )
     )
+    # Bolivia's point, ringed: a click away in the legend
+    bolivia = chosen[chosen.country == BOLIVIA]
+    fig.add_trace(bolivia_ring(bolivia.y_rel, bolivia.predicted))
     # Step 4: on a log axis Plotly expects the `range` in powers of ten, so we
     # pass `np.log10(1 / 110)` rather than 1 / 110. `tickvals` says where to put
     # the ticks, and `ticktext` what to write there
@@ -2240,10 +2307,12 @@ fig = slider_figure(
 # Step 2: label each step with its fraction; `zip` pairs each step with a key of ALPHAS
 for step, name in zip(fig.layout.sliders[0].steps, ALPHAS):
     step.label = name                  # show 1/3 rather than 0.333...
+# Step 3: Bolivia's ring waits in the legend for every exponent (hide_bolivia_steps)
+hide_bolivia_steps(fig)
 fig
 ```
 
-**Sources.** Data: [Penn World Table 11.0](https://www.rug.nl/ggdc/productivity/pwt/), Groningen Growth and Development Centre ([DOI 10.34894/FABVLR](https://doi.org/10.34894/FABVLR)), variables `rgdpo` (real GDP), `pop` (population) and `csh_i` (investment share); cite as Feenstra, Inklaar and Timmer (2015), ["The Next Generation of the Penn World Table"](https://doi.org/10.1257/aer.20130954), *American Economic Review* 105(10). Capital per person is our own perpetual-inventory estimate from PWT investment, and TFP is computed from it.
+**Sources.** Data: [Penn World Table 11.0](https://www.rug.nl/ggdc/productivity/pwt/), Groningen Growth and Development Centre ([DOI 10.34894/FABVLR](https://doi.org/10.34894/FABVLR)), variables `rgdpo` (real GDP), `pop` (population) and `csh_i` (investment share); cite as Feenstra, Inklaar and Timmer (2015), ["The Next Generation of the Penn World Table"](https://doi.org/10.1257/aer.20130954), *American Economic Review* 105(10). Capital per person is our own perpetual-inventory estimate from PWT investment, and TFP is computed from it. Bolivia (the ringed point, in the legend): the same [Penn World Table 11.0](https://www.rug.nl/ggdc/productivity/pwt/) data, also in [`data/ch04/pwt_production.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch04/pwt_production.csv).
 Prepared file: [`data/ch04/pwt_production.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch04/pwt_production.csv) (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch04/README.md)).
 Chart: inspired by Fig. 4.5 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
@@ -2416,17 +2485,25 @@ interact(
 ```{python}
 #| kind: website
 # @title Website version: Fig. 6 with a precomputed slider for the country
-# one picture of Fig. 6 per country compared with the United States
-slider_figure(
+# Step 1: one picture of Fig. 6 per country compared with the United States,
+# Bolivia last
+fig = slider_figure(
     compare_with_us,
     "country",
-    ["China", "India", "Brazil", "Mexico", "Nigeria", "Japan"],
+    ["China", "India", "Brazil", "Mexico", "Nigeria", "Japan", BOLIVIA],
     start="China",
     label="compared with",
 )
+# Step 2: Bolivia's step: a short label, and its traces tagged meta="BOL"
+bolivia_step = fig.layout.sliders[0].steps[-1]
+bolivia_step.label = "Bolivia"
+for trace, mine in zip(fig.data, bolivia_step.args[0]["visible"]):
+    if mine:
+        trace.meta = "BOL"
+fig
 ```
 
-**Sources.** Data: [Penn World Table 11.0](https://www.rug.nl/ggdc/productivity/pwt/), Groningen Growth and Development Centre ([DOI 10.34894/FABVLR](https://doi.org/10.34894/FABVLR)), variables `rgdpo` (real GDP), `pop` (population) and `csh_i` (investment share); cite as Feenstra, Inklaar and Timmer (2015), ["The Next Generation of the Penn World Table"](https://doi.org/10.1257/aer.20130954), *American Economic Review* 105(10). Capital per person is our own perpetual-inventory estimate from PWT investment, and TFP is computed from it.
+**Sources.** Data: [Penn World Table 11.0](https://www.rug.nl/ggdc/productivity/pwt/), Groningen Growth and Development Centre ([DOI 10.34894/FABVLR](https://doi.org/10.34894/FABVLR)), variables `rgdpo` (real GDP), `pop` (population) and `csh_i` (investment share); cite as Feenstra, Inklaar and Timmer (2015), ["The Next Generation of the Penn World Table"](https://doi.org/10.1257/aer.20130954), *American Economic Review* 105(10). Capital per person is our own perpetual-inventory estimate from PWT investment, and TFP is computed from it. Bolivia (the last step of the slider): the same [Penn World Table 11.0](https://www.rug.nl/ggdc/productivity/pwt/) data, also in [`data/ch04/pwt_production.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch04/pwt_production.csv).
 Prepared file: [`data/ch04/pwt_production.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch04/pwt_production.csv) (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch04/README.md)).
 Chart: adapted from Fig. 4.6 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
@@ -2501,10 +2578,18 @@ fig = px.scatter(
 fig.update_traces(marker=dict(color=TEAL, size=9))
 fig.update_xaxes(tickvals=FRACTIONS, ticktext=FRACTION_NAMES)
 fig.update_yaxes(tickvals=FRACTIONS, ticktext=FRACTION_NAMES)
+# Step 3: Bolivia's point, ringed, a click away in the legend; each animation
+# frame (`frame.data`) moves the ring to Bolivia's point of that year
+bolivia = years[years.country == BOLIVIA]
+start = bolivia[bolivia.year == int(fig.frames[0].name)]
+fig.add_trace(bolivia_ring(start.y_rel, start.tfp))
+for frame in fig.frames:
+    one = bolivia[bolivia.year == int(frame.name)]
+    frame.data = frame.data + (go.Scatter(x=list(one.y_rel), y=list(one.tfp)),)
 fig.show()
 ```
 
-**Sources.** Data: [Penn World Table 11.0](https://www.rug.nl/ggdc/productivity/pwt/), Groningen Growth and Development Centre ([DOI 10.34894/FABVLR](https://doi.org/10.34894/FABVLR)), variables `rgdpo` (real GDP), `pop` (population) and `csh_i` (investment share); cite as Feenstra, Inklaar and Timmer (2015), ["The Next Generation of the Penn World Table"](https://doi.org/10.1257/aer.20130954), *American Economic Review* 105(10). Capital per person is our own perpetual-inventory estimate from PWT investment, and TFP is computed from it.
+**Sources.** Data: [Penn World Table 11.0](https://www.rug.nl/ggdc/productivity/pwt/), Groningen Growth and Development Centre ([DOI 10.34894/FABVLR](https://doi.org/10.34894/FABVLR)), variables `rgdpo` (real GDP), `pop` (population) and `csh_i` (investment share); cite as Feenstra, Inklaar and Timmer (2015), ["The Next Generation of the Penn World Table"](https://doi.org/10.1257/aer.20130954), *American Economic Review* 105(10). Capital per person is our own perpetual-inventory estimate from PWT investment, and TFP is computed from it. Bolivia (the ringed point, in the legend): the same [Penn World Table 11.0](https://www.rug.nl/ggdc/productivity/pwt/) data, also in [`data/ch04/pwt_production.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch04/pwt_production.csv).
 Prepared file: [`data/ch04/pwt_production.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch04/pwt_production.csv) (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch04/README.md)).
 Chart: inspired by Fig. 4.7 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
@@ -2775,9 +2860,11 @@ country_menu(
     ["China", "Russian Federation"],
     regions.set_index("country").region,
 )
+# Step 4: Bolivia waits in the legend of every menu entry (hide_bolivia)
+hide_bolivia(fig)
 ```
 
-**Sources.** Data: [Penn World Table 11.0](https://www.rug.nl/ggdc/productivity/pwt/), Groningen Growth and Development Centre ([DOI 10.34894/FABVLR](https://doi.org/10.34894/FABVLR)), variables `rgdpo` (real GDP), `pop` (population) and `csh_i` (investment share); cite as Feenstra, Inklaar and Timmer (2015), ["The Next Generation of the Penn World Table"](https://doi.org/10.1257/aer.20130954), *American Economic Review* 105(10). GDP per person is `rgdpo` / `pop`, in 2021 dollars. Regions for the website menu: [World Bank country and lending groups](https://datahelpdesk.worldbank.org/knowledgebase/articles/906519-world-bank-country-and-lending-groups).
+**Sources.** Data: [Penn World Table 11.0](https://www.rug.nl/ggdc/productivity/pwt/), Groningen Growth and Development Centre ([DOI 10.34894/FABVLR](https://doi.org/10.34894/FABVLR)), variables `rgdpo` (real GDP), `pop` (population) and `csh_i` (investment share); cite as Feenstra, Inklaar and Timmer (2015), ["The Next Generation of the Penn World Table"](https://doi.org/10.1257/aer.20130954), *American Economic Review* 105(10). GDP per person is `rgdpo` / `pop`, in 2021 dollars. Regions for the website menu: [World Bank country and lending groups](https://datahelpdesk.worldbank.org/knowledgebase/articles/906519-world-bank-country-and-lending-groups). Bolivia (in the legend of every menu entry): the same [Penn World Table 11.0](https://www.rug.nl/ggdc/productivity/pwt/) data, also in [`data/ch04/pwt_production.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch04/pwt_production.csv).
 Prepared files: [`data/ch04/pwt_production.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch04/pwt_production.csv), [`data/ch04/regions.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch04/regions.csv) (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch04/README.md)).
 Chart: inspired by Fig. 4.9 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 

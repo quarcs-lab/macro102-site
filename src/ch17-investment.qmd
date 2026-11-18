@@ -717,6 +717,33 @@ def slider_figure(make_figure, name, values, start, label=None):
     fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
                                     currentvalue=dict(prefix=(label or name) + " = "))])
     return fig
+
+
+def hide_bolivia(fig):
+    """Tag Bolivia's lines (meta="BOL") and hide them until clicked in the legend."""
+    for trace in fig.data:
+        if (trace.name or "").startswith("Bolivia"):
+            trace.meta = "BOL"
+            trace.visible = "legendonly"
+    return fig
+
+
+def hide_bolivia_in_slider(fig):
+    """Keep Bolivia's lines of a slider figure in the legend, in every step."""
+    # Step 1: which traces are Bolivia's
+    bolivia = [(t.name or "").startswith("Bolivia") for t in fig.data]
+    # Step 2: at the start, the shown step's Bolivia lines wait in the legend
+    for trace, is_bolivia in zip(fig.data, bolivia):
+        if is_bolivia:
+            trace.meta = "BOL"
+            if trace.visible:
+                trace.visible = "legendonly"
+    # Step 3: the same in every step of the slider
+    for step in fig.layout.sliders[0].steps:
+        visible = step.args[0]["visible"]
+        new = ["legendonly" if v and b else v for v, b in zip(visible, bolivia)]
+        step.args = [{"visible": new}, step.args[1]]
+    return fig
 ```
 
 :::
@@ -1885,6 +1912,8 @@ In the national accounts, private investment has three parts:
 invest = pd.read_csv(DATA_URL + "fig17-4.csv")
 recessions = pd.read_csv(DATA_URL + "recessions.csv", parse_dates=["peak", "trough"])
 quarterly = pd.read_csv(DATA_URL + "investment_quarterly.csv", parse_dates=["date"])
+# Bolivia's counterparts (World Bank WDI), one row per series and year
+bolivia = pd.read_csv(DATA_URL + "bolivia.csv")
 invest.head()
 ```
 
@@ -1936,6 +1965,15 @@ COLORS = {
     "Residential": TEAL,
     "Inventory": "#5aa0d8",
 }
+# Bolivia's lines: one color, and a dash style per part
+BOLIVIA_COLOR = "#c0392b"
+# Bolivia's names: public and private investment together, a proxy
+BOLIVIA_NAMES = {
+    "gcf_gdp": "Bolivia: total, public and private (proxy)",
+    "gfcf_gdp": "Bolivia: all fixed investment (proxy)",
+    "inventories_gdp": "Bolivia: inventory",
+}
+BOLIVIA_DASHES = {"gcf_gdp": "solid", "gfcf_gdp": "dash", "inventories_gdp": "dot"}
 
 
 def shade_recessions(fig, start):
@@ -2008,7 +2046,18 @@ def components_chart(frequency="annual"):
         yaxis=dict(range=[-5, 25], tickvals=[0, 5, 10, 15, 20, 25]),
         legend=dict(orientation="h", x=0.01, y=0.99, title=None),
     )
-    return fig
+    # Step 5: Bolivia's annual lines, in the legend until clicked (hide_bolivia)
+    for series, name in BOLIVIA_NAMES.items():
+        rows = bolivia[bolivia.series == series]
+        fig.add_trace(
+            go.Scatter(
+                x=pd.to_datetime(rows.date.astype(str)),
+                y=rows.value,
+                name=name,
+                line=dict(color=BOLIVIA_COLOR, width=2, dash=BOLIVIA_DASHES[series]),
+            )
+        )
+    return hide_bolivia(fig)
 ```
 
 ```{python}
@@ -2026,18 +2075,21 @@ interact(
 #| kind: website
 # @title Website version: Fig. 4 with a precomputed slider for annual or quarterly data
 # one picture of Fig. 4 per option; the slider shows one at a time
-slider_figure(
+fig = slider_figure(
     components_chart,
     "frequency",
     ["annual", "quarterly"],
     start="annual",
     label="data",
 )
+# Bolivia's lines stay in the legend, unclicked, in both steps
+hide_bolivia_in_slider(fig)
 ```
 
 **Sources.** Data: U.S. Bureau of Economic Analysis, NIPA Table 1.1.5, via FRED: [gross private domestic investment (`GPDIA`)](https://fred.stlouisfed.org/series/GPDIA), [private nonresidential fixed investment (`PNFIA`)](https://fred.stlouisfed.org/series/PNFIA), [private residential fixed investment (`PRFIA`)](https://fred.stlouisfed.org/series/PRFIA), [change in private inventories (`CBIA`)](https://fred.stlouisfed.org/series/CBIA) and [GDP (`GDPA`)](https://fred.stlouisfed.org/series/GDPA);
 quarterly shares of GDP from NIPA Table 1.1.10, via FRED ([`A006RE1Q156NBEA`](https://fred.stlouisfed.org/series/A006RE1Q156NBEA), [`A011RE1Q156NBEA`](https://fred.stlouisfed.org/series/A011RE1Q156NBEA));
 recessions: [NBER business cycle dates](https://www.nber.org/research/data/us-business-cycle-expansions-and-contractions), via FRED ([`USREC`](https://fred.stlouisfed.org/series/USREC)).
+Bolivia: World Bank, World Development Indicators, [gross capital formation (`NE.GDI.TOTL.ZS`)](https://data.worldbank.org/indicator/NE.GDI.TOTL.ZS) and [gross fixed capital formation (`NE.GDI.FTOT.ZS`)](https://data.worldbank.org/indicator/NE.GDI.FTOT.ZS), percent of GDP, public and private together: a proxy, since Bolivia publishes no split into private, residential and other investment; file [`data/ch17/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch17/bolivia.csv).
 Prepared files: [`data/ch17/fig17-4.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch17/fig17-4.csv), [`data/ch17/investment_quarterly.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch17/investment_quarterly.csv), [`data/ch17/recessions.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch17/recessions.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch17/README.md)).
 Chart: inspired by Fig. 17.4 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -2121,8 +2173,20 @@ def components_by_country(country="United States"):
     Returns
         a Plotly figure
     """
-    # Step 1: the data (country_components)
+    # Step 1: the data (country_components). Bolivia's numbers are a proxy (public
+    # and private investment together), so its parts get their own names
     long, low, high = country_components(country)
+    colors = COLORS
+    if country == "Bolivia":
+        names = {
+            "Total": "Bolivia: total, public and private (proxy)",
+            "Nonresidential fixed": "Bolivia: all fixed investment (proxy)",
+            "Inventory": "Bolivia: inventory",
+        }
+        # `.dropna(...)` drops the empty residential rows
+        long = long.dropna(subset=["share"])
+        long["component"] = long.component.map(names)
+        colors = {names[k]: COLORS[k] for k in names}
     # Step 2: the textbook's scale, or a second, fixed scale for the
     # high-investment countries
     top = 25
@@ -2135,7 +2199,7 @@ def components_by_country(country="United States"):
         x="year",
         y="share",
         color="component",
-        color_discrete_map=COLORS,
+        color_discrete_map=colors,
         hover_name="country",
         labels={"year": "Year", "share": "Percent of GDP", "component": "Component"},
         title=f"{country}: investment from {low.Total:.1f}% ({low.year}) to "
@@ -2148,6 +2212,9 @@ def components_by_country(country="United States"):
         yaxis=dict(range=[-5, top]),
         legend=dict(orientation="h", x=0.01, y=0.99, title=None),
     )
+    # Step 5: tag Bolivia's lines, so the page can find them
+    if country == "Bolivia":
+        fig.update_traces(meta="BOL")
     return fig
 ```
 
@@ -2225,6 +2292,7 @@ dropdown_figure(
 ```
 
 **Sources.** Data: OECD, National Accounts at a Glance, Chapter 3, investment (gross fixed capital formation), the government's share of it and investment in dwellings (dataflows `DSD_NAAG@DF_NAAG_III` and `DSD_NAAG@DF_NAAG_III_GFCF`); OECD national accounts Table 1, GDP and changes in inventories (`DSD_NAMAIN10@DF_TABLE1_EXPENDITURE`); all via the [OECD Data Explorer](https://data-explorer.oecd.org/).
+Bolivia: World Bank, World Development Indicators, [gross capital formation (`NE.GDI.TOTL.ZS`)](https://data.worldbank.org/indicator/NE.GDI.TOTL.ZS) and [gross fixed capital formation (`NE.GDI.FTOT.ZS`)](https://data.worldbank.org/indicator/NE.GDI.FTOT.ZS), public and private together (no residential part): a proxy, since Bolivia publishes no split of its investment; its rows are in the same file.
 Prepared file: [`data/ch17/investment_components.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch17/investment_components.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch17/README.md)).
 Chart: inspired by Fig. 17.4 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)

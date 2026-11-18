@@ -377,6 +377,13 @@
     JSON.parse(document.getElementById("snap-quicklinks").textContent).forEach(function (row, k) {
       if (k) quick.appendChild(el("span", "snap-sep", "/"));
       row.forEach(function (iso) {
+        if (iso && iso.c) {                          // a comparison: {label, c: [iso3, ...]}
+          var cmp = el("a", "snap-qlink", iso.label);
+          cmp.href = "#c=" + iso.c.join(",");
+          cmp.title = iso.c.map(function (x) { return byIso[x] ? byIso[x].name : x; }).join(", ");
+          quick.appendChild(cmp);
+          return;
+        }
         if (!byIso[iso]) return;
         var a = link({ iso3: iso, name: iso });
         a.title = byIso[iso].name;

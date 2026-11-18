@@ -615,6 +615,7 @@ def slider_figure(make_figure, name, values, start, label=None):
     fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
                                     currentvalue=dict(prefix=(label or name) + " = "))])
     return fig
+
 ```
 
 :::
@@ -1234,6 +1235,16 @@ for region, rows in countries.groupby("region"):
 # Step 3: the colors, first for the OECD and emerging economies, then for the rest
 rest = sorted(set(countries.country) - set(OECD_PLUS))
 INFLATION_COLORS = group_colors(OECD_PLUS + rest, [OECD_PLUS] + regions, BOOK_COLORS)
+# Step 4: Bolivia's series, kept apart (columns series, date, value)
+bolivia = pd.read_csv(DATA_URL + "bolivia.csv")
+
+
+def bolivia_series(name):
+    """One of Bolivia's series in bolivia.csv, with the dates as row labels."""
+    rows = bolivia[bolivia.series == name]
+    return pd.Series(rows.value.values, index=rows.date.values, name=name)
+
+
 countries.head()
 ```
 
@@ -1388,6 +1399,72 @@ def group_menu(fig, book, small=8):
     fig.update_layout(margin=dict(t=120), updatemenus=list(fig.layout.updatemenus) + [dict(
         type="buttons", direction="right", x=0, y=1.02, xanchor="left", yanchor="bottom", buttons=buttons)])
     return compact(fig)
+```
+
+```{python}
+#| kind: folded
+# @title Helpers for Bolivia's lines (run this cell; no need to read it)
+def hide_bolivia(fig):
+    """Tag Bolivia's lines (meta="BOL") and hide them until clicked in the legend."""
+    for trace in fig.data:
+        if (trace.name or "").startswith("Bolivia"):
+            trace.meta = "BOL"
+            trace.visible = "legendonly"
+    return fig
+
+
+def bolivia_controls(fig):
+    """Bolivia's place in each trace list, and every button and slider step of a figure.
+
+    Arguments
+        fig : a Plotly figure
+    Returns
+        bolivia  : one True/False per trace: is it Bolivia's?
+        controls : the buttons and slider steps that set "visible"
+    """
+    bolivia = []
+    for trace in fig.data:
+        bolivia.append((trace.name or "").startswith("Bolivia"))
+    controls = []
+    for menu in fig.layout.updatemenus:
+        controls += [b for b in menu.buttons if "visible" in b.args[0]]
+    for slider in fig.layout.sliders:
+        controls += [st for st in slider.steps if "visible" in st.args[0]]
+    return bolivia, controls
+```
+
+```{python}
+#| kind: folded
+# @title Helper for Bolivia in buttons and sliders (run this cell; no need to read it)
+def legend_bolivia(fig, keep_listed=False):
+    """Keep Bolivia's lines in the legend ("legendonly") instead of drawn.
+
+    In every button and slider step, Bolivia's line of the view shown waits in the
+    legend; the copies of the other views stay hidden (False). With keep_listed, a
+    group button that would drop Bolivia from the legend lists it too.
+
+    Arguments
+        fig         : a Plotly figure with buttons or a slider
+        keep_listed : True for group buttons (group_menu)
+    Returns
+        the same figure, with Bolivia's lines tagged (meta="BOL")
+    """
+    bolivia, controls = bolivia_controls(fig)
+    # Step 1: every button and slider step
+    for control in controls:
+        new = []
+        for is_bolivia, v in zip(bolivia, control.args[0]["visible"]):
+            if is_bolivia and (v is True or (keep_listed and v is False)):
+                v = "legendonly"
+            new.append(v)
+        control.args = [{"visible": new}] + list(control.args[1:])
+    # Step 2: the figure as it opens, in the same way
+    for trace, is_bolivia in zip(fig.data, bolivia):
+        if is_bolivia:
+            trace.meta = "BOL"
+            if trace.visible in (True, None) or keep_listed:
+                trace.visible = "legendonly"
+    return fig
 ```
 
 :::
@@ -3227,6 +3304,17 @@ def policy_rule(pi, r_bar=2.0, m=M_BAR, pi_bar=PI_BAR):
 average gap between the two since 2009.
 
 ```{python}
+# Bolivia, kept apart: the overnight interbank rate, a proxy for the policy rate (the
+# central bank sets no policy-rate target), and headline CPI inflation (no core series)
+bolivia_rules = pd.DataFrame({
+    "policy_rate": bolivia_series("interbank_q"),
+    "core_inflation": bolivia_series("inflation_q"),
+}).rename_axis("date").reset_index()
+bolivia_rules["date"] = pd.to_datetime(bolivia_rules.date)
+bolivia_rules = bolivia_rules[bolivia_rules.date >= "1995-01-01"]
+bolivia_rules["country"] = "Bolivia"
+
+
 def fed_funds_data(r_bar, m, country):
     """The actual policy rate of one economy, the rule's rate, and their gap (Fig. 16).
 
@@ -3242,10 +3330,13 @@ def fed_funds_data(r_bar, m, country):
         gap    : actual minus rule, average since 2009, in points (NaN: no data)
     """
     # Step 1: the rows of the economy; for the U.S. the rate is the fed funds rate
-    part = rules[rules.country == country]
+    rows = bolivia_rules if country == "Bolivia" else rules
+    part = rows[rows.country == country]
     actual = "Actual policy rate"
     if country == "United States":
         actual = "Actual fed funds rate"
+    if country == "Bolivia":
+        actual = "Bolivia: interbank rate (proxy)"
     # Step 2: one table with both rates
     chart = pd.DataFrame(
         {
@@ -3313,6 +3404,9 @@ def fed_funds_chart(r_bar=2.0, m=M_BAR, country="United States"):
         legend=dict(x=0.99, y=0.99, xanchor="right", yanchor="top"),
         legend_title_text=legend,
     )
+    # Bolivia's lines carry the tag the website uses to find them
+    if country == "Bolivia":
+        fig.update_traces(meta="BOL")
     return fig
 ```
 
@@ -3326,31 +3420,57 @@ interact(
                       description="r̄ in the rule (%)", style=WIDE),
     m=FloatSlider(value=0.5, min=0.0, max=1.0, step=0.25,
                   description="m̄ in the rule", style=WIDE),
-    country=Dropdown(options=sorted(rules.country.unique()), value="United States",
-                     description="country", style=WIDE),
+    country=Dropdown(options=sorted(list(rules.country.unique()) + ["Bolivia"]),
+                     value="United States", description="country", style=WIDE),
 );
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 16 with a precomputed slider for r̄
+def fed_funds_with_bolivia(r_bar):
+    """Fig. 16 for the United States, with Bolivia's interbank rate (a proxy).
+
+    Arguments
+        r_bar : r-bar in the rule
+    Returns
+        a Plotly figure
+    """
+    fig = fed_funds_chart(r_bar)
+    rate = bolivia_rules.dropna(subset=["policy_rate"])
+    fig.add_trace(go.Scatter(
+        x=rate.date,
+        y=rate.policy_rate,
+        name="Bolivia: interbank rate (proxy)",
+        mode="lines",
+        line=dict(color=INFLATION_COLORS["Bolivia"], width=2),
+    ))
+    return fig
+
+
 # one picture of Fig. 16 per value of r-bar; `compact` keeps the saved page small
-compact(
-    slider_figure(
-        fed_funds_chart,
-        "r_bar",
-        [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0],     # the values of r-bar
-        start=2.0,
-        label="r̄ in the rule (%)",
-    )
+fig = slider_figure(
+    fed_funds_with_bolivia,
+    "r_bar",
+    [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0],     # the values of r-bar
+    start=2.0,
+    label="r̄ in the rule (%)",
 )
+# Bolivia's line: in the legend in the step shown, hidden in the others
+legend_bolivia(fig)
+compact(fig)
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 16 with a menu for the country
 # one picture of Fig. 16 per economy, with Taylor's numbers r-bar = 2, m-bar = 1/2
-menu_figure(fed_funds_chart, "country", sorted(rules.country.unique()), "United States")
+menu_figure(
+    fed_funds_chart,
+    "country",
+    sorted(list(rules.country.unique()) + ["Bolivia"]),
+    "United States",
+)
 ```
 
 **Sources.** Data: [Board of Governors of the Federal Reserve System, Federal Funds Effective Rate (`FEDFUNDS`), via FRED](https://fred.stlouisfed.org/series/FEDFUNDS);
@@ -3359,6 +3479,7 @@ for the other economies, [Bank for International Settlements, central bank polic
 and [OECD, Consumer price indices, CPI excluding food and energy (`DSD_PRICES@DF_PRICES_ALL`), via the OECD Data Explorer](https://data-explorer.oecd.org/).
 Prepared files: [`data/ch13/taylor_rule.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch13/taylor_rule.csv) and [`data/ch13/taylor_rule_countries.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch13/taylor_rule_countries.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch13/README.md)).
+Bolivia (in the menu, and in the legend of the first chart): the overnight interbank rate in bolivianos ([IMF, Monetary and Financial Statistics, interbank money-market rate](https://data.imf.org/), from the Banco Central de Bolivia), a proxy for the policy rate (Bolivia's central bank sets no policy-rate target and kept a fixed exchange rate), and headline CPI inflation from [INE](https://www.ine.gob.bo/) (via the IMF) in place of core inflation; file [`data/ch13/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch13/bolivia.csv).
 Chart: inspired by Fig. 13.16 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -3471,6 +3592,15 @@ WINDOWS = {
 }
 # Step 2: the two vintages; the textbook used the March 2023 vintage
 VINTAGES = {"Current data": "output_gap", "Textbook data": "output_gap_2023"}
+# Bolivia, kept apart: the book's output gap and World Bank CPI inflation, from 1987,
+# after the hyperinflation (its 11,750 percent of 1985 would flatten every loop)
+bolivia_loops = pd.DataFrame({
+    "output_gap": bolivia_series("output_gap"),
+    "inflation": bolivia_series("inflation"),
+}).rename_axis("year").reset_index()
+bolivia_loops["year"] = bolivia_loops.year.astype(int)
+bolivia_loops = bolivia_loops[bolivia_loops.year >= 1987]
+bolivia_loops["country"] = "Bolivia"
 
 
 def loops_data(years, vintage):
@@ -3577,6 +3707,16 @@ choices = [
 ]
 names = ["1960–1985", "1985–2025", "1985–2022, textbook data"]
 figures = [loops_chart(years, vintage) for years, vintage in choices]
+# each picture also gets Bolivia's loops, 1987-2025, which wait in the legend
+for f in figures:
+    f.add_trace(go.Scatter(
+        x=bolivia_loops.output_gap,
+        y=bolivia_loops.inflation,
+        mode="lines+markers",
+        name="Bolivia, 1987–2025 (output gap estimated by the book)",
+        hovertext=bolivia_loops.year,
+        line=dict(color=INFLATION_COLORS["Bolivia"], width=1.5),
+    ))
 # Step 2: copy every trace into one figure; only the first picture's are visible
 fig = go.Figure(layout=figures[0].layout)
 owner = []
@@ -3602,6 +3742,7 @@ fig.update_layout(
     updatemenus=[dict(type="buttons", direction="right", x=0, y=1.02,
                       xanchor="left", yanchor="bottom", buttons=buttons)],
 )
+legend_bolivia(fig)                         # Bolivia waits in the legend
 fig
 ```
 
@@ -3611,6 +3752,7 @@ fig
 the textbook vintage of GDP and potential GDP (30 March 2023) from [ALFRED, the St. Louis Fed's archive of past data vintages](https://alfred.stlouisfed.org/series?seid=GDPPOT).
 Prepared file: [`data/ch13/loops_vintages.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch13/loops_vintages.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch13/README.md)).
+Bolivia, 1987–2025 (after the hyperinflation): the output gap [estimated by the book](https://github.com/quarcs-lab/macro102-site/blob/main/data/bolivia/README.md) and [World Bank CPI inflation (`FP.CPI.TOTL.ZG`)](https://data.worldbank.org/indicator/FP.CPI.TOTL.ZG); file [`data/ch13/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch13/bolivia.csv).
 Chart: inspired by Fig. 13.17 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -3694,7 +3836,8 @@ def oecd_loops_chart(country="United States"):
     """
     # Step 1: the rows of the economy, with a label every five years and in the last
     # year: `part.year % 5 == 0` is true for years that end in 0 or 5
-    part = eo_loops[eo_loops.country == country]
+    rows = bolivia_loops if country == "Bolivia" else eo_loops
+    part = rows[rows.country == country]
     labeled = (part.year % 5 == 0) | (part.year == part.year.max())
     label = part.year.astype(str).where(labeled, "")
     # Step 2: axes that fit the data, with one point to spare on each side;
@@ -3728,6 +3871,11 @@ def oecd_loops_chart(country="United States"):
         xaxis=dict(range=x_range, zeroline=True),
         yaxis=dict(range=y_range),
     )
+    # Bolivia: the book's output gap, and the tag the website uses to find it
+    if country == "Bolivia":
+        fig.update_layout(title=fig.layout.title.text + " (gap estimated by the book)")
+        fig.update_xaxes(title_text="Output gap, Ỹ (percent, estimated by the book)")
+        fig.update_traces(meta="BOL")
     return fig
 ```
 
@@ -3736,8 +3884,8 @@ def oecd_loops_chart(country="United States"):
 # The loops of one economy, with a menu for the country
 interact(
     oecd_loops_chart,
-    country=Dropdown(options=sorted(eo_loops.country.unique()), value="United States",
-                     description="country", style=WIDE),
+    country=Dropdown(options=sorted(list(eo_loops.country.unique()) + ["Bolivia"]),
+                     value="United States", description="country", style=WIDE),
 );
 ```
 
@@ -3748,7 +3896,7 @@ interact(
 menu_figure(
     oecd_loops_chart,
     "country",
-    sorted(eo_loops.country.unique()),
+    sorted(list(eo_loops.country.unique()) + ["Bolivia"]),
     "United States",
 )
 ```
@@ -3758,6 +3906,7 @@ menu_figure(
 with the rows of the U.S., the U.K., the euro area and Japan from the sources of Fig. 19.
 Prepared files: [`data/ch13/output_gaps_oecd.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch13/output_gaps_oecd.csv) and [`data/ch13/inflation_annual.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch13/inflation_annual.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch13/README.md)).
+Bolivia (in the menu), 1987–2025: the output gap [estimated by the book](https://github.com/quarcs-lab/macro102-site/blob/main/data/bolivia/README.md), not by the OECD, and [World Bank CPI inflation (`FP.CPI.TOTL.ZG`)](https://data.worldbank.org/indicator/FP.CPI.TOTL.ZG); file [`data/ch13/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch13/bolivia.csv).
 Chart: inspired by Fig. 13.17 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -4025,8 +4174,9 @@ interact(
 ```{python}
 #| kind: website
 # @title Website version: Fig. 19 with buttons for groups of countries
-# Step 1: the OECD and eight large emerging economies, with the textbook's title
-shown = OECD_PLUS
+# Step 1: the OECD and eight large emerging economies, and Bolivia last, with the
+# textbook's title
+shown = OECD_PLUS + ["Bolivia"]
 fig = oecd_chart(countries=shown)
 # the vertical axis adapts to the countries shown
 fig.update_layout(
@@ -4034,8 +4184,10 @@ fig.update_layout(
     yaxis=dict(range=None, autorange=True, tickvals=None),
     legend=dict(x=1.02, xanchor="left"),
 )
-# Step 2: the buttons that list one group of countries in the legend
-group_menu(fig, BOOK_FOUR)
+# Step 2: the buttons that list one group of countries in the legend; Bolivia
+# stays in the legend whatever the button
+fig = group_menu(fig, BOOK_FOUR)
+legend_bolivia(fig, keep_listed=True)
 ```
 
 **Sources.** Data: [OECD, Consumer price indices, CPI all items (`DSD_PRICES@DF_PRICES_ALL`), via the OECD Data Explorer](https://data-explorer.oecd.org/)
@@ -4043,6 +4195,7 @@ for the U.S., the U.K. and Japan; [World Bank, World Development Indicators, Inf
 for the euro area, Japan since 2021 and all other economies.
 Prepared files: [`data/ch13/fig13-19.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch13/fig13-19.csv) and [`data/ch13/inflation_annual.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch13/inflation_annual.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch13/README.md)).
+Bolivia (last in the legend): [World Bank, WDI (`FP.CPI.TOTL.ZG`)](https://data.worldbank.org/indicator/FP.CPI.TOTL.ZG).
 Chart: inspired by Fig. 13.19 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -4325,6 +4478,14 @@ for trace in fig.data:
     for name in trace.hovertext:
         positions.append(POSITIONS.get(name, "middle right"))
     trace.textposition = positions
+# Bolivia's windows of World Bank inflation: its data start in 1960, so its first
+# full window is 1977-1996, the hyperinflation, far off the chart
+bol = bolivia_series("inflation")
+bol_start = (bol.index.astype(int) - 1737) // 20 * 20 + 1737
+bol_windows = bol.groupby(bol_start).agg(["mean", "std", "count"])
+bol_windows = bol_windows[(bol_windows["count"] == 20) | (bol_windows.index == 2017)]
+bol_end = bol_windows.index + bol_windows["count"] - 1
+bol_windows["period"] = bol_windows.index.astype(str) + "–" + bol_end.astype(str)
 ```
 
 ```{python}
@@ -4355,6 +4516,18 @@ fig.update_layout(
     legend=dict(x=0.99, y=0.99, xanchor="right", yanchor="top"),
     legend_title_text="",
 )
+# Step 6: Bolivia's windows, in the legend until you click them
+fig.add_trace(
+    go.Scatter(
+        x=bol_windows["mean"],
+        y=bol_windows["std"],
+        mode="markers",
+        name="Bolivia (20-year windows)",
+        hovertext=bol_windows.period,
+        marker=dict(color=INFLATION_COLORS["Bolivia"], size=11, symbol="diamond"),
+    )
+)
+hide_bolivia(fig)
 fig.show()
 ```
 
@@ -4363,6 +4536,7 @@ fig.show()
 The textbook figure follows Ricardo Reis (2022), "The Burst of High Inflation in 2021–22: How and Why Did We Get Here?", London School of Economics working paper.
 Prepared file: [`data/ch13/fig13-21.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch13/fig13-21.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch13/README.md)).
+Bolivia: 20-year windows of [World Bank CPI inflation (`FP.CPI.TOTL.ZG`)](https://data.worldbank.org/indicator/FP.CPI.TOTL.ZG) since 1960 (1977–1996, the hyperinflation, lies far off the chart); file [`data/ch13/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch13/bolivia.csv).
 Chart: inspired by Fig. 13.21 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -4404,6 +4578,11 @@ deviation of each window. For the United Kingdom this gives exactly the points o
 ```{python}
 # Step 1: load the long series: one row per country and year
 history = pd.read_csv(DATA_URL + "inflation_long_annual.csv")
+# Bolivia's World Bank inflation since 1960 (bolivia.csv), not one of the 18
+bolivia_history = bolivia_series("inflation").rename_axis("year").reset_index()
+bolivia_history["year"] = bolivia_history.year.astype(int)
+bolivia_history["country"] = "Bolivia"
+history = pd.concat([history, bolivia_history], ignore_index=True)
 # Step 2: the first year of the 20-year window that contains each year. `//`
 # divides and drops the remainder, so a year of 1990 gives 1977
 history["start"] = (history.year - 1737) // 20 * 20 + 1737
@@ -4510,8 +4689,10 @@ fig.update_layout(
     xaxis_range=[-3, 8.5],
     yaxis_range=[-0.7, 13],
 )
-# Step 2: the buttons; the U.K. and the goal are always drawn
-group_menu(fig, ["United Kingdom", "Goal"])
+# Step 2: the buttons; the U.K. and the goal are always drawn, and Bolivia stays in
+# the legend
+fig = group_menu(fig, ["United Kingdom", "Goal"])
+legend_bolivia(fig, keep_listed=True)
 ```
 
 **Sources.** Data: [Jordà–Schularick–Taylor Macrohistory Database, release 6, consumer prices (`cpi`)](https://www.macrohistory.net/database/),
@@ -4520,6 +4701,7 @@ to 2020 (Jordà, Schularick and Taylor 2017, ["Macrofinancial History and the Ne
 for the United Kingdom, the Bank of England and ONS series of the chart above.
 Prepared file: [`data/ch13/inflation_long_annual.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch13/inflation_long_annual.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch13/README.md)).
+Bolivia (not one of the 18): [World Bank CPI inflation (`FP.CPI.TOTL.ZG`)](https://data.worldbank.org/indicator/FP.CPI.TOTL.ZG) since 1960; file [`data/ch13/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch13/bolivia.csv).
 Chart: inspired by Fig. 13.21 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->

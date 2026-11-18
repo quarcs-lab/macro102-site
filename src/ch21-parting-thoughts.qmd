@@ -862,6 +862,10 @@ def group_menu(fig, groups, start, title):
         ys = np.concatenate([np.asarray(t.y, dtype=float) for t, v in zip(fig.data, visible) if v]
                             or [np.zeros(1)])
         top = np.nanmax(ys) if np.isfinite(ys).any() else 1.0
+        # Bolivia waits in the legend of every group (a click away)
+        for k, t in enumerate(fig.data):
+            if t.legendgroup.startswith("Bolivia") and not visible[k]:
+                visible[k] = "legendonly"
         buttons.append(dict(label=name, method="update",
                             args=[{"visible": visible}, {"yaxis.range": [0, max(1.05, 1.05 * top)]}]))
     # Step 2: start with the group `start` visible
@@ -872,6 +876,18 @@ def group_menu(fig, groups, start, title):
     fig.update_layout(title=title, yaxis_range=buttons[first]["args"][1]["yaxis.range"], margin=dict(t=115),
                       updatemenus=[dict(buttons=buttons, active=first, direction="down", x=0, y=1.02,
                                         xanchor="left", yanchor="bottom")])
+    return fig
+```
+
+```{python}
+#| kind: folded
+# @title Helper for Bolivia on the website (run this cell; no need to read it)
+def hide_bolivia(fig):
+    """Tag Bolivia's lines (meta="BOL") and hide them until clicked in the legend."""
+    for trace in fig.data:
+        if (trace.name or "").startswith("Bolivia"):
+            trace.meta = "BOL"
+            trace.visible = "legendonly"
     return fig
 ```
 
@@ -1523,13 +1539,15 @@ group_menu(
     "Textbook: Japan",
     "GDP per person relative to the U.S. since 1950: choose a group",
 )
+# Step 3: Bolivia waits in the legend of every group (hide_bolivia)
+hide_bolivia(fig)
 ```
 
 **Sources.** Data: Groningen Growth and Development Centre,
 [Maddison Project Database 2023](https://www.rug.nl/ggdc/historicaldevelopment/maddison/releases/maddison-project-database-2023)
 ([doi:10.34894/INZBF2](https://doi.org/10.34894/INZBF2); Bolt and van Zanden 2024), GDP per person (`gdppc`),
 converted to 2022 dollars. Prepared file: [`data/ch21/maddison_world.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch21/maddison_world.csv), a copy of
-[`data/ch03/maddison_world.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch03/maddison_world.csv) (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch21/README.md)).
+[`data/ch03/maddison_world.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch03/maddison_world.csv) (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch21/README.md)). Bolivia (in the legend of every group): the same [Maddison Project Database 2023](https://www.rug.nl/ggdc/historicaldevelopment/maddison/releases/maddison-project-database-2023) data.
 Chart: inspired by the discussion in Chapter 21 of Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -1703,6 +1721,27 @@ fig = px.scatter(
 # Step 2: teal points, and a blue line (the trace drawn with lines)
 fig.update_traces(marker=dict(color=TEAL, size=8))
 fig.update_traces(line=dict(color=BLUE, width=3), selector=dict(mode="lines"))
+# Step 3: Bolivia's points, a click away in the legend and out of the U.S. line.
+# They start in 1988, after the 1984-86 hyperinflation, whose swings of
+# thousands of points would hide every other point
+bolivia = pd.read_csv(DATA_URL + "bolivia.csv").pivot(
+    index="date",
+    columns="series",
+    values="value",
+)
+bolivia["change"] = bolivia.inflation.diff()
+bolivia = bolivia.loc[1988:]
+fig.add_scatter(
+    x=bolivia.output_gap,
+    y=bolivia.change,
+    mode="markers",
+    name="Bolivia (gap estimated by the book)",
+    meta="BOL",
+    visible="legendonly",
+    text=bolivia.index,
+    hovertemplate="Bolivia %{text}: Ỹ %{x:.1f}, Δπ %{y:.1f}<extra></extra>",
+    marker=dict(color="#c0392b", size=8),
+)
 fig.show()
 ```
 
@@ -1710,6 +1749,7 @@ fig.show()
 [Real gross domestic product (`GDPC1`)](https://fred.stlouisfed.org/series/GDPC1); Congressional Budget Office,
 [Real potential gross domestic product (`GDPPOT`)](https://fred.stlouisfed.org/series/GDPPOT); U.S. Bureau of Labor
 Statistics, [Consumer price index for all urban consumers (`CPIAUCSL`)](https://fred.stlouisfed.org/series/CPIAUCSL).
+Bolivia (in the legend, 1988–2025, after its 1984–86 hyperinflation, and not in the fitted line): an output gap estimated by the book ([notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/bolivia/README.md)) from [World Bank WDI real GDP](https://data.worldbank.org/indicator/NY.GDP.MKTP.KN), and [CPI inflation, World Bank WDI](https://data.worldbank.org/indicator/FP.CPI.TOTL.ZG), both from INE; file [`data/ch21/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch21/bolivia.csv).
 Prepared file: [`data/ch21/fig13-17.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch21/fig13-17.csv), a copy of
 [`data/ch13/fig13-17.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch13/fig13-17.csv) (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch21/README.md)).
 Chart: inspired by the discussion in Chapter 21 of Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -1720,9 +1760,8 @@ Chart: inspired by the discussion in Chapter 21 of Jones (2024), [*Macroeconomic
 
 - The fitted slope is about 0.35: each percent of output above potential goes with inflation about a third of a
   point higher than the year before. That is close to the "about 1/3" you measured in Chapter 9.
-- This chart stays U.S.-only: its output gap is the Chapter 13 file, built from the CBO's estimate of U.S.
-  potential output. Output gaps for other countries exist (the OECD and the IMF estimate them), but they are not in
-  this book's data files.
+- The U.S. output gap is the Chapter 13 file, built from the CBO's estimate of U.S. potential output. Bolivia
+  publishes no output gap, so its points (hidden in the legend) use the book's own HP-filter estimate.
 - The points are widely scattered. Price shocks $\bar{o}$, such as the oil shocks of the 1970s and the
   2021–2022 surge, move inflation far off the line (hover over the outliers).
 - The trade-off is short-run only. Over decades, Lesson 3's classical dichotomy takes over again.

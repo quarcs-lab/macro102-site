@@ -26,7 +26,7 @@ Covid-19 pandemic of 2020. This chapter looks at both in the data. By the end of
   components, and read the comparative statics of each result;
 - in Python: find peaks and troughs with `idxmax` and `idxmin`, shade recessions with one small function,
   reshape a table with `melt`, compare two vintages of the same data, and turn log changes into percent changes;
-- go beyond the textbook's countries: pick any of up to 61 economies from long (tidy) data files, and spot breaks,
+- go beyond the textbook's countries: pick any of up to 62 economies from long (tidy) data files, and spot breaks,
   gaps and changes of definition in international data.
 
 <!-- cell -->
@@ -662,6 +662,11 @@ def slider_figure(make_figure, name, values, start, label=None):
             trace.visible = (i == first)
             fig.add_trace(trace)
             owner.append(i)
+    # Bolivia's line of each step (meta="BOL") waits in the legend until it is clicked
+    bolivia = [trace.meta == "BOL" for trace in fig.data]
+    for trace, bol in zip(fig.data, bolivia):
+        if bol and trace.visible:
+            trace.visible = "legendonly"
     # Step 3: one slider step per value: its curves, title, labels and shapes
     steps = []
     for i, f in enumerate(figures):
@@ -669,9 +674,21 @@ def slider_figure(make_figure, name, values, start, label=None):
                   "annotations": [a.to_plotly_json() for a in f.layout.annotations],
                   "shapes": [s.to_plotly_json() for s in f.layout.shapes]}
         visible = [o == i for o in owner]
+        # the other steps' Bolivia lines stay off (False), this step's in the legend
+        visible = ["legendonly" if v and b else v for v, b in zip(visible, bolivia)]
         steps.append(dict(method="update", label=str(values[i]), args=[{"visible": visible}, layout]))
     fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
                                     currentvalue=dict(prefix=(label or name) + " = "))])
+    return fig
+
+
+def hide_bolivia(fig):
+    """Tag Bolivia's lines (meta="BOL") and hide them until clicked in the legend."""
+    for trace in fig.data:
+        # `.startswith("Bolivia")` is True for the names that begin with "Bolivia"
+        if (trace.name or "").startswith("Bolivia"):
+            trace.meta = "BOL"
+            trace.visible = "legendonly"
     return fig
 ```
 
@@ -1139,6 +1156,70 @@ countries = pd.read_csv(DATA_URL + "countries.csv")
 countries.head()
 ```
 
+```{python}
+#| kind: folded
+# @title Data tools: Bolivia's series, for the U.S. charts and beyond the U.S.
+# Bolivia's series, one row per series and date. The multi-country files keep their
+# own economies; the charts add Bolivia from this file, hidden until it is clicked
+bolivia = pd.read_csv(DATA_URL + "bolivia.csv")
+
+
+def bolivia_series(name):
+    """One of Bolivia's series in bolivia.csv, with the dates as row labels.
+
+    Arguments
+        name : the series, e.g. "unemployment_q"
+    Returns
+        a Series of values, with the dates (a year becomes its 1 January) as labels
+    """
+    rows = bolivia[bolivia.series == name]
+    return pd.Series(rows.value.values, index=pd.to_datetime(rows.date), name=name)
+
+
+def add_bolivia(panel, name, column):
+    """A long data table with Bolivia's rows added, for the "Beyond the U.S." charts.
+
+    Arguments
+        panel  : a long data table, one row per country and date (or year)
+        name   : Bolivia's series in bolivia.csv, e.g. "unemployment_q"
+        column : the column of the table for its values, e.g. "unemployment_rate"
+    Returns
+        the table with Bolivia's rows, sorted by country and date
+    """
+    series = bolivia_series(name)
+    rows = pd.DataFrame({"iso3": "BOL", "country": "Bolivia", column: series.values})
+    # a yearly table has a `year` column, the others a `date` column
+    key = "year" if "year" in panel.columns else "date"
+    rows[key] = series.index.year if key == "year" else series.index
+    both = pd.concat([panel, rows], ignore_index=True)
+    return both.sort_values(["country", key], ignore_index=True)
+
+
+def add_bolivia_line(fig, series, label, scale=None):
+    """Add one of Bolivia's series to a U.S. chart, hidden until clicked in the legend.
+
+    Arguments
+        fig    : the chart
+        series : Bolivia's values, with the dates as labels (from bolivia_series)
+        label  : the name in the legend, starting with "Bolivia"
+        scale  : None for the chart's own y-axis, or the range [bottom, top] of a
+                 hidden second y-axis, Bolivia's own scale (hover to read it)
+    Returns
+        the same figure
+    """
+    fig.add_scatter(
+        x=series.index,
+        y=series.values,
+        mode="lines",
+        line=dict(color=ORANGE, width=1.5),
+        name=label,
+        yaxis="y" if scale is None else "y2",
+    )
+    if scale is not None:
+        fig.update_layout(yaxis2=dict(overlaying="y", visible=False, range=scale))
+    return hide_bolivia(fig)
+```
+
 A country should keep its color in every chart, so we give each one a fixed color once. The textbook's economies
 keep the chapter's colors.
 
@@ -1302,7 +1383,8 @@ def all_countries(make_figure, names, shown):
     fig.update_layout(margin=dict(t=120), legend=dict(title_text="Click to add"),
                       updatemenus=[dict(type="dropdown", direction="down", x=0, y=1.02, xanchor="left",
                                         yanchor="bottom", buttons=buttons, showactive=True)])
-    return fig
+    # Step 5: tag Bolivia's line (meta="BOL"); it waits in the legend
+    return hide_bolivia(fig)
 ```
 
 :::
@@ -1737,7 +1819,16 @@ def fed_chart(period="2000–2026"):
     )
     # no 0 label: it would crowd the first year
     fig.update_yaxes(range=[0, 8], tickvals=[1, 2, 3, 4, 5, 6, 7])
-    return fig
+    # Step 5: Bolivia's overnight interbank rate, a proxy (its central bank sets no
+    # policy rate), hidden until it is clicked in the legend. It goes above 8
+    # percent, so it gets its own scale: a hidden second y-axis with zero at the
+    # same height (hover to read its values)
+    return add_bolivia_line(
+        fig,
+        bolivia_series("interbank_rate"),
+        "Bolivia (interbank rate, proxy, own scale)",
+        scale=[0, 12],
+    )
 ```
 
 ```{python}
@@ -1790,6 +1881,8 @@ fig
 
 **Sources.** Data: [Board of Governors of the Federal Reserve System, Federal Funds Effective Rate (`FEDFUNDS`), via FRED](https://fred.stlouisfed.org/series/FEDFUNDS);
 [NBER recession dates (`USREC`), via FRED](https://fred.stlouisfed.org/series/USREC).
+Bolivia: [IMF, Monetary and Financial Statistics, interbank money-market rate](https://data.imf.org/), from the Banco Central de Bolivia,
+a proxy for the policy rate (Bolivia's central bank sets no policy-rate target), on its own scale; file [`data/ch10/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/bolivia.csv).
 Prepared files: [`data/ch10/fig10-2.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/fig10-2.csv), [`data/ch10/recessions.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/recessions.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/README.md)).
 Chart: inspired by Fig. 10.2 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -1843,6 +1936,8 @@ the effective rate of Fig. 2 moves smoothly; the two differ by 0.04 points in a 
 ```{python}
 # Load the BIS policy rates: one row per country and month
 rates_panel = pd.read_csv(DATA_URL + "policy_rates_panel.csv", parse_dates=["date"])
+# Bolivia has no policy rate: add its overnight interbank rate, a proxy (add_bolivia)
+rates_panel = add_bolivia(rates_panel, "interbank_rate", "policy_rate")
 rates_panel.tail(3)
 ```
 
@@ -1894,6 +1989,11 @@ def policy_world(names=("United States",)):
     # Step 4: `fig.add_hline` draws a horizontal line, here a dashed line at zero
     fig.add_hline(y=0, line_dash="dash", line_color="black", line_width=1)
     fig.update_layout(title=title + no_data_note(missing))
+    # Step 5: Bolivia's line is its interbank rate, a proxy for a policy rate
+    fig.update_traces(
+        name="Bolivia (interbank rate, proxy)",
+        selector=dict(name="Bolivia"),
+    )
     return fig
 ```
 
@@ -1916,6 +2016,8 @@ all_countries(policy_world, sorted(rates_panel.country.unique()), ["United State
 
 **Sources.** Data: [Bank for International Settlements, central bank policy rates (dataset `WS_CBPOL`), BIS data
 portal](https://data.bis.org/topics/CBPOL).
+Bolivia: [IMF, Monetary and Financial Statistics, interbank money-market rate](https://data.imf.org/), from the Banco Central de Bolivia,
+a proxy for the policy rate (Bolivia's central bank sets no policy-rate target); file [`data/ch10/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/bolivia.csv).
 Prepared files: [`data/ch10/policy_rates_panel.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/policy_rates_panel.csv), [`data/ch10/countries.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/countries.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/README.md)).
 Chart: inspired by Fig. 10.2 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -2625,7 +2727,17 @@ def covid_chart(date="March 2023"):
     # Step 4: fixed axes, the same for both dates
     fig.update_xaxes(range=[0, 6300], tickvals=[1000, 2000, 3000, 4000, 5000, 6000])
     fig.update_yaxes(range=[0, 19.5], tickvals=[0, 2, 4, 6, 8, 10, 12, 14, 16, 18])
-    return fig
+    # Step 5: Bolivia as a ring, hidden until it is clicked in the legend. Its GDP
+    # comes from INE; for August 2026 its loss stops in 2024Q4, INE's latest quarter
+    k = 0 if date == "March 2023" else 1
+    fig.add_scatter(
+        x=[bolivia_series("covid_deaths_pm").iloc[k]],
+        y=[bolivia_series("gdp_loss").iloc[k]],
+        mode="markers",
+        marker=dict(color=ORANGE, size=16, symbol="circle-open", line_width=3),
+        name="Bolivia" if k == 0 else "Bolivia (GDP loss to 2024Q4)",
+    )
+    return hide_bolivia(fig)
 ```
 
 ```{python}
@@ -2654,6 +2766,8 @@ slider_figure(
 **Sources.** Data: [Our World in Data, Covid-19 deaths (cumulative confirmed deaths per million people)](https://ourworldindata.org/covid-deaths),
 from the [WHO Covid-19 dashboard](https://data.who.int/dashboards/covid19/deaths);
 [OECD, Quarterly National Accounts, real GDP volume index (dataflow `DSD_NAMAIN1@DF_QNA`), OECD Data Explorer](https://data-explorer.oecd.org/).
+Bolivia: the same Our World in Data series, and the GDP loss computed from [INE's quarterly real GDP](https://www.ine.gob.bo/),
+seasonally adjusted by the book, to 2022Q3 and, for August 2026, to 2024Q4 (INE's latest quarter); file [`data/ch10/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/bolivia.csv).
 Prepared file: [`data/ch10/fig10-5.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/fig10-5.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/README.md)).
 Chart: inspired by Fig. 10.5 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -2786,6 +2900,8 @@ the same index (2019Q4 = 100); its six textbook countries are identical to `fig1
 ```{python}
 # Load the OECD panel: real GDP of 49 economies (2019Q4 = 100), one row per quarter
 gdp_panel = pd.read_csv(DATA_URL + "gdp_quarterly_panel.csv", parse_dates=["date"])
+# Bolivia is not in the OECD's file: add INE's GDP from bolivia.csv (add_bolivia)
+gdp_panel = add_bolivia(gdp_panel, "gdp_index_q", "gdp_index")
 gdp_panel.tail(3)
 ```
 
@@ -2908,6 +3024,8 @@ all_countries(gdp_chart, sorted(gdp_panel.country.unique()), list(BOOK_SIX))
 
 **Sources.** Data: [OECD, Quarterly National Accounts, real GDP, chain-linked volumes, seasonally adjusted (dataflow
 `DSD_NAMAIN1@DF_QNA`), OECD Data Explorer](https://data-explorer.oecd.org/).
+Bolivia: [INE, quarterly real GDP at 1990 prices](https://www.ine.gob.bo/), seasonally adjusted by the book, to 2024Q4;
+file [`data/ch10/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/bolivia.csv).
 Prepared files: [`data/ch10/gdp_quarterly_panel.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/gdp_quarterly_panel.csv), [`data/ch10/fig10-6.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/fig10-6.csv), [`data/ch10/countries.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/countries.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/README.md)).
 Chart: inspired by Fig. 10.6 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -3033,11 +3151,22 @@ shade_recessions(fig)
 # below it: drag its handles to zoom in on a period (this works on the website too)
 fig.update_xaxes(range=["1999-07-01", "2026-12-01"], rangeslider_visible=True)
 fig.update_yaxes(range=[125, 162], tickvals=[130, 135, 140, 145, 150, 155, 160])
+# Step 4: Bolivia's employed persons (INE's household survey), hidden until it is
+# clicked in the legend, on its own scale: a hidden second y-axis (hover to read
+# it). `.asfreq("MS")` adds the months without a survey, so the line has a gap
+add_bolivia_line(
+    fig,
+    bolivia_series("employment_m").asfreq("MS"),
+    "Bolivia (employed persons, millions, own scale)",
+    scale=[2, 8],
+)
 fig.show()
 ```
 
 **Sources.** Data: [U.S. Bureau of Labor Statistics, All Employees, Total Nonfarm (`PAYEMS`), via FRED](https://fred.stlouisfed.org/series/PAYEMS);
 [NBER recession dates (`USREC`), via FRED](https://fred.stlouisfed.org/series/USREC).
+Bolivia: [INE, Continuous Employment Survey (ECE)](https://www.ine.gob.bo/), employed persons, via the [IMF](https://data.imf.org/),
+a household survey, not seasonally adjusted, on its own scale; file [`data/ch10/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/bolivia.csv).
 Prepared files: [`data/ch10/fig10-7.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/fig10-7.csv), [`data/ch10/recessions.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/recessions.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/README.md)).
 Chart: inspired by Fig. 10.7 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -3101,6 +3230,8 @@ compare **indexes**: employment divided by its level in 2019Q4, times 100.
 # Step 1: load employment from the labour force surveys, one row per country and
 # quarter
 jobs_panel = pd.read_csv(DATA_URL + "employment_panel.csv", parse_dates=["date"])
+# Bolivia is not in the OECD's file: add INE's survey from bolivia.csv (add_bolivia)
+jobs_panel = add_bolivia(jobs_panel, "employment_q", "employment")
 # Step 2: each country's employment in 2019Q4, with the country names as labels
 base = jobs_panel[jobs_panel.date == "2019-10-01"].set_index("country").employment
 # Step 3: the index. `jobs_panel.country.map(base)` looks up the 2019Q4 value for
@@ -3177,6 +3308,8 @@ all_countries(jobs_world, sorted(jobs_panel.country.unique()), ["United States"]
 
 **Sources.** Data: [OECD, Infra-annual labour statistics, employment from labour force surveys (dataflow
 `DSD_LFS@DF_IALFS_EMP_Q`), OECD Data Explorer](https://data-explorer.oecd.org/).
+Bolivia: [INE, Continuous Employment Survey (ECE)](https://www.ine.gob.bo/), employed persons, via the [IMF](https://data.imf.org/),
+quarterly means of the monthly numbers, not seasonally adjusted (no survey in the second half of 2020); file [`data/ch10/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/bolivia.csv).
 Prepared files: [`data/ch10/employment_panel.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/employment_panel.csv), [`data/ch10/countries.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/countries.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/README.md)).
 Chart: inspired by Fig. 10.7 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -3271,6 +3404,9 @@ shade_recessions(fig)
 # Step 4: fixed axes, and the legend in the bottom left corner
 fig.update_xaxes(range=["1999-07-01", "2026-12-01"])
 fig.update_yaxes(range=[-12, 4.5], tickvals=[-10, -8, -6, -4, -2, 0, 2, 4])
+# Step 5: Bolivia's output gap, estimated by the book from INE's GDP, hidden until
+# it is clicked in the legend (its fall of 2020 goes below the chart)
+add_bolivia_line(fig, bolivia_series("output_gap_q"), "Bolivia (estimated by the book)")
 fig.update_layout(
     legend=dict(
         x=0.01,
@@ -3287,6 +3423,8 @@ fig.show()
 [Congressional Budget Office, Real Potential Gross Domestic Product (`GDPPOT`), via FRED](https://fred.stlouisfed.org/series/GDPPOT);
 the 2023 vintage from ALFRED, as published on 1 February 2023 ([`GDPC1`](https://alfred.stlouisfed.org/series?seid=GDPC1),
 [`GDPPOT`](https://alfred.stlouisfed.org/series?seid=GDPPOT)); [NBER recession dates (`USREC`), via FRED](https://fred.stlouisfed.org/series/USREC).
+Bolivia: an output gap [estimated by the book](https://github.com/quarcs-lab/macro102-site/blob/main/data/bolivia/README.md) (a Hodrick-Prescott trend, λ = 1600, of
+[INE's quarterly real GDP](https://www.ine.gob.bo/), seasonally adjusted); file [`data/ch10/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/bolivia.csv).
 Prepared files: [`data/ch10/fig10-8.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/fig10-8.csv), [`data/ch10/recessions.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/recessions.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/README.md)).
 Chart: inspired by Fig. 10.8 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -3343,6 +3481,8 @@ file is annual, from 1990 to 2027; the values for 2026 and 2027 are the OECD's *
 ```{python}
 # Load the OECD output gaps: one row per country and year, 1990 to 2027
 gaps_panel = pd.read_csv(DATA_URL + "output_gap_panel.csv")
+# Bolivia is not in the OECD's file: add the book's estimate (add_bolivia)
+gaps_panel = add_bolivia(gaps_panel, "output_gap", "output_gap")
 gaps_panel.tail(3)
 ```
 
@@ -3460,6 +3600,9 @@ all_countries(gap_world, sorted(gaps_panel.country.unique()), ["United States"])
 
 **Sources.** Data: [OECD, Economic Outlook 119 (June 2026), output gap (dataflow `DSD_EO@DF_EO`, measure `GAP`),
 OECD Data Explorer](https://data-explorer.oecd.org/).
+Bolivia: an output gap [estimated by the book](https://github.com/quarcs-lab/macro102-site/blob/main/data/bolivia/README.md) (a Hodrick-Prescott trend, λ = 100, of
+[World Bank real GDP](https://data.worldbank.org/indicator/NY.GDP.MKTP.KN) extended with the [IMF WEO](https://www.imf.org/en/Publications/WEO) projections
+from 2026); file [`data/ch10/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/bolivia.csv).
 Prepared files: [`data/ch10/output_gap_panel.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/output_gap_panel.csv), [`data/ch10/countries.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/countries.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/README.md)).
 Chart: inspired by Fig. 10.8 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -3585,7 +3728,10 @@ def unemployment_chart(recession="Great Recession"):
     # Step 4: fixed axes
     fig.update_xaxes(range=["1999-07-01", "2026-12-01"])
     fig.update_yaxes(range=[3, 16], tickvals=[4, 6, 8, 10, 12, 14, 16])
-    return fig
+    # Step 5: Bolivia's urban unemployment rate, quarterly, hidden until it is
+    # clicked in the legend
+    rate = bolivia_series("unemployment_q")
+    return add_bolivia_line(fig, rate, "Bolivia (urban unemployment, INE)")
 ```
 
 ```{python}
@@ -3613,6 +3759,8 @@ slider_figure(
 
 **Sources.** Data: [U.S. Bureau of Labor Statistics, Unemployment Rate (`UNRATE`), via FRED](https://fred.stlouisfed.org/series/UNRATE);
 [NBER recession dates (`USREC`), via FRED](https://fred.stlouisfed.org/series/USREC).
+Bolivia: [INE, urban unemployment rate](https://www.ine.gob.bo/), quarterly, not seasonally adjusted, via the [IMF](https://data.imf.org/);
+file [`data/ch10/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/bolivia.csv).
 Prepared files: [`data/ch10/fig10-9.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/fig10-9.csv), [`data/ch10/recessions.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/recessions.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/README.md)).
 Chart: inspired by Fig. 10.9 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -3768,6 +3916,8 @@ of Fig. 9 (the largest difference over 320 months is 0.0).
 ```{python}
 # Load the OECD unemployment rates: one row per country and month
 unemp_panel = pd.read_csv(DATA_URL + "unemployment_panel.csv", parse_dates=["date"])
+# Bolivia is not in the OECD's file: add INE's urban rate (add_bolivia)
+unemp_panel = add_bolivia(unemp_panel, "unemployment_q", "unemployment_rate")
 unemp_panel.tail(3)
 ```
 
@@ -3857,6 +4007,8 @@ all_countries(
 
 **Sources.** Data: [OECD, harmonised unemployment rates, monthly (dataflow `DSD_LFS@DF_IALFS_UNE_M`), OECD Data
 Explorer](https://data-explorer.oecd.org/); [NBER recession dates (`USREC`), via FRED](https://fred.stlouisfed.org/series/USREC).
+Bolivia: [INE, urban unemployment rate](https://www.ine.gob.bo/), quarterly, not seasonally adjusted and not harmonised, via the
+[IMF](https://data.imf.org/); file [`data/ch10/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/bolivia.csv).
 Prepared files: [`data/ch10/unemployment_panel.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/unemployment_panel.csv), [`data/ch10/countries.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/countries.csv), [`data/ch10/recessions.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/recessions.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/README.md)).
 Chart: inspired by Fig. 10.9 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -4008,7 +4160,13 @@ def inflation_chart(measure="log change"):
             bgcolor="rgba(255,255,255,0.8)",
         )
     )
-    return fig
+    # Step 4: Bolivia, hidden until it is clicked in the legend. Its inflation
+    # passed 20 percent in 2025, so it gets its own scale: a hidden second y-axis,
+    # 2.5 times as tall, with zero at the same height (hover to read its values)
+    rate = bolivia_series("inflation_log")
+    if measure == "percent change":
+        rate = percent_from_log(rate)
+    return add_bolivia_line(fig, rate, "Bolivia (own scale)", scale=[-3.75, 30])
 ```
 
 ```{python}
@@ -4038,6 +4196,8 @@ slider_figure(
 [U.K. Office for National Statistics, CPIH](https://www.ons.gov.uk/economy/inflationandpriceindices/timeseries/l522/mm23),
 via the [OECD prices database (dataflow `DSD_PRICES@DF_PRICES_ALL`), OECD Data Explorer](https://data-explorer.oecd.org/);
 [Eurostat, HICP, euro area (`prc_hicp_minr`)](https://ec.europa.eu/eurostat/databrowser/view/prc_hicp_minr/default/table).
+Bolivia: [INE, consumer price index](https://www.ine.gob.bo/), via the [IMF Consumer Price Index dataset](https://data.imf.org/en/datasets/IMF.STA:CPI),
+on its own scale; file [`data/ch10/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/bolivia.csv).
 Prepared file: [`data/ch10/fig10-10.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/fig10-10.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/README.md)).
 Chart: inspired by Fig. 10.10 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -4101,6 +4261,8 @@ reports. The chart starts with the textbook's three economies, `BOOK_THREE`.
 ```{python}
 # The textbook's three economies, shown at the start
 BOOK_THREE = ("Euro area", "United Kingdom", "United States")
+# Bolivia is not in the file: add its inflation from bolivia.csv (add_bolivia)
+world_cpi = add_bolivia(world_cpi, "inflation_log", "inflation")
 
 
 def highest_inflation(names):
@@ -4216,6 +4378,7 @@ all_countries(inflation_world, sorted(world_cpi.country.unique()), list(BOOK_THR
 **Sources.** Data: the U.S., U.K. and euro-area series of Fig. 10 (BLS, ONS and Eurostat);
 [Eurostat, HICP (`prc_hicp_minr`)](https://ec.europa.eu/eurostat/databrowser/view/prc_hicp_minr/default/table) for the other
 European economies; [IMF, Consumer Price Index dataset (`IMF.STA:CPI`)](https://data.imf.org/en/datasets/IMF.STA:CPI) for the rest.
+Bolivia: [INE, consumer price index](https://www.ine.gob.bo/), via the IMF Consumer Price Index dataset; file [`data/ch10/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/bolivia.csv).
 Prepared files: [`data/ch10/inflation_panel.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/inflation_panel.csv), [`data/ch10/countries.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/countries.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/README.md)).
 Chart: inspired by Fig. 10.10 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -4286,6 +4449,9 @@ HEADLINE = {
 VIEWS = ["core, all three"] + sorted(
     world_cpi.dropna(subset=["core_inflation"]).country.unique()
 )
+# Step 3: Bolivia publishes no core index, so its view shows headline inflation only
+BOLIVIA_VIEW = "Bolivia (headline only)"
+VIEWS.append(BOLIVIA_VIEW)
 ```
 
 `core_view` gives the data of one view, and the number its title reports: the U.S. core peak, or the largest gap
@@ -4314,7 +4480,15 @@ def core_view(view):
         )
         series = ["U.S.", "U.K.", "Euro area"]
         number = both[CORE["U.S."]].max()
-    # Step 2, for one country: headline and core inflation, and the gap between
+    # Step 2, for Bolivia: headline inflation only (no core index); `np.nan` is a
+    # missing number
+    elif view == BOLIVIA_VIEW:
+        data = world_cpi[world_cpi.country == "Bolivia"].rename(
+            columns={"inflation": "Bolivia, headline"}
+        )
+        series = ["Bolivia, headline"]
+        number = np.nan
+    # Step 3, for one country: headline and core inflation, and the gap between
     # them, which food and energy add to inflation
     else:
         data = world_cpi[world_cpi.country == view].rename(
@@ -4348,6 +4522,9 @@ def core_chart(view="core, all three"):
             f"Core inflation peaked at {number:.1f}% in the U.S., "
             "the highest of the three"
         )
+    elif view == BOLIVIA_VIEW:
+        colors = {"Bolivia, headline": GRAY}
+        title = "Bolivia: headline inflation only (no core index is published)"
     else:
         colors = {"Headline": GRAY, "Core": COUNTRY_COLORS[view]}
         title = (
@@ -4366,6 +4543,8 @@ def core_chart(view="core, all three"):
         labels={"date": "Year", "value": "Percent", "variable": "Inflation"},
     )
     fig.update_traces(line_width=3)
+    # Bolivia's line carries the tag meta="BOL" (for the website's Bolivia switch)
+    fig.update_traces(meta="BOL", selector=dict(name="Bolivia, headline"))
     fig.add_hline(y=0, line_dash="dash", line_color="black", line_width=1)
     # Step 4: fixed axes; the top is 12, or wider for high-inflation countries
     # (axis_top), and `.max().max()` is the largest value of all the columns
@@ -4453,6 +4632,8 @@ fig
 [Eurostat, HICP excluding energy, food, alcohol and tobacco (`prc_hicp_minr`)](https://ec.europa.eu/eurostat/databrowser/view/prc_hicp_minr/default/table);
 for the other economies, Eurostat, the [IMF Consumer Price Index dataset](https://data.imf.org/en/datasets/IMF.STA:CPI)
 and the OECD prices database, as in Fig. 10's panel; headline rates from Fig. 10.
+Bolivia: headline inflation only, from [INE's consumer price index](https://www.ine.gob.bo/) via the IMF (INE publishes no core index);
+file [`data/ch10/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/bolivia.csv).
 Prepared files: [`data/ch10/fig10-11.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/fig10-11.csv), [`data/ch10/fig10-10.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/fig10-10.csv), [`data/ch10/inflation_panel.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/inflation_panel.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch10/README.md)).
 Chart: inspired by Fig. 10.11 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)

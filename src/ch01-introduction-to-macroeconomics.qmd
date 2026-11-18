@@ -538,6 +538,37 @@ def slider_figure(make_figure, name, values, start, label=None):
     fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
                                     currentvalue=dict(prefix=(label or name) + " = "))])
     return fig
+
+
+def hide_bolivia(fig):
+    """Tag Bolivia's lines (meta="BOL") and hide them until clicked in the legend.
+
+    In a figure with a slider, each step keeps its own copy of Bolivia's lines in
+    the legend only, and the copies of the other steps stay hidden.
+
+    Arguments
+        fig : a Plotly figure whose Bolivian traces have names starting "Bolivia"
+    Returns
+        the same figure
+    """
+    # Step 1: which traces are Bolivia's
+    bolivia = [(trace.name or "").startswith("Bolivia") for trace in fig.data]
+    # Step 2: tag them, and move the visible ones to the legend
+    for trace, is_bolivia in zip(fig.data, bolivia):
+        if is_bolivia:
+            trace.meta = "BOL"
+            if trace.visible is not False:
+                trace.visible = "legendonly"
+    # Step 3: a slider step that shows a Bolivian trace puts it in the legend only
+    for slider in fig.layout.sliders:
+        for step in slider.steps:
+            if step.method != "update":
+                continue
+            visible = step.args[0]["visible"]
+            new = ["legendonly" if v is True and b else v
+                   for v, b in zip(visible, bolivia)]
+            step.args = [{"visible": new}, *step.args[1:]]
+    return fig
 ```
 
 The data figures of this chapter let you add other countries. On the website, a menu above each of these
@@ -616,6 +647,33 @@ def country_menu(fig, extra, countries):
         for step in slider.steps:
             step.args = [{"visible": list(step.args[0]["visible"])}, step.args[1], list(range(n))]
     return fig
+
+
+def add_bolivia(fig, data, y, x="year", fmt=".1f", markers=False, own_scale=None):
+    """Add Bolivia's line to a figure with a country menu, in the legend only.
+
+    The menu's buttons leave it alone, so it is one click away in every view.
+
+    Arguments
+        fig       : the figure, after country_menu
+        data      : the long table that the menu's lines come from
+        y         : the column to draw (x, fmt and markers as in country_traces)
+        own_scale : None to use the figure's axis; or a short description, e.g.
+                    "labor share", to give Bolivia a hidden axis with its own scale
+    Returns
+        the same figure
+    """
+    # Step 1: Bolivia's line, drawn as country_traces draws every country
+    one = data[data.country == "Bolivia"]
+    lines = country_traces(one, y, [], x=x, fmt=fmt, markers=markers)
+    trace = lines["Bolivia"][0]
+    # Step 2: its own scale if needed: a second vertical axis that is not drawn
+    if own_scale:
+        trace.name = f"Bolivia ({own_scale}, own scale)"
+        trace.yaxis = "y2"
+        fig.update_layout(yaxis2=dict(overlaying="y", visible=False))
+    fig.add_trace(trace)
+    return hide_bolivia(fig)
 ```
 
 The last helper builds the website version of a figure that shows one country at a time, chosen from a menu.
@@ -1131,8 +1189,12 @@ fig.update_layout(
     ]
 )
 # Step 3: every other country's line, hidden, and the menu that adds a group of them
-extra = country_traces(on_benchmarks, "gdppc", BOOK, fmt=",.0f", markers=True)
+extra = country_traces(
+    on_benchmarks, "gdppc", BOOK + ("Bolivia",), fmt=",.0f", markers=True
+)
 country_menu(fig, extra, countries)
+# Step 4: Bolivia's line, in the legend only (click it to draw it)
+add_bolivia(fig, on_benchmarks, "gdppc", fmt=",.0f", markers=True)
 ```
 
 **Sources.** Data: [Maddison Project Database 2023, GDP per capita (`gdppc`), Groningen Growth and Development Centre](https://www.rug.nl/ggdc/historicaldevelopment/maddison/releases/maddison-project-database-2023) (Bolt and van Zanden 2024, [doi:10.34894/INZBF2](https://doi.org/10.34894/INZBF2)), converted from 2011 to 2022 dollars with the
@@ -1140,6 +1202,7 @@ country_menu(fig, extra, countries)
 Country groups: [World Bank country classifications](https://datahelpdesk.worldbank.org/knowledgebase/articles/906519-world-bank-country-and-lending-groups).
 Prepared files: [`data/ch01/fig1-1.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch01/fig1-1.csv), [`data/ch01/maddison_world.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch01/maddison_world.csv) and [`data/ch01/countries.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch01/countries.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch01/README.md)).
+Bolivia (in the legend): the same Maddison Project data, in `maddison_world.csv`.
 Chart: inspired by Fig. 1.1 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -1281,6 +1344,28 @@ fig.update_yaxes(range=[50, 66], tickvals=[52, 54, 56, 58, 60, 62, 64, 66])
 # `rangeslider_visible=True` adds a small copy of the chart below the axis: drag
 # its handles to zoom in on a period
 fig.update_xaxes(rangeslider_visible=True)
+# Step 4: Bolivia's yearly ratio (ILO estimate, ages 15+), in the legend only. It
+# lies above this axis, so it gets a hidden second axis with its own scale
+bolivia = pd.read_csv(DATA_URL + "bolivia.csv")
+bolivia_emp = bolivia[bolivia.series == "emp_pop"]
+fig.add_trace(
+    go.Scatter(
+        x=pd.to_datetime(bolivia_emp.date.astype(str) + "-07-01"),   # mid-year
+        y=bolivia_emp.value,
+        name="Bolivia (ILO, yearly, ages 15+, own scale)",
+        mode="lines+markers",
+        line=dict(color=COLORS["Bolivia"], width=2),
+        yaxis="y2",
+    )
+)
+fig.update_layout(
+    yaxis2=dict(overlaying="y", visible=False),
+    showlegend=True,                    # the legend, to click Bolivia's line
+    # inside the plot, bottom left (an empty corner), so the plot keeps its width
+    legend=dict(x=0.01, y=0.02, xanchor="left", yanchor="bottom",
+                bgcolor="rgba(0,0,0,0)"),
+)
+hide_bolivia(fig)
 fig.show()
 ```
 
@@ -1288,6 +1373,7 @@ fig.show()
 recession dates: [NBER business cycle dates](https://www.nber.org/research/business-cycle-dating), as in [the NBER-based recession indicator (`USREC`)](https://fred.stlouisfed.org/series/USREC), via FRED.
 Prepared files: [`data/ch01/fig1-2.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch01/fig1-2.csv) and [`data/ch01/recessions.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch01/recessions.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch01/README.md)).
+Bolivia (in the legend, on its own scale): [International Labour Organization modelled estimates, Employment to population ratio, 15+ (`SL.EMP.TOTL.SP.ZS`)](https://data.worldbank.org/indicator/SL.EMP.TOTL.SP.ZS), yearly, via the World Bank; file [`data/ch01/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch01/bolivia.csv).
 Chart: inspired by Fig. 1.2 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -1426,15 +1512,19 @@ interact(
 fig = employment_chart()
 country_menu(
     fig,
-    country_traces(employment, "emp_pop_ratio", ["United States"]),
+    country_traces(employment, "emp_pop_ratio", ["United States", "Bolivia"]),
     countries,
 )
+# Bolivia's line, in the legend only; it lies above this axis, so it has its own
+# (hidden) scale
+add_bolivia(fig, employment, "emp_pop_ratio", own_scale="employment rate, %")
 ```
 
 **Sources.** Data: [International Labour Organization modelled estimates, Employment to population ratio, 15+ (`SL.EMP.TOTL.SP.ZS`)](https://data.worldbank.org/indicator/SL.EMP.TOTL.SP.ZS),
 via the World Bank's World Development Indicators. Country groups: [World Bank country classifications](https://datahelpdesk.worldbank.org/knowledgebase/articles/906519-world-bank-country-and-lending-groups).
 Prepared files: [`data/ch01/employment_world.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch01/employment_world.csv) and [`data/ch01/countries.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch01/countries.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch01/README.md)).
+Bolivia (in the legend, on its own scale): the same ILO series.
 Chart: inspired by Fig. 1.2 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -1590,9 +1680,13 @@ interact(
 fig = inflation_chart()
 country_menu(
     fig,
-    country_traces(world_inflation, "inflation", BOOK_INFLATION, fmt=",.1f"),
+    country_traces(
+        world_inflation, "inflation", BOOK_INFLATION + ("Bolivia",), fmt=",.1f"
+    ),
     countries,
 )
+# Bolivia's line, in the legend only (its 1980s hyperinflation is off the chart)
+add_bolivia(fig, world_inflation, "inflation", fmt=",.1f")
 ```
 
 **Sources.** Data: [World Bank, World Development Indicators, Inflation, consumer prices (`FP.CPI.TOTL.ZG`)](https://data.worldbank.org/indicator/FP.CPI.TOTL.ZG), also via FRED for the
@@ -1602,6 +1696,7 @@ gaps filled from the [World Bank's Global Inflation Database](https://www.worldb
 (Ha, Kose and Ohnsorge). Country groups: [World Bank country classifications](https://datahelpdesk.worldbank.org/knowledgebase/articles/906519-world-bank-country-and-lending-groups).
 Prepared files: [`data/ch01/fig1-3.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch01/fig1-3.csv), [`data/ch01/inflation_world.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch01/inflation_world.csv) and [`data/ch01/countries.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch01/countries.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch01/README.md)).
+Bolivia (in the legend): the same [World Bank series (`FP.CPI.TOTL.ZG`)](https://data.worldbank.org/indicator/FP.CPI.TOTL.ZG), from the consumer price index of Bolivia's [National Statistics Institute (INE)](https://www.ine.gob.bo/).
 Chart: inspired by Fig. 1.3 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -1808,7 +1903,10 @@ fig = slider_figure(
     label="period",
 )
 # Step 2: every other country's line, hidden, and the menu that adds a group
-country_menu(fig, country_traces(world_unemp, "unrate", BOOK_UNEMP), countries)
+others = country_traces(world_unemp, "unrate", BOOK_UNEMP + ("Bolivia",))
+country_menu(fig, others, countries)
+# Step 3: Bolivia's line, in the legend only (the slider leaves it alone)
+add_bolivia(fig, world_unemp, "unrate")
 ```
 
 **Sources.** Data: [U.S. Bureau of Labor Statistics, Unemployment Rate (`UNRATE`)](https://fred.stlouisfed.org/series/UNRATE), via FRED;
@@ -1818,6 +1916,7 @@ other OECD and G20 members: [International Labour Organization modelled estimate
 via the World Bank's World Development Indicators. Country groups: [World Bank country classifications](https://datahelpdesk.worldbank.org/knowledgebase/articles/906519-world-bank-country-and-lending-groups).
 Prepared files: [`data/ch01/fig1-4.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch01/fig1-4.csv), [`data/ch01/unemployment_world.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch01/unemployment_world.csv) and [`data/ch01/countries.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch01/countries.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch01/README.md)).
+Bolivia (in the legend): [International Labour Organization modelled estimates, Unemployment, total (`SL.UEM.TOTL.ZS`)](https://data.worldbank.org/indicator/SL.UEM.TOTL.ZS), via the World Bank, from 1991.
 Chart: inspired by Fig. 1.4 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -1981,8 +2080,14 @@ members = countries[countries.g20 | countries.oecd].country
 options = ["United States"] + sorted(
     set(members) & set(world_deficits.country) - {"United States"}
 )
-# Step 2: one precomputed figure per country, and the menu that shows one
-dropdown_figure(deficits_chart, "country", options, start="United States")
+# Step 2: one precomputed figure per country, and the menu that shows one;
+# Bolivia comes last
+options = options + ["Bolivia"]
+fig = dropdown_figure(deficits_chart, "country", options, start="United States")
+# Step 3: tag Bolivia's lines, the last ones; the menu draws them when chosen
+for trace in fig.data[-len(deficits_chart("Bolivia").data):]:
+    trace.meta = "BOL"
+fig
 ```
 
 **Sources.** Data: U.S. Bureau of Economic Analysis, national accounts, via FRED: [federal government net saving (`FGDEF`)](https://fred.stlouisfed.org/series/FGDEF), [net exports (`NETEXP`)](https://fred.stlouisfed.org/series/NETEXP) and [GDP (`GDP`)](https://fred.stlouisfed.org/series/GDP);
@@ -1990,11 +2095,12 @@ other countries: [IMF, World Economic Outlook, general government net lending/bo
 [World Bank, World Development Indicators, External balance on goods and services (`NE.RSB.GNFS.ZS`)](https://data.worldbank.org/indicator/NE.RSB.GNFS.ZS). Country groups: [World Bank country classifications](https://datahelpdesk.worldbank.org/knowledgebase/articles/906519-world-bank-country-and-lending-groups).
 Prepared files: [`data/ch01/fig1-5.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch01/fig1-5.csv), [`data/ch01/deficits_world.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch01/deficits_world.csv) and [`data/ch01/countries.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch01/countries.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch01/README.md)).
+Bolivia (last in the menu): the same IMF and World Bank series (general government budget).
 Chart: inspired by Fig. 1.5 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
 
-The website's menu lists the G20 and OECD members; in Colab you can choose any of the countries.
+The website's menu lists the G20 and OECD members, and Bolivia; in Colab you can choose any of the countries.
 
 **What to notice.**
 
@@ -2410,8 +2516,14 @@ members = countries[countries.g20 | countries.oecd].country
 options = ["United States"] + sorted(
     set(members) & set(world.country) - {"United States"}
 )
-# Step 2: one precomputed figure per country, and the menu that shows one
-dropdown_figure(per_capita_chart, "country", options, start="United States")
+# Step 2: one precomputed figure per country, and the menu that shows one;
+# Bolivia comes last
+options = options + ["Bolivia"]
+fig = dropdown_figure(per_capita_chart, "country", options, start="United States")
+# Step 3: tag Bolivia's line, the last one; the menu draws it when chosen
+for trace in fig.data[-len(per_capita_chart("Bolivia").data):]:
+    trace.meta = "BOL"
+fig
 ```
 
 **Sources.** Data: U.S. Bureau of Economic Analysis via FRED: [real GDP (`GDPCA`)](https://fred.stlouisfed.org/series/GDPCA), [population (`B230RC0A052NBEA`)](https://fred.stlouisfed.org/series/B230RC0A052NBEA)
@@ -2420,11 +2532,12 @@ before 1929 and for other countries: [Maddison Project Database 2023, GDP per ca
 (the textbook uses the Barro-Ursúa data before 1929).
 Prepared files: [`data/ch01/fig1-7.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch01/fig1-7.csv) and [`data/ch01/maddison_world.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch01/maddison_world.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch01/README.md)).
+Bolivia (last in the menu): the same Maddison Project data.
 Chart: inspired by Fig. 1.7 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
 
-The website's menu lists the G20 and OECD members; in Colab you can choose any of the countries.
+The website's menu lists the G20 and OECD members, and Bolivia; in Colab you can choose any of the countries.
 
 **What to notice.**
 
@@ -2463,8 +2576,8 @@ When sources disagree, report the range.
 
 #### The short run: the output gap
 
-This part stays U.S.-only: potential output comes from the CBO, which estimates it only for the United
-States. (The IMF and the OECD publish output-gap estimates for rich countries, but only since about 1980
+This part stays U.S.-only, apart from Bolivia's gap (hidden in the legend), which is the book's own
+estimate: potential output comes from the CBO, which estimates it only for the United States. (The IMF and the OECD publish output-gap estimates for rich countries, but only since about 1980
 and from models that differ from the CBO's.)
 
 The gap between actual and potential output, in percent, is
@@ -2559,14 +2672,36 @@ interact(
 ```{python}
 #| kind: website
 # @title Website version: Fig. 7's output gap with a precomputed slider for the year
-# the Great Depression, World War II, 1982, 2009, Covid-19 and the latest year
-slider_figure(
-    output_gap_chart,
+# Step 1: Bolivia's output gap, estimated by the book (an HP trend; see bolivia.csv)
+bolivia = pd.read_csv(DATA_URL + "bolivia.csv")
+bolivia_gap = bolivia[bolivia.series == "output_gap"]
+
+
+def gap_with_bolivia(year):
+    """output_gap_chart, plus Bolivia's yearly output gap as a line."""
+    fig = output_gap_chart(year)
+    fig.add_trace(
+        go.Scatter(
+            x=bolivia_gap.date,
+            y=bolivia_gap.value,
+            name="Bolivia (estimated by the book)",
+            mode="lines",
+            line=dict(color=COLORS["Bolivia"], width=2),
+        )
+    )
+    return fig
+
+
+# Step 2: the Great Depression, World War II, 1982, 2009, Covid-19 and the latest
+# year; every year has its own copy of Bolivia's line, in the legend only
+fig = slider_figure(
+    gap_with_bolivia,
     "year",
     [1933, 1944, 1982, 2009, 2020, 2025],
     start=2009,
     label="year",
 )
+hide_bolivia(fig)
 ```
 
 **Sources.** Data: U.S. Bureau of Economic Analysis via FRED: [real GDP (`GDPCA`)](https://fred.stlouisfed.org/series/GDPCA) and [population (`B230RC0A052NBEA`)](https://fred.stlouisfed.org/series/B230RC0A052NBEA);
@@ -2574,6 +2709,7 @@ slider_figure(
 statistical trend); before 1929: [Maddison Project Database 2023, GDP per capita (`gdppc`), Groningen Growth and Development Centre](https://www.rug.nl/ggdc/historicaldevelopment/maddison/releases/maddison-project-database-2023) (Bolt and van Zanden 2024, [doi:10.34894/INZBF2](https://doi.org/10.34894/INZBF2)).
 Prepared files: [`data/ch01/fig1-7.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch01/fig1-7.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch01/README.md)).
+Bolivia (in the legend): the output gap estimated by the book, from a Hodrick-Prescott trend (λ = 100) of [World Bank real GDP (`NY.GDP.MKTP.KN`)](https://data.worldbank.org/indicator/NY.GDP.MKTP.KN) extended with the [IMF World Economic Outlook](https://www.imf.org/en/Publications/WEO) projections (see the [Bolivia data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/bolivia/README.md)); file [`data/ch01/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch01/bolivia.csv).
 Chart: inspired by Fig. 1.7 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->

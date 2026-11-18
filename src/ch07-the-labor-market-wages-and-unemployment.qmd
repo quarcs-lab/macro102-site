@@ -690,6 +690,39 @@ def slider_figure(make_figure, name, values, start, label=None):
     fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
                                     currentvalue=dict(prefix=(label or name) + " = "))])
     return fig
+
+
+def hide_bolivia(fig):
+    """Tag Bolivia's lines (meta="BOL") and hide them until clicked in the legend."""
+    for trace in fig.data:
+        if (trace.name or "").startswith("Bolivia"):
+            trace.meta = "BOL"
+            trace.visible = "legendonly"
+    return fig
+
+
+def hide_bolivia_steps(fig):
+    """Keep Bolivia's traces (meta="BOL") legend-only in every step of a slider."""
+    # Step 1: tag Bolivia's traces; the start step's copy waits in the legend
+    bolivia = [(t.name or "").startswith("Bolivia") for t in fig.data]
+    for trace, mine in zip(fig.data, bolivia):
+        if mine:
+            trace.meta = "BOL"
+            if trace.visible:
+                trace.visible = "legendonly"
+    # Step 2: in every step, a Bolivia trace that would be drawn waits in the legend
+    for step in fig.layout.sliders[0].steps:
+        visible = step.args[0]["visible"]
+        step.args = [
+            {
+                "visible": [
+                    "legendonly" if v and mine else v
+                    for v, mine in zip(visible, bolivia)
+                ]
+            },
+            step.args[1],
+        ]
+    return fig
 ```
 
 The multi-country charts have three more website helpers. `region_menu` adds a menu of world regions to a
@@ -724,14 +757,16 @@ def region_menu(fig, regions, shown, label=None):
         for n in names:
             if n in shown:
                 visible.append(True)                # a textbook country: drawn
+            elif n.startswith("Bolivia"):
+                visible.append("legendonly")        # Bolivia: in every legend
             elif regions.get(n) == group:
                 visible.append("legendonly")        # in this region: a click away
             else:
                 visible.append(False)               # another region: hidden
         buttons.append(dict(label=group, method="restyle", args=[{"visible": visible}]))
-    # Step 3: start with the textbook's countries, and put the menu above the plot
-    for trace in fig.data:
-        trace.visible = True if trace.name in shown else False
+    # Step 3: start with the first entry, and put the menu above the plot
+    for trace, v in zip(fig.data, buttons[0]["args"][0]["visible"]):
+        trace.visible = v
     fig.update_layout(updatemenus=[dict(buttons=buttons, active=0, direction="down", showactive=True,
                                         x=0, xanchor="left", y=1.02, yanchor="bottom")],
                       margin=dict(t=120), legend_title_text="")
@@ -1228,6 +1263,42 @@ def shade_recessions(fig, start):
 recessions.tail(3)
 ```
 
+```{python}
+#| kind: folded
+# @title Data tool: Bolivia's series
+# Step 1: the chapter's Bolivia file, one row per series and date. Every data chart
+# offers Bolivia as a line that waits in the legend until you click it
+bolivia = pd.read_csv(DATA_URL + "bolivia.csv")
+BOLIVIA_COLOR = "#c8102e"             # a red that no other line of the chapter uses
+
+
+def bolivia_series(name):
+    """One of Bolivia's series in bolivia.csv (the data notes list them).
+
+    Arguments
+        name : the series, e.g. "unemployment_a"
+    Returns
+        a DataFrame with the columns date (text: a year, a month or a percentile)
+        and value
+    """
+    # Step 2: the rows of that series; `reset_index(drop=True)` numbers them 0, 1, ...
+    rows = bolivia[bolivia.series == name]
+    return rows[["date", "value"]].reset_index(drop=True)
+
+
+def bolivia_years(name):
+    """An annual Bolivian series, dated in the middle of each year (for monthly charts).
+
+    Arguments
+        name : the series, e.g. "emp_pop"
+    Returns
+        a DataFrame with the columns date (July 1 of each year) and value
+    """
+    rows = bolivia_series(name)
+    rows["date"] = pd.to_datetime(rows.date + "-07-01")
+    return rows
+```
+
 Most data figures of this chapter end with a section that goes beyond the textbook's countries, where you can add
 any country to the chart. A line should keep its color when you add or remove others, so we give every country
 one fixed color. The textbook's countries keep the colors of `BOOK_COLORS`. Two countries that can appear
@@ -1357,6 +1428,21 @@ shade_recessions(fig, "1960-01-01")
 # of the chart below the axis: drag its handles to zoom in on a period
 fig.update_yaxes(range=[50, 66], tickvals=[52, 56, 60, 64])
 fig.update_xaxes(rangeslider_visible=True)
+# Step 4: Bolivia's ratio (ILO, ages 15+, annual), hidden until you click it in the
+# legend. It lies above this axis, so it gets its own invisible axis, "y2"
+emp_bol = bolivia_years("emp_pop")
+fig.add_trace(
+    go.Scatter(
+        x=emp_bol.date,
+        y=emp_bol.value,
+        name="Bolivia (ILO, ages 15+, %, own scale)",
+        mode="lines+markers",
+        line=dict(color=BOLIVIA_COLOR),
+        yaxis="y2",
+    )
+)
+fig.update_layout(yaxis2=dict(overlaying="y", visible=False))
+hide_bolivia(fig)
 fig.show()
 ```
 
@@ -1365,6 +1451,7 @@ recession dates: [NBER, U.S. Business Cycle Expansions and Contractions](https:/
 via the FRED recession indicator [`USREC`](https://fred.stlouisfed.org/series/USREC).
 Prepared files: [`data/ch07/fig7-1.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/fig7-1.csv), [`data/ch07/recessions.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/recessions.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/README.md)).
+Bolivia: International Labour Organization, modelled estimates, in the [World Bank, World Development Indicators, Employment to population ratio, 15+ (`SL.EMP.TOTL.SP.ZS`)](https://data.worldbank.org/indicator/SL.EMP.TOTL.SP.ZS), annual, drawn on its own scale; file [`data/ch07/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/bolivia.csv).
 Chart: inspired by Fig. 7.1 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -1446,6 +1533,19 @@ fig = px.line(
 )
 # Step 2: the shaded bands: every recession since 1948
 shade_recessions(fig, "1948-01-01")
+# Step 3: Bolivia's men and women (ILO, ages 15+, annual), hidden until clicked
+for group, dash in [["men", "solid"], ["women", "dot"]]:
+    sex = bolivia_years("emp_pop_" + group)
+    fig.add_trace(
+        go.Scatter(
+            x=sex.date,
+            y=sex.value,
+            name="Bolivia, " + group + " (ILO, ages 15+)",
+            mode="lines",
+            line=dict(color=BOLIVIA_COLOR, dash=dash),
+        )
+    )
+hide_bolivia(fig)
 fig.show()
 ```
 
@@ -1455,6 +1555,7 @@ recession dates: [NBER, U.S. Business Cycle Expansions and Contractions](https:/
 via the FRED recession indicator [`USREC`](https://fred.stlouisfed.org/series/USREC).
 Prepared files: [`data/ch07/emp_pop_by_sex.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/emp_pop_by_sex.csv), [`data/ch07/recessions.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/recessions.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/README.md)).
+Bolivia: International Labour Organization, modelled estimates, in the World Bank, World Development Indicators, employment to population ratio, 15+, of [men (`SL.EMP.TOTL.SP.MA.ZS`)](https://data.worldbank.org/indicator/SL.EMP.TOTL.SP.MA.ZS) and [women (`SL.EMP.TOTL.SP.FE.ZS`)](https://data.worldbank.org/indicator/SL.EMP.TOTL.SP.FE.ZS), annual; file [`data/ch07/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/bolivia.csv).
 Chart: inspired by Fig. 7.1 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -1607,6 +1708,7 @@ interact(
 # every country in one chart, with a menu of regions (region_menu)
 fig = emp_pop_countries(tuple(EMP_COUNTRIES))
 region_menu(fig, EMP_REGIONS, shown=EMP_SHOWN, label="U.S., Germany, Japan")
+hide_bolivia(fig)                   # Bolivia waits in the legend of every entry
 fig.update_layout(
     title=("Since 2000 the U.S. ratio has fallen, "
            "while Germany's and Japan's have risen")
@@ -1619,6 +1721,7 @@ fig
 [World Bank, World Development Indicators, Employment to population ratio, 15+, total (`SL.EMP.TOTL.SP.ZS`)](https://data.worldbank.org/indicator/SL.EMP.TOTL.SP.ZS).
 Prepared file: [`data/ch07/emp_pop_countries.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/emp_pop_countries.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/README.md)).
+Bolivia (in the legend of every menu entry): the same [World Bank, World Development Indicators, Employment to population ratio, 15+ (`SL.EMP.TOTL.SP.ZS`)](https://data.worldbank.org/indicator/SL.EMP.TOTL.SP.ZS) data.
 Chart: inspired by Fig. 7.1 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -1694,6 +1797,19 @@ shade_recessions(fig, "1950-01-01")
 # Step 3: no tick label in the bottom-left corner, and the range slider below
 fig.update_yaxes(range=[0, 16], tickvals=[2, 4, 6, 8, 10, 12, 14])
 fig.update_xaxes(rangeslider_visible=True)
+# Step 4: Bolivia's monthly urban rate (INE, from October 2015), hidden until you
+# click it in the legend
+unemp_bol = bolivia_series("unemployment_m")
+fig.add_trace(
+    go.Scatter(
+        x=pd.to_datetime(unemp_bol.date),
+        y=unemp_bol.value,
+        name="Bolivia (urban unemployment, INE)",
+        mode="lines",
+        line=dict(color=BOLIVIA_COLOR),
+    )
+)
+hide_bolivia(fig)
 fig.show()
 ```
 
@@ -1702,6 +1818,7 @@ recession dates: [NBER, U.S. Business Cycle Expansions and Contractions](https:/
 via the FRED recession indicator [`USREC`](https://fred.stlouisfed.org/series/USREC).
 Prepared files: [`data/ch07/fig7-2.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/fig7-2.csv), [`data/ch07/recessions.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/recessions.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/README.md)).
+Bolivia: [INE, Encuesta Continua de Empleo](https://www.ine.gob.bo/), urban unemployment rate, monthly, not seasonally adjusted (no data from June to December 2020), as reported to the [IMF](https://data.imf.org/); file [`data/ch07/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/bolivia.csv).
 Chart: inspired by Fig. 7.2 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -1811,6 +1928,24 @@ the highest monthly rate among them, which the title reports.
 ```{python}
 # The countries of the picker, A to Z
 MONTHLY_COUNTRIES = sorted(monthly.country.unique())
+# Bolivia's monthly urban rate (INE) is not an OECD series: the charts use a copy
+# of the table with Bolivia's rows added at the end (`pd.concat` stacks tables)
+BOLIVIA_URBAN = "Bolivia (urban, INE)"
+unemp_bol = bolivia_series("unemployment_m")
+monthly_all = pd.concat(
+    [
+        monthly,
+        pd.DataFrame(
+            {
+                "iso3": "BOL",
+                "country": BOLIVIA_URBAN,
+                "date": pd.to_datetime(unemp_bol.date),
+                "unemployment_rate": unemp_bol.value,
+            }
+        ),
+    ],
+    ignore_index=True,
+)
 
 
 def unemployment_peak(names):
@@ -1819,11 +1954,11 @@ def unemployment_peak(names):
     Arguments
         names : the countries to show
     Returns
-        chosen : their rows of monthly
+        chosen : their rows of monthly_all
         peak   : the row of the highest rate (its country, date and rate)
     """
     # Step 1: the rows of the chosen countries
-    chosen = monthly[monthly.country.isin(names)]
+    chosen = monthly_all[monthly_all.country.isin(names)]
     if len(chosen) == 0:
         return chosen, None                    # nothing chosen: no peak
     # Step 2: `.idxmax()` gives the row label of the highest rate, and `.loc[...]`
@@ -1842,6 +1977,7 @@ MONTHLY_COLORS = group_colors(
     [MONTHLY_SHOWN, MONTHLY_COUNTRIES],
     BOOK_COLORS,
 )
+MONTHLY_COLORS[BOLIVIA_URBAN] = BOLIVIA_COLOR
 
 
 def unemployment_countries(names=("United States",)):
@@ -1892,7 +2028,8 @@ legend to add it**, and double-click one to show it alone.
 # Fig. 2 with a country picker (hold Ctrl or Cmd to pick several)
 interact(
     unemployment_countries,
-    names=SelectMultiple(options=MONTHLY_COUNTRIES, value=("United States",), rows=10,
+    names=SelectMultiple(options=MONTHLY_COUNTRIES + [BOLIVIA_URBAN],
+                         value=("United States",), rows=10,
                          description="countries", style=WIDE),
 );
 ```
@@ -1900,9 +2037,11 @@ interact(
 ```{python}
 #| kind: website
 # @title Website version: Fig. 2 for 34 OECD countries (click a country in the legend)
-# every country in one chart; the legend buttons come from legend_menu
-fig = unemployment_countries(tuple(MONTHLY_COUNTRIES))
+# every country in one chart, and Bolivia last; the legend buttons come from
+# legend_menu, and Bolivia waits in the legend (hide_bolivia)
+fig = unemployment_countries(tuple(MONTHLY_COUNTRIES) + (BOLIVIA_URBAN,))
 legend_menu(fig, MONTHLY_SHOWN, label="U.S. and Germany")
+hide_bolivia(fig)
 fig.update_layout(
     title="Covid-19 sent U.S. unemployment to 14.8%; Germany's barely moved"
 )
@@ -1915,6 +2054,7 @@ fig
 U.S. rows: [U.S. Bureau of Labor Statistics, `UNRATE`, via FRED](https://fred.stlouisfed.org/series/UNRATE).
 Prepared file: [`data/ch07/unemployment_countries_monthly.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/unemployment_countries_monthly.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/README.md)).
+Bolivia (not an OECD series): [INE, Encuesta Continua de Empleo](https://www.ine.gob.bo/), urban unemployment rate, monthly, not seasonally adjusted (no data from June to December 2020), as reported to the [IMF](https://data.imf.org/); file [`data/ch07/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/bolivia.csv).
 Chart: inspired by Fig. 7.2 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -2673,6 +2813,18 @@ def unemployment_in(year=2022):
             "variable": "Economy",
         },
     )
+    # Step 2b: Bolivia's urban rate (INE), hidden until you click it in the legend
+    unemp_bol = bolivia_series("unemployment_a")
+    fig.add_trace(
+        go.Scatter(
+            x=unemp_bol.date.astype(int),
+            y=unemp_bol.value,
+            name="Bolivia (urban unemployment, INE)",
+            mode="lines",
+            line=dict(color=BOLIVIA_COLOR),
+        )
+    )
+    hide_bolivia(fig)
     # Step 3: `add_vline` draws a vertical line at the chosen year
     fig.add_vline(x=year, line_dash="dot", line_color=GRAY)
     fig.update_yaxes(range=[0, 14])
@@ -2702,13 +2854,16 @@ interact(
 #| kind: website
 # @title Website version: Fig. 7 with a precomputed slider for the year
 # one picture of Fig. 7 per year
-slider_figure(
+fig = slider_figure(
     unemployment_in,
     "year",
     [1960, 1975, 1985, 1995, 2013, 2020, 2022, 2025],     # the years
     start=2022,
     label="year",
 )
+# Bolivia's line waits in the legend in every year (hide_bolivia_steps)
+hide_bolivia_steps(fig)
+fig
 ```
 
 **Sources.** Data: [U.S. Bureau of Labor Statistics, Unemployment Rate (`UNRATE`), via FRED](https://fred.stlouisfed.org/series/UNRATE), annual average;
@@ -2717,6 +2872,7 @@ Europe: euro area of 12 countries, [European Commission, AMECO database](https:/
 unemployment rate (`ZUTN`), which replaces the textbook's OECD series.
 Prepared file: [`data/ch07/fig7-7.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/fig7-7.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/README.md)).
+Bolivia: [INE](https://www.ine.gob.bo/), urban unemployment rate from its household and employment surveys, annual, as reported to the [IMF](https://data.imf.org/); the years 1983–1988, above 14 percent, run off the chart; file [`data/ch07/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/bolivia.csv).
 Chart: inspired by Fig. 7.7 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -2789,6 +2945,23 @@ average rate since 1985, which the title reports.
 # The economies of the picker, A to Z, and the textbook's three
 AMECO_COUNTRIES = sorted(ameco.country.unique())
 BOOK_ECONOMIES = ("Euro area (12 countries)", "Japan", "United States")
+# Bolivia's annual urban rate (INE) is not in AMECO: the charts use a copy of the
+# table with Bolivia's rows added at the end
+unemp_bol = bolivia_series("unemployment_a")
+ameco_all = pd.concat(
+    [
+        ameco,
+        pd.DataFrame(
+            {
+                "iso3": "BOL",
+                "country": BOLIVIA_URBAN,
+                "year": unemp_bol.date.astype(int),
+                "unemployment_rate": unemp_bol.value,
+            }
+        ),
+    ],
+    ignore_index=True,
+)
 
 
 def long_run_averages(names):
@@ -2797,11 +2970,11 @@ def long_run_averages(names):
     Arguments
         names : the economies to show
     Returns
-        chosen  : their rows of ameco
+        chosen  : their rows of ameco_all
         average : each economy's average rate 1985-2025, from the lowest to the highest
     """
     # Step 1: the rows of the chosen economies
-    chosen = ameco[ameco.country.isin(names)]
+    chosen = ameco_all[ameco_all.country.isin(names)]
     if len(chosen) == 0:
         return chosen, None                    # nothing chosen: no averages
     # Step 2: one column per economy; `.loc[1985:2025]` keeps the rows from 1985 to
@@ -2821,6 +2994,7 @@ AMECO_COLORS = group_colors(
     [AMECO_SHOWN, AMECO_COUNTRIES],
     BOOK_COLORS,
 )
+AMECO_COLORS[BOLIVIA_URBAN] = BOLIVIA_COLOR
 
 
 def unemployment_long_run(names=BOOK_ECONOMIES):
@@ -2876,7 +3050,8 @@ shown; **click a country in the legend to add it**.
 # Fig. 7 with a picker of economies (hold Ctrl or Cmd to pick several)
 interact(
     unemployment_long_run,
-    names=SelectMultiple(options=AMECO_COUNTRIES, value=BOOK_ECONOMIES, rows=10,
+    names=SelectMultiple(options=AMECO_COUNTRIES + [BOLIVIA_URBAN],
+                         value=BOOK_ECONOMIES, rows=10,
                          description="economies", style=WIDE),
 );
 ```
@@ -2884,9 +3059,11 @@ interact(
 ```{python}
 #| kind: website
 # @title Website version: Fig. 7 for 43 economies (click a country in the legend)
-# every economy in one chart; the legend buttons come from legend_menu
-fig = unemployment_long_run(tuple(AMECO_COUNTRIES))
+# every economy in one chart, and Bolivia last; the legend buttons come from
+# legend_menu, and Bolivia waits in the legend (hide_bolivia)
+fig = unemployment_long_run(tuple(AMECO_COUNTRIES) + (BOLIVIA_URBAN,))
 legend_menu(fig, AMECO_SHOWN, label="Textbook view + Spain, South Korea")
+hide_bolivia(fig)
 fig.update_layout(
     title=("Since 1985 unemployment averaged 16.6% in Spain, "
            "3.5% in Japan and South Korea"),
@@ -2900,6 +3077,7 @@ fig
 unemployment rate, Eurostat definition (series `<country>.1.0.0.0.ZUTN`), 42 countries and the euro area of 12.
 Prepared file: [`data/ch07/unemployment_countries.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/unemployment_countries.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/README.md)).
+Bolivia (not in AMECO): [INE](https://www.ine.gob.bo/), urban unemployment rate from its household and employment surveys, annual, as reported to the [IMF](https://data.imf.org/); file [`data/ch07/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/bolivia.csv).
 Chart: inspired by Fig. 7.7 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -3060,6 +3238,22 @@ fig.update_layout(
     legend_title_text="",
     hovermode="x unified",
 )
+# Step 3: Bolivia's premium (a proxy: hourly earnings of all employees, INE's
+# survey via the ILO), hidden until clicked. It lies above this axis, so it gets
+# its own invisible axis "y2", which starts at 0 (`rangemode="tozero"`)
+premium_bol = bolivia_series("college_premium")
+fig.add_trace(
+    go.Scatter(
+        x=premium_bol.date.astype(int),
+        y=premium_bol.value,
+        name="Bolivia: college premium (ILO, log points, proxy, own scale)",
+        mode="lines+markers",
+        line=dict(color=BOLIVIA_COLOR),
+        yaxis="y2",
+    )
+)
+fig.update_layout(yaxis2=dict(overlaying="y", visible=False, rangemode="tozero"))
+hide_bolivia(fig)
 fig.show()
 ```
 
@@ -3068,6 +3262,7 @@ fig.show()
 [share of employment by education](https://data.epi.org/labor_force/labor_force_emp/line/year/national/dist_share_emp/education). They replace the textbook's private Acemoglu–Molina series.
 Prepared file: [`data/ch07/fig7-8.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/fig7-8.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/README.md)).
+Bolivia: INE's Encuesta Continua de Empleo via [ILOSTAT](https://ilostat.ilo.org/data/) (`EAR_EHRA_SEX_EDU_NB_A`, `EES_TEES_SEX_EDU_NB_A`): average hourly earnings of all employees with a bachelor's or higher degree relative to those with upper secondary education, a proxy for the college premium (not adjusted, and not limited to full-time workers aged 25–64), 2021–2025, in log points, drawn on its own scale; file [`data/ch07/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/bolivia.csv).
 Chart: inspired by Fig. 7.8 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -3134,19 +3329,38 @@ each country's premium in its latest year, which the title reports.
 PREMIUM_COUNTRIES = sorted(
     oecd_college.dropna(subset=["premium_log_points"]).country.unique()
 )
+# Bolivia's premium, a proxy from INE's survey via the ILO (all employees): the
+# line chart uses a copy of the table with Bolivia's rows added at the end
+BOLIVIA_PROXY = "Bolivia (ILO, proxy)"
+premium_bol = bolivia_series("college_premium")
+college_all = pd.concat(
+    [
+        oecd_college,
+        pd.DataFrame(
+            {
+                "iso3": "BOL",
+                "country": BOLIVIA_PROXY,
+                "year": premium_bol.date.astype(int),
+                "premium_log_points": premium_bol.value,
+            }
+        ),
+    ],
+    ignore_index=True,
+)
+```
 
-
+```{python}
 def latest_premiums(names):
     """The chosen countries' college premiums, and the latest one of each (Fig. 8).
 
     Arguments
         names : the countries to show
     Returns
-        chosen : their rows of oecd_college that have a premium
+        chosen : their rows of college_all that have a premium
         latest : each country's premium in its latest year, from the lowest
     """
     # Step 1: the rows of the chosen countries that have a premium
-    chosen = oecd_college[oecd_college.country.isin(names)]
+    chosen = college_all[college_all.country.isin(names)]
     chosen = chosen.dropna(subset=["premium_log_points"])
     if len(chosen) == 0:
         return chosen, None                    # nothing chosen: no premiums
@@ -3161,6 +3375,7 @@ def latest_premiums(names):
 # @title Drawing code: Fig. 8 for OECD countries
 # one fixed color per country; every line can be on at once ("All lines")
 PREMIUM_COLORS = group_colors(PREMIUM_COUNTRIES, [PREMIUM_COUNTRIES], BOOK_COLORS)
+PREMIUM_COLORS[BOLIVIA_PROXY] = BOLIVIA_COLOR
 
 
 def premium_countries(names=("United States",)):
@@ -3217,7 +3432,8 @@ Below, Colab shows a country picker. On the website, the chart holds all 38 coun
 # Fig. 8 with a country picker (hold Ctrl or Cmd to pick several)
 interact(
     premium_countries,
-    names=SelectMultiple(options=PREMIUM_COUNTRIES, value=("United States",), rows=10,
+    names=SelectMultiple(options=PREMIUM_COUNTRIES + [BOLIVIA_PROXY],
+                         value=("United States",), rows=10,
                          description="countries", style=WIDE),
 );
 ```
@@ -3225,9 +3441,11 @@ interact(
 ```{python}
 #| kind: website
 # @title Website version: Fig. 8 for 38 countries (click a country in the legend)
-# every country in one chart; the legend buttons come from legend_menu
-fig = premium_countries(tuple(PREMIUM_COUNTRIES))
+# every country in one chart, and Bolivia last; the legend buttons come from
+# legend_menu, and Bolivia waits in the legend (hide_bolivia)
+fig = premium_countries(tuple(PREMIUM_COUNTRIES) + (BOLIVIA_PROXY,))
 legend_menu(fig, ["United States"], label="United States only")
+hide_bolivia(fig)
 fig.update_layout(
     title="The U.S. college premium is among the highest of the rich countries"
 )
@@ -3239,6 +3457,7 @@ fig
 (relative earnings of full-time workers aged 25–64 with a bachelor's or higher degree, upper secondary = 100).
 Prepared file: [`data/ch07/college_premium_countries.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/college_premium_countries.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/README.md)).
+Bolivia: INE's Encuesta Continua de Empleo via [ILOSTAT](https://ilostat.ilo.org/data/) (`EAR_EHRA_SEX_EDU_NB_A`, `EES_TEES_SEX_EDU_NB_A`): average hourly earnings of all employees with a bachelor's or higher degree relative to those with upper secondary education, a proxy for the college premium (not adjusted, and not limited to full-time workers aged 25–64), in log points; file [`data/ch07/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/bolivia.csv).
 Chart: inspired by Fig. 7.8 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -3273,6 +3492,19 @@ fig = px.scatter(
     title="Where graduates are scarce, they earn much more",
 )
 fig.update_traces(marker=dict(size=10))
+# Bolivia's latest premium and share (a proxy, INE's survey via the ILO), a red
+# ring that waits in the legend; `.iloc[-1]` is the latest year of each series
+share_bol = bolivia_series("bachelor_share")
+fig.add_trace(
+    go.Scatter(
+        x=[share_bol.value.iloc[-1]],
+        y=[premium_bol.value.iloc[-1]],
+        name="Bolivia (ILO, proxy)",
+        mode="markers",
+        marker=dict(symbol="circle-open-dot", size=16, color=BOLIVIA_COLOR),
+    )
+)
+hide_bolivia(fig)
 fig.show()
 ```
 
@@ -3280,6 +3512,7 @@ fig.show()
 `DF_LSO_NEAC_DISTR_EA` (share of adults aged 25–64 with a bachelor's or higher degree).
 Prepared file: [`data/ch07/college_premium_countries.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/college_premium_countries.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/README.md)).
+Bolivia (the red ring): INE's Encuesta Continua de Empleo via [ILOSTAT](https://ilostat.ilo.org/data/) (`EAR_EHRA_SEX_EDU_NB_A`, `EES_TEES_SEX_EDU_NB_A`): average hourly earnings of all employees with a bachelor's or higher degree relative to those with upper secondary education, a proxy for the college premium (not adjusted, and not limited to full-time workers aged 25–64), and the share of people aged 25–64 with such a degree, from the same survey (`POP_XWAP_SEX_AGE_EDU_NB_A`), both for 2025; file [`data/ch07/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/bolivia.csv).
 Chart: inspired by Fig. 7.8 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -3624,6 +3857,22 @@ shade_recessions(fig, "1950-01-01")
 # Step 3: no tick label in the bottom-left corner, and the range slider below
 fig.update_yaxes(range=[10, 20], tickvals=[12, 14, 16, 18, 20])
 fig.update_xaxes(rangeslider_visible=True, range=["1950-01-01", "2030-01-01"])
+# Step 4: Bolivia's manufacturing workers (ILO estimates, annual), hidden until
+# clicked. Half a million workers lie far below this axis, so they get their own
+# invisible axis "y2", which starts at 0 (`rangemode="tozero"`)
+manuf_bol = bolivia_years("manufacturing_millions")
+fig.add_trace(
+    go.Scatter(
+        x=manuf_bol.date,
+        y=manuf_bol.value,
+        name="Bolivia (ILO, millions of workers, own scale)",
+        mode="lines+markers",
+        line=dict(color=BOLIVIA_COLOR),
+        yaxis="y2",
+    )
+)
+fig.update_layout(yaxis2=dict(overlaying="y", visible=False, rangemode="tozero"))
+hide_bolivia(fig)
 fig.show()
 ```
 
@@ -3632,6 +3881,7 @@ recession dates: [NBER, U.S. Business Cycle Expansions and Contractions](https:/
 via the FRED recession indicator [`USREC`](https://fred.stlouisfed.org/series/USREC).
 Prepared files: [`data/ch07/fig7-10.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/fig7-10.csv), [`data/ch07/recessions.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/recessions.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/README.md)).
+Bolivia: [International Labour Organization, ILOSTAT](https://ilostat.ilo.org/data/), modelled estimates of employment in manufacturing (`EMP_2EMP_SEX_ECO_NB_A`), millions, annual, drawn on its own scale; file [`data/ch07/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/bolivia.csv).
 Chart: inspired by Fig. 7.10 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -3805,6 +4055,7 @@ interact(
 # every country in one chart (shares of jobs), with a menu of regions (region_menu)
 fig = manufacturing_countries(tuple(MANUF_COUNTRIES), "share of jobs")
 region_menu(fig, MANUF_REGIONS, shown=MANUF_SHOWN, label="U.S., Germany, Vietnam")
+hide_bolivia(fig)                   # Bolivia waits in the legend of every entry
 fig.update_layout(
     title="Manufacturing's share of jobs fell in rich countries and rose in Vietnam"
 )
@@ -3816,6 +4067,7 @@ fig
 by economic activity (`EMP_2EMP_SEX_ECO_NB_A`, manufacturing and total).
 Prepared file: [`data/ch07/manufacturing_countries.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/manufacturing_countries.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/README.md)).
+Bolivia (in the legend of every menu entry): the same ILOSTAT estimates.
 Chart: inspired by Fig. 7.10 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -3908,6 +4160,18 @@ fig = px.line(
 # Step 2: 0 to 12 percent, and one hover box for both lines
 fig.update_yaxes(range=[0, 12])
 fig.update_layout(hovermode="x unified")
+# Step 3: Bolivia's share (WID, from 1980), hidden until clicked in the legend
+top_bol = bolivia_series("top01_share")
+fig.add_trace(
+    go.Scatter(
+        x=top_bol.date.astype(int),
+        y=top_bol.value,
+        name="Bolivia (WID)",
+        mode="lines",
+        line=dict(color=BOLIVIA_COLOR),
+    )
+)
+hide_bolivia(fig)
 fig.show()
 ```
 
@@ -3916,6 +4180,7 @@ via [Our World in Data](https://ourworldindata.org/economic-inequality); WID ext
 Piketty and Saez (2003).
 Prepared file: [`data/ch07/fig7-11.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/fig7-11.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/README.md)).
+Bolivia: [World Inequality Database (WID)](https://wid.world/data/), bulk download, variable `sptinc992j`, percentile `p99.9p100`, 1980–2025 (WID holds the share fixed, an imputation, until 2000); file [`data/ch07/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/bolivia.csv).
 Chart: inspired by Fig. 7.11 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -3974,6 +4239,24 @@ share in the latest year, which the title reports.
 TOP_COUNTRIES = sorted(top_world.country.unique())
 TOP_REGIONS = dict(zip(top_world.country, top_world.region))
 BOOK_PAIR = ("France", "United States")
+# Bolivia is not one of the 58 countries: the charts use a copy of the table with
+# Bolivia's WID shares added at the end
+top_bol = bolivia_series("top01_share")
+top_all = pd.concat(
+    [
+        top_world,
+        pd.DataFrame(
+            {
+                "iso3": "BOL",
+                "country": "Bolivia",
+                "region": "Latin America & Caribbean",
+                "year": top_bol.date.astype(int),
+                "top01_share": top_bol.value,
+            }
+        ),
+    ],
+    ignore_index=True,
+)
 
 
 def top_share_latest(names):
@@ -3982,12 +4265,12 @@ def top_share_latest(names):
     Arguments
         names : the countries to show
     Returns
-        chosen : their rows of top_world from 1900 on
+        chosen : their rows of top_all from 1900 on
         last   : the latest year of those rows
         latest : each country's share in that year, from the lowest to the highest
     """
     # Step 1: the rows of the chosen countries from 1900 on (`&`: both must be true)
-    chosen = top_world[top_world.country.isin(names) & (top_world.year >= 1900)]
+    chosen = top_all[top_all.country.isin(names) & (top_all.year >= 1900)]
     # Step 2: the latest year, and each country's share in it, sorted
     last = chosen.year.max()
     latest = chosen[chosen.year == last].set_index("country").top01_share.sort_values()
@@ -4003,6 +4286,8 @@ TOP_COLORS = group_colors(
     region_groups(TOP_REGIONS, BOOK_PAIR),
     BOOK_COLORS,
 )
+TOP_COLORS["Bolivia"] = BOLIVIA_COLOR
+TOP_REGIONS["Bolivia"] = "Latin America & Caribbean"
 
 
 def top_share_countries(names=BOOK_PAIR):
@@ -4063,17 +4348,19 @@ menu, then click a country in the legend to add it.**
 # Fig. 11 with a country picker (hold Ctrl or Cmd to pick several)
 interact(
     top_share_countries,
-    names=SelectMultiple(options=TOP_COUNTRIES, value=BOOK_PAIR, rows=10,
-                         description="countries", style=WIDE),
+    names=SelectMultiple(options=sorted(TOP_COUNTRIES + ["Bolivia"]), value=BOOK_PAIR,
+                         rows=10, description="countries", style=WIDE),
 );
 ```
 
 ```{python}
 #| kind: website
 # @title Website version: Fig. 11 for 58 countries (pick a region, then a country)
-# every country in one chart, with a menu of regions (region_menu)
-fig = top_share_countries(tuple(TOP_COUNTRIES))
+# every country in one chart, and Bolivia last, with a menu of regions
+# (region_menu); Bolivia waits in the legend of every entry (hide_bolivia)
+fig = top_share_countries(tuple(TOP_COUNTRIES) + ("Bolivia",))
 region_menu(fig, TOP_REGIONS, shown=list(BOOK_PAIR))
+hide_bolivia(fig)
 fig.update_layout(
     title=("Top 0.1% shares fell in most countries until 1980, "
            "and rose in 40 of 58 since")
@@ -4086,6 +4373,7 @@ fig
 (pre-tax national income share), percentile `p99.9p100` (the top 0.1 percent).
 Prepared file: [`data/ch07/top01_share_countries.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/top01_share_countries.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/README.md)).
+Bolivia (not one of the 58 countries): the same WID variable, 1980–2025 (fixed, an imputation, until 2000); file [`data/ch07/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/bolivia.csv).
 Chart: inspired by Fig. 7.11 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -4199,6 +4487,22 @@ fig.add_traces(dots.data)
 fig.update_traces(marker=dict(size=6))
 fig.update_yaxes(range=[-0.5, 7])
 fig.update_layout(legend=dict(orientation="h", y=-0.2, yanchor="top"))
+# Step 4: Bolivia, 1980-2014, from the 10th percentile: a proxy, because WID
+# measures income before taxes and transfers. Hidden until clicked in the legend
+pct_bol = bolivia_series("growth_1980-2014")
+pct_bol["percentile"] = pct_bol.date.astype(float)
+pct_bol = pct_bol[pct_bol.percentile >= 10]
+fig.add_trace(
+    go.Scatter(
+        x=pct_bol.percentile,
+        y=pct_bol.value,
+        name="Bolivia, 1980–2014 (WID, pre-tax income, proxy)",
+        mode="lines+markers",
+        line=dict(color=BOLIVIA_COLOR),
+        marker=dict(size=6),
+    )
+)
+hide_bolivia(fig)
 fig.show()
 ```
 
@@ -4207,6 +4511,7 @@ States," *Quarterly Journal of Economics* 133(2), [doi:10.1093/qje/qjx043](https
 the February 2022 appendix tables II, sheet `TC3`, both from the authors' [Distributional National Accounts page](https://gabriel-zucman.eu/usdina/).
 Prepared file: [`data/ch07/fig7-12.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/fig7-12.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/README.md)).
+Bolivia: [World Inequality Database (WID)](https://wid.world/data/), bulk download, variable `aptinc992j`, growth of average pre-tax national income per adult at each percentile, 1980–2014, a proxy for the post-tax income of the chart (taxes and transfers are not counted); file [`data/ch07/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/bolivia.csv).
 Chart: inspired by Fig. 7.12 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -4285,8 +4590,27 @@ from the 10th percentile, and each one's median growth, which the title reports.
 # The countries of the picker, A to Z, and each country's region
 PCT_COUNTRIES = sorted(pct_world.country.unique())
 PCT_REGIONS = dict(zip(pct_world.country, pct_world.region))
+# Bolivia is not one of the 58 countries: the charts use a copy of the table with
+# Bolivia's WID curves added (bolivia.csv keeps the percentile in `date`)
+frames = [pct_world]
+for period in ["1980–2014", "1990–2024"]:
+    curve = bolivia_series("growth_" + period.replace("–", "-"))
+    frames.append(
+        pd.DataFrame(
+            {
+                "iso3": "BOL",
+                "country": "Bolivia",
+                "region": "Latin America & Caribbean",
+                "period": period,
+                "percentile": curve.date.astype(float),
+                "growth_pct": curve.value,
+            }
+        )
+    )
+pct_all = pd.concat(frames, ignore_index=True)
+```
 
-
+```{python}
 def percentile_growth(names, period):
     """The chosen countries' growth by percentile, and their median growth (Fig. 12).
 
@@ -4294,14 +4618,14 @@ def percentile_growth(names, period):
         names  : the countries to show
         period : "1980–2014" or "1990–2024"
     Returns
-        chosen : their rows of pct_world for that period, from the 10th percentile
+        chosen : their rows of pct_all for that period, from the 10th percentile
         median : each country's growth at the 50th percentile, from the lowest
     """
     # Step 1: three conditions joined with `&`: all three must be true
-    chosen = pct_world[
-        pct_world.country.isin(names)
-        & (pct_world.period == period)
-        & (pct_world.percentile >= 10)
+    chosen = pct_all[
+        pct_all.country.isin(names)
+        & (pct_all.period == period)
+        & (pct_all.percentile >= 10)
     ]
     # Step 2: growth at the median, the 50th percentile, sorted
     median = chosen[chosen.percentile == 50].set_index("country").growth_pct
@@ -4318,6 +4642,8 @@ PCT_COLORS = group_colors(
     region_groups(PCT_REGIONS, PCT_SHOWN),
     BOOK_COLORS,
 )
+PCT_COLORS["Bolivia"] = BOLIVIA_COLOR
+PCT_REGIONS["Bolivia"] = "Latin America & Caribbean"
 
 
 def growth_by_percentile(names=("United States",), period="1980–2014"):
@@ -4380,7 +4706,8 @@ legend to add it.**
 # Fig. 12 with a country picker and two buttons for the period
 interact(
     growth_by_percentile,
-    names=SelectMultiple(options=PCT_COUNTRIES, value=("United States",), rows=10,
+    names=SelectMultiple(options=sorted(PCT_COUNTRIES + ["Bolivia"]),
+                         value=("United States",), rows=10,
                          description="countries", style=WIDE),
     period=ToggleButtons(options=["1980–2014", "1990–2024"], value="1980–2014",
                          description="period", style=WIDE),
@@ -4390,9 +4717,11 @@ interact(
 ```{python}
 #| kind: website
 # @title Website version: Fig. 12 for 58 countries, 1980-2014 (pick a region)
-# every country in one chart for 1980-2014, with a menu of regions (region_menu)
-fig = growth_by_percentile(tuple(PCT_COUNTRIES), "1980–2014")
+# every country in one chart for 1980-2014, and Bolivia last, with a menu of
+# regions (region_menu); Bolivia waits in the legend of every entry (hide_bolivia)
+fig = growth_by_percentile(tuple(PCT_COUNTRIES) + ("Bolivia",), "1980–2014")
 region_menu(fig, PCT_REGIONS, shown=PCT_SHOWN, label="U.S. and China")
+hide_bolivia(fig)
 fig.update_layout(title="1980–2014: in China every percentile grew at least 3% a year")
 fig.update_yaxes(autorange=True)    # the axis adapts to the countries you add
 fig
@@ -4402,6 +4731,7 @@ fig
 (average pre-tax national income per adult) at each g-percentile.
 Prepared file: [`data/ch07/percentile_growth_countries.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/percentile_growth_countries.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/README.md)).
+Bolivia (not one of the 58 countries): the same WID variable, computed in the same way; file [`data/ch07/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch07/bolivia.csv).
 Chart: inspired by Fig. 7.12 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->

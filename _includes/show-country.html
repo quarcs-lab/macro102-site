@@ -1,0 +1,92 @@
+<script>
+/* Show one country in every chart from the address (user decision, 2026-11-18): a page opened with
+   ?show=BOL draws Bolivia in each chart that offers it. Bolivia is never drawn by default: its traces
+   carry meta="BOL" and start hidden in the legend, and some charts offer it as a menu entry or a
+   slider step labeled "Bolivia...". Built by the macro102 /write-bolivia-data skill.
+   It must load after plotly-controls.html: that script turns the in-chart menus and sliders into page
+   controls, so this one picks the Bolivia entry through those controls (keeping them in step), then
+   switches on the tagged traces. Without ?show=, nothing changes. */
+(function () {
+  "use strict";
+  var P = window.Plotly;
+  var code = (new URLSearchParams(location.search).get("show") || "").toUpperCase();
+  var NAMES = { BOL: "Bolivia" };
+  if (!P || P.__bookShow || !NAMES[code]) return;
+  P.__bookShow = true;
+  var name = NAMES[code];
+  var parser = new DOMParser();
+  function text(label) { return parser.parseFromString(String(label == null ? "" : label), "text/html").body.textContent; }
+  function mine(label) { return text(label).trim().indexOf(name) === 0; }
+
+  function pickControls(div, menus, sliders) {
+    var bar = div.parentNode && div.parentNode.querySelector(".book-controls");
+    if (!bar) return;
+    var groups = Array.prototype.filter.call(bar.children, function (e) {
+      return e.matches(".book-ctl-select, .book-ctl-buttons");
+    });
+    menus.forEach(function (m, k) {
+      var buttons = (m.buttons || []).filter(function (b) { return b.visible !== false; });
+      var i = buttons.findIndex(function (b) { return mine(b.label); });
+      var g = groups[k];
+      if (i < 0 || !g) return;
+      if (g.tagName === "SELECT") { g.value = String(i); g.dispatchEvent(new Event("change")); }
+      else if (g.children[i]) g.children[i].click();
+    });
+    var ranges = bar.querySelectorAll(".book-ctl-range");
+    sliders.forEach(function (s, k) {
+      var steps = (s.steps || []).filter(function (st) { return st.visible !== false; });
+      var i = steps.findIndex(function (st) { return mine(st.label); });
+      if (i < 0 || !ranges[k]) return;
+      ranges[k].value = String(i);
+      ranges[k].dispatchEvent(new Event("input"));
+    });
+  }
+  function showTraces(div) {
+    var idx = [];
+    // only the traces waiting in the legend: the hidden copies (visible: false) belong to other menu
+    // entries or slider steps, which pickControls has already chosen
+    (div.data || []).forEach(function (t, i) { if (t.meta === code && t.visible === "legendonly") idx.push(i); });
+    if (idx.length) return P.restyle(div, { visible: true }, idx);
+  }
+  function notice() {
+    if (document.getElementById("book-show-notice")) return;
+    var main = document.querySelector("main") || document.body;
+    var n = document.createElement("p");
+    n.id = "book-show-notice";
+    n.className = "book-show-notice";
+    var off = location.pathname + location.hash;
+    n.innerHTML = "Showing <strong>" + name + "</strong> in every chart that has its data. " +
+                  "<a href=\"" + off + "\">Hide it</a> to see the default views.";
+    main.insertBefore(n, main.firstChild);
+  }
+
+  var newPlot = P.newPlot, react = P.react;
+  P.newPlot = function (gd, data, layout) {
+    var fig = data && !Array.isArray(data) && typeof data === "object" ? data : { layout: layout };
+    var L = fig.layout || {};
+    var menus = (L.updatemenus || []).slice(), sliders = (L.sliders || []).slice();
+    return Promise.resolve(newPlot.apply(P, arguments)).then(function (res) {
+      var div = typeof gd === "string" ? document.getElementById(gd) : gd;
+      if (div) {
+        div.__bookShow = true;
+        pickControls(div, menus, sliders);
+        return Promise.resolve(showTraces(div)).then(function () { return res; });
+      }
+      return res;
+    });
+  };
+  P.react = function (gd) {                       // a theme redraw restores the saved visibility
+    var div = typeof gd === "string" ? document.getElementById(gd) : gd;
+    return Promise.resolve(react.apply(P, arguments)).then(function (res) {
+      if (div && div.__bookShow) showTraces(div);
+      return res;
+    });
+  };
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", notice);
+  else notice();
+})();
+</script>
+<style>
+.book-show-notice { border-left: 4px solid var(--bs-primary, #2c7be5); padding: .4rem .8rem;
+                    background: rgba(44, 123, 229, .08); font-size: .95em; }
+</style>

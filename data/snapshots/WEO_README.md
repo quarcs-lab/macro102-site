@@ -13,6 +13,7 @@ The data behind the book's interactive [WEO Snapshots](https://quarcs-lab.github
 | `value` | its value |
 | `status` | "actual" or "IMF projection" (the years after last_actual) |
 | `last_actual` | the last year of actual data of this country and variable |
+| `source` | empty for the IMF WEO; where the WEO has no number, the series that fills the gap (see below) |
 
 | Variable | Definition (WEO indicator) | Unit |
 |---|---|---|
@@ -38,5 +39,7 @@ The data behind the book's interactive [WEO Snapshots](https://quarcs-lab.github
 | `pop` | Population (`LP`) | millions |
 
 The years after `last_actual` are IMF projections. The IMF gives the last actual year per country and indicator; a fiscal year FY2024/25 counts as 2024. Series without it (the PPP series, most groups) take the last actual year of the country's real GDP growth, or else 2025.
+
+Where the WEO has no number for Bolivia, the gap is filled from the book's Bolivian data (`data/bolivia/`): the output gap and the structural balance are estimated by the book (HP filter of real GDP; the structural balance adjusts the WEO balance with that gap), and unemployment before 2000 is INE's urban rate. The `source` column marks these rows.
 
 Groups (`iso3` codes from the IMF): `G001` World, `G110` Advanced economies, `G200` Emerging and developing economies, `G119` G7, `G163` Euro area, `G998` European Union, `GX123` Other advanced economies, `G505` Emerging and developing Asia, `G903` Emerging and developing Europe, `G205` Latin America and the Caribbean, `G400` Middle East and Central Asia, `G603` Sub-Saharan Africa.

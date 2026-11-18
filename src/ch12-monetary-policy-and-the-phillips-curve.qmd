@@ -654,6 +654,20 @@ def slider_figure(make_figure, name, values, start, label=None):
     fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
                                     currentvalue=dict(prefix=(label or name) + " = "))])
     return fig
+
+
+# Bolivia's lines: the red of its flag, a color that no other country uses
+BOLIVIA_RED = "#D52B1E"
+
+
+def hide_bolivia(fig):
+    """Tag Bolivia's lines (meta="BOL") and hide them until clicked in the legend."""
+    # a loop over the lines; `trace.name or ""` is "" for a line with no name
+    for trace in fig.data:
+        if (trace.name or "").startswith("Bolivia"):
+            trace.meta = "BOL"
+            trace.visible = "legendonly"
+    return fig
 ```
 
 :::
@@ -1364,6 +1378,9 @@ def menu_figure(make_figure, name, values, start):
         for trace in f.data:
             shown.append(True if trace.visible is None else trace.visible)
             trace.visible = shown[-1] if i == first else False
+            # Bolivia's entry: its lines are tagged, for the page's ?show=BOL switch
+            if str(values[i]).startswith("Bolivia"):
+                trace.meta = "BOL"
             fig.add_trace(trace)
             owner.append(i)
     # Step 3: one menu entry per value: its traces, title, labels, shapes and axes
@@ -1417,13 +1434,16 @@ def group_menu(fig, book, small=8):
                 visible.append(True if len(members) <= small else "legendonly")
             else:
                 visible.append(first[j] if label == "Textbook" else False)
+            # Bolivia stays in the legend in every view; it is drawn only when clicked
+            if n.startswith("Bolivia") and visible[-1] is False:
+                visible[-1] = "legendonly"
         buttons.append(dict(label=label, method="restyle", args=[{"visible": visible}]))
     # Step 3: start with the first button, and add the row of buttons above the plot
     for trace, v in zip(fig.data, buttons[0]["args"][0]["visible"]):
         trace.visible = v
     fig.update_layout(margin=dict(t=120), updatemenus=list(fig.layout.updatemenus) + [dict(
         type="buttons", direction="right", x=0, y=1.02, xanchor="left", yanchor="bottom", buttons=buttons)])
-    return compact(fig)
+    return compact(hide_bolivia(fig))
 ```
 
 :::
@@ -1781,6 +1801,27 @@ def add_fed_labels(fig):
 
 ```{python}
 #| kind: drawing
+# @title Drawing code: Fig. 2, Bolivia's interbank rate, a proxy
+# Step 1: Bolivia's series, from bolivia.csv. Its interbank rate is a proxy for a
+# policy rate: Bolivia's central bank sets no policy-rate target
+bolivia = pd.read_csv(DATA_URL + "bolivia.csv", parse_dates=["date"])
+BOLIVIA_RATE = "Bolivia (interbank rate, proxy)"
+interbank = bolivia[bolivia.series == "money_market"]
+# Step 2: the rates you can choose: the 49 central banks, then Bolivia's proxy
+bolivia_rates = pd.DataFrame(
+    {
+        "country": BOLIVIA_RATE,
+        "date": interbank.date,
+        "policy_rate": interbank.value,
+    }
+)
+rate_choices = pd.concat([rates, bolivia_rates], ignore_index=True)
+# Step 3: Bolivia's line is red
+POLICY_COLORS[BOLIVIA_RATE] = BOLIVIA_RED
+```
+
+```{python}
+#| kind: drawing
 # @title Drawing code: Fig. 2, the policy rates over one period
 def fed_chart(period="1960–2026, all the data", countries=("United States",)):
     """The policy rates of the chosen central banks over one period.
@@ -1794,11 +1835,12 @@ def fed_chart(period="1960–2026, all the data", countries=("United States",)):
         a Plotly figure
     """
     # Step 1: the rows of the chosen countries in the period.
-    # `rates.country.isin(countries)` is true for the rows of the chosen countries,
-    # and `.between(a, b)` keeps the dates of the period
+    # `.isin(countries)` is true for the rows of the chosen countries (Bolivia's
+    # proxy too, if chosen), and `.between(a, b)` keeps the dates of the period
     x_range, y_range = PERIODS[period]
-    part = rates[
-        rates.country.isin(countries) & rates.date.between(x_range[0], x_range[1])
+    part = rate_choices[
+        rate_choices.country.isin(countries)
+        & rate_choices.date.between(x_range[0], x_range[1])
     ]
     # Step 2: the loop raises the top of the axis in steps, only when a chosen
     # country needs it
@@ -1856,7 +1898,7 @@ interact(
     fed_chart,
     period=Dropdown(options=list(PERIODS), value="1960–2026, all the data",
                     description="period", style=WIDE),
-    countries=SelectMultiple(options=sorted(rates.country.unique()),
+    countries=SelectMultiple(options=sorted(rate_choices.country.unique()),
                              value=["United States"], rows=8,
                              description="countries", style=WIDE),
 );
@@ -1867,7 +1909,7 @@ interact(
 # @title Website version: Fig. 2 with a menu for the period and buttons for groups
 # Step 1: the textbook view, the United States, plus a line for every other bank
 fig = fed_chart()
-for trace in fed_chart(countries=sorted(rates.country.unique())).data:
+for trace in fed_chart(countries=sorted(rate_choices.country.unique())).data:
     if trace.name != "United States":
         fig.add_trace(trace)
 # Step 2: one menu entry per period; each sets the ranges of the two axes
@@ -1897,6 +1939,7 @@ group_menu(fig, ["United States"])
 recession bands: [NBER-based Recession Indicators for the United States (`USREC`), via FRED](https://fred.stlouisfed.org/series/USREC), from the dates of the [NBER Business Cycle Dating Committee](https://www.nber.org/research/business-cycle-dating).
 Prepared files: [`data/ch12/fig12-2.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch12/fig12-2.csv), [`data/ch12/policy_rates_monthly.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch12/policy_rates_monthly.csv), [`data/ch12/recessions.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch12/recessions.csv), [`data/ch12/countries.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch12/countries.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch12/README.md)).
+Bolivia: [IMF, Monetary and Financial Statistics, interbank money-market rate](https://data.imf.org/), a proxy for the policy rate (Bolivia's central bank sets no policy-rate target); file [`data/ch12/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch12/bolivia.csv).
 Chart: inspired by Fig. 12.2 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 **What to notice.**
@@ -2841,6 +2884,17 @@ rate and the real interest rate, and choose another country from the menu.
 ```{python}
 #| kind: drawing
 # @title Drawing code: Fig. 9, the axis and the two interest rates
+# Bolivia: its interbank rate of Fig. 2, averaged over each year, stands in for
+# the policy rate (a proxy: Bolivia's central bank sets no policy-rate target)
+bolivia_rate = interbank.groupby(interbank.date.dt.year).value.mean()
+is_bolivia = world.country == "Bolivia"
+world.loc[is_bolivia, "policy_rate"] = world.year[is_bolivia].map(bolivia_rate)
+world.loc[is_bolivia, "real_rate"] = real_rate(
+    world.policy_rate[is_bolivia],
+    world.inflation[is_bolivia],
+)
+
+
 def inflation_axis(part):
     """The range of the vertical axis of Fig. 9: wider only when the country needs it.
 
@@ -2871,6 +2925,12 @@ def add_interest_rates(fig, part, country):
         part    : the rows of the country
         country : its name (the U.S. policy rate is the fed funds rate)
     """
+    # the name of the rate: the fed funds rate, Bolivia's proxy, or the policy rate
+    name = "Policy rate, i"
+    if country == "United States":
+        name = "Fed funds rate, i"
+    elif country == "Bolivia":
+        name = "Interbank rate, i (proxy)"
     # the policy rate: a blue line
     fig.add_trace(
         go.Scatter(
@@ -2878,9 +2938,7 @@ def add_interest_rates(fig, part, country):
             y=part.policy_rate,
             visible="legendonly",
             line=dict(color=BLUE, width=2),
-            name=(
-                "Fed funds rate, i" if country == "United States" else "Policy rate, i"
-            ),
+            name=name,
         )
     )
     # the real interest rate: a dotted green line
@@ -2963,11 +3021,12 @@ interact(
 ```{python}
 #| kind: website
 # @title Website version: Fig. 9 with a menu for the country
-# one picture of Fig. 9 per country with a policy rate; the menu shows one at a time
+# one picture of Fig. 9 per country with a policy rate, and Bolivia with its proxy;
+# the menu shows one at a time
 menu_figure(
     inflation_chart,
     "country",
-    sorted(annual_rates.country.unique()),
+    sorted(list(annual_rates.country.unique()) + ["Bolivia"]),
     "United States",
 )
 ```
@@ -2979,6 +3038,7 @@ menu_figure(
 recession bands: [NBER-based Recession Indicators for the United States (`USREC`), via FRED](https://fred.stlouisfed.org/series/USREC), from the dates of the [NBER Business Cycle Dating Committee](https://www.nber.org/research/business-cycle-dating).
 Prepared files: [`data/ch12/fig12-9.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch12/fig12-9.csv), [`data/ch12/inflation_annual.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch12/inflation_annual.csv), [`data/ch12/fig12-2.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch12/fig12-2.csv), [`data/ch12/policy_rates_monthly.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch12/policy_rates_monthly.csv), [`data/ch12/recessions.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch12/recessions.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch12/README.md)).
+Bolivia, in the menu: inflation from the World Bank, as above, and as its policy rate a proxy, the [IMF, Monetary and Financial Statistics, interbank money-market rate](https://data.imf.org/) (Bolivia's central bank sets no policy-rate target); file [`data/ch12/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch12/bolivia.csv).
 Chart: inspired by Fig. 12.9 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 **What to notice.**
@@ -3722,6 +3782,22 @@ fig.update_layout(
     yaxis_range=[18, 25.5],
     legend=dict(x=0.01, y=0.99, xanchor="left", yanchor="top", title=None),
 )
+# Step 3: Bolivia, hidden until clicked in the legend: INE's real GDP, seasonally
+# adjusted by the book, 2019Q4 = 100, on its own scale (a hidden second axis)
+bolivia_gdp = bolivia[bolivia.series == "real_gdp_index"]
+fig.add_trace(
+    go.Scatter(
+        x=bolivia_gdp.date,
+        y=bolivia_gdp.value,
+        name="Bolivia (real GDP, 2019Q4 = 100, own scale)",
+        yaxis="y2",
+        mode="lines+markers",
+        marker_size=4,
+        line=dict(color=BOLIVIA_RED, width=2),
+    )
+)
+fig.update_layout(yaxis2=dict(overlaying="y", visible=False))
+hide_bolivia(fig)
 fig.show()
 ```
 
@@ -3729,6 +3805,7 @@ fig.show()
 recession bands: [NBER-based Recession Indicators for the United States (`USREC`), via FRED](https://fred.stlouisfed.org/series/USREC), from the dates of the [NBER Business Cycle Dating Committee](https://www.nber.org/research/business-cycle-dating).
 Prepared files: [`data/ch12/fig12-14.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch12/fig12-14.csv), [`data/ch12/recessions.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch12/recessions.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch12/README.md)).
+Bolivia: [INE, quarterly GDP at constant 1990 prices](https://www.ine.gob.bo/), seasonally adjusted by the book ([notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/bolivia/README.md)), 2019Q4 = 100, on its own scale; file [`data/ch12/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch12/bolivia.csv).
 Chart: inspired by Fig. 12.14 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 **What to notice.**
@@ -3748,7 +3825,8 @@ volume index of real GDP for 49 economies (China is missing: it does not publish
 every country's index to 100 in 2019Q4, just before the pandemic, so each line shows the percent change since then.
 
 ```{python}
-# Step 1: the OECD's quarterly volume index of real GDP for 49 economies
+# Step 1: the OECD's quarterly volume index of real GDP for 49 economies, and
+# INE's real GDP for Bolivia, seasonally adjusted by the book
 gdp_world = pd.read_csv(DATA_URL + "gdp_quarterly.csv", parse_dates=["date"])
 # Step 2: rebase to 2019Q4 = 100. `base` is a Series with one value per country,
 # the index in 2019Q4 (`.set_index("country")` labels the rows by country), and
@@ -3769,8 +3847,11 @@ the pandemic.
 ```{python}
 #| kind: drawing
 # @title Drawing code: Fig. 14, extended: real GDP of the chosen countries
-# a fixed color for each country (`menu_colors`)
-GDP_COLORS = menu_colors(sorted(gdp_world.country.unique()))
+# a fixed color for each country (`menu_colors`); Bolivia (INE's data, added by
+# the book) is left out, so that the other countries keep their colors, and is red
+oecd_names = sorted(set(gdp_world.country) - {"Bolivia"})
+GDP_COLORS = menu_colors(oecd_names)
+GDP_COLORS["Bolivia"] = BOLIVIA_RED
 
 
 def gdp_index_chart(countries=("United States",)):
@@ -3853,6 +3934,7 @@ group_menu(fig, ["United States"])
 **Sources.** Data: OECD, Quarterly National Accounts (`DSD_NAMAIN1@DF_QNA`), real GDP, chain-linked volume index, on the [OECD Data Explorer](https://data-explorer.oecd.org/).
 Prepared files: [`data/ch12/gdp_quarterly.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch12/gdp_quarterly.csv), [`data/ch12/countries.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch12/countries.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch12/README.md)).
+Bolivia: [INE, quarterly GDP at constant 1990 prices](https://www.ine.gob.bo/), seasonally adjusted by the book ([notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/bolivia/README.md)); it is not an OECD series.
 Chart: inspired by Fig. 12.14 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 - Add the United Kingdom and Spain: their real GDP fell by about 22 percent in 2020, more than twice as much as in the
@@ -3895,14 +3977,15 @@ cpi[cpi.isna().any(axis=1)]
 October 2025 is empty: the federal government was shut down that month and the Bureau of Labor Statistics did not collect
 prices. We keep the gap rather than invent a number; the chart simply breaks the lines there.
 
-The pandemic inflation was not only American. The file `cpi_monthly.csv` has the same two rates for 64 economies:
+The pandemic inflation was not only American. The file `cpi_monthly.csv` has the same two rates for 64 economies
+(and all-items inflation for Bolivia, from INE via the IMF):
 all items from the Bank for International Settlements (national consumer price indexes; for the euro area, the
 harmonised index the ECB targets), and core inflation from the OECD (from Eurostat for the euro area). Core data are
 missing for some countries and stop early for others: in 2026 the OECD has not yet published core inflation for the
 European countries, and its core index for Japan stops in June 2021. The U.S. rows are the table above.
 
 ```{python}
-# Step 1: all-items and core inflation of 64 economies
+# Step 1: all-items and core inflation of 64 economies, and Bolivia's all-items rate
 cpi_world = pd.read_csv(DATA_URL + "cpi_monthly.csv", parse_dates=["date"])
 # Step 2: the months with core data in each country (`.count()` skips missing
 # values), the eight countries with the fewest first
@@ -4029,6 +4112,7 @@ OECD, Consumer price indices (`DSD_PRICES@DF_PRICES_ALL`), core CPI, on the [OEC
 recession bands: [NBER-based Recession Indicators for the United States (`USREC`), via FRED](https://fred.stlouisfed.org/series/USREC), from the dates of the [NBER Business Cycle Dating Committee](https://www.nber.org/research/business-cycle-dating).
 Prepared files: [`data/ch12/fig12-15.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch12/fig12-15.csv), [`data/ch12/cpi_monthly.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch12/cpi_monthly.csv), [`data/ch12/recessions.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch12/recessions.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch12/README.md)).
+Bolivia: INE's consumer price index, via the [IMF's CPI database](https://data.imf.org/), all items only (no core series).
 Chart: inspired by Fig. 12.15 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 **What to notice.**
@@ -4086,6 +4170,27 @@ fig = px.line(
 fig.update_traces(line_color=BLUE, line_width=3, marker_size=9)
 shade_recessions(fig, "2007-01-01")
 fig.update_layout(yaxis_range=[16, 32])
+# Step 3: Bolivia, hidden until clicked in the legend: general government
+# spending (all levels, calendar years), on its own scale (a hidden second axis),
+# since it rises above 32 percent
+bolivia_spending = bolivia[bolivia.series == "gov_spending"]
+fig.add_trace(
+    go.Scatter(
+        x=bolivia_spending.date,
+        y=bolivia_spending.value,
+        name="Bolivia (general government, % of GDP, own scale)",
+        yaxis="y2",
+        mode="lines+markers",
+        line=dict(color=BOLIVIA_RED, width=2),
+    )
+)
+# Bolivia's scale spans 16 points, like the left one, so equal moves look equal;
+# the legend sits inside the plot, so the plot keeps its width
+fig.update_layout(
+    yaxis2=dict(overlaying="y", visible=False, range=[21, 37]),
+    legend=dict(x=0.99, y=0.02, xanchor="right", yanchor="bottom"),
+)
+hide_bolivia(fig)
 fig.show()
 ```
 
@@ -4093,6 +4198,7 @@ fig.show()
 recession bands: [NBER-based Recession Indicators for the United States (`USREC`), via FRED](https://fred.stlouisfed.org/series/USREC), from the dates of the [NBER Business Cycle Dating Committee](https://www.nber.org/research/business-cycle-dating).
 Prepared files: [`data/ch12/fig12-16.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch12/fig12-16.csv), [`data/ch12/recessions.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch12/recessions.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch12/README.md)).
+Bolivia: [International Monetary Fund, *World Economic Outlook*, general government total expenditure](https://www.imf.org/en/Publications/WEO), percent of GDP by calendar year (all levels of government, not federal outlays), on its own scale; file [`data/ch12/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch12/bolivia.csv).
 Chart: inspired by Fig. 12.16 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 **What to notice.**
@@ -4217,6 +4323,7 @@ group_menu(fig, ["United States"])
 **Sources.** Data: [International Monetary Fund, *Fiscal Monitor*, General government total expenditure, percent of GDP (`G_X_G01_GDP_PT`)](https://www.imf.org/external/datamapper/G_X_G01_GDP_PT).
 Prepared files: [`data/ch12/government_spending.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch12/government_spending.csv), [`data/ch12/countries.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch12/countries.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch12/README.md)).
+Bolivia: the same IMF series, hidden until you click it in the legend.
 Chart: inspired by Fig. 12.16 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 - Choose G7 on the website, or add Canada and the United Kingdom: their spending jumped even more than in the United

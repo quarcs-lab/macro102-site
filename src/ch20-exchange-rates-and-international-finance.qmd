@@ -735,6 +735,20 @@ def slider_figure(make_figure, name, values, start, label=None):
     fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
                                     currentvalue=dict(prefix=(label or name) + " = "))])
     return fig
+
+
+# Bolivia's color in the charts that add it to a fixed set of lines (outside the
+# palette of the country charts, so no other country changes color)
+BOLIVIA_COLOR = "#c0392b"
+
+
+def hide_bolivia(fig):
+    """Tag Bolivia's lines (meta="BOL") and hide them until clicked in the legend."""
+    for trace in fig.data:
+        if (trace.name or "").startswith("Bolivia"):
+            trace.meta = "BOL"
+            trace.visible = "legendonly"
+    return fig
 ```
 
 The data figures can show many countries. On the website they use the helpers below: a legend you can click, a
@@ -886,9 +900,15 @@ def menu_figure(make_figure, options, categories=False):
     # Step 2: copy every line into one figure; only the first option's are visible
     fig = go.Figure(layout=figures[0].layout)
     owner = []                          # which precomputed figure each trace is from
+    shown = []                          # how each trace looks when its option is chosen
     for i, f in enumerate(figures):
         for trace in f.data:
-            trace.visible = (i == 0)
+            # drawn (True), or "legendonly" for Bolivia's line, a click away
+            if trace.visible is None:
+                shown.append(True)
+            else:
+                shown.append(trace.visible)
+            trace.visible = shown[-1] if i == 0 else False
             fig.add_trace(slim(trace))
             owner.append(i)
     # Step 3: one menu button per option: its lines, title, axes, shapes and notes
@@ -907,12 +927,68 @@ def menu_figure(make_figure, options, categories=False):
             # the first option is the one shown at the start
             if i == 0:
                 fig.update_xaxes(categoryorder="array", categoryarray=names, range=[-0.5, len(names) - 0.5])
+        # the chosen option's traces as they were drawn, all others hidden
+        visible = [shown[k] if o == i else False for k, o in enumerate(owner)]
         buttons.append(dict(label=labels[i], method="update",
-                            args=[{"visible": [o == i for o in owner]}, layout]))
+                            args=[{"visible": visible}, layout]))
     # Step 4: the menu sits above the plot, at the left
     fig.update_layout(margin=dict(t=110), updatemenus=[dict(buttons=buttons, active=0, x=0, y=1.02,
                                                             xanchor="left", yanchor="bottom")])
     return fig
+```
+
+```{python}
+#| kind: folded
+# @title Helper: Bolivia in every menu view (run this cell; you do not need to read it)
+def with_bolivia(make_figure):
+    """make_figure, with Bolivia's line in the legend of every menu view.
+
+    A group without Bolivia gets Bolivia's line, hidden until clicked in the legend;
+    a group with Bolivia (Latin America & Caribbean) draws it as before.
+
+    Arguments
+        make_figure : the function that draws the figure for a tuple of countries
+    Returns
+        a function that draws the same figure, with Bolivia's line added
+    """
+    def draw(countries):
+        # Step 1: the figure of the group, as before
+        fig = make_figure(countries)
+        if "Bolivia" in countries:
+            # Step 2a: Bolivia is in the group: tag its line, which stays drawn
+            for trace in fig.data:
+                if (trace.name or "").startswith("Bolivia"):
+                    trace.meta = "BOL"
+        else:
+            # Step 2b: Bolivia's own figure gives its line, legend-only (hide_bolivia);
+            # the title and the axes stay those of the group
+            extra = hide_bolivia(make_figure(("Bolivia",)))
+            fig.add_traces(extra.data)
+        return fig
+    return draw
+```
+
+```{python}
+#| kind: folded
+# @title Helper: Bolivia's option in the bar menus (run this cell; no need to read it)
+def tag_bolivia_bars(make_figure):
+    """make_figure, with the bars of a view that includes Bolivia tagged meta="BOL".
+
+    The bar-chart menus offer Bolivia as an option of its own; the tag lets the
+    ?show=BOL link find that option.
+
+    Arguments
+        make_figure : the function that draws the bar chart for a tuple of countries
+    Returns
+        a function that draws the same bar chart, tagged when Bolivia is in it
+    """
+    def draw(countries, **more):
+        fig = make_figure(countries, **more)
+        if "Bolivia" in countries:
+            for trace in fig.data:
+                trace.meta = "BOL"
+        return fig
+    return draw
 ```
 
 :::
@@ -1519,7 +1595,10 @@ group, and says which are OECD members and since when each euro member uses the 
 # @title Data tool: the list of countries
 # Step 1: read the list of economies
 country_info = pd.read_csv(DATA_URL + "countries.csv")
-# Step 2: show four of them; `isin` keeps the rows whose country is in the list
+# Step 2: Bolivia's series for the charts of a fixed set of countries (one row per
+# series and date; Bolivia's lines are hidden until clicked in the legend)
+bolivia = pd.read_csv(DATA_URL + "bolivia.csv")
+# Step 3: show four economies; `isin` keeps the rows whose country is in the list
 country_info[country_info.country.isin(["Japan", "Germany", "Mexico", "Euro area"])]
 ```
 
@@ -1753,7 +1832,20 @@ fig.add_scatter(
     name="Euros per dollar",
     yaxis="y2",
     line=dict(color=TEAL),
-);  # the `;` keeps the chart hidden until the next cell completes it
+    showlegend=False,
+)
+# Step 2b: Bolivia's official rate, on a third, hidden scale of its own (from almost
+# 0 before the 1985 hyperinflation to about 12 bolivianos in 2026); it waits in the
+# legend until clicked (`hide_bolivia`)
+bol_fx = bolivia[bolivia.series == "fx_monthly"]
+fig.add_scatter(
+    x=pd.to_datetime(bol_fx.date),
+    y=bol_fx.value,
+    name="Bolivia (bolivianos per dollar, own scale)",
+    yaxis="y3",
+    line=dict(color=BOLIVIA_COLOR),
+)
+hide_bolivia(fig);  # the `;` keeps the chart hidden until the next cell completes it
 ```
 
 ```{python}
@@ -1763,8 +1855,13 @@ fig.add_scatter(
 # the second one on the right; `hovermode="x unified"` shows both values of the
 # month you point at in one box
 fig.update_layout(
-    showlegend=False,
     hovermode="x unified",
+    # the legend lists only Bolivia's line, in the empty bottom-left corner
+    showlegend=True,
+    legend=dict(x=0.01, y=0.02, xanchor="left", yanchor="bottom",
+                bgcolor="rgba(0,0,0,0)"),
+    # Bolivia's scale: no ticks, the hover box shows the values
+    yaxis3=dict(overlaying="y", visible=False),
     xaxis=dict(range=["1970-01-01", "2028-01-01"]),
     yaxis=dict(
         title="Yen per dollar (left scale)",
@@ -1804,6 +1901,7 @@ fig.show()
 **Sources.** Data: Board of Governors of the Federal Reserve System, [H.10 Foreign Exchange Rates](https://www.federalreserve.gov/releases/h10/), via [FRED](https://fred.stlouisfed.org/release?rid=17): [Japanese yen to one U.S. dollar (`EXJPUS`)](https://fred.stlouisfed.org/series/EXJPUS) and
 [U.S. dollars to one euro (`EXUSEU`)](https://fred.stlouisfed.org/series/EXUSEU) (inverted to euros per dollar), monthly.
 Prepared file: [`data/ch20/fig20-1.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch20/fig20-1.csv) (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch20/README.md)).
+Bolivia: International Monetary Fund, [Exchange Rates dataset](https://data.imf.org/), the Banco Central de Bolivia's official rate, bolivianos per dollar, monthly average (in today's bolivianos also before the 1987 redenomination), on a hidden scale of its own; only the official rate is shown, although a parallel market traded dollars well above the official 6.96 bolivianos from 2023, until the official rate moved to about 12 in mid-2026; file [`data/ch20/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch20/bolivia.csv).
 Chart: inspired by Fig. 20.1 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -1919,11 +2017,33 @@ def dollar_index_data(countries, base):
 ```{python}
 #| kind: drawing
 # @title Drawing code: Fig. 1, the price of a dollar in any currency
-# Every currency gets a fixed color (`group_colors`), all of them in one legend
+# Bolivia's official rate (IMF, file bolivia.csv) joins the 25 currencies, in the
+# same columns; `if` adds it only once, even when the cell runs again
+if "Bolivia" not in set(fx_all.country):
+    bol_fx = bolivia[bolivia.series == "fx_monthly"]
+    bol_rows = pd.DataFrame(
+        {
+            "iso3": "BOL",
+            "country": "Bolivia",
+            "currency": "boliviano",
+            "date": bol_fx.date.str[:7],
+            "per_usd": bol_fx.value,
+        }
+    )
+    bol_rows["year"] = bol_rows.date.str[:4].astype(int)
+    bol_rows["label"] = "Bolivia (boliviano)"
+    fx_all = pd.concat([fx_all, bol_rows], ignore_index=True)
+
+# Every currency gets a fixed color (`group_colors`), all of them in one legend;
+# Bolivia's color is outside the palette, so no other currency changes color
 FX_COLORS = group_colors(
     fx_all.label.unique(),
     [list(fx_all.label.unique())],
-    {"Japan (yen)": BLUE, "Euro area (euro)": TEAL},
+    {
+        "Japan (yen)": BLUE,
+        "Euro area (euro)": TEAL,
+        "Bolivia (boliviano)": BOLIVIA_COLOR,
+    },
 )
 
 
@@ -1991,6 +2111,8 @@ interact(
 # all 25 currencies; only the yen and the euro are drawn at the start
 fig = dollar_index(tuple(fx_all.country.unique()), base=1999)
 legend_only(fig, ["Japan (yen)", "Euro area (euro)"])
+# Bolivia's line waits in the legend too, tagged for the ?show=BOL link
+hide_bolivia(fig)
 # two buttons above the chart. `updatemenus` adds buttons to the figure itself, and
 # each button runs `relayout` with new axis settings, so it works on the website too
 fig.update_layout(
@@ -2025,6 +2147,7 @@ fig
 **Sources.** Data: Board of Governors of the Federal Reserve System, [H.10 Foreign Exchange Rates](https://www.federalreserve.gov/releases/h10/), via [FRED](https://fred.stlouisfed.org/release?rid=17): monthly rates of 25 currencies against the dollar, from
 [the yen (`EXJPUS`)](https://fred.stlouisfed.org/series/EXJPUS) and [the euro (`EXUSEU`)](https://fred.stlouisfed.org/series/EXUSEU) to `EXUSUK`, `EXCAUS`, `EXSZUS`, `EXCHUS`, `EXKOUS`,
 `EXINUS`, `EXMXUS`, `EXBZUS` and the others listed in the data notes. Prepared file: [`data/ch20/fx_monthly.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch20/fx_monthly.csv) (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch20/README.md)).
+Bolivia: International Monetary Fund, [Exchange Rates dataset](https://data.imf.org/), the Banco Central de Bolivia's official rate, monthly average; only the official rate is shown, although a parallel market traded dollars well above the official 6.96 bolivianos from 2023, until the official rate moved to about 12 in mid-2026; file [`data/ch20/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch20/bolivia.csv).
 Chart: inspired by Fig. 20.1 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -2216,8 +2339,9 @@ interact(
 ```{python}
 #| kind: website
 # @title Website version: Fig. 2 with a menu of country groups
-# one picture of Fig. 2 per country group; the menu shows one at a time
-menu_figure(inflation_chart, INFLATION_GROUPS)
+# one picture of Fig. 2 per country group; the menu shows one at a time.
+# `with_bolivia` adds Bolivia's line to the legend of every group, a click away
+menu_figure(with_bolivia(inflation_chart), INFLATION_GROUPS)
 ```
 
 **Sources.** Data: World Bank, World Development Indicators:
@@ -2225,6 +2349,7 @@ menu_figure(inflation_chart, INFLATION_GROUPS)
 [the U.S. series (`FPCPITOTLZGUSA`)](https://fred.stlouisfed.org/series/FPCPITOTLZGUSA) and [the Japanese series (`FPCPITOTLZGJPN`)](https://fred.stlouisfed.org/series/FPCPITOTLZGJPN) that FRED copies
 from the World Bank; World Bank, [country and lending groups](https://datahelpdesk.worldbank.org/knowledgebase/articles/906519-world-bank-country-and-lending-groups) (regions and income groups of the menus).
 Prepared files: [`data/ch20/inflation_wdi.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch20/inflation_wdi.csv) and [`data/ch20/countries.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch20/countries.csv), checked against [`data/ch20/fig20-2.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch20/fig20-2.csv) (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch20/README.md)).
+Bolivia: the same World Bank series, from the consumer price index of Bolivia's [INE](https://www.ine.gob.bo/), in the legend of every group; its hyperinflation (11,750 percent in 1985) is far above the axis.
 Chart: inspired by Fig. 20.2 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -2442,6 +2567,19 @@ fig = px.line(
 # Step 2: the dotted line at the 1971 level, and the legend in the top right corner
 fig.add_hline(y=100, line_dash="dot", line_color=GRAY)
 fig.update_layout(legend=dict(x=0.99, y=0.99, xanchor="right", yanchor="top"))
+# Step 3: Bolivia's real exchange rate, the same Penn World Table measure, 1971 = 100.
+# `.astype(int)` turns the years, stored as text, into numbers
+bol_rer = bolivia[bolivia.series == "rer_pwt"].copy()
+bol_rer["year"] = bol_rer.date.astype(int)
+bol_rer = bol_rer.set_index("year").value.loc[1971:]
+fig.add_scatter(
+    x=bol_rer.index,
+    y=(100 * bol_rer / bol_rer.loc[1971]).round(1),
+    name="Bolivia (Penn World Table)",
+    line=dict(color=BOLIVIA_COLOR),
+)
+# it waits in the legend until clicked (`hide_bolivia`)
+hide_bolivia(fig)
 fig.show()
 ```
 
@@ -2449,6 +2587,7 @@ fig.show()
 estimate uses [yen per dollar (`EXJPUS`)](https://fred.stlouisfed.org/series/EXJPUS) (Board of Governors of the Federal Reserve System, [H.10 Foreign Exchange Rates](https://www.federalreserve.gov/releases/h10/), via [FRED](https://fred.stlouisfed.org/release?rid=17)) and the World Bank's consumer-price inflation via FRED
 ([United States (`FPCPITOTLZGUSA`)](https://fred.stlouisfed.org/series/FPCPITOTLZGUSA), [Japan (`FPCPITOTLZGJPN`)](https://fred.stlouisfed.org/series/FPCPITOTLZGJPN)).
 Prepared files: [`data/ch20/fig20-3.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch20/fig20-3.csv), [`data/ch20/fig20-1.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch20/fig20-1.csv) and [`data/ch20/fig20-2.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch20/fig20-2.csv) (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch20/README.md)).
+Bolivia: the same [Penn World Table 11.0](https://www.rug.nl/ggdc/productivity/pwt/) measure, Bolivia's `pl_gdpo` relative to the United States; file [`data/ch20/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch20/bolivia.csv).
 Chart: inspired by Fig. 20.3 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -2550,12 +2689,30 @@ fig.update_layout(
     ),
     yaxis=dict(tickvals=[2, 4, 6, 8, 10]),
 )
+# Step 4: Bolivia has no McDonald's, so no Big Mac price. A proxy: the U.S. price
+# times Bolivia's price level of GDP relative to the U.S. (Penn World Table, 2023)
+us_price = latest[latest.iso3 == "USA"].dollar_price.iloc[0]
+in_2023 = (bolivia.series == "rer_pwt") & (bolivia.date == "2023")
+bol_level = bolivia[in_2023].value.iloc[0]
+bol_gdp = bolivia[bolivia.series == "gdp_pc_pwt"].value.iloc[0]
+fig.add_scatter(
+    x=[bol_gdp],
+    y=[round(us_price * bol_level, 2)],
+    mode="markers",
+    marker=dict(symbol="diamond", size=12, color=BOLIVIA_COLOR),
+    name="Bolivia (proxy: U.S. Big Mac price × price level)",
+    showlegend=True,
+)
+# it waits in the legend, in the top left corner, until clicked (`hide_bolivia`)
+fig.update_layout(legend=dict(x=0.01, y=0.99, xanchor="left", yanchor="top"))
+hide_bolivia(fig)
 fig.show()
 ```
 
 **Sources.** Data: *The Economist*, [The Big Mac index, open data](https://github.com/TheEconomist/big-mac-data)
 (release of July 2026); Groningen Growth and Development Centre, [Penn World Table 11.0](https://www.rug.nl/ggdc/productivity/pwt/) ([doi:10.34894/FABVLR](https://doi.org/10.34894/FABVLR); Feenstra, Inklaar and Timmer 2015), real GDP per person (`rgdpo` / `pop`) in 2023.
 Prepared file: [`data/ch20/big_mac.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch20/big_mac.csv) (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch20/README.md)).
+Bolivia has no McDonald's and no Big Mac price, so its point is a proxy: the U.S. Big Mac price of July 2026 times Bolivia's price level of GDP relative to the U.S. in 2023 ([Penn World Table 11.0](https://www.rug.nl/ggdc/productivity/pwt/), `pl_gdpo`), at its GDP per person in 2023, before the official rate moved from 6.96 to about 12 bolivianos per dollar in mid-2026; file [`data/ch20/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch20/bolivia.csv).
 Chart: inspired by Table 20.1 and the discussion of the Balassa-Samuelson effect in Chapter 20 of Jones (2024),
 [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
@@ -2696,12 +2853,14 @@ interact(
 ```{python}
 #| kind: website
 # @title Website version: the real exchange rate (index, 1971 = 100), country menu
-# one picture per country group; the menu shows one at a time
-menu_figure(rer_chart, RER_GROUPS)
+# one picture per country group; the menu shows one at a time.
+# `with_bolivia` adds Bolivia's line to the legend of every group, a click away
+menu_figure(with_bolivia(rer_chart), RER_GROUPS)
 ```
 
 **Sources.** Data: Groningen Growth and Development Centre, [Penn World Table 11.0](https://www.rug.nl/ggdc/productivity/pwt/) ([doi:10.34894/FABVLR](https://doi.org/10.34894/FABVLR); Feenstra, Inklaar and Timmer 2015), price level of output-side GDP (`pl_gdpo`) relative to the United States; World Bank, [country and lending groups](https://datahelpdesk.worldbank.org/knowledgebase/articles/906519-world-bank-country-and-lending-groups) (regions and income groups of the menus).
 Prepared files: [`data/ch20/rer_pwt.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch20/rer_pwt.csv) and [`data/ch20/countries.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch20/countries.csv) (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch20/README.md)).
+Bolivia: the same Penn World Table series, in the legend of every group.
 Chart: inspired by Fig. 20.3 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -3238,12 +3397,32 @@ fig.add_annotation(
     showarrow=False,
     font=dict(size=13),
 )
+# Step 5: Bolivia's official rate since 1950 on a hidden ratio scale of its own (from
+# 0.00000015 bolivianos per dollar in 1950 to 6.91 from 2011); `.astype(int)` turns
+# the years, stored as text, into numbers
+bol_year = bolivia[bolivia.series == "fx_annual"]
+fig.add_scatter(
+    x=bol_year.date.astype(int),
+    y=bol_year.value,
+    name="Bolivia (bolivianos per dollar, own scale)",
+    yaxis="y2",
+    line=dict(color=BOLIVIA_COLOR),
+    showlegend=True,
+    hovertemplate="%{x}: %{y:.3g} bolivianos<extra>Bolivia</extra>",
+)
+fig.update_layout(
+    yaxis2=dict(overlaying="y", type="log", visible=False),
+    legend=dict(x=0.01, y=0.99, xanchor="left", yanchor="top"),
+)
+# it waits in the legend until clicked (`hide_bolivia`)
+hide_bolivia(fig)
 fig.show()
 ```
 
 **Sources.** Data: Lawrence H. Officer, MeasuringWorth,
 [Dollar-Pound Exchange Rate From 1791](https://www.measuringworth.com/datasets/exchangepound/), annual, inverted to
 pounds per dollar. Prepared file: [`data/ch20/fig20-6.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch20/fig20-6.csv) (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch20/README.md)).
+Bolivia: the official rate in bolivianos per dollar, annual average, from the International Monetary Fund, [Exchange Rates dataset](https://data.imf.org/) (Banco Central de Bolivia) from 1959 and the [Penn World Table 11.0](https://www.rug.nl/ggdc/productivity/pwt/) (`xr`) for 1950–1958, on a hidden ratio scale of its own; only the official rate is shown, although a parallel market traded dollars well above the official 6.96 bolivianos from 2023, until the official rate moved to about 12 in mid-2026; file [`data/ch20/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch20/bolivia.csv).
 Chart: inspired by Fig. 20.6 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -3353,11 +3532,26 @@ def history_data(countries, base):
 ```{python}
 #| kind: drawing
 # @title Drawing code: Fig. 6, 17 countries since 1870
-# Every country gets a fixed color, all of them in one legend
+# Bolivia's official rate since 1950 (IMF and Penn World Table, file bolivia.csv)
+# joins the 17 countries; `if` adds it only once, even when the cell runs again
+if "Bolivia" not in set(fx_hist.country):
+    bol_year = bolivia[bolivia.series == "fx_annual"]
+    bol_rows = pd.DataFrame(
+        {
+            "iso3": "BOL",
+            "country": "Bolivia",
+            "year": bol_year.date.astype(int),
+            "per_usd": bol_year.value,
+        }
+    )
+    fx_hist = pd.concat([fx_hist, bol_rows], ignore_index=True)
+
+# Every country gets a fixed color, all of them in one legend; Bolivia's color is
+# outside the palette, so no other country changes color
 HIST_COLORS = group_colors(
     fx_hist.country.unique(),
     [list(fx_hist.country.unique())],
-    {"United Kingdom": BLUE},
+    {"United Kingdom": BLUE, "Bolivia": BOLIVIA_COLOR},
 )
 
 
@@ -3430,6 +3624,8 @@ fig = data_slider(
 )
 # only the U.K. is drawn at the start, and the axis fits the lines shown
 legend_only(fig, ["United Kingdom"])
+# Bolivia's line (from 1950, so with the base year 1950 or 1973) waits in the legend
+hide_bolivia(fig)
 fig.update_yaxes(autorange=True, tickvals=None)
 fig
 ```
@@ -3438,6 +3634,7 @@ fig
 [Jordà-Schularick-Taylor Macrohistory Database](https://www.macrohistory.net/database/), Release 6, exchange rate
 against the dollar (`xrusd`) (Jordà, Schularick and Taylor 2017, *NBER Macroeconomics Annual*).
 Prepared file: [`data/ch20/fx_history.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch20/fx_history.csv) (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch20/README.md)).
+Bolivia: the official rate, annual average, from the International Monetary Fund, [Exchange Rates dataset](https://data.imf.org/) from 1959 and the [Penn World Table 11.0](https://www.rug.nl/ggdc/productivity/pwt/) (`xr`) for 1950–1958, so its line needs the base year 1950 or 1973; only the official rate is shown, although a parallel market traded dollars well above the official 6.96 bolivianos from 2023, until the official rate moved to about 12 in mid-2026; file [`data/ch20/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch20/bolivia.csv).
 Chart: inspired by Fig. 20.6 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -3865,6 +4062,25 @@ latest_ratio = {
 
 ```{python}
 #| kind: drawing
+# @title Drawing code: Fig. 8, Bolivia's line (hidden until clicked)
+# Bolivia's boliviano, the same index from the IMF's end-of-year official rates
+# (file bolivia.csv); `.astype(int)` turns the years, stored as text, into numbers
+bol_eop = bolivia[bolivia.series == "fx_eop"].copy()
+bol_eop["year"] = bol_eop.date.astype(int)
+bol_eop = bol_eop.set_index("year").value.loc[1991:]
+fig.add_scatter(
+    x=bol_eop.index,
+    y=(100 * bol_eop.loc[1991] / bol_eop).round(1),
+    name="Bolivia",
+    mode="lines+markers",
+    line=dict(color=BOLIVIA_COLOR),
+)
+# it waits in the legend until clicked (`hide_bolivia`)
+hide_bolivia(fig);  # the `;` keeps the chart hidden until the next cell
+```
+
+```{python}
+#| kind: drawing
 # @title Drawing code: Fig. 8, buttons for the views
 # Step 3: one button per view. `updatemenus` adds buttons to the figure itself, and
 # each one runs `relayout` with its axis settings, so it works on the website too
@@ -3895,6 +4111,7 @@ fig.show()
 
 **Sources.** Data: International Monetary Fund, [Exchange Rates dataset (`ER`)](https://data.imf.org/en/datasets/IMF.STA:ER), national currency per U.S. dollar, end of period (`XDC_USD.EOP_RT`), annual.
 Prepared file: [`data/ch20/fig20-8.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch20/fig20-8.csv) (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch20/README.md)).
+Bolivia: the same IMF series, the Banco Central de Bolivia's official rate at the end of each year; only the official rate is shown, although a parallel market traded dollars well above the official 6.96 bolivianos from 2023, until the official rate moved to about 12 in mid-2026; file [`data/ch20/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch20/bolivia.csv).
 Chart: inspired by Fig. 20.8 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -4101,12 +4318,14 @@ def crisis_group(countries):
     )
 
 
-# one picture of Fig. 8 per country group; the menu shows one at a time
-menu_figure(crisis_group, CRISIS_GROUPS)
+# one picture of Fig. 8 per country group; the menu shows one at a time.
+# `with_bolivia` adds Bolivia's line to the legend of every group, a click away
+menu_figure(with_bolivia(crisis_group), CRISIS_GROUPS)
 ```
 
 **Sources.** Data: International Monetary Fund, [Exchange Rates dataset (`ER`)](https://data.imf.org/en/datasets/IMF.STA:ER), national currency per U.S. dollar, end of period (`XDC_USD.EOP_RT`), annual, about 210
 economies; World Bank, [country and lending groups](https://datahelpdesk.worldbank.org/knowledgebase/articles/906519-world-bank-country-and-lending-groups) (regions and income groups of the menus). Prepared files: [`data/ch20/fx_crises.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch20/fx_crises.csv) and [`data/ch20/countries.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch20/countries.csv) (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch20/README.md)).
+Bolivia: the same IMF series, the Banco Central de Bolivia's official rate, in the legend of every group; only the official rate is shown, although a parallel market traded dollars well above the official 6.96 bolivianos from 2023, until the official rate moved to about 12 in mid-2026.
 Chart: inspired by Fig. 20.8 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -4489,8 +4708,11 @@ groups = country_groups(
     "Textbook: six countries",
     regions=False,
 )
-# one bar chart per group; each menu option also sets the order of the bars
-menu_figure(lending_chart, groups, categories=True)
+# one more option at the end: Bolivia next to the textbook's six countries
+groups["Bolivia and the textbook's six"] = list(BOOK_LENDING) + ["Bolivia"]
+# one bar chart per group; each menu option also sets the order of the bars, and
+# `tag_bolivia_bars` tags the bars of the Bolivia option
+menu_figure(tag_bolivia_bars(lending_chart), groups, categories=True)
 ```
 
 **Sources.** Data: World Bank,
@@ -4498,6 +4720,7 @@ menu_figure(lending_chart, groups, categories=True)
 private credit by deposit money banks, % of GDP (`GFDD.DI.01`); World Bank, [World Development Indicators](https://datatopics.worldbank.org/world-development-indicators/),
 domestic credit to private sector, % of GDP (`FD.AST.PRVT.GD.ZS`; the 2023 bars); World Bank, [country and lending groups](https://datahelpdesk.worldbank.org/knowledgebase/articles/906519-world-bank-country-and-lending-groups) (regions and income groups of the menus).
 Prepared files: [`data/ch20/credit_wdi.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch20/credit_wdi.csv) and [`data/ch20/countries.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch20/countries.csv) (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch20/README.md)).
+Bolivia: the same World Bank series, in the menu option "Bolivia and the textbook's six".
 Chart: inspired by Fig. 20.10 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -4700,13 +4923,17 @@ groups = country_groups(
     "Textbook: six countries",
     regions=False,
 )
-# one bar chart per group; each menu option also sets the order of the bars
-menu_figure(current_chart, groups, categories=True)
+# one more option at the end: Bolivia next to the textbook's six countries
+groups["Bolivia and the textbook's six"] = list(BOOK_CA) + ["Bolivia"]
+# one bar chart per group; each menu option also sets the order of the bars, and
+# `tag_bolivia_bars` tags the bars of the Bolivia option
+menu_figure(tag_bolivia_bars(current_chart), groups, categories=True)
 ```
 
 **Sources.** Data: International Monetary Fund, World Economic Outlook (October 2026),
 [Current account balance, % of GDP (`BCA_NGDPD`)](https://www.imf.org/external/datamapper/BCA_NGDPD); World Bank, [country and lending groups](https://datahelpdesk.worldbank.org/knowledgebase/articles/906519-world-bank-country-and-lending-groups) (regions and income groups of the menus).
 Prepared files: [`data/ch20/current_account_imf.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch20/current_account_imf.csv) and [`data/ch20/countries.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch20/countries.csv) (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch20/README.md)).
+Bolivia: the same IMF series ([World Economic Outlook](https://www.imf.org/en/Publications/WEO)), in the menu option "Bolivia and the textbook's six".
 Chart: inspired by Fig. 20.11 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -4868,13 +5095,21 @@ for label in groups:
     options[label + ", IMF"] = {"countries": tuple(groups[label]), "source": "IMF"}
 # the OECD measure misses most of the large emerging economies
 del options["Large emerging economies, OECD"]
-menu_figure(debt_chart, options, categories=True)
+# one more option at the end: Bolivia next to the textbook's six (the OECD measure
+# does not cover Bolivia)
+options["Bolivia and the textbook six, IMF"] = {
+    "countries": BOOK_DEBT + ("Bolivia",),
+    "source": "IMF",
+}
+# `tag_bolivia_bars` tags the bars of the Bolivia option
+menu_figure(tag_bolivia_bars(debt_chart), options, categories=True)
 ```
 
 **Sources.** Data: OECD, Economic Outlook No. 119, general government gross financial liabilities, % of GDP
 (`GGFLQ`), dataflow `DSD_EO@DF_EO` in the [OECD Data Explorer](https://data-explorer.oecd.org/); International Monetary Fund, World Economic Outlook (October 2026),
 [General government gross debt, % of GDP (`GGXWDG_NGDP`)](https://www.imf.org/external/datamapper/GGXWDG_NGDP);
 World Bank, [country and lending groups](https://datahelpdesk.worldbank.org/knowledgebase/articles/906519-world-bank-country-and-lending-groups) (regions and income groups of the menus). Prepared files: [`data/ch20/debt.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch20/debt.csv) and [`data/ch20/countries.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch20/countries.csv) (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch20/README.md)).
+Bolivia: the IMF measure only (the OECD does not cover Bolivia), in the menu option "Bolivia and the textbook six, IMF".
 Chart: inspired by Fig. 20.12 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -5248,12 +5483,14 @@ interact(
 ```{python}
 #| kind: website
 # @title Website version: Fig. 14 with a menu of country groups
-# one picture of Fig. 14 per country group; the menu shows one at a time
-menu_figure(tfp_chart, TFP_GROUPS)
+# one picture of Fig. 14 per country group; the menu shows one at a time.
+# `with_bolivia` adds Bolivia's line to the legend of every group, a click away
+menu_figure(with_bolivia(tfp_chart), TFP_GROUPS)
 ```
 
 **Sources.** Data: Groningen Growth and Development Centre, [Penn World Table 11.0](https://www.rug.nl/ggdc/productivity/pwt/) ([doi:10.34894/FABVLR](https://doi.org/10.34894/FABVLR); Feenstra, Inklaar and Timmer 2015), TFP at constant national prices (`rtfpna`); World Bank, [country and lending groups](https://datahelpdesk.worldbank.org/knowledgebase/articles/906519-world-bank-country-and-lending-groups) (regions and income groups of the menus).
 Prepared files: [`data/ch20/tfp_pwt.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch20/tfp_pwt.csv) and [`data/ch20/countries.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch20/countries.csv) (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch20/README.md)).
+Bolivia: the same Penn World Table series, in the legend of every group.
 Chart: inspired by Fig. 20.14 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->

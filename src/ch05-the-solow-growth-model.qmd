@@ -466,6 +466,68 @@ def slider_figure(make_figure, name, values, start, label=None):
 
 ```{python}
 #| kind: folded
+# @title Helper for Bolivia on the website (run this cell; no need to read it)
+def hide_bolivia(fig):
+    """Tag Bolivia's lines (meta="BOL") and hide them until clicked in the legend."""
+    for trace in fig.data:
+        if (trace.name or "").startswith("Bolivia"):
+            trace.meta = "BOL"
+            trace.visible = "legendonly"
+    return fig
+
+
+def hide_bolivia_steps(fig):
+    """Keep Bolivia's traces (meta="BOL") legend-only in every step of a slider."""
+    # Step 1: tag Bolivia's traces; the start step's copy waits in the legend
+    bolivia = [(t.name or "").startswith("Bolivia") for t in fig.data]
+    for trace, mine in zip(fig.data, bolivia):
+        if mine:
+            trace.meta = "BOL"
+            if trace.visible:
+                trace.visible = "legendonly"
+    # Step 2: in every step, a Bolivia trace that would be drawn waits in the legend
+    for step in fig.layout.sliders[0].steps:
+        visible = step.args[0]["visible"]
+        step.args = [
+            {
+                "visible": [
+                    "legendonly" if v and mine else v
+                    for v, mine in zip(visible, bolivia)
+                ]
+            },
+            step.args[1],
+        ]
+    return fig
+```
+
+```{python}
+#| kind: folded
+# @title Helper for Bolivia's point in the scatters (run this cell; no need to read it)
+# Bolivia's name in the Penn World Table files
+BOLIVIA = "Bolivia (Plurinational State of)"
+
+
+def bolivia_ring(x, y):
+    """Bolivia's point as a red ring, hidden until clicked in the legend.
+
+    Arguments
+        x, y : Bolivia's coordinates (columns of its rows)
+    Returns
+        a Plotly trace, tagged meta="BOL"
+    """
+    return go.Scatter(
+        x=list(x),
+        y=list(y),
+        mode="markers",
+        name="Bolivia",
+        meta="BOL",
+        visible="legendonly",
+        marker=dict(symbol="circle-open", color="#c0392b", size=18, line_width=3),
+    )
+```
+
+```{python}
+#| kind: folded
 # @title Helper for the website versions with many countries (run this cell; you do not need to read it)
 def country_menu(fig, shown, regions, label="Textbook countries"):
     """Draw the countries in `shown` and put every other country one click away in the legend.
@@ -494,6 +556,8 @@ def country_menu(fig, shown, regions, label="Textbook countries"):
         for trace in fig.data:
             if trace.name in shown:
                 visible.append(True)                    # a textbook country: drawn
+            elif (trace.name or "").startswith("Bolivia"):
+                visible.append("legendonly")            # Bolivia: in every legend
             elif trace.name not in regions:
                 visible.append(True if trace.visible is None else trace.visible)   # not a country: as it was
             elif group is None or regions[trace.name] == group:
@@ -1192,6 +1256,9 @@ def capital_output_chart(d=0.07):
     # Step 2: the model line, for investment rates from 0 to 55 percent
     s = np.linspace(0, 55, 100)
     add_curve(fig, s, predicted_ky(s, d), "Solow: K/Y = s/d", TEAL, 7)
+    # Bolivia's point, ringed: a click away in the legend
+    bolivia = capital[capital.country == BOLIVIA]
+    fig.add_trace(bolivia_ring(bolivia.inv_rate_avg_1990_2023, bolivia.ky_2023))
     # Step 3: fixed axes, so that the line visibly turns when d changes
     fig.update_layout(
         title=f"Data and the Solow prediction with d = {d:.2f}",
@@ -1215,17 +1282,19 @@ interact(
 ```{python}
 #| kind: website
 # @title Website version: Fig. 3 with a precomputed slider for the depreciation rate
-# one picture of Fig. 3 per value of d
-slider_figure(
+# Step 1: one picture of Fig. 3 per value of d
+fig = slider_figure(
     capital_output_chart,
     "d",
     [0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1, 0.12],     # the values of d
     start=0.07,
     label="depreciation rate d",
 )
+# Step 2: Bolivia's ring waits in the legend for every d (hide_bolivia_steps)
+hide_bolivia_steps(fig)
 ```
 
-**Sources.** Data: [Penn World Table 11.0](https://www.rug.nl/ggdc/productivity/pwt/), Groningen Growth and Development Centre ([DOI 10.34894/FABVLR](https://doi.org/10.34894/FABVLR)), variables `csh_i` (investment share) and `rgdpo` (real GDP); cite as Feenstra, Inklaar and Timmer (2015), ["The Next Generation of the Penn World Table"](https://doi.org/10.1257/aer.20130954), *American Economic Review* 105(10). Capital is our own perpetual-inventory estimate from PWT investment, with 5 percent depreciation. The straight line is the Solow model's prediction, $K/Y = s/d$.
+**Sources.** Data: [Penn World Table 11.0](https://www.rug.nl/ggdc/productivity/pwt/), Groningen Growth and Development Centre ([DOI 10.34894/FABVLR](https://doi.org/10.34894/FABVLR)), variables `csh_i` (investment share) and `rgdpo` (real GDP); cite as Feenstra, Inklaar and Timmer (2015), ["The Next Generation of the Penn World Table"](https://doi.org/10.1257/aer.20130954), *American Economic Review* 105(10). Capital is our own perpetual-inventory estimate from PWT investment, with 5 percent depreciation. The straight line is the Solow model's prediction, $K/Y = s/d$. Bolivia (the ringed point, in the legend): the same [Penn World Table 11.0](https://www.rug.nl/ggdc/productivity/pwt/) data, also in [`data/ch05/fig5-3.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch05/fig5-3.csv).
 Prepared file: [`data/ch05/fig5-3.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch05/fig5-3.csv) (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch05/README.md)).
 Chart: inspired by Fig. 5.3 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
@@ -2203,10 +2272,21 @@ fig.update_traces(
     visible="legendonly",
 )
 fig.update_layout(legend_title_text="")
+# Step 3: Bolivia, not an OECD member, as its own point outside the groups and
+# their lines, a click away in the legend; each animation frame (`frame.data`)
+# moves it to the frame's starting year
+bolivia = growth[growth.country == BOLIVIA]
+start = bolivia[bolivia.start_year == int(fig.frames[0].name)]
+fig.add_trace(bolivia_ring(start.gdp_pc_start, start.growth))
+for frame in fig.frames:
+    one = bolivia[bolivia.start_year == int(frame.name)]
+    frame.data = frame.data + (
+        go.Scatter(x=list(one.gdp_pc_start), y=list(one.growth)),
+    )
 fig.show()
 ```
 
-**Sources.** Data: [Penn World Table 11.0](https://www.rug.nl/ggdc/productivity/pwt/), Groningen Growth and Development Centre ([DOI 10.34894/FABVLR](https://doi.org/10.34894/FABVLR)), variables `rgdpo` (real GDP) and `pop` (population); GDP per person is `rgdpo` / `pop`, in 2021 dollars; cite as Feenstra, Inklaar and Timmer (2015), ["The Next Generation of the Penn World Table"](https://doi.org/10.1257/aer.20130954), *American Economic Review* 105(10). OECD membership and accession years: [OECD, Members and partners](https://www.oecd.org/en/about/members-partners.html).
+**Sources.** Data: [Penn World Table 11.0](https://www.rug.nl/ggdc/productivity/pwt/), Groningen Growth and Development Centre ([DOI 10.34894/FABVLR](https://doi.org/10.34894/FABVLR)), variables `rgdpo` (real GDP) and `pop` (population); GDP per person is `rgdpo` / `pop`, in 2021 dollars; cite as Feenstra, Inklaar and Timmer (2015), ["The Next Generation of the Penn World Table"](https://doi.org/10.1257/aer.20130954), *American Economic Review* 105(10). OECD membership and accession years: [OECD, Members and partners](https://www.oecd.org/en/about/members-partners.html). Bolivia (the ringed point, in the legend; not an OECD member and not in the fitted lines): the same [Penn World Table 11.0](https://www.rug.nl/ggdc/productivity/pwt/) data, also in [`data/ch05/pwt_panel.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch05/pwt_panel.csv).
 Prepared files: [`data/ch05/pwt_panel.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch05/pwt_panel.csv), [`data/ch05/oecd_members.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch05/oecd_members.csv) (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch05/README.md)).
 Chart: inspired by Fig. 5.8 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
@@ -2300,10 +2380,19 @@ fig.add_scatter(
 # so that the line moves when you press play
 for frame in fig.frames:
     frame.data = frame.data + (go.Scatter(x=x_line, y=world_line[frame.name]),)
+# Step 4: Bolivia's point, ringed, a click away in the legend, in every frame
+bolivia = growth[growth.country == BOLIVIA]
+start = bolivia[bolivia.start_year == int(fig.frames[0].name)]
+fig.add_trace(bolivia_ring(start.gdp_pc_start, start.growth))
+for frame in fig.frames:
+    one = bolivia[bolivia.start_year == int(frame.name)]
+    frame.data = frame.data + (
+        go.Scatter(x=list(one.gdp_pc_start), y=list(one.growth)),
+    )
 fig.show()
 ```
 
-**Sources.** Data: [Penn World Table 11.0](https://www.rug.nl/ggdc/productivity/pwt/), Groningen Growth and Development Centre ([DOI 10.34894/FABVLR](https://doi.org/10.34894/FABVLR)), variables `rgdpo` (real GDP) and `pop` (population); GDP per person is `rgdpo` / `pop`, in 2021 dollars; cite as Feenstra, Inklaar and Timmer (2015), ["The Next Generation of the Penn World Table"](https://doi.org/10.1257/aer.20130954), *American Economic Review* 105(10).
+**Sources.** Data: [Penn World Table 11.0](https://www.rug.nl/ggdc/productivity/pwt/), Groningen Growth and Development Centre ([DOI 10.34894/FABVLR](https://doi.org/10.34894/FABVLR)), variables `rgdpo` (real GDP) and `pop` (population); GDP per person is `rgdpo` / `pop`, in 2021 dollars; cite as Feenstra, Inklaar and Timmer (2015), ["The Next Generation of the Penn World Table"](https://doi.org/10.1257/aer.20130954), *American Economic Review* 105(10). Bolivia (the ringed point, in the legend): the same [Penn World Table 11.0](https://www.rug.nl/ggdc/productivity/pwt/) data, also in [`data/ch05/pwt_panel.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch05/pwt_panel.csv).
 Prepared file: [`data/ch05/pwt_panel.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch05/pwt_panel.csv) (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch05/README.md)).
 Chart: inspired by Fig. 5.9 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
@@ -2585,9 +2674,11 @@ fig.update_layout(
 )
 # Step 3: draw the textbook's three countries; the region menu adds the others
 country_menu(fig, ["Republic of Korea", "Philippines", "United States"], regions)
+# Step 4: Bolivia waits in the legend of every menu entry (hide_bolivia)
+hide_bolivia(fig)
 ```
 
-**Sources.** Data: [Penn World Table 11.0](https://www.rug.nl/ggdc/productivity/pwt/), Groningen Growth and Development Centre ([DOI 10.34894/FABVLR](https://doi.org/10.34894/FABVLR)), variable `csh_i` (investment as a share of GDP); cite as Feenstra, Inklaar and Timmer (2015), ["The Next Generation of the Penn World Table"](https://doi.org/10.1257/aer.20130954), *American Economic Review* 105(10). Regions for the website menu: [World Bank country and lending groups](https://datahelpdesk.worldbank.org/knowledgebase/articles/906519-world-bank-country-and-lending-groups).
+**Sources.** Data: [Penn World Table 11.0](https://www.rug.nl/ggdc/productivity/pwt/), Groningen Growth and Development Centre ([DOI 10.34894/FABVLR](https://doi.org/10.34894/FABVLR)), variable `csh_i` (investment as a share of GDP); cite as Feenstra, Inklaar and Timmer (2015), ["The Next Generation of the Penn World Table"](https://doi.org/10.1257/aer.20130954), *American Economic Review* 105(10). Regions for the website menu: [World Bank country and lending groups](https://datahelpdesk.worldbank.org/knowledgebase/articles/906519-world-bank-country-and-lending-groups). Bolivia (in the legend of every menu entry): the same [Penn World Table 11.0](https://www.rug.nl/ggdc/productivity/pwt/) data, also in [`data/ch05/pwt_panel.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch05/pwt_panel.csv).
 Prepared files: [`data/ch05/pwt_panel.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch05/pwt_panel.csv), [`data/ch05/regions.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch05/regions.csv) (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch05/README.md)).
 Chart: inspired by Fig. 5.10 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 

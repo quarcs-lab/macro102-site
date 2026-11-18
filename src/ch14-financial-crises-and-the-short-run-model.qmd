@@ -642,6 +642,69 @@ def slider_figure(make_figure, name, values, start, label=None):
     return fig
 ```
 
+```{python}
+#| kind: folded
+# @title Helper for Bolivia's lines (run this cell; you do not need to read it)
+def hide_bolivia(fig):
+    """Tag Bolivia's lines (meta="BOL") and hide them until clicked in the legend."""
+    for trace in fig.data:
+        if (trace.name or "").startswith("Bolivia"):
+            trace.meta = "BOL"
+            trace.visible = "legendonly"
+    return fig
+
+
+def hide_bolivia_in_slider(fig):
+    """Keep Bolivia's lines of a slider figure in the legend, in every step."""
+    # Step 1: which traces are Bolivia's
+    bolivia = [(t.name or "").startswith("Bolivia") for t in fig.data]
+    # Step 2: at the start, the shown step's Bolivia lines wait in the legend
+    for trace, is_bolivia in zip(fig.data, bolivia):
+        if is_bolivia:
+            trace.meta = "BOL"
+            if trace.visible:
+                trace.visible = "legendonly"
+    # Step 3: the same in every step of the slider
+    for step in fig.layout.sliders[0].steps:
+        visible = step.args[0]["visible"]
+        new = ["legendonly" if v and b else v for v, b in zip(visible, bolivia)]
+        step.args = [{"visible": new}, step.args[1]]
+    return fig
+
+
+def keep_bolivia_in_legend(fig):
+    """After legend_menu: Bolivia's line stays in the legend under every menu entry."""
+    # Step 1: which traces are Bolivia's; at the start they wait in the legend
+    bolivia = [(t.name or "").startswith("Bolivia") for t in fig.data]
+    hide_bolivia(fig)
+    # Step 2: an entry that would hide Bolivia puts it in the legend instead
+    for button in fig.layout.updatemenus[0].buttons:
+        visible = button.args[0]["visible"]
+        new = []
+        for v, b in zip(visible, bolivia):
+            new.append("legendonly" if b and v is False else v)
+        button.args = [{"visible": new}]
+    return fig
+
+
+def name_bolivia(fig, names):
+    """Give the lines of a Bolivia-only chart Bolivian names and tag them (meta="BOL").
+
+    Arguments
+        fig   : a figure that draws only Bolivia
+        names : {old name: new name}; each new name starts with "Bolivia"
+    Returns
+        the same figure
+    """
+    for trace in fig.data:
+        new = names[trace.name]
+        # the hover box repeats the name: change it there too
+        trace.hovertemplate = trace.hovertemplate.replace(trace.name, new)
+        trace.name = new
+        trace.meta = "BOL"
+    return fig
+```
+
 :::
 
 <!-- cell -->
@@ -1222,7 +1285,50 @@ def peak_to_trough(data, column, start, end):
     return peak, trough, 100 * (1 - trough[column] / peak[column])
 
 
-# Step 5: show the last three recessions of the file
+# Step 5: Bolivia's counterparts to the U.S. charts, one row per series and date,
+# and one red for all of Bolivia's lines
+bolivia = pd.read_csv(DATA_URL + "bolivia.csv")
+BOLIVIA_COLOR = "#c0392b"
+
+
+def bolivia_series(series):
+    """One series of bolivia.csv, with its dates (or years) as the row labels.
+
+    Arguments
+        series : the series' name in bolivia.csv, e.g. "interbank_q"
+    Returns
+        a pandas Series
+    """
+    rows = bolivia[bolivia.series == series]
+    return pd.Series(rows.value.values, index=rows.date.values)
+
+
+def bolivia_line(values, name, dash="solid", yaxis="y"):
+    """A line for a Bolivian series, ready for `fig.add_trace`.
+
+    Arguments
+        values : a Series from bolivia_series
+        name   : the name in the legend; it starts with "Bolivia"
+        dash   : the line style, "solid", "dash" or "dot"
+        yaxis  : "y" for the chart's axis, "y2" for a hidden axis of its own
+    Returns
+        a Plotly line (go.Scatter)
+    """
+    # dates such as "2008-01-01" become dates; years such as "2009" numbers
+    if len(values.index[0]) == 4:
+        x = values.index.astype(int)
+    else:
+        x = pd.to_datetime(values.index)
+    return go.Scatter(
+        x=x,
+        y=values.values,
+        name=name,
+        yaxis=yaxis,
+        line=dict(color=BOLIVIA_COLOR, width=2, dash=dash),
+    )
+
+
+# Step 6: show the last three recessions of the file
 recessions.tail(3)
 ```
 
@@ -2299,7 +2405,17 @@ def taylor_chart(r_bar=2.0, weight=0.5):
         yaxis=dict(range=[-5, 11.5], tickvals=[-4, -2, 0, 2, 4, 6, 8, 10]),
         legend=dict(x=0.01, y=0.99, xanchor="left", yanchor="top"),
     )
-    return fig
+    # Step 5: Bolivia, in the legend until clicked: the interbank rate (a proxy, as
+    # Bolivia sets no policy rate) and the rule with its headline inflation and the
+    # output gap estimated by the book
+    rule = taylor_rule(
+        bolivia_series("inflation_q"), bolivia_series("output_gap_q"), r_bar, weight
+    )
+    rate_name = "Bolivia (interbank rate, proxy)"
+    rule_name = "Bolivia (Taylor rule, gap estimated by the book)"
+    fig.add_trace(bolivia_line(bolivia_series("interbank_q"), rate_name))
+    fig.add_trace(bolivia_line(rule.dropna(), rule_name, dash="dash"))
+    return hide_bolivia(fig)
 ```
 
 ```{python}
@@ -2318,13 +2434,15 @@ interact(
 #| kind: website
 # @title Website version: Fig. 4 with a precomputed slider for r̄
 # one picture of Fig. 4 per value of r-bar
-slider_figure(
+fig = slider_figure(
     taylor_chart,
     "r_bar",
     [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0],     # the values of r-bar
     start=2.0,
     label="r̄ in the rule (%)",
 )
+# Bolivia's lines stay in the legend, unclicked, in every step
+hide_bolivia_in_slider(fig)
 ```
 
 **Sources.** Data: [Board of Governors of the Federal Reserve System, Federal Funds Effective Rate (`FEDFUNDS`), via FRED](https://fred.stlouisfed.org/series/FEDFUNDS);
@@ -2333,6 +2451,7 @@ slider_figure(
 [Congressional Budget Office, Real Potential Gross Domestic Product (`GDPPOT`), via FRED](https://fred.stlouisfed.org/series/GDPPOT);
 recession dates: [National Bureau of Economic Research, business cycle dates](https://www.nber.org/research/business-cycle-dating), as the indicator [`USREC`, via FRED](https://fred.stlouisfed.org/series/USREC).
 The Taylor rule and short-run output, 100 × (GDPC1 / GDPPOT − 1), are our own calculations.
+Bolivia: [IMF, Monetary and Financial Statistics, interbank money-market rate](https://data.imf.org/), a proxy for the policy rate (Bolivia's central bank sets no policy-rate target), and the same rule with CPI inflation over four quarters ([INE, via the IMF](https://data.imf.org/); headline, not core) and the output gap [estimated by the book](https://github.com/quarcs-lab/macro102-site/blob/main/data/bolivia/README.md) from [INE](https://www.ine.gob.bo/)'s quarterly GDP; file [`data/ch14/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch14/bolivia.csv).
 Prepared files: [`data/ch14/fig14-4.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch14/fig14-4.csv), [`data/ch14/recessions.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch14/recessions.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch14/README.md)).
 Chart: inspired by Fig. 14.4 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -2385,6 +2504,16 @@ inputs.add_trace(
     ),
     row=1,
     col=2,
+)
+# Step 4: Bolivia: the output gap estimated by the book (left) and headline CPI
+# inflation, a proxy for core inflation (right)
+gap_name = "Bolivia (output gap, estimated by the book)"
+inflation_name = "Bolivia (CPI inflation, proxy for core)"
+inputs.add_trace(bolivia_line(bolivia_series("output_gap_q"), gap_name), row=1, col=1)
+inputs.add_trace(
+    bolivia_line(bolivia_series("inflation_q"), inflation_name),
+    row=1,
+    col=2,
 );
 ```
 
@@ -2409,6 +2538,8 @@ inputs.update_layout(
     title="The inputs of the rule: a deep slump after 2008, low inflation until 2021",
     legend=dict(orientation="h", y=-0.15),
 )
+# Step 4: Bolivia's lines wait in the legend until clicked
+hide_bolivia(inputs)
 inputs.show()
 ```
 
@@ -2419,6 +2550,7 @@ the May 2023 vintages of the same two series from
 ALFRED, the archival FRED database ([`GDPC1`](https://alfred.stlouisfed.org/series?seid=GDPC1) and
 [`GDPPOT`](https://alfred.stlouisfed.org/series?seid=GDPPOT));
 recession dates: [National Bureau of Economic Research, business cycle dates](https://www.nber.org/research/business-cycle-dating), as the indicator [`USREC`, via FRED](https://fred.stlouisfed.org/series/USREC).
+Bolivia: the output gap [estimated by the book](https://github.com/quarcs-lab/macro102-site/blob/main/data/bolivia/README.md) from [INE](https://www.ine.gob.bo/)'s quarterly GDP, and CPI inflation over four quarters ([INE, via the IMF](https://data.imf.org/)), headline inflation as a proxy for core; file [`data/ch14/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch14/bolivia.csv).
 Prepared files: [`data/ch14/fig14-4.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch14/fig14-4.csv), [`data/ch14/recessions.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch14/recessions.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch14/README.md)).
 Chart: inspired by Fig. 14.4 (its lower panels) in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -2443,12 +2575,13 @@ Chart: inspired by Fig. 14.4 (its lower panels) in Jones (2024), [*Macroeconomic
 The same rule can be computed for any central bank, given its policy rate, inflation and an estimate of short-run
 output. The file `taylor_world.csv` holds them for 14 central banks with their own currency and an inflation target
 of 2 to 2.5 percent, as **annual averages** from 1999: the policy rate from the BIS, and core inflation, headline
-inflation and the output gap from the OECD's *Economic Outlook*. Two differences from the U.S. chart above: the
+inflation and the output gap from the OECD's *Economic Outlook*; it also holds Bolivia, with proxies (see the Sources
+note). Two differences from the U.S. chart above: the
 data are annual, and the output gap is the OECD's estimate, not the CBO's. The rule keeps the 2 percent target.
 
 ```{python}
-# Load the file of 14 central banks: annual averages from 1999; here the last
-# three years of the euro area
+# Load the file of 14 central banks and Bolivia: annual averages from 1999;
+# here the last three years of the euro area
 taylor_world = pd.read_csv(DATA_URL + "taylor_world.csv")
 taylor_world[taylor_world.country == "Euro area"].tail(3)
 ```
@@ -2596,6 +2729,13 @@ def taylor_world_chart(country="United States", r_bar=2.0):
         title=f"{country}, r̄ = {r_bar:.1f}: {gap}",
     )
     fig.update_traces(line_width=3)
+    # Bolivia: its "policy rate" is the interbank rate, a proxy
+    if country == "Bolivia":
+        names = {
+            "Policy rate": "Bolivia (interbank rate, proxy)",
+            "Taylor rule": "Bolivia (Taylor rule)",
+        }
+        name_bolivia(fig, names)
     fig.add_hline(y=0, line_dash="dash", line_color=GRAY)
     # Step 3: the narrowest of three fixed ranges that holds both lines
     low = min(chart["Policy rate"].min(), chart["Taylor rule"].min())
@@ -2638,6 +2778,7 @@ dropdown_figure(
 OECD, *Economic Outlook* No. 119 (dataflow `DSD_EO@DF_EO`), via the [OECD Data Explorer](https://data-explorer.oecd.org/): core inflation (`PCORE_YTYPCT`), headline inflation (`CPI_YTYPCT`, else `CPIH_YTYPCT`) and the output gap (`GAP`);
 [European Central Bank, euro-area HICP excluding energy and food (`ICP.M.U2.N.XEF000.4.ANR`)](https://data.ecb.europa.eu/data/datasets/ICP/ICP.M.U2.N.XEF000.4.ANR).
 The Taylor rule is our own calculation.
+Bolivia: [IMF, Monetary and Financial Statistics, interbank money-market rate](https://data.imf.org/), a proxy for the policy rate (Bolivia sets no policy-rate target and kept a fixed exchange rate, so a Taylor rule describes its policy poorly), [CPI inflation, World Bank WDI (`FP.CPI.TOTL.ZG`)](https://data.worldbank.org/indicator/FP.CPI.TOTL.ZG) and the output gap [estimated by the book](https://github.com/quarcs-lab/macro102-site/blob/main/data/bolivia/README.md); its rows are in the same file.
 Prepared file: [`data/ch14/taylor_world.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch14/taylor_world.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch14/README.md)).
 Chart: inspired by Fig. 14.4 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -2753,12 +2894,28 @@ fig.update_layout(
     legend_title_text="",
     legend=dict(x=0.01, y=0.99, xanchor="left", yanchor="top"),
 )
+# Step 3: Bolivia, in the legend until clicked: real GDP and potential GDP
+# (estimated by the book), 2007 = 100, on a hidden axis of their own (y2)
+gdp_name = "Bolivia (real GDP, 2007 = 100, own scale)"
+potential_name = "Bolivia (potential, estimated by the book, own scale)"
+fig.add_trace(bolivia_line(bolivia_series("gdp_index_q"), gdp_name, yaxis="y2"))
+fig.add_trace(
+    bolivia_line(
+        bolivia_series("potential_index_q"),
+        potential_name,
+        dash="dash",
+        yaxis="y2",
+    )
+)
+fig.update_layout(yaxis2=dict(overlaying="y", visible=False))
+hide_bolivia(fig)
 fig.show()
 ```
 
 **Sources.** Data: [U.S. Bureau of Economic Analysis, Real Gross Domestic Product (`GDPC1`), via FRED](https://fred.stlouisfed.org/series/GDPC1);
 [Congressional Budget Office, Real Potential Gross Domestic Product (`GDPPOT`), via FRED](https://fred.stlouisfed.org/series/GDPPOT); the CBO's 2007 estimate is the June 2007 vintage of `GDPPOT` in
 [ALFRED, the archival FRED database](https://alfred.stlouisfed.org/series?seid=GDPPOT), rebased to chained 2017 dollars.
+Bolivia: [INE](https://www.ine.gob.bo/)'s quarterly real GDP, seasonally adjusted, and potential GDP [estimated by the book](https://github.com/quarcs-lab/macro102-site/blob/main/data/bolivia/README.md) (a Hodrick-Prescott trend), both with 2007 = 100 and drawn on their own scale; file [`data/ch14/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch14/bolivia.csv).
 Prepared file: [`data/ch14/fig14-5.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch14/fig14-5.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch14/README.md)).
 Chart: inspired by Fig. 14.5 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -2898,6 +3055,14 @@ def potential_world_chart(country="United States"):
     )
     fig.update_traces(line_width=3)
     fig.update_traces(line_dash="dash", selector=dict(name=TREND))
+    # Bolivia: its potential GDP is the book's estimate, not the OECD's
+    if country == "Bolivia":
+        names = {
+            "Actual GDP": "Bolivia (real GDP)",
+            "Potential GDP (OECD, latest)": "Bolivia (potential, book estimate)",
+            TREND: "Bolivia (" + TREND + ")",
+        }
+        name_bolivia(fig, names)
     # Step 3: the narrowest of four fixed ranges that holds every line
     y_range = fit_axis(
         chart[lines].min().min(),
@@ -2937,6 +3102,7 @@ dropdown_figure(
 
 **Sources.** Data: OECD, *Economic Outlook* No. 119 (dataflow `DSD_EO@DF_EO`), via the [OECD Data Explorer](https://data-explorer.oecd.org/): real GDP (`GDPV`) and potential output (`GDPVTR`).
 The old trend (1997–2007 growth extended) is our own calculation.
+Bolivia: [real GDP, World Bank WDI (`NY.GDP.MKTP.KN`)](https://data.worldbank.org/indicator/NY.GDP.MKTP.KN) and potential GDP [estimated by the book](https://github.com/quarcs-lab/macro102-site/blob/main/data/bolivia/README.md) (a Hodrick-Prescott trend, not the OECD's method); its rows are in the same file.
 Prepared file: [`data/ch14/potential_world.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch14/potential_world.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch14/README.md)).
 Chart: inspired by Fig. 14.5 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -3083,12 +3249,22 @@ fig.update_layout(
     legend_title_text="",
     legend=dict(x=0.01, y=0.99, xanchor="left", yanchor="top"),
 )
+# Step 4: Bolivia, in the legend until clicked: the growth of base money and broad
+# money (values beyond the fixed axis are off the chart)
+base_name = "Bolivia (base money)"
+broad_name = "Bolivia (broad money)"
+fig.add_trace(bolivia_line(bolivia_series("base_money_growth"), base_name))
+fig.add_trace(
+    bolivia_line(bolivia_series("broad_money_growth"), broad_name, dash="dash")
+)
+hide_bolivia(fig)
 fig.show()
 ```
 
 **Sources.** Data: Board of Governors of the Federal Reserve System, [H.6 Money Stock Measures](https://www.federalreserve.gov/releases/h6/), via FRED:
 [Currency Component of M1 (`CURRSL`)](https://fred.stlouisfed.org/series/CURRSL), [M1 (`M1SL`)](https://fred.stlouisfed.org/series/M1SL) and [M2 (`M2SL`)](https://fred.stlouisfed.org/series/M2SL);
 recession dates: [National Bureau of Economic Research, business cycle dates](https://www.nber.org/research/business-cycle-dating), as the indicator [`USREC`, via FRED](https://fred.stlouisfed.org/series/USREC). The 12-month growth rates are our own calculation.
+Bolivia: base money and broad money of the Banco Central de Bolivia ([IMF, Monetary and Financial Statistics](https://data.imf.org/)), growth over 12 months (values beyond the axis are off the chart); file [`data/ch14/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch14/bolivia.csv).
 Prepared files: [`data/ch14/fig14-6.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch14/fig14-6.csv), [`data/ch14/recessions.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch14/recessions.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch14/README.md)).
 Chart: inspired by Fig. 14.6 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -3234,10 +3410,13 @@ interact(
 fig = money_world_chart(tuple(money_world.country.unique()))
 fig.update_layout(title=money_world_chart().layout.title)
 legend_menu(fig, shown=["United States"], groups=region_groups(money_world))
+# Bolivia waits in the legend under every menu entry
+keep_bolivia_in_legend(fig)
 ```
 
 **Sources.** Data: [World Bank, World Development Indicators, Broad money growth (annual %) (`FM.LBL.BMNY.ZG`)](https://databank.worldbank.org/metadataglossary/world-development-indicators/series/FM.LBL.BMNY.ZG);
 euro area: [European Central Bank, M3 annual growth rate (`BSI.M.U2.Y.V.M30.X.I.U2.2300.Z01.A`)](https://data.ecb.europa.eu/data/datasets/BSI/BSI.M.U2.Y.V.M30.X.I.U2.2300.Z01.A).
+Bolivia: the same [World Bank WDI series](https://data.worldbank.org/indicator/FM.LBL.BMNY.ZG), in the legend.
 Prepared file: [`data/ch14/money_world.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch14/money_world.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch14/README.md)).
 Chart: inspired by Fig. 14.6 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -3806,6 +3985,12 @@ fig.update_layout(
     legend_title_text="",
     legend=dict(x=0.01, y=0.99, xanchor="left", yanchor="top"),
 )
+# Step 4: Bolivia, in the legend until clicked: its central bank's assets in
+# percent of GDP, on a hidden axis of their own (y2)
+assets_name = "Bolivia (central bank assets, % of GDP, own scale)"
+fig.add_trace(bolivia_line(bolivia_series("cb_assets_gdp"), assets_name, yaxis="y2"))
+fig.update_layout(yaxis2=dict(overlaying="y", visible=False))
+hide_bolivia(fig)
 fig.show()
 ```
 
@@ -3814,6 +3999,7 @@ fig.show()
 [`TREAS1T5`](https://fred.stlouisfed.org/series/TREAS1T5) and [`TREAS10Y`](https://fred.stlouisfed.org/series/TREAS10Y); [mortgage-backed securities (`WSHOMCB`)](https://fred.stlouisfed.org/series/WSHOMCB);
 [agency debt (`FEDDT`)](https://fred.stlouisfed.org/series/FEDDT); [Commercial Paper Funding Facility (`WCPFF`)](https://fred.stlouisfed.org/series/WCPFF).
 The grouping into five layers is our own.
+Bolivia: total assets of the Banco Central de Bolivia ([IMF, Monetary and Financial Statistics](https://data.imf.org/)) in percent of nominal GDP ([World Bank WDI, `NY.GDP.MKTP.CN`](https://data.worldbank.org/indicator/NY.GDP.MKTP.CN)), drawn on their own scale; file [`data/ch14/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch14/bolivia.csv).
 Prepared file: [`data/ch14/fig14-9.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch14/fig14-9.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch14/README.md)).
 Chart: inspired by Fig. 14.9 (a Federal Reserve Bank of Cleveland chart reprinted there) in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -3884,11 +4070,14 @@ CB_BOOK_COLORS = {
     "Japan": GREEN,
     "United Kingdom": PALETTE[0],
 }
+# (Bolivia, added later, gets its own red, so the other colors stay the same)
+cb_names = sorted(cb_world.country[cb_world.country != "Bolivia"].unique())
 CB_COLORS = group_colors(
-    sorted(cb_world.country.unique()),
+    cb_names,
     [list(cb_world.country.unique())],
     CB_BOOK_COLORS,
 )
+CB_COLORS["Bolivia"] = BOLIVIA_COLOR
 
 
 def cb_assets_chart(countries=CB_BOOK):
@@ -3952,9 +4141,12 @@ interact(
 fig = cb_assets_chart(tuple(cb_world.country.unique()))
 fig.update_layout(title=cb_assets_chart().layout.title)
 legend_menu(fig, shown=CB_BOOK)
+# Bolivia waits in the legend under every menu entry
+keep_bolivia_in_legend(fig)
 ```
 
 **Sources.** Data: [Bank for International Settlements, Central bank total assets (`WS_CBTA`), percent of GDP](https://data.bis.org/topics/CBTA).
+Bolivia: total assets of the Banco Central de Bolivia at the end of each quarter ([IMF, Monetary and Financial Statistics](https://data.imf.org/)) in percent of the year's nominal GDP ([World Bank WDI, `NY.GDP.MKTP.CN`](https://data.worldbank.org/indicator/NY.GDP.MKTP.CN)), as the BIS has no Bolivian series; its rows are in the same file.
 Prepared file: [`data/ch14/cb_assets_world.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch14/cb_assets_world.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch14/README.md)).
 Chart: inspired by Fig. 14.9 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -4407,7 +4599,10 @@ def tfp_chart(start=2004):
         legend_title_text="",
         legend=dict(x=0.99, y=0.02, xanchor="right", yanchor="bottom"),
     )
-    return fig
+    # Step 5: Bolivia's TFP (PWT, the whole economy), in the legend until clicked
+    tfp_name = "Bolivia (TFP, Penn World Table, whole economy)"
+    fig.add_trace(bolivia_line(bolivia_series("tfp_index"), tfp_name))
+    return hide_bolivia(fig)
 ```
 
 ```{python}
@@ -4424,18 +4619,21 @@ interact(
 #| kind: website
 # @title Website version: Fig. 11 with a precomputed slider for the start year
 # one picture of Fig. 11 per first year of the growth rates
-slider_figure(
+fig = slider_figure(
     tfp_chart,
     "start",
     [1987, 1995, 2000, 2004, 2010, 2015],     # the first years
     start=2004,
     label="growth since",
 )
+# Bolivia's line stays in the legend, unclicked, in every step
+hide_bolivia_in_slider(fig)
 ```
 
 **Sources.** Data: U.S. Bureau of Labor Statistics, [productivity program](https://www.bls.gov/productivity/), via FRED:
 [Private Business Sector: Total Factor Productivity (`MFPPBS`)](https://fred.stlouisfed.org/series/MFPPBS) and
 [Manufacturing Sector: Total Factor Productivity (`MFGPROD`)](https://fred.stlouisfed.org/series/MFGPROD), rebased to 2009 = 100.
+Bolivia: [Penn World Table 11.0](https://www.rug.nl/ggdc/productivity/pwt/), TFP at constant national prices (`rtfpna`, the whole economy), rebased to 2009 = 100; file [`data/ch14/bolivia.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch14/bolivia.csv).
 Prepared file: [`data/ch14/fig14-11.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch14/fig14-11.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch14/README.md)).
 Chart: inspired by Fig. 14.11 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
@@ -4593,12 +4791,15 @@ interact(
 fig = tfp_world_chart(tuple(tfp_world.country.unique()))
 fig.update_layout(title=tfp_world_chart().layout.title)
 legend_menu(fig, shown=["United States"], groups=region_groups(tfp_world))
+# Bolivia waits in the legend under every menu entry
+keep_bolivia_in_legend(fig)
 ```
 
 **Sources.** Data: Penn World Table 11.0, TFP at constant national prices (`rtfpna`):
 [Groningen Growth and Development Centre](https://www.rug.nl/ggdc/productivity/pwt/) ([DataverseNL](https://doi.org/10.34894/FABVLR)).
 Please cite Feenstra, Inklaar and Timmer (2015), "The Next Generation of the Penn World Table,"
 [*American Economic Review* 105 (10)](https://doi.org/10.1257/aer.20130954).
+Bolivia: the same [Penn World Table 11.0](https://www.rug.nl/ggdc/productivity/pwt/) series, in the legend.
 Prepared file: [`data/ch14/tfp_world.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch14/tfp_world.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch14/README.md)).
 Chart: inspired by Fig. 14.11 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)

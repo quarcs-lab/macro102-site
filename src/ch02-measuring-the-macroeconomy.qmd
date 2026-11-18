@@ -572,6 +572,37 @@ def slider_figure(make_figure, name, values, start, label=None):
     fig.update_layout(sliders=[dict(active=first, steps=steps, pad=dict(t=60),
                                     currentvalue=dict(prefix=(label or name) + " = "))])
     return fig
+
+
+def hide_bolivia(fig):
+    """Tag Bolivia's lines (meta="BOL") and hide them until clicked in the legend.
+
+    In a figure with a slider, each step keeps its own copy of Bolivia's lines in
+    the legend only, and the copies of the other steps stay hidden.
+
+    Arguments
+        fig : a Plotly figure whose Bolivian traces have names starting "Bolivia"
+    Returns
+        the same figure
+    """
+    # Step 1: which traces are Bolivia's
+    bolivia = [(trace.name or "").startswith("Bolivia") for trace in fig.data]
+    # Step 2: tag them, and move the visible ones to the legend
+    for trace, is_bolivia in zip(fig.data, bolivia):
+        if is_bolivia:
+            trace.meta = "BOL"
+            if trace.visible is not False:
+                trace.visible = "legendonly"
+    # Step 3: a slider step that shows a Bolivian trace puts it in the legend only
+    for slider in fig.layout.sliders:
+        for step in slider.steps:
+            if step.method != "update":
+                continue
+            visible = step.args[0]["visible"]
+            new = ["legendonly" if v is True and b else v
+                   for v, b in zip(visible, bolivia)]
+            step.args = [{"visible": new}, *step.args[1:]]
+    return fig
 ```
 
 The data figures of this chapter let you add other countries. On the website, a menu above each of these
@@ -649,6 +680,33 @@ def country_menu(fig, extra, countries):
         for step in slider.steps:
             step.args = [{"visible": list(step.args[0]["visible"])}, step.args[1], list(range(n))]
     return fig
+
+
+def add_bolivia(fig, data, y, x="year", fmt=".1f", markers=False, own_scale=None):
+    """Add Bolivia's line to a figure with a country menu, in the legend only.
+
+    The menu's buttons leave it alone, so it is one click away in every view.
+
+    Arguments
+        fig       : the figure, after country_menu
+        data      : the long table that the menu's lines come from
+        y         : the column to draw (x, fmt and markers as in country_traces)
+        own_scale : None to use the figure's axis; or a short description, e.g.
+                    "labor share", to give Bolivia a hidden axis with its own scale
+    Returns
+        the same figure
+    """
+    # Step 1: Bolivia's line, drawn as country_traces draws every country
+    one = data[data.country == "Bolivia"]
+    lines = country_traces(one, y, [], x=x, fmt=fmt, markers=markers)
+    trace = lines["Bolivia"][0]
+    # Step 2: its own scale if needed: a second vertical axis that is not drawn
+    if own_scale:
+        trace.name = f"Bolivia ({own_scale}, own scale)"
+        trace.yaxis = "y2"
+        fig.update_layout(yaxis2=dict(overlaying="y", visible=False))
+    fig.add_trace(trace)
+    return hide_bolivia(fig)
 ```
 
 The last helper is like `slider_figure`, but with a dropdown menu, for the figures that show one country at a
@@ -1219,9 +1277,13 @@ members = countries[countries.g20 | countries.oecd].country
 fig = dropdown_figure(
     composition_chart,
     "country",
-    [BEA] + sorted(set(members) & set(world.country)),     # those with data
+    # those with data, and Bolivia last
+    [BEA] + sorted(set(members) & set(world.country)) + ["Bolivia"],
     start=BEA,
 )
+# tag Bolivia's areas, the last ones; the menu draws them when chosen
+for trace in fig.data[-len(composition_chart(country="Bolivia").data):]:
+    trace.meta = "BOL"
 # Step 2: two buttons switch the style: a "stackgroup" stacks the areas, None
 # draws separate lines
 fig.update_layout(
@@ -1253,11 +1315,12 @@ other countries: World Bank, World Development Indicators, shares of GDP: [house
 [gross capital formation (`NE.GDI.TOTL.ZS`)](https://data.worldbank.org/indicator/NE.GDI.TOTL.ZS), [government consumption (`NE.CON.GOVT.ZS`)](https://data.worldbank.org/indicator/NE.CON.GOVT.ZS) and [external balance on goods and services (`NE.RSB.GNFS.ZS`)](https://data.worldbank.org/indicator/NE.RSB.GNFS.ZS). Country groups: [World Bank country classifications](https://datahelpdesk.worldbank.org/knowledgebase/articles/906519-world-bank-country-and-lending-groups).
 Prepared files: [`data/ch02/fig2-1.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch02/fig2-1.csv), [`data/ch02/expenditure_world.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch02/expenditure_world.csv) and [`data/ch02/countries.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch02/countries.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch02/README.md)).
+Bolivia (last in the menu): the same World Bank shares, from the national accounts of Bolivia's [National Statistics Institute (INE)](https://www.ine.gob.bo/).
 Chart: inspired by Fig. 2.1 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
 
-The website's menu lists the G20 and OECD members; in Colab you can choose any of the countries.
+The website's menu lists the G20 and OECD members, and Bolivia; in Colab you can choose any of the countries.
 
 **What to notice.**
 
@@ -1567,13 +1630,18 @@ interact(
 ```{python}
 #| kind: website
 # @title Website version: Fig. 2 with a menu of countries (the G20 and OECD members)
-# one precomputed figure per country of the G20 or the OECD, in a menu
-dropdown_figure(
+# one precomputed figure per country of the G20 or the OECD, in a menu, and
+# Bolivia last
+fig = dropdown_figure(
     shares_chart,
     "country",
-    [BEA] + sorted(set(members) & set(world.country)),
+    [BEA] + sorted(set(members) & set(world.country)) + ["Bolivia"],
     start=BEA,
 )
+# tag Bolivia's lines, the last ones; the menu draws them when chosen
+for trace in fig.data[-len(shares_chart("Bolivia").data):]:
+    trace.meta = "BOL"
+fig
 ```
 
 **Sources.** Data: U.S. Bureau of Economic Analysis, national accounts (NIPA Table 1.1.5), via FRED: [GDP (`GDPA`)](https://fred.stlouisfed.org/series/GDPA),
@@ -1583,11 +1651,12 @@ other countries: World Bank, World Development Indicators, shares of GDP: [house
 [gross capital formation (`NE.GDI.TOTL.ZS`)](https://data.worldbank.org/indicator/NE.GDI.TOTL.ZS), [government consumption (`NE.CON.GOVT.ZS`)](https://data.worldbank.org/indicator/NE.CON.GOVT.ZS) and [external balance on goods and services (`NE.RSB.GNFS.ZS`)](https://data.worldbank.org/indicator/NE.RSB.GNFS.ZS). Country groups: [World Bank country classifications](https://datahelpdesk.worldbank.org/knowledgebase/articles/906519-world-bank-country-and-lending-groups).
 Prepared files: [`data/ch02/fig2-2.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch02/fig2-2.csv), [`data/ch02/expenditure_world.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch02/expenditure_world.csv) and [`data/ch02/countries.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch02/countries.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch02/README.md)).
+Bolivia (last in the menu): the same World Bank shares, from the national accounts of Bolivia's [National Statistics Institute (INE)](https://www.ine.gob.bo/).
 Chart: inspired by Fig. 2.2 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
 
-The website's menu lists the G20 and OECD members; in Colab you can choose any of the countries. The
+The website's menu lists the G20 and OECD members, and Bolivia; in Colab you can choose any of the countries. The
 next cell compares the four U.S. shares in 1970 and 2025.
 
 ```{python}
@@ -1685,7 +1754,23 @@ def changes_chart(base_year=1970):
             f"G {c['Government purchases']:+.1f}, NX {c['Net exports']:+.1f} points"
         )
     )
-    return fig
+    # Step 4: Bolivia's four changes (World Bank shares), dotted, in the legend
+    # only. They are larger, so they get a hidden second axis with its own scale
+    bolivia = world[(world.country == "Bolivia") & (world.year >= base_year)]
+    bolivia = bolivia.set_index("year")[list(WB_NAMES)].rename(columns=WB_NAMES)
+    for component, values in (bolivia - bolivia.iloc[0]).items():
+        fig.add_trace(
+            go.Scatter(
+                x=values.index,
+                y=values,
+                name=f"Bolivia: {component.lower()} (own scale)",
+                legendgroup="Bolivia",
+                line=dict(color=CHANGE_COLORS[component], dash="dot"),
+                yaxis="y2",
+            )
+        )
+    fig.update_layout(yaxis2=dict(overlaying="y", visible=False))
+    return hide_bolivia(fig)
 ```
 
 ```{python}
@@ -1701,14 +1786,16 @@ interact(
 ```{python}
 #| kind: website
 # @title Website version: Fig. 2 (changes) with a precomputed slider for the base year
-# one picture per base year; the slider shows one at a time
-slider_figure(
+# one picture per base year; the slider shows one at a time, and each keeps its
+# own copy of Bolivia's lines in the legend only
+fig = slider_figure(
     changes_chart,
     "base_year",
     [1970, 1980, 1990, 2000, 2010],     # the base years
     start=1970,
     label="base year",
 )
+hide_bolivia(fig)
 ```
 
 **Sources.** Data: U.S. Bureau of Economic Analysis, national accounts (NIPA Table 1.1.5), via FRED: [GDP (`GDPA`)](https://fred.stlouisfed.org/series/GDPA),
@@ -1716,6 +1803,7 @@ slider_figure(
 [government consumption expenditures and gross investment (`GCEA`)](https://fred.stlouisfed.org/series/GCEA) and [net exports (`A019RC1A027NBEA`)](https://fred.stlouisfed.org/series/A019RC1A027NBEA).
 Prepared files: [`data/ch02/fig2-2.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch02/fig2-2.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch02/README.md)).
+Bolivia (in the legend, on its own scale): the changes in its four shares of GDP, [World Bank, World Development Indicators](https://data.worldbank.org/indicator/NE.CON.PRVT.ZS) (`NE.CON.PRVT.ZS`, `NE.GDI.TOTL.ZS`, `NE.CON.GOVT.ZS`, `NE.RSB.GNFS.ZS`, World Bank definitions), to 2024; file [`data/ch02/expenditure_world.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch02/expenditure_world.csv).
 Chart: inspired by Fig. 2.2 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -1974,7 +2062,11 @@ fig = slider_figure(
     label="trend from",
 )
 # Step 2: the menu that adds a group of countries from the Penn World Table
-country_menu(fig, country_traces(pwt, "labor_share", [], fmt=".3f"), countries)
+others = country_traces(pwt, "labor_share", ["Bolivia"], fmt=".3f")
+country_menu(fig, others, countries)
+# Step 3: Bolivia's line, in the legend only; it lies below this axis, so it has
+# its own (hidden) scale
+add_bolivia(fig, pwt, "labor_share", fmt=".3f", own_scale="labor share")
 ```
 
 **Sources.** Data: U.S. Bureau of Economic Analysis, national accounts (NIPA Table 1.10), via FRED:
@@ -1984,6 +2076,7 @@ other countries: [Penn World Table 11.0, labor share (`labsh`), Groningen Growth
 (Feenstra, Inklaar and Timmer 2015, [doi:10.34894/FABVLR](https://doi.org/10.34894/FABVLR)). Country groups: [World Bank country classifications](https://datahelpdesk.worldbank.org/knowledgebase/articles/906519-world-bank-country-and-lending-groups).
 Prepared files: [`data/ch02/fig2-3.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch02/fig2-3.csv), [`data/ch02/labor_share_world.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch02/labor_share_world.csv) and [`data/ch02/countries.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch02/countries.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch02/README.md)).
+Bolivia (in the legend, on its own scale): the same Penn World Table series.
 Chart: inspired by Fig. 2.3 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -2347,9 +2440,13 @@ fig.update_layout(
 yearly_levels = deflators.dropna(subset=["deflator_2012_100"])
 country_menu(
     fig,
-    country_traces(yearly_levels, "deflator_2012_100", [], x="date", fmt=",.4g"),
+    country_traces(
+        yearly_levels, "deflator_2012_100", ["Bolivia"], x="date", fmt=",.4g"
+    ),
     countries,
 )
+# Step 4: Bolivia's line, in the legend only
+add_bolivia(fig, yearly_levels, "deflator_2012_100", x="date", fmt=",.4g")
 ```
 
 **Sources.** Data: [U.S. Bureau of Economic Analysis, GDP implicit price deflator (`GDPDEF`)](https://fred.stlouisfed.org/series/GDPDEF), via FRED (rebased to 2012 = 100);
@@ -2357,6 +2454,7 @@ recession dates: [NBER business cycle dates](https://www.nber.org/research/busin
 other countries: [World Bank, World Development Indicators, GDP deflator (`NY.GDP.DEFL.ZS`)](https://data.worldbank.org/indicator/NY.GDP.DEFL.ZS). Country groups: [World Bank country classifications](https://datahelpdesk.worldbank.org/knowledgebase/articles/906519-world-bank-country-and-lending-groups).
 Prepared files: [`data/ch02/fig2-4.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch02/fig2-4.csv), [`data/ch02/recessions.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch02/recessions.csv), [`data/ch02/deflator_world.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch02/deflator_world.csv) and [`data/ch02/countries.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch02/countries.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch02/README.md)).
+Bolivia (in the legend): the same World Bank series, from the national accounts of Bolivia's [National Statistics Institute (INE)](https://www.ine.gob.bo/).
 Chart: inspired by Fig. 2.4 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
@@ -2600,9 +2698,12 @@ fig = slider_figure(
 yearly_inflation = deflators.dropna(subset=["inflation"])
 country_menu(
     fig,
-    country_traces(yearly_inflation, "inflation", [], x="date", fmt=",.1f"),
+    country_traces(yearly_inflation, "inflation", ["Bolivia"], x="date", fmt=",.1f"),
     countries,
 )
+# Step 3: Bolivia's line, in the legend only (its 1980s hyperinflation is off the
+# chart)
+add_bolivia(fig, yearly_inflation, "inflation", x="date", fmt=",.1f")
 ```
 
 **Sources.** Data: [U.S. Bureau of Economic Analysis, GDP implicit price deflator (`GDPDEF`)](https://fred.stlouisfed.org/series/GDPDEF), via FRED;
@@ -2610,6 +2711,7 @@ recession dates: [NBER business cycle dates](https://www.nber.org/research/busin
 other countries: [World Bank, World Development Indicators, Inflation, GDP deflator (`NY.GDP.DEFL.KD.ZG`)](https://data.worldbank.org/indicator/NY.GDP.DEFL.KD.ZG). Country groups: [World Bank country classifications](https://datahelpdesk.worldbank.org/knowledgebase/articles/906519-world-bank-country-and-lending-groups).
 Prepared files: [`data/ch02/fig2-4.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch02/fig2-4.csv), [`data/ch02/recessions.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch02/recessions.csv), [`data/ch02/deflator_world.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch02/deflator_world.csv) and [`data/ch02/countries.csv`](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch02/countries.csv)
 (see the [data notes](https://github.com/quarcs-lab/macro102-site/blob/main/data/ch02/README.md)).
+Bolivia (in the legend): the same World Bank series ([`NY.GDP.DEFL.KD.ZG`](https://data.worldbank.org/indicator/NY.GDP.DEFL.KD.ZG)).
 Chart: inspired by Fig. 2.5 in Jones (2024), [*Macroeconomics*, 6th ed.](https://wwnorton.com/books/9781324063612)
 
 <!-- cell -->
