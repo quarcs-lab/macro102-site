@@ -40,3 +40,11 @@ Made by `build_data.py`; downloads are cached in `../macro102/.work/ch04/noteboo
   - Coverage: from the 1950s for most early OECD members; from the 1990s for Central Europe, Chile, China (1999), Russia (2001) and others. Latvia, Lithuania, Colombia and Costa Rica have no series on FRED.
   - Validation against `fig4-3.csv` (U.S.): the OECD U.S. series (it follows the NYSE Composite) and the real S&P 500 have a correlation of monthly changes of 0.973 for 1957-01 to 2026-08, but average real growth of 2.94% vs 3.87% a year; the gap opened mostly after 2015 (4.2% vs 8.8% a year), as Nasdaq-listed technology firms lifted the S&P 500. The notebook explains this as a data lesson.
 - `regions.csv`: `iso3, country, region, income_group`. The World Bank region and income group (`https://api.worldbank.org/v2/country?format=json&per_page=400`, trailing spaces stripped) of the 185 countries of `pwt_production.csv`, with PWT country names. Taiwan (East Asia & Pacific, high income), Anguilla and Montserrat (Latin America & Caribbean, high income) are not in the World Bank list and are added by hand. Used for the website region menus.
+
+## Bolivia
+
+No rows added. Bolivia (`BOL`, "Bolivia (Plurinational State of)") is already in `pwt_production.csv` (1950–2023,
+in the textbook's sample), `fig4-5.csv`, `fig4-7.csv` and `regions.csv`; its rows stay as they are, because they
+feed the default views. The website charts add tagged, legend-only Bolivia traces drawn from them (macro102
+`/write-bolivia-data`, `merges/ch04.py`). Bolivia has no stock price index, so `fig4-3.csv` and
+`share_prices.csv` have no Bolivian counterpart.

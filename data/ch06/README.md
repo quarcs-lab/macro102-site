@@ -40,3 +40,12 @@ Both are made by `build_data.py`. Downloads are cached in `../macro102/.work/ch0
   - Series start in 1950 (55 countries), 1960, 1970 or 1990 (former Soviet and Yugoslav republics), so 10-year growth rates start ten years later.
   - Validation: the U.S. 10-year growth rates differ from `fig6-6.csv` (BEA) by −0.003 points on average over 1960–2023, at most 0.20 points.
   - Used by Figure 6 ("Beyond the United States").
+
+## Bolivia
+
+- `bolivia.csv`: `series, date, value`, Bolivia's counterpart to the U.S.-only Figure 6 (made by macro102
+  `/write-bolivia-data`, `merges/ch06.py`). One series, `gdp_pc_pwt`: real GDP per person, `rgdpna / pop`, in 2021
+  U.S. dollars, annual, 1950–2023 (74 rows), copied unchanged from Bolivia's rows of `gdp_pc_countries.csv`
+  (Penn World Table 11.0). The notebook averages its growth over the preceding N years, as for the United States.
+- Bolivia's rows of `gdp_pc_countries.csv` (Figure 6 for every country) are unchanged. The commodity files hold
+  world prices; the 40-commodity chart marks Bolivia's main export commodities in its code, without new data.

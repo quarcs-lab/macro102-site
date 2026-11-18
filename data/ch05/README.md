@@ -28,3 +28,11 @@ Made by `build_data.py`.
 
 - `oecd_members.csv`: `iso3, country, joined, in_textbook`. The 38 OECD members in 2026 with the year each joined (OECD, "Members and partners", <https://www.oecd.org/en/about/members-partners.html>; 20 founding members in 1961, then Italy 1962 … Costa Rica 2021), and whether the country is one of the textbook's 24 in Figure 5.8. Used by Figure 8 to add the 14 later members (6 of them have PWT data in 1960).
 - `regions.csv`: `iso3, country, region, income_group`. Same as `../ch04/regions.csv`: the World Bank region and income group of the 185 PWT countries (World Bank country API, cached in `../macro102/.work/ch05/notebook-raw/`; Taiwan, Anguilla and Montserrat added by hand). Used for the website region menu of Figure 10.
+
+## Bolivia
+
+No rows added. Bolivia (`BOL`, "Bolivia (Plurinational State of)") is already in `pwt_panel.csv` (1950–2023,
+`oecd` = False), `fig5-3.csv`, `fig5-9.csv` and `regions.csv`; its rows stay as they are, because they feed the
+default views. The website charts add tagged, legend-only Bolivia traces drawn from them, including Figure 8 (OECD
+members), where Bolivia's growth comes from `pwt_panel.csv` and stays out of the OECD groups and their lines
+(macro102 `/write-bolivia-data`, `merges/ch05.py`).

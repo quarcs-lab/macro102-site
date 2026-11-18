@@ -60,3 +60,19 @@ the raw responses in macro102's `.work/ch17/notebook-raw/`. Retrieved 2026-10-17
   are left out. Check: the U.S. rows are within 0.40 (total), 0.42 (nonresidential), 0.05 (residential) and 0.06
   (inventories) points of GDP of the BEA shares in `fig17-4.csv` (1975–2024). Ireland's investment jumps to 51.5
   percent of GDP in 2019 because multinationals moved intellectual property there.
+
+## Bolivia
+
+Added on 2026-11-18 by macro102's `/write-bolivia-data` skill (`merges/ch17.py`) from the book's Bolivia files in
+[`data/bolivia/`](../bolivia/README.md). Bolivia publishes no split of investment into private and public, or into
+residential and other fixed investment, so Bolivia's numbers are a **proxy** from the World Bank WDI, in percent of
+GDP: all gross capital formation (`NE.GDI.TOTL.ZS`) and all gross fixed capital formation (`NE.GDI.FTOT.ZS`), public
+and private together. The charts show Bolivia only when the reader clicks it in the legend or picks it in the menu.
+
+- `investment_components.csv`: 55 rows at the end of the file (`BOL`, Bolivia, 1970–2024, region Americas). For
+  Bolivia `total` is gross capital formation, `nonres_fixed` is all gross fixed capital formation (dwellings and
+  public investment included), `residential` is empty, and `inventories` is gross capital formation minus gross fixed
+  capital formation. Every other line is unchanged.
+- `bolivia.csv` (new; columns `series, date, value`): `gcf_gdp` (gross capital formation), `gfcf_gdp` (gross fixed
+  capital formation) and `inventories_gdp` (the difference), percent of GDP, annual, 1975–2024, for the U.S. chart of
+  Fig. 4.

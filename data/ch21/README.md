@@ -63,3 +63,15 @@ definitions, sources and validations are in the README of the source folder.
     release of March 19, 2026 (<https://www.bls.gov/productivity/tables/total-factor-productivity-major-sectors-historical.xlsx>).
   - Used for the productivity slowdown after 2003 (the open questions section). Its period averages reproduce the
     textbook's Table 6.2 (see `data/ch06/README.md`).
+
+## Bolivia
+
+- `bolivia.csv`: `series, date, value`, Bolivia's counterparts to the U.S. Phillips curve (Lesson 4, Fig. 2), annual,
+  1960–2025, 132 rows (made by macro102 `/write-bolivia-data`, `merges/ch21.py`, from `data/bolivia/`):
+  - `output_gap`: the book's estimate, 100 log(real GDP / HP trend), λ = 100, on World Bank WDI real GDP (from
+    INE) extended with IMF WEO projections to soften the end-point problem; only the years to 2025 are kept (see
+    `data/bolivia/README.md`). Unlike the U.S. gap, it is not built from an official potential-output estimate.
+  - `inflation`: CPI inflation, percent, World Bank WDI `FP.CPI.TOTL.ZG` (from INE's CPI).
+  The notebook draws Bolivia's points from 1988 on, after the 1984–86 hyperinflation, and keeps them out of the
+  U.S. least-squares line.
+- This file is Bolivia's own, not a copy: `build_data.py` does not touch it, and the copied files are unchanged.
