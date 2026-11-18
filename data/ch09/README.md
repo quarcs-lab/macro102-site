@@ -90,3 +90,24 @@ are kept for comparison.
     before the 2000s changes smoothly from quarter to quarter). This is a different concept from the monthly payroll
     jobs of `fig9-4.csv`.
   - Used for Figure 4 (other countries).
+
+## Bolivia
+
+Added on 2026-11-18 by macro102's `/write-bolivia-data` skill (`merges/ch09.py`) from the book's Bolivia files in
+[`data/bolivia/`](../bolivia/README.md). No multi-country file changed: the chapter gives the economies of
+`short_run_panel.csv` their colors in alphabetical order, and Practice problem 6 uses all of them, so Bolivia's rows
+are in `bolivia.csv` and the notebook adds them to the charts. The charts show Bolivia only when the reader clicks it in
+the legend or picks it in a menu.
+
+`bolivia.csv` (new; columns `series, date, value`; `date` is a year, or the first day of the quarter or month): 608 rows.
+
+| `series` | Chart | Content | Span |
+|---|---|---|---|
+| `gdp_real` | Fig. 2 | Real GDP, billions of constant bolivianos (WDI `NY.GDP.MKTP.KN`) | 1960–2025 |
+| `gdp_potential` | Fig. 2 | Potential GDP **estimated by the book**: HP trend (λ = 100) of real GDP, same units | 1960–2025 |
+| `output_gap_q` | Fig. 3 | Output gap **estimated by the book**: 100 × log(real GDP / HP trend), λ = 1600, INE quarterly GDP, quarterly | 1990Q1–2024Q4 |
+| `employment_change_m` | Fig. 4 | Percent change of employed persons from the month before, INE's Continuous Employment Survey (via the IMF), not seasonally adjusted, monthly; no change where the month before is missing (June 2020 to January 2021) | 2015-11 to 2024-12 |
+| `inflation` | Figs. 5 and 7 | CPI inflation (WDI `FP.CPI.TOTL.ZG`), percent | 1960–2025 |
+| `output_gap` | Figs. 7 and 8 | Output gap **estimated by the book**: 100 × log(real GDP / HP trend), λ = 100, WDI real GDP | 1960–2025 |
+| `unemployment` | Fig. 8 | Urban unemployment rate, INE surveys (via the IMF), percent; 1998, 2003 and 2010 missing | 1971–2024 |
+| `unemployment_trend` | Fig. 8 | HP trend (λ = 100) of `unemployment` over its years, computed as `unemployment_trend` of `short_run_panel.csv` | 1971–2024 |

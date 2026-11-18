@@ -70,3 +70,18 @@ covers them; aggregates (euro area, G20, ...) are dropped. Retrieved 2026-10-17.
   countries. Check: the U.S. ratio is 0.93 to 1.09 times the Federal Reserve's ratio of `fig16-5.csv` (annual means;
   mean 1.015, 1995–2024). Gotcha: NAAG's measure `LES1M_B90`, labelled "Net worth", is total financial **assets**
   (codes `LE`, `F`, `A`), not net worth; it is not used.
+
+## Bolivia
+
+Bolivia's series for the chapter's charts, added by macro102's `/write-bolivia-data` skill
+(`merges/ch16.py`) from the book's Bolivian data in [`data/bolivia/`](../bolivia/README.md). Bolivia is
+hidden in every chart until the reader picks it. No other file changed.
+
+- `bolivia.csv`: `series, date, value`, with the year as the date. Both series are **proxies**, so they stay out of
+  the BIS and OECD files (which also feed Problem 5):
+  - `private_credit_gdp`: domestic credit to the private sector, percent of GDP, 1960–2025 (World Bank WDI
+    `FD.AST.PRVT.GD.ZS`). It stands in for household debt (Fig. 3): it covers households **and firms**. The BIS and
+    the IMF Global Debt Database have no Bolivian household debt.
+  - `gross_national_saving`: gross national saving, percent of GNI, 1976–2024 (World Bank WDI `NY.GNS.ICTR.ZS`). It
+    stands in for the household saving rate (Fig. 4): it covers households, firms and the government, and it is
+    gross, not net. Bolivia publishes no household saving rate.

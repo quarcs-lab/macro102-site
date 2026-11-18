@@ -112,3 +112,25 @@ responses in macro102's `.work/ch08/notebook-raw/`. The U.S. rows of each file a
   - Known quirks: Argentina 2025 has no inflation (one row with an empty real rate); Russia's rate stops in 2021. With
     inflation in the hundreds of percent, `i − π` is a poor approximation of the real rate (Argentina 2024: −164).
   - Used for Figure 5 (a menu of the 50 economies).
+
+## Bolivia
+
+Added on 2026-11-18 by macro102's `/write-bolivia-data` skill (`merges/ch08.py`) from the book's Bolivia files in
+[`data/bolivia/`](../bolivia/README.md). No multi-country file changed; the charts show Bolivia only when the reader
+clicks it in the legend or picks it in a menu.
+
+- `inflation_panel.csv` and `fig8-4.csv` already had Bolivia (WDI CPI inflation, 1960–2025; Bolivia's point in Fig. 4):
+  unchanged. They feed Figs. 1, 4, 6 and 7.
+- `money_prices_panel.csv` and `interest_rates_panel.csv`: unchanged. Adding Bolivia would shift the colors of the 18
+  Macrohistory economies (Fig. 3) and change the averages of Practice problem 5 (Fig. 5), so Bolivia's rows for those
+  figures are in `bolivia.csv`.
+- `bolivia.csv` (new; columns `series, date, value`, annual, `date` = year): 326 rows.
+
+| `series` | Chart | Content | Span |
+|---|---|---|---|
+| `broad_money` | Fig. 3 | Broad money, current bolivianos, end of year (WDI `FM.LBL.BMNY.CN`); a series break in December 2020 lowers 2020 by about 30 percent | 1960–2025 |
+| `cpi` | Fig. 3 | Consumer price index, 2010 = 100 (WDI `FP.CPI.TOTL`) | 1960–2025 |
+| `velocity` | Fig. 3, velocity | Nominal GDP (WDI `NY.GDP.MKTP.CN`) / broad money | 1960–2025 |
+| `interbank_rate` | Fig. 5 | Overnight interbank rate in bolivianos (Banco Central de Bolivia, via the IMF), mean of the 12 months, percent | 1995–2025 |
+| `inflation` | Fig. 5 | CPI inflation (WDI `FP.CPI.TOTL.ZG`), percent | 1960–2025 |
+| `real_rate` | Fig. 5 | `interbank_rate − inflation`, percent | 1995–2025 |
