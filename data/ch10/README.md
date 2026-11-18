@@ -121,3 +121,35 @@ period, `iso3, country, date|year, values...`, with the country names of `fig10-
   - Gaps: Australia's monthly CPI starts in 2024-04 (so inflation in 2025-04); the OECD's Japanese core index stops
     in 2021-06; Argentina's IMF index starts in 2016-12; New Zealand has no monthly CPI and is missing.
   - Validation: our own Eurostat euro-area HICP and IMF U.S. CPI reproduce `fig10-10.csv` within 0.010 and 0.000 points.
+
+## Bolivia
+
+Added by macro102's `.claude/skills/write-bolivia-data/merges/ch10.py` from the book's Bolivian series in
+[`data/bolivia/`](../bolivia/README.md) (run after `build_data.py`). Every other line stays as it is.
+
+- `countries.csv`: `BOL, Bolivia, Americas`, as the **last** row, so that no other economy changes its color.
+- The multi-country panels keep their own economies (the chapter's text and Practice problems count them). The
+  notebook adds Bolivia's rows from `bolivia.csv` to the "beyond the U.S." charts only. No Bolivian series exists
+  for house prices, interbank spreads or share prices.
+- `bolivia.csv`: `series, date, value`:
+  - `interbank_rate`: overnight interbank money-market rate (IMF Monetary and Financial Statistics, from the BCB),
+    percent, monthly average, 2000-01 to 2026-09. Bolivia's central bank sets no policy-rate target, so this is a
+    **proxy** for the policy rate (Fig. 2 and its panel);
+  - `covid_deaths_pm`: cumulative confirmed Covid-19 deaths per million on 2023-03-22 and 2026-08-30 (Our World in
+    Data indicator 954543, the download of `fig10-5.csv`) (Fig. 5);
+  - `gdp_loss`: the GDP loss of `fig10-5.csv`, percent of one year's GDP, through 2022Q3 (date 2022-07-01) and
+    through 2024Q4 (date 2024-10-01, INE's latest quarter; the 2026Q2 value cannot be computed), on INE's quarterly
+    real GDP seasonally adjusted by the book (Fig. 5);
+  - `gdp_index_q`: the same GDP, index 2019Q4 = 100, 2019Q4 to 2024Q4 (Fig. 6). Bolivia's 2019Q4 is low (the
+    political crisis of October–November 2019);
+  - `employment_m`: employed persons, millions, monthly, 2015-10 to 2024-12 (INE's Continuous Employment Survey via
+    the IMF, not seasonally adjusted; no survey from June to December 2020) (Fig. 7);
+  - `employment_q`: the same, quarterly mean of the months available, thousands, 2015Q4 to 2024Q4 (2020Q2 = mean of
+    April and May; 2020Q3 and Q4 missing) (Fig. 7 beyond the U.S.);
+  - `output_gap_q`: the book's HP output gap (λ = 1600) on INE's quarterly GDP, percent, 2000Q1 to 2024Q4 (Fig. 8);
+  - `output_gap`: the book's annual HP output gap (λ = 100) on World Bank real GDP extended with the IMF WEO growth
+    projections, 1990 to 2027; 2026 and 2027 are projections (Fig. 8 beyond the U.S.);
+  - `unemployment_q`: INE's urban unemployment rate (Continuous Employment Survey via the IMF), quarterly, 2015Q4 to
+    2025Q2, not seasonally adjusted (Fig. 9 and its panel);
+  - `inflation_log`: 12-month CPI inflation, 100 ln(P_t / P_t−12), of the IMF CPI (INE's index), monthly, 2015-01 to
+    2026-06; Bolivia publishes no core index (Figs. 10 and 11).
