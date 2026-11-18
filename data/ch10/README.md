@@ -149,7 +149,7 @@ Added by macro102's `.claude/skills/write-bolivia-data/merges/ch10.py` from the 
   - `output_gap_q`: the book's HP output gap (λ = 1600) on INE's quarterly GDP, percent, 2000Q1 to 2024Q4 (Fig. 8);
   - `output_gap`: the book's annual HP output gap (λ = 100) on World Bank real GDP extended with the IMF WEO growth
     projections, 1990 to 2027; 2026 and 2027 are projections (Fig. 8 beyond the U.S.);
-  - `unemployment_q`: INE's urban unemployment rate (Continuous Employment Survey via the IMF), quarterly, 2015Q4 to
+  - `unemployment_q`: INE's unemployment rate (Continuous Employment Survey, ECE, via the IMF), quarterly, 2015Q4 to
     2025Q2, not seasonally adjusted (Fig. 9 and its panel);
   - `inflation_log`: 12-month CPI inflation, 100 ln(P_t / P_t−12), of the IMF CPI (INE's index), monthly, 2015-01 to
     2026-06; Bolivia publishes no core index (Figs. 10 and 11).

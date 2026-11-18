@@ -67,7 +67,7 @@ download it again).
 
 - `pwt_growth.csv`: `iso3, country, region, year, tfp_growth, gdp_growth`. Every country of the Penn World Table 11.0
   with TFP data: 120 countries, 1955 to 2023, 6,868 rows (about 360 kB).
-  - `tfp_growth` = 100 × change in the log of `rtfpna` (TFP at constant national prices, 2017 = 1);
+  - `tfp_growth` = 100 × change in the log of `rtfpna` (TFP at constant national prices, 2021 = 1);
     `gdp_growth` = 100 × change in the log of `rgdpna` (real GDP at constant national prices); percent per year.
     Log changes can fall below −100 (Iraq 1991: −105).
   - `region` is the World Bank region; names follow the World Bank's country list with the readable names of

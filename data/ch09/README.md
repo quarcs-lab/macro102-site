@@ -109,5 +109,5 @@ the legend or picks it in a menu.
 | `employment_change_m` | Fig. 4 | Percent change of employed persons from the month before, INE's Continuous Employment Survey (via the IMF), not seasonally adjusted, monthly; no change where the month before is missing (June 2020 to January 2021) | 2015-11 to 2024-12 |
 | `inflation` | Figs. 5 and 7 | CPI inflation (WDI `FP.CPI.TOTL.ZG`), percent | 1960–2025 |
 | `output_gap` | Figs. 7 and 8 | Output gap **estimated by the book**: 100 × log(real GDP / HP trend), λ = 100, WDI real GDP | 1960–2025 |
-| `unemployment` | Fig. 8 | Urban unemployment rate, INE surveys (via the IMF), percent; 1998, 2003 and 2010 missing | 1971–2024 |
+| `unemployment` | Fig. 8 | Unemployment rate, INE surveys (via the IMF; coverage varies over time), percent; 1998, 2003 and 2010 missing | 1971–2024 |
 | `unemployment_trend` | Fig. 8 | HP trend (λ = 100) of `unemployment` over its years, computed as `unemployment_trend` of `short_run_panel.csv` | 1971–2024 |

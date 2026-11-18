@@ -70,5 +70,5 @@ clicks it in the legend or picks it in a menu.
 |---|---|---|---|
 | `interbank_q` | Fig. 16 | Overnight interbank (money-market) rate in bolivianos (Banco Central de Bolivia, via the IMF), quarterly mean of complete quarters, percent: the book's **proxy** for the policy rate (Bolivia sets no policy-rate target and kept a fixed exchange rate; the Treasury bill yield is not used because the BCB held almost no auctions from 2016 to 2025) | 1995Q1–2026Q3 |
 | `inflation_q` | Fig. 16 | Headline CPI inflation over four quarters (quarterly mean of INE's CPI, via the IMF), percent; Bolivia publishes no core CPI series here | 1958Q1–2026Q2 |
-| `output_gap` | Fig. 17 | Output gap **estimated by the book**: 100 × log(real GDP / HP trend), λ = 100, WDI real GDP | 1960–2025 |
+| `output_gap` | Fig. 17 | Output gap **estimated by the book**: 100 × log(real GDP / HP trend), λ = 100, on WDI real GDP extended with the IMF WEO growth projections to 2031 (the projection years soften the HP end-point problem) | 1960–2025 |
 | `inflation` | Figs. 17 and 21 | CPI inflation (WDI `FP.CPI.TOTL.ZG`), percent | 1960–2025 |

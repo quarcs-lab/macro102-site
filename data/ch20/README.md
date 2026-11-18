@@ -139,7 +139,7 @@ separate file, made from `data/bolivia/` by macro102's `.claude/skills/write-bol
   - `fx_monthly` — official exchange rate, bolivianos per U.S. dollar, monthly average, 1971-01 to 2026-10 (IMF
     Exchange Rates dataset, the Banco Central de Bolivia's rate; Fig. 1 and the 25-currency chart). The IMF writes
     the rates before the 1987 redenomination (1 boliviano = 1,000,000 pesos bolivianos) in today's bolivianos. The
-    rate was fixed at 6.91 (6.96 selling) from 2011 and moved to about 11.8–11.9 from July 2026.
+    rate was fixed at 6.91 (6.96 selling) from 2011 and moved in June–July 2026, to about 11.7–11.9 from August 2026.
   - `fx_annual` — the same rate, annual average, 1950–2025: 1950–1958 from the Penn World Table 11.0 (`xr`), from
     1959 the IMF's monthly rate averaged (Fig. 6 and the 17-country chart).
   - `fx_eop` — the official rate at the end of each year, 1990–2025: Bolivia's rows of `fx_crises.csv` (Fig. 8).

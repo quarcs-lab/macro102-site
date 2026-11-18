@@ -16,17 +16,16 @@ Status: *official* = published by a Bolivian institution (INE, Banco Central de 
 | M | `inflation_yoy` | CPI inflation, 12-month | % | IMF CPI | official | 1958-01 to 2026-06 |
 | M | `fx_official` | Official exchange rate | bolivianos per U.S. dollar, period average | IMF ER | official | 1959-03 to 2026-10 |
 | M | `fx_official_eop` | Official exchange rate, end of period | bolivianos per U.S. dollar | IMF ER | official | 1959-03 to 2026-10 |
-| M | `fx_parallel` | Parallel-market exchange rate | bolivianos per U.S. dollar | IMF WPCPER | international | 2020-02 to 2025-10 |
 | M | `tbill` | Treasury bill yield | % per year | IMF MFS_IR | official | 1994-01 to 2026-09 |
 | M | `money_market` | Interbank money-market rate | % per year | IMF MFS_IR | official | 1995-01 to 2026-09 |
 | M | `deposit_rate` | Deposit rate | % per year | IMF MFS_IR | official | 1987-01 to 2026-09 |
 | M | `base_money` | Base money | bolivianos | IMF MFS_MA | official | 1977-12 to 2026-08 |
 | M | `broad_money` | Broad money | bolivianos | IMF MFS_MA | official | 2001-12 to 2026-08 |
 | M | `cb_assets` | Central bank total assets | bolivianos | IMF MFS_CBS | official | 2001-12 to 2026-08 |
-| M | `unemployment_urban` | Urban unemployment rate | % | IMF LS | official | 2015-10 to 2024-12 |
+| M | `unemployment_urban` | Unemployment rate (INE surveys) | % | IMF LS | official | 2015-10 to 2024-12 |
 | M | `employment` | Employed persons | persons | IMF LS | official | 2015-10 to 2024-12 |
 | Q | `gdp_real` | Real GDP | thousands of 1990 bolivianos, not seasonally adjusted | INE Bolivia | official | 1990-01 to 2024-10 |
-| Q | `unemployment_urban` | Urban unemployment rate | % | IMF LS | official | 1989-01 to 2025-04 |
+| Q | `unemployment_urban` | Unemployment rate (INE surveys) | % | IMF LS | official | 1989-01 to 2025-04 |
 | A | `gdp_real` | Real GDP | constant bolivianos | World Bank WDI NY.GDP.MKTP.KN | international | 1960 to 2025 |
 | A | `gdp_nominal` | Nominal GDP | current bolivianos | World Bank WDI NY.GDP.MKTP.CN | international | 1960 to 2025 |
 | A | `unemployment_ilo` | Unemployment rate (ILO modeled) | % of labor force | World Bank WDI SL.UEM.TOTL.ZS | international | 1991 to 2025 |
@@ -48,7 +47,7 @@ Status: *official* = published by a Bolivian institution (INE, Banco Central de 
 | A | `gcf_gdp` | Gross capital formation | % of GDP | World Bank WDI NE.GDI.TOTL.ZS | international | 1970 to 2024 |
 | A | `health_spending` | Current health expenditure | % of GDP | World Bank WDI SH.XPD.CHEX.GD.ZS | international | 2000 to 2023 |
 | A | `public_debt_long` | Government debt | % of GDP | IMF GDD | international | 1970 to 2024 |
-| A | `unemployment_urban` | Urban unemployment rate | % | IMF LS | official | 1971 to 2024 |
+| A | `unemployment_urban` | Unemployment rate (INE surveys) | % | IMF LS | official | 1971 to 2024 |
 | A | `weo_growth` | Real GDP growth | % | IMF WEO | international | 1980 to 2031 |
 | A | `weo_infl` | CPI inflation, annual average | % | IMF WEO | international | 1980 to 2031 |
 | A | `weo_unemp` | Unemployment rate | % | IMF WEO | international | 2000 to 2031 |
@@ -68,7 +67,7 @@ Status: *official* = published by a Bolivian institution (INE, Banco Central de 
 | A | `pwt_tfp_index` | Total factor productivity (PWT rtfpna) | index, 2021 = 1 | Penn World Table 11.0 | international | 1954 to 2023 |
 | A | `pwt_inv` | Investment share of GDP (PWT) | % of GDP | Penn World Table 11.0 | international | 1950 to 2023 |
 | A | `pwt_labsh` | Labor share (PWT) | % | Penn World Table 11.0 | international | 1950 to 2023 |
-| A | `pwt_price` | Price level of GDP (PWT) | U.S. = 1 | Penn World Table 11.0 | international | 1950 to 2023 |
+| A | `pwt_price` | Price level of GDP (PWT) | U.S. in 2021 = 1 | Penn World Table 11.0 | international | 1950 to 2023 |
 | A | `pwt_xr` | Exchange rate (PWT) | bolivianos per U.S. dollar | Penn World Table 11.0 | international | 1950 to 2023 |
 | A | `pwt_ky` | Capital-output ratio (PWT) | ratio | Penn World Table 11.0 | international | 1950 to 2023 |
 | A | `pwt_hc` | Human capital index (PWT) | index | Penn World Table 11.0 | international | 1950 to 2023 |
@@ -86,23 +85,22 @@ Status: *official* = published by a Bolivian institution (INE, Banco Central de 
 
 - `cpi` (M): INE's CPI as reported to the IMF, spliced back to 1957 by the IMF.
 - `inflation_yoy` (M): Change in INE's CPI over 12 months.
-- `fx_official` (M): The BCB's official rate. Bolivia redenominated in 1987 (1 boliviano = 1,000,000 pesos bolivianos); the IMF series is in today's bolivianos throughout. Fixed at 6.86 to 6.96 since 2011.
+- `fx_official` (M): The BCB's official rate. Bolivia redenominated in 1987 (1 boliviano = 1,000,000 pesos bolivianos); the IMF series is in today's bolivianos throughout. Held at 6.86 to 6.96 from 2011 to early 2026, while a parallel market traded dollars at well above the official price from 2023; the official rate was moved to about 12 in mid-2026. No reliable monthly parallel-rate series is published (the IMF's crypto-based series for Bolivia tracks the official rate), so the book shows the official rate only.
 - `fx_official_eop` (M): The BCB's official rate at the end of each month.
-- `fx_parallel` (M): IMF Working Paper dataset of crypto-based parallel exchange rates (USDT-boliviano trades), monthly average. It tracks the street price of dollars after the 2023 dollar shortage.
-- `tbill` (M): Yield on the BCB's open-market auctions of short-term government and BCB securities (Letras). Bolivia has no policy-rate target; this is the closest market rate the BCB steers.
+- `tbill` (M): Yield on the BCB's open-market auctions of short-term government and BCB securities (Letras). Bolivia has no policy-rate target, and the auctions were rare from 2016 to 2025, so the book uses the interbank rate (money_market) as its policy-rate proxy.
 - `money_market` (M): Overnight interbank rate in bolivianos.
 - `deposit_rate` (M): Average bank deposit rate in bolivianos.
 - `base_money` (M): Monetary base (currency plus bank reserves at the BCB), national definition.
 - `broad_money` (M): Broad money in bolivianos and dollars, IMF definition.
 - `cb_assets` (M): Total assets of the Banco Central de Bolivia.
-- `unemployment_urban` (M): INE's Continuous Employment Survey (ECE), urban areas, reported to the IMF.
+- `unemployment_urban` (M): INE's Continuous Employment Survey (ECE), reported to the IMF. (The id says urban for history: the series follows INE's survey coverage, which is mostly the whole country; it is close to, not equal to, the WEO's urban rate.)
 - `employment` (M): INE's Continuous Employment Survey (ECE), reported to the IMF.
-- `gdp_real` (Q): INE, Cuadro 1.01.01, quarterly GDP at constant 1990 prices (the latest year is preliminary).
-- `unemployment_urban` (Q): INE household and employment surveys, urban areas, reported to the IMF.
+- `gdp_real` (Q): INE, Cuadro 1.01.01, quarterly GDP at constant 1990 prices (INE marks 2017-2024 as preliminary).
+- `unemployment_urban` (Q): INE household and employment surveys, reported to the IMF. Coverage follows INE's surveys: urban areas in the older surveys, the whole country in most years since 2000 (2000-2018 equal the World Bank's national estimate). It differs from the WEO's urban rate, so there is a break where the two meet in 1999-2000. The id says urban for history.
 - `gdp_real` (A): World Bank WDI, from INE's national accounts.
 - `gdp_nominal` (A): World Bank WDI, from INE's national accounts.
 - `unemployment_ilo` (A): ILO modeled estimate, whole country, ages 15+.
-- `unemployment_national` (A): INE's survey-based rate (urban before the 2010s), via the World Bank.
+- `unemployment_national` (A): INE's survey-based rate (urban areas in the older surveys, mostly the whole country since 2000), via the World Bank.
 - `emp_pop` (A): ILO modeled estimate.
 - `emp_pop_male` (A): ILO modeled estimate.
 - `emp_pop_female` (A): ILO modeled estimate.
@@ -120,7 +118,7 @@ Status: *official* = published by a Bolivian institution (INE, Banco Central de 
 - `gcf_gdp` (A): World Bank WDI: fixed investment plus inventories.
 - `health_spending` (A): WHO Global Health Expenditure Database, via the World Bank.
 - `public_debt_long` (A): IMF Global Debt Database, public debt (the IMF's mixed coverage: central government, and general government where available), 1970 on. The Database has no Bolivian household debt; the book uses domestic credit to the private sector instead.
-- `unemployment_urban` (A): INE household and employment surveys, urban areas, reported to the IMF.
+- `unemployment_urban` (A): INE household and employment surveys, reported to the IMF. Coverage follows INE's surveys: urban areas in the older surveys, the whole country in most years since 2000 (2000-2018 equal the World Bank's national estimate). It differs from the WEO's urban rate, so there is a break where the two meet in 1999-2000. The id says urban for history.
 - `weo_growth` (A): IMF World Economic Outlook, October 2026; years after 2025 are IMF projections.
 - `weo_infl` (A): IMF World Economic Outlook, October 2026; years after 2025 are IMF projections.
 - `weo_unemp` (A): IMF World Economic Outlook, October 2026; years after 2025 are IMF projections.
@@ -145,11 +143,11 @@ Status: *official* = published by a Bolivian institution (INE, Banco Central de 
 - `pwt_ky` (A): Penn World Table 11.0.
 - `pwt_hc` (A): Penn World Table 11.0.
 - `pwt_pop` (A): Penn World Table 11.0.
-- `tbill` (A): Annual average of the monthly BCB auction yield (IMF).
-- `fx_official` (A): Annual average of the IMF's monthly official rate.
-- `gdp_real_sa` (Q): INE's quarterly real GDP, seasonally adjusted by the book (STL decomposition of the log, period 4).
-- `potential_q` (Q): Hodrick-Prescott trend (lambda = 1600) of seasonally adjusted real GDP. Bolivia publishes no potential GDP; HP trends are least reliable at the end of the sample.
-- `output_gap_q` (Q): 100 x log(real GDP / HP trend), lambda = 1600, from INE's quarterly GDP.
-- `potential` (A): Hodrick-Prescott trend (lambda = 100) of real GDP, as for the output gap.
+- `tbill` (A): Annual average of the monthly BCB auction yield (IMF), only for years with at least 6 monthly values (the auctions were rare from 2016).
+- `fx_official` (A): Annual average of the IMF's monthly official rate, for years with at least 6 monthly values (1959 starts in March; the latest year is partial, e.g. 2026 = January-October, across the mid-2026 move of the rate).
+- `gdp_real_sa` (Q): INE's quarterly real GDP, seasonally adjusted by the book (robust STL decomposition of the log, period 4; adjusted = exp(log GDP - seasonal)).
+- `potential_q` (Q): Hodrick-Prescott trend (lambda = 1600) of the log of seasonally adjusted real GDP. Bolivia publishes no potential GDP; HP trends are least reliable at the end of the sample.
+- `output_gap_q` (Q): 100 x log(seasonally adjusted real GDP / HP trend), lambda = 1600, from INE's quarterly GDP.
+- `potential` (A): Hodrick-Prescott trend (lambda = 100) of the log of real GDP, as for the output gap.
 - `output_gap` (A): 100 x log(real GDP / HP trend), lambda = 100, on WDI real GDP 1960-2025 extended with the IMF WEO growth projections to 2031 (which softens the HP end-point problem). Bolivia publishes no output gap.
 - `structural_balance` (A): General government balance (IMF WEO) minus eps x output gap, with eps = revenue / GDP (revenue moves one for one with output, spending does not react). It ignores the swings of gas prices, which drive much of Bolivia's revenue.

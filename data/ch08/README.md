@@ -130,7 +130,7 @@ clicks it in the legend or picks it in a menu.
 |---|---|---|---|
 | `broad_money` | Fig. 3 | Broad money, current bolivianos, end of year (WDI `FM.LBL.BMNY.CN`); a series break in December 2020 lowers 2020 by about 30 percent | 1960–2025 |
 | `cpi` | Fig. 3 | Consumer price index, 2010 = 100 (WDI `FP.CPI.TOTL`) | 1960–2025 |
-| `velocity` | Fig. 3, velocity | Nominal GDP (WDI `NY.GDP.MKTP.CN`) / broad money | 1960–2025 |
+| `velocity` | Fig. 3, velocity | Nominal GDP (WDI `NY.GDP.MKTP.CN`) / broad money; WDI nominal GDP has a break in 2017 (+35 percent), which raises velocity from 2017 | 1960–2025 |
 | `interbank_rate` | Fig. 5 | Overnight interbank (money-market) rate in bolivianos (Banco Central de Bolivia, via the IMF), mean of the 12 months, percent; a **proxy** for the chart's 3-month rate (closer to it than the deposit rate) | 1995–2025 |
 | `inflation` | Fig. 5 | CPI inflation (WDI `FP.CPI.TOTL.ZG`), percent | 1960–2025 |
 | `real_rate` | Fig. 5 | `interbank_rate − inflation`, percent | 1995–2025 |

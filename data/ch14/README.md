@@ -63,7 +63,7 @@ readable names of `data/ch01/build_data.py`; the euro area is `EMU`, "Euro area"
 | `money_world.csv` | 14.6 | `iso3, country, region, year, broad_money_growth` (percent, end of year over end of year) | 166 economies, 1990–2025; 5,350 rows | WDI `FM.LBL.BMNY.ZG`; euro area: ECB `BSI.M.U2.Y.V.M30.X.I.U2.2300.Z01.A` (M3 annual growth rate, December) |
 | `house_prices_world.csv` | 14.8 | `iso3, country, region, date, real_price` (index, 2010 = 100) | 58 economies, quarterly (first day of the quarter), 1970Q1–2026Q2; 8,635 rows | BIS `WS_SPP`, key `Q..R.628` (real residential property prices, CPI-deflated); aggregates 4T, 5R, XW dropped |
 | `cb_assets_world.csv` | 14.9 | `iso3, country, date, assets_gdp` (percent of GDP) | 35 central banks, quarterly, 2000Q1–2026Q2; 3,507 rows | BIS `WS_CBTA`, key `Q..B.XDF_R_B1GQ..B` (total assets, break-adjusted, percent of GDP); the Eurosystem's national central banks are dropped (the euro area stands for them) |
-| `tfp_world.csv` | 14.11 | `iso3, country, region, year, tfp` (PWT `rtfpna`, 2017 = 1) | 120 countries, 1954–2023; 6,988 rows | Penn World Table 11.0 (`pwt110.dta`, DataverseNL doi:10.34894/FABVLR) |
+| `tfp_world.csv` | 14.11 | `iso3, country, region, year, tfp` (PWT `rtfpna`, 2021 = 1) | 120 countries, 1954–2023; 6,988 rows | Penn World Table 11.0 (`pwt110.dta`, DataverseNL doi:10.34894/FABVLR) |
 
 Validation of the U.S. rows (printed by `build_data.py`; it stops if the policy-rate check fails):
 
@@ -118,6 +118,6 @@ unchanged. The charts show Bolivia only when the reader clicks it in the legend 
 | `inflation_q` | Fig. 4 | CPI inflation over four quarters (quarterly mean of INE's CPI, via the IMF), percent | 2000Q1–2026Q2 |
 | `output_gap_q` | Fig. 4 | Output gap estimated by the book: 100 × log(real GDP / HP trend), λ = 1600, INE quarterly GDP | 2000Q1–2024Q4 |
 | `gdp_index_q`, `potential_index_q` | Fig. 5 | INE real GDP, seasonally adjusted by the book, and its HP trend (λ = 1600); index, average real GDP in 2007 = 100 | 2000Q1–2024Q4 |
-| `base_money_growth`, `broad_money_growth` | Fig. 6 | 12-month growth of base money and broad money (BCB, IMF Monetary and Financial Statistics), percent | 1990-01 (broad money 2002-12) to 2026-08 |
+| `base_money_growth`, `broad_money_growth` | Fig. 6 | 12-month growth of base money and broad money (BCB, IMF Monetary and Financial Statistics), percent | 1990-01 (broad money 2002-12) to 2026-08; broad money growth is empty from 2020-12 to 2021-11, the 12 months that span a break in the IMF series (its level falls by a third in December 2020, a redefinition, while base money does not) |
 | `cb_assets_gdp` | Fig. 9 | BCB total assets in percent of the same year's nominal GDP | 2007-01 to 2025-12, monthly |
 | `tfp_index` | Fig. 11 | PWT 11.0 TFP at constant national prices (`rtfpna`), 2009 = 100 | 1987–2023 |

@@ -93,10 +93,10 @@ countries. `date` is a year, a month (`YYYY-MM-DD`), or, for the `growth_*` seri
 
 - `emp_pop`, `emp_pop_men`, `emp_pop_women`: employment-population ratio, ages 15+, percent, 1991–2025. ILO modelled
   estimates, World Bank WDI `SL.EMP.TOTL.SP.ZS` (`.MA.ZS`, `.FE.ZS`), from `data/bolivia/`.
-- `unemployment_m`: urban unemployment rate, percent, monthly, 2015-10 to 2024-12 (no data June–December 2020), not
+- `unemployment_m`: unemployment rate, percent, monthly, 2015-10 to 2024-12 (no data June–December 2020), not
   seasonally adjusted. INE, Continuous Employment Survey (ECE), via the IMF; from `data/bolivia/`.
-- `unemployment_a`: urban unemployment rate, percent, annual, 1971–2024 (a few years missing). INE household and
-  employment surveys, via the IMF; from `data/bolivia/`. Above 14 percent in 1983–1988.
+- `unemployment_a`: unemployment rate, percent, annual, 1971–2024 (a few years missing). INE household and
+  employment surveys (their coverage varies over time), via the IMF; from `data/bolivia/`. Above 14 percent in 1983–1988.
 - `college_premium`: 100 × ln(average hourly earnings of employees with a bachelor's or higher degree, ISCED 6–8,
   weighted by the number of employees at each level / those with upper secondary education, ISCED 3), log points,
   2021–2025. INE's ECE via ILOSTAT (`EAR_EHRA_SEX_EDU_NB_A`, `EES_TEES_SEX_EDU_NB_A`, source `BA:74`). A proxy for
