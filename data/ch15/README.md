@@ -82,3 +82,12 @@ download it again).
   - Data hygiene: wars and collapses give extreme values (Iraq 1991 −105, Kuwait 1991 −51, Macao 2020 −80, Kuwait
     1992 +55). The series start in 1954–1994 (1994 for the former Soviet, Yugoslav and Czechoslovak states).
   - Used in Figure 1, "Beyond the United States".
+
+## Bolivia
+
+`pwt_growth.csv` already includes Bolivia (PWT 11.0, 1955–2023); its rows are not changed.
+
+- `bolivia.csv`: `series, date, value`, Bolivia's rows of `pwt_growth.csv` for the two U.S. charts of Figure 1,
+  written by macro102's `.claude/skills/write-bolivia-data/merges/ch15.py`:
+  - `tfp_growth`: PWT TFP growth (a raw Solow residual, not utilization-adjusted), percent, 1955–2023;
+  - `gdp_growth`: PWT real GDP growth, percent, 1955–2023.
