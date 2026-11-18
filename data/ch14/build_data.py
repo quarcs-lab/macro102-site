@@ -33,7 +33,7 @@ More outputs:
   money_world.csv           iso3, country, region, year, broad_money_growth       December over December, percent
   house_prices_world.csv    iso3, country, region, date, real_price               BIS real index, 2010 = 100, quarterly
   cb_assets_world.csv       iso3, country, date, assets_gdp                       central bank assets, percent of GDP, quarterly
-  tfp_world.csv             iso3, country, region, year, tfp                      PWT rtfpna, 2017 = 1
+  tfp_world.csv             iso3, country, region, year, tfp                      PWT rtfpna, 2021 = 1
 """
 import argparse
 import io
@@ -328,7 +328,7 @@ def pwt(macro102, cache):
 
 
 def tfp_world(macro102, cache, names):
-    """Figure 11 for other countries: TFP at constant national prices (PWT rtfpna, 2017 = 1)."""
+    """Figure 11 for other countries: TFP at constant national prices (PWT rtfpna, 2021 = 1)."""
     d = pwt(macro102, cache).rename(columns={"countrycode": "iso3", "rtfpna": "tfp"}).dropna(subset=["tfp"])
     d["year"] = d.year.astype(int)
     d["tfp"] = d.tfp.round(4)

@@ -386,6 +386,8 @@ def wid_country(cache, iso2):
     if not os.path.exists(path):
         z = zipfile.ZipFile(io.BufferedReader(RangeFile(WID_ZIP), buffer_size=1 << 20))
         d = pd.read_csv(z.open(f"WID_data_{iso2}.csv"), sep=";", usecols=["variable", "percentile", "year", "value"])
+        # the bulk file now spells the variables aptinc992j / sptinc992j; keep the old names used below
+        d["variable"] = d.variable.replace({"aptinc992j": "aptincj992", "sptinc992j": "sptincj992"})
         income = (d.variable == "aptincj992") & d.percentile.isin(list(g_percentiles())) & (d.year >= 1980)
         top = (d.variable == "sptincj992") & (d.percentile == "p99.9p100")
         d[income | top].to_csv(path, index=False)
