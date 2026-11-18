@@ -113,3 +113,12 @@ The notebook draws the U.S. textbook series from the figure files above and the 
   - Hygiene: the file includes the "Euro area" aggregate (`EMU`, from `countries.csv`); leave it out when
     comparing countries.
 
+
+## Bolivia (added 2026-11-18)
+
+Bolivia is offered, hidden until clicked, in every data chart of the chapter. No file changed: every
+multi-country file already holds Bolivia (`BOL`, "Bolivia"), from the World Bank WDI and the Penn
+World Table: `expenditure_world.csv` (Figs. 1 and 2, 1970–2024, and Bolivia's counterpart to the
+U.S.-only Fig. 2 "changes"), `labor_share_world.csv` (Fig. 3; PWT repeats its 1970 value for 1950–1969
+and its 2015 value for 2016–2023), `deflator_world.csv` (Figs. 4 and 5; 12,339 percent deflator
+inflation in 1985, the hyperinflation) and `ppp_world.csv`.

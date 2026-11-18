@@ -42,3 +42,12 @@ Both are made by `build_data.py` from the full Maddison Project Database 2023 (`
   - Maddison 2023 only: `fig3-1.csv` also splices in Maddison (2010) for the six book countries' earliest years, so the notebook keeps `fig3-1.csv` for those six and adds the others from this file.
   - Validation: wherever `fig3-1.csv` uses Maddison 2023 (no splice), the values are identical.
   - Only 14 countries have an estimate for the year 1 (Italy, Greece, Egypt, Iran, Iraq, Israel, Jordan, Tunisia, Turkey, Spain, Portugal, France, Belgium, Switzerland).
+
+## Bolivia (added 2026-11-18)
+
+Bolivia is offered, hidden until clicked, in every data chart of the chapter. No file changed: every
+multi-country file already holds Bolivia (`BOL`, "Bolivia (Plurinational State of)", shown as
+"Bolivia"): `maddison_world.csv` (Figs. 2, 5, 6 and 9, and the counterparts to the U.S.-only Figs. 5
+and 9; GDP per person from 1890, population from 1900), `maddison_longrun.csv` (Fig. 1, from 1900),
+and `pwt_income.csv`, `fig3-7.csv` and `fig3-8.csv` (Figs. 7 and 8; Penn World Table 11.0, in the
+textbook's sample of 111 countries).
