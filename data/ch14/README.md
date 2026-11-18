@@ -92,3 +92,32 @@ Known quirks, shown in the notebook as data-hygiene notes:
   −99.9 percent in 2015, Grenada −91 percent in 2024 and +1,169 percent in 2025.
 - Series start in different years (BIS house prices: 1970 for many, 2010 for Poland and Turkey; PWT: 1994 for the
   former Soviet, Yugoslav and Czechoslovak states; OECD GDP: Bulgaria, Colombia, Lithuania, Romania and Turkey after 1997).
+
+## Bolivia
+
+Added on 2026-11-18 by macro102's `/write-bolivia-data` skill (`merges/ch14.py`) from the book's Bolivia files in
+[`data/bolivia/`](../bolivia/README.md). Bolivia's rows go at the end of each multi-country file; every other line is
+unchanged. The charts show Bolivia only when the reader clicks it in the legend or picks it in a menu.
+
+- `taylor_world.csv`: 27 rows (`BOL`, 1999–2025). `policy_rate` is the interbank money-market rate in bolivianos
+  (Banco Central de Bolivia, via the IMF's monetary statistics, annual mean of the monthly rate), a **proxy**: Bolivia
+  sets no policy-rate target and kept a fixed exchange rate. `core_inflation` is empty (Bolivia publishes no core inflation here; the notebook
+  falls back on headline inflation), `headline_inflation` is CPI inflation (WDI `FP.CPI.TOTL.ZG`), and `output_gap`
+  is the book's HP estimate (λ = 100, `data/bolivia/`).
+- `potential_world.csv`: 36 rows (`BOL`, 1990–2025). `gdp` is real GDP (WDI `NY.GDP.MKTP.KN`) and `potential_gdp` the
+  book's HP trend of it (λ = 100), both with actual GDP in 2007 = 100; **estimated by the book**, not by the OECD.
+- `cb_assets_world.csv`: 97 rows (`BOL`, 2001Q4–2025Q4). Total assets of the Banco Central de Bolivia at the end of
+  the quarter (IMF Monetary and Financial Statistics) in percent of the same year's nominal GDP (WDI
+  `NY.GDP.MKTP.CN`); the BIS publishes no Bolivian ratio, and it uses quarterly GDP.
+- `money_world.csv` and `tfp_world.csv` already had Bolivia (WDI, PWT 11.0): unchanged.
+- `bolivia.csv` (new; columns `series, date, value`): Bolivia's counterparts to the U.S.-only charts.
+
+| `series` | Chart | Content | Span |
+|---|---|---|---|
+| `interbank_q` | Fig. 4 | Interbank money-market rate in bolivianos (BCB, via the IMF), quarterly mean, percent; a proxy for the policy rate | 2000Q1–2026Q3 |
+| `inflation_q` | Fig. 4 | CPI inflation over four quarters (quarterly mean of INE's CPI, via the IMF), percent | 2000Q1–2026Q2 |
+| `output_gap_q` | Fig. 4 | Output gap estimated by the book: 100 × log(real GDP / HP trend), λ = 1600, INE quarterly GDP | 2000Q1–2024Q4 |
+| `gdp_index_q`, `potential_index_q` | Fig. 5 | INE real GDP, seasonally adjusted by the book, and its HP trend (λ = 1600); index, average real GDP in 2007 = 100 | 2000Q1–2024Q4 |
+| `base_money_growth`, `broad_money_growth` | Fig. 6 | 12-month growth of base money and broad money (BCB, IMF Monetary and Financial Statistics), percent | 1990-01 (broad money 2002-12) to 2026-08 |
+| `cb_assets_gdp` | Fig. 9 | BCB total assets in percent of the same year's nominal GDP | 2007-01 to 2025-12, monthly |
+| `tfp_index` | Fig. 11 | PWT 11.0 TFP at constant national prices (`rtfpna`), 2009 = 100 | 1987–2023 |
