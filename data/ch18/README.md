@@ -104,3 +104,24 @@ dropped. Retrieved 2026-10-17. Shares are percent of GDP and calendar years.
 API note: the OECD Data Explorer answered HTTP 429 with a Cloudflare "Just a moment..." page for long stretches on
 2026-10-17 (the structure endpoints kept working). `build_data.py` reads the cache when it exists, so a rerun needs
 no download.
+
+## Bolivia
+
+Added by the macro102 `/write-bolivia-data` skill (`merges/ch18.py`), so that every chart can show Bolivia (hidden
+until clicked). No other file changes: the text counts the countries of `gross_debt.csv`, `net_debt.csv` and
+`health_spending.csv`, and the practice problems average and correlate across every country of `gov_finance.csv`
+and `gov_spending.csv`, so the notebook adds Bolivia to the charts and menus from this one file.
+
+- `bolivia.csv` (new): `series, date, value`, one row per series and year, percent of GDP:
+  `revenue`, `spending`, `balance` (IMF *World Economic Outlook*, October 2026, general government revenue,
+  expenditure and net lending, 1981–2031, IMF projections after 2025); `spending_ex_interest` (WEO revenue minus
+  primary balance, that is primary expenditure, 1985–2031); `investment` (World Bank WDI `NE.GDI.TOTL.ZS`, gross
+  capital formation, public and private, 1970–2024; Bolivia publishes no private investment series);
+  `gross_debt` and `net_debt` (WEO general government gross and net debt, 2000–2031; the OECD balance sheets of
+  `net_debt.csv` do not cover Bolivia, and the WEO's net debt subtracts only debt-type assets);
+  `gross_debt_history` (IMF *Public Finances in Modern History*, DataMapper indicator `d`, the source of
+  `gross_debt.csv`, 1953 and 1970–2024); `health` (WDI `SH.XPD.CHEX.GD.ZS`, current health expenditure from the WHO
+  Global Health Expenditure Database, the OECD's System of Health Accounts concept, 2000–2023) and
+  `health_government` (WDI `SH.XPD.GHED.GD.ZS`, domestic general government health expenditure, 2000–2023).
+  The WEO and WDI rows come from `data/bolivia/`; the IMF `d` and WDI `SH.XPD.GHED.GD.ZS` rows are downloaded by the
+  merge (2026-11-18).
